@@ -62,6 +62,18 @@ pub fn get_field_type(modulus: &BigUint) -> Option<FieldType> {
     None
 }
 
+pub fn get_fp2_field_type(modulus: &BigUint) -> Option<FieldType> {
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>() {
+        return Some(FieldType::BN254Coordinate);
+    }
+
+    if modulus == &get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>() {
+        return Some(FieldType::BLS12_381Coordinate);
+    }
+
+    None
+}
+
 #[inline(always)]
 pub fn field_operation<
     const FIELD: u8,
@@ -185,8 +197,8 @@ fn field_operation_bls12_381_coordinate<
 fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u8>(
     input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2],
 ) -> [[u8; BLOCK_SIZE]; BLOCKS] {
-    let a = blocks_to_fp2_bn254(input_data[0].as_ref());
-    let b = blocks_to_fp2_bn254(input_data[1].as_ref());
+    let a = blocks_to_fp2_bn254::<BLOCKS, BLOCK_SIZE>(input_data[0].as_ref());
+    let b = blocks_to_fp2_bn254::<BLOCKS, BLOCK_SIZE>(input_data[1].as_ref());
     let c = match OP {
         x if x == Operation::Add as u8 => a + b,
         x if x == Operation::Sub as u8 => a - b,
@@ -280,13 +292,16 @@ pub fn field_element_to_blocks_bls12_381_coordinate<const BLOCK_SIZE: usize>(
 }
 
 #[inline(always)]
-fn blocks_to_fp2_bn254<const BLOCK_SIZE: usize>(
+fn blocks_to_fp2_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     blocks: &[[u8; BLOCK_SIZE]],
 ) -> halo2curves_axiom::bn256::Fq2 {
-    let mid = blocks.len() / 2;
-    let c0 = blocks_to_field_element::<halo2curves_axiom::bn256::Fq>(blocks[..mid].as_flattened());
-    let c1 = blocks_to_field_element::<halo2curves_axiom::bn256::Fq>(blocks[mid..].as_flattened());
-    halo2curves_axiom::bn256::Fq2 { c0, c1 }
+    let c0 = blocks_to_field_element::<halo2curves_axiom::bn256::Fq>(
+        blocks[..BLOCKS / 2].as_flattened(),
+    );
+    let c1 = blocks_to_field_element::<halo2curves_axiom::bn256::Fq>(
+        blocks[BLOCKS / 2..].as_flattened(),
+    );
+    halo2curves_axiom::bn256::Fq2::new(c0, c1)
 }
 
 #[inline(always)]

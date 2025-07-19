@@ -25,7 +25,9 @@ use openvm_mod_circuit_builder::{
 use openvm_rv32_adapters::Rv32VecHeapAdapterStep;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use self::fields::{field_operation, fp2_operation, get_field_type, FieldType, Operation};
+use self::fields::{
+    field_operation, fp2_operation, get_field_type, get_fp2_field_type, FieldType, Operation,
+};
 
 macro_rules! generate_field_dispatch {
     (
@@ -33,7 +35,6 @@ macro_rules! generate_field_dispatch {
         $op:expr,
         $blocks:expr,
         $block_size:expr,
-        $is_fp2:expr,
         $execute_fn:ident,
         [$(($curve:ident, $operation:ident)),* $(,)?]
     ) => {
@@ -44,11 +45,37 @@ macro_rules! generate_field_dispatch {
                     _,
                     $blocks,
                     $block_size,
-                    $is_fp2,
+                    false,
                     { FieldType::$curve as u8 },
                     { Operation::$operation as u8 },
                 >),
             )*
+        }
+    };
+}
+
+macro_rules! generate_fp2_dispatch {
+    (
+        $field_type:expr,
+        $op:expr,
+        $blocks:expr,
+        $block_size:expr,
+        $execute_fn:ident,
+        [$(($curve:ident, $operation:ident)),* $(,)?]
+    ) => {
+        match ($field_type, $op) {
+            $(
+                (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
+                    _,
+                    _,
+                    $blocks,
+                    $block_size,
+                    true,
+                    { FieldType::$curve as u8 },
+                    { Operation::$operation as u8 },
+                >),
+            )*
+            _ => panic!("Unsupported fp2 field")
         }
     };
 }
@@ -193,16 +220,35 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         if let Some(op) = op {
-            if let Some(field_type) = {
-                let modulus = &pre_compute.expr.prime;
-                get_field_type(modulus)
-            } {
+            let modulus = &pre_compute.expr.prime;
+            if IS_FP2 {
+                if let Some(field_type) = get_fp2_field_type(modulus) {
+                    generate_fp2_dispatch!(
+                        field_type,
+                        op,
+                        BLOCKS,
+                        BLOCK_SIZE,
+                        execute_e1_impl,
+                        [
+                            (BN254Coordinate, Add),
+                            (BN254Coordinate, Sub),
+                            (BN254Coordinate, Mul),
+                            (BN254Coordinate, Div),
+                            (BLS12_381Coordinate, Add),
+                            (BLS12_381Coordinate, Sub),
+                            (BLS12_381Coordinate, Mul),
+                            (BLS12_381Coordinate, Div),
+                        ]
+                    )
+                } else {
+                    Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                }
+            } else if let Some(field_type) = get_field_type(modulus) {
                 generate_field_dispatch!(
                     field_type,
                     op,
                     BLOCKS,
                     BLOCK_SIZE,
-                    IS_FP2,
                     execute_e1_impl,
                     [
                         (K256Coordinate, Add),
@@ -243,7 +289,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
                 Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
             }
         } else {
-            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
         }
     }
 }
@@ -272,16 +318,35 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
         if let Some(op) = op {
-            if let Some(field_type) = {
-                let modulus = &pre_compute.data.expr.prime;
-                get_field_type(modulus)
-            } {
+            let modulus = &pre_compute.data.expr.prime;
+            if IS_FP2 {
+                if let Some(field_type) = get_fp2_field_type(modulus) {
+                    generate_fp2_dispatch!(
+                        field_type,
+                        op,
+                        BLOCKS,
+                        BLOCK_SIZE,
+                        execute_e2_impl,
+                        [
+                            (BN254Coordinate, Add),
+                            (BN254Coordinate, Sub),
+                            (BN254Coordinate, Mul),
+                            (BN254Coordinate, Div),
+                            (BLS12_381Coordinate, Add),
+                            (BLS12_381Coordinate, Sub),
+                            (BLS12_381Coordinate, Mul),
+                            (BLS12_381Coordinate, Div),
+                        ]
+                    )
+                } else {
+                    Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                }
+            } else if let Some(field_type) = get_field_type(modulus) {
                 generate_field_dispatch!(
                     field_type,
                     op,
                     BLOCKS,
                     BLOCK_SIZE,
-                    IS_FP2,
                     execute_e2_impl,
                     [
                         (K256Coordinate, Add),
@@ -322,7 +387,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
                 Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
             }
         } else {
-            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
         }
     }
 }
@@ -331,12 +396,13 @@ unsafe fn execute_e1_setup_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const IS_FP2: bool,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
+    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e2_setup_impl<
@@ -344,6 +410,7 @@ unsafe fn execute_e2_setup_impl<
     CTX: E2ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const IS_FP2: bool,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
@@ -352,7 +419,7 @@ unsafe fn execute_e2_setup_impl<
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, vm_state);
+    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(&pre_compute.data, vm_state);
 }
 
 unsafe fn execute_e1_impl<
@@ -504,6 +571,7 @@ unsafe fn execute_e12_setup_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const IS_FP2: bool,
 >(
     pre_compute: &FieldExpressionPreCompute,
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
@@ -520,7 +588,11 @@ unsafe fn execute_e12_setup_impl<
     };
 
     // Extract first field element as the prime
-    let input_prime = BigUint::from_bytes_le(setup_input_data.as_flattened());
+    let input_prime = if IS_FP2 {
+        BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened())
+    } else {
+        BigUint::from_bytes_le(setup_input_data.as_flattened())
+    };
 
     if input_prime != pre_compute.expr.prime {
         vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
