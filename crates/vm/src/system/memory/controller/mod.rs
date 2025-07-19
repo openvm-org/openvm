@@ -176,7 +176,7 @@ impl PersistentMemoryTraceHeights {
 }
 
 impl<F: PrimeField32> MemoryController<F> {
-    pub fn continuation_enabled(&self) -> bool {
+    pub(crate) fn continuation_enabled(&self) -> bool {
         match &self.interface_chip {
             MemoryInterface::Volatile { .. } => false,
             MemoryInterface::Persistent { .. } => true,
@@ -398,29 +398,10 @@ impl<F: PrimeField32> MemoryController<F> {
         num_airs
     }
 
-    // The following functions are for instrumentation but not necessarily required by any traits.
-    // They may be deleted in the future.
-
-    fn get_dummy_memory_trace_heights(&self) -> MemoryTraceHeights {
-        let access_adapters = vec![1; self.access_adapter_inventory.num_access_adapters()];
-        match &self.interface_chip {
-            MemoryInterface::Volatile { .. } => {
-                MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                    boundary: 1,
-                    access_adapters,
-                })
-            }
-            MemoryInterface::Persistent { .. } => {
-                MemoryTraceHeights::Persistent(PersistentMemoryTraceHeights {
-                    boundary: 1,
-                    merkle: 1,
-                    access_adapters,
-                })
-            }
-        }
-    }
-
-    fn current_trace_cells(&self) -> Vec<usize> {
+    // The following function is for instrumentation but not necessarily required by any traits. It
+    // may be deleted in the future.
+    #[cfg(feature = "bench-metrics")]
+    pub(crate) fn current_trace_cells(&self) -> Vec<usize> {
         let mut ret = Vec::new();
         match &self.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {

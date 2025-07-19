@@ -4,12 +4,12 @@ use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_I
 use openvm_continuations::verifier::common::types::SpecialAirIds;
 
 /// Permutation of the AIR IDs to order them by forced trace heights.
-pub(super) struct AirIdPermutation {
+pub(crate) struct AirIdPermutation {
     pub perm: Vec<usize>,
 }
 
 impl AirIdPermutation {
-    pub fn compute(heights: &[usize]) -> AirIdPermutation {
+    pub fn compute(heights: &[u32]) -> AirIdPermutation {
         let mut height_with_air_id: Vec<_> = heights.iter().copied().enumerate().collect();
         height_with_air_id.sort_by_key(|(_, h)| Reverse(*h));
         AirIdPermutation {

@@ -58,7 +58,7 @@ pub(super) fn compute_root_proof_heights(
     root_vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeConfig>,
     root_committed_exe: &VmCommittedExe<BabyBearPoseidon2RootConfig>,
     dummy_internal_proof: &Proof<SC>,
-) -> Result<Vec<usize>, VirtualMachineError> {
+) -> Result<Vec<u32>, VirtualMachineError> {
     let num_public_values = root_vm.config().as_ref().num_public_values;
     let num_user_public_values = num_public_values - 2 * DIGEST_SIZE;
     let root_input = RootVmVerifierInput {
@@ -83,7 +83,11 @@ pub(super) fn compute_root_proof_heights(
     let ctx = root_vm.generate_proving_ctx(system_records, record_arenas)?;
     let air_heights = ctx
         .into_iter()
-        .map(|(_, air_ctx)| next_power_of_two_or_zero(air_ctx.main_trace_height()))
+        .map(|(_, air_ctx)| {
+            next_power_of_two_or_zero(air_ctx.main_trace_height())
+                .try_into()
+                .unwrap()
+        })
         .collect();
     Ok(air_heights)
 }

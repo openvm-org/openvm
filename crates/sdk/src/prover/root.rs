@@ -1,58 +1,49 @@
-use async_trait::async_trait;
-use itertools::Itertools;
-use openvm_circuit::arch::{SingleSegmentVmProver, Streams, VirtualMachineError};
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
+use itertools::zip_eq;
+use openvm_circuit::arch::{
+    GenerationError, PreflightExecutionOutput, SingleSegmentVmProver, Streams, VirtualMachineError,
+    VmLocalProver,
+};
 use openvm_native_circuit::NativeConfig;
-use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
-    engine::{StarkEngine, StarkFriEngine},
+    engine::StarkEngine,
     openvm_stark_backend::proof::Proof,
 };
 
-use crate::{keygen::RootVerifierProvingKey, RootSC, F, SC};
+use crate::{
+    keygen::{perm::AirIdPermutation, RootVerifierProvingKey},
+    prover::vm::new_local_prover,
+    RootSC, F,
+};
 
 /// Local prover for a root verifier.
 pub struct RootVerifierLocalProver {
-    pub root_verifier_pk: RootVerifierProvingKey,
-    // executor_for_heights: SingleSegmentVmExecutor<F, NativeConfig>,
+    inner: VmLocalProver<BabyBearPoseidon2RootEngine, NativeConfig>,
+    /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
+    fixed_air_heights: Vec<u32>,
+    air_id_perm: AirIdPermutation,
 }
 
 impl RootVerifierLocalProver {
-    pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Self {
-        // let executor_for_heights =
-        //     SingleSegmentVmExecutor::<F, _>::new(root_verifier_pk.vm_pk.vm_config.clone());
-        Self {
-            root_verifier_pk,
-            // executor_for_heights,
-        }
+    pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
+        let inner = new_local_prover(
+            &root_verifier_pk.vm_pk,
+            &root_verifier_pk.root_committed_exe,
+        )?;
+        let air_id_perm = root_verifier_pk.air_id_permutation();
+        let fixed_air_heights = root_verifier_pk.air_heights;
+        Ok(Self {
+            inner,
+            fixed_air_heights,
+            air_id_perm,
+        })
     }
-    // pub fn execute_for_air_heights(&self, input: RootVmVerifierInput<SC>) -> Vec<usize> {
-    //     let vm_vk = self.root_verifier_pk.vm_pk.vm_pk.get_vk();
-    //     let max_trace_heights = self
-    //         .executor_for_heights
-    //         .execute_metered(
-    //             self.root_verifier_pk.root_committed_exe.exe.clone(),
-    //             input.write(),
-    //             &vm_vk.num_interactions(),
-    //         )
-    //         .unwrap();
-    //     let result = self
-    //         .executor_for_heights
-    //         .execute_and_compute_heights(
-    //             self.root_verifier_pk.root_committed_exe.exe.clone(),
-    //             input.write(),
-    //             &max_trace_heights,
-    //         )
-    //         .unwrap();
-    //     result.air_heights
-    // }
     pub fn vm_config(&self) -> &NativeConfig {
-        &self.root_verifier_pk.vm_pk.vm_config
+        self.inner.vm.config()
     }
     #[allow(dead_code)]
     pub(crate) fn fri_params(&self) -> &FriParameters {
-        &self.root_verifier_pk.vm_pk.fri_params
+        &self.inner.vm.engine.fri_params
     }
 }
 
@@ -60,45 +51,54 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
     fn prove(
         &mut self,
         input: impl Into<Streams<F>>,
-        trace_heights: &[u32],
+        _: &[u32],
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        todo!();
-        // let input = input.into();
-        // let mut vm = SingleSegmentVmExecutor::new(self.vm_config().clone());
-        // vm.set_override_trace_heights(self.root_verifier_pk.vm_heights.clone());
-        // let trace_heights = self
-        //     .root_verifier_pk
-        //     .air_heights
-        //     .iter()
-        //     .map(|&height| height as u32)
-        //     .collect_vec();
-        // let mut proof_input = vm
-        //     .execute_and_generate(
-        //         self.root_verifier_pk.root_committed_exe.clone(),
-        //         input,
-        //         &trace_heights,
-        //     )
-        //     .unwrap();
-        // assert_eq!(
-        //     proof_input.per_air.len(),
-        //     self.root_verifier_pk.air_heights.len(),
-        //     "All AIRs of root verifier should present"
-        // );
-        // proof_input.per_air.iter().for_each(|(air_id, input)| {
-        //     assert_eq!(
-        //         input.main_trace_height(),
-        //         self.root_verifier_pk.air_heights[*air_id],
-        //         "Trace height doesn't match"
-        //     );
-        // });
-        // // Reorder the AIRs by heights.
-        // let air_id_perm = self.root_verifier_pk.air_id_permutation();
-        // air_id_perm.permute(&mut proof_input.per_air);
-        // for i in 0..proof_input.per_air.len() {
-        //     // Overwrite the AIR ID.
-        //     proof_input.per_air[i].0 = i;
-        // }
-        // let e = BabyBearPoseidon2RootEngine::new(*self.fri_params());
-        // e.prove(&self.root_verifier_pk.vm_pk.vm_pk, proof_input)
+        // The following is unrolled from SingleSegmentVmProver for VmLocalProver and
+        // VirtualMachine::prove to add special logic around ensuring trace heights are fixed and
+        // then reordering the trace matrices so the heights are sorted.
+        let input = input.into();
+        let exe = self.inner.exe().clone();
+        let vm = &mut self.inner.vm;
+        assert!(!vm.config().as_ref().continuation_enabled);
+        let state = vm.executor().create_initial_state(&exe, input);
+        vm.transport_init_memory_to_device(&state.memory);
+
+        let trace_heights = &self.fixed_air_heights;
+        let PreflightExecutionOutput {
+            system_records,
+            record_arenas,
+            ..
+        } = vm.execute_preflight(exe, state, None, trace_heights)?;
+        // record_arenas are created with capacity specified by trace_heights. we must ensure
+        // `generate_proving_ctx` does not resize the trace matrices to make them smaller:
+        let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+        for (air_idx, (fixed_height, (idx, air_ctx))) in
+            zip_eq(trace_heights, &ctx.per_air).enumerate()
+        {
+            let fixed_height = *fixed_height as usize;
+            if air_idx != *idx {
+                return Err(GenerationError::ForceTraceHeightIncorrect {
+                    air_idx,
+                    actual: 0,
+                    expected: fixed_height,
+                }
+                .into());
+            }
+            if fixed_height != air_ctx.main_trace_height() {
+                return Err(GenerationError::ForceTraceHeightIncorrect {
+                    air_idx,
+                    actual: air_ctx.main_trace_height(),
+                    expected: fixed_height,
+                }
+                .into());
+            }
+        }
+        // Reorder the AIRs by heights.
+        self.air_id_perm.permute(&mut ctx.per_air);
+        for (i, (air_idx, _)) in ctx.per_air.iter_mut().enumerate() {
+            *air_idx = i;
+        }
+        let proof = vm.engine.prove(vm.pk(), ctx);
+        Ok(proof)
     }
 }

@@ -76,8 +76,12 @@ use crate::{
 pub enum GenerationError {
     #[error("unexpected number of arenas: {actual} (expected num_airs={expected})")]
     UnexpectedNumArenas { actual: usize, expected: usize },
-    #[error("force_trace_heights len incorrect: {actual} (expected num_airs={expected})")]
-    UnexpectedForceTraceHeightsLen { actual: usize, expected: usize },
+    #[error("trace height for air_idx={air_idx} must be fixed to {expected}, actual={actual}")]
+    ForceTraceHeightIncorrect {
+        air_idx: usize,
+        actual: usize,
+        expected: usize,
+    },
     #[error("trace height of air {air_idx} has height {height} greater than maximum {max_height}")]
     TraceHeightsLimitExceeded {
         air_idx: usize,
@@ -844,6 +848,7 @@ where
     #[getset(get = "pub")]
     exe_commitment: Com<E::SC>,
     // TODO: store immutable parts of program handler here
+    #[getset(get = "pub")]
     exe: VmExe<Val<E::SC>>,
 }
 

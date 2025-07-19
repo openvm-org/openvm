@@ -394,11 +394,11 @@ pub struct RootVerifierProvingKey {
     /// Committed executable for the root VM.
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
     /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
-    pub air_heights: Vec<usize>,
+    pub air_heights: Vec<u32>,
 }
 
 impl RootVerifierProvingKey {
-    fn air_id_permutation(&self) -> AirIdPermutation {
+    pub(crate) fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)
     }
 }

@@ -13,8 +13,8 @@ pub mod test_utils {
         arch::{
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine, VmProverConfig,
-            VmState,
+            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
+            VirtualMachineError, VmProverConfig, VmState,
         },
         utils::test_system_config,
     };
@@ -77,10 +77,13 @@ pub mod test_utils {
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
         config: NativeConfig,
-    ) -> eyre::Result<(
-        PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
-        VirtualMachine<E, NativeConfig>,
-    )>
+    ) -> Result<
+        (
+            PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+            VirtualMachine<E, NativeConfig>,
+        ),
+        VirtualMachineError,
+    >
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
