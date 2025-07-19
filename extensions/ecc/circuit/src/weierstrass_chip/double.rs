@@ -8,7 +8,6 @@ use std::{
 use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use num_traits::One;
-use openvm_algebra_circuit::FieldExprVecHeapStep;
 use openvm_circuit::{
     arch::{
         execution::ExecuteFunc,
@@ -34,7 +33,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldVariable,
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep, FieldVariable,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
@@ -80,7 +79,7 @@ pub fn ec_double_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, InstructionExecutor, Deref, DerefMut)]
 pub struct EcDoubleStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExprVecHeapStep<1, BLOCKS, BLOCK_SIZE>,
+    FieldExpressionStep<Rv32VecHeapAdapterStep<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
 fn gen_base_expr(
@@ -129,7 +128,7 @@ pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     a_biguint: BigUint,
 ) -> EcDoubleStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
-    EcDoubleStep(FieldExprVecHeapStep::new(
+    EcDoubleStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
@@ -405,20 +404,16 @@ unsafe fn execute_e12_impl<
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     };
 
-    let output_data = match CURVE_TYPE {
-        x if x == CurveType::K256 as u8 => ec_double::<0, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::P256 as u8 => ec_double::<1, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BN254 as u8 => ec_double::<2, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BLS12_381 as u8 => ec_double::<3, BLOCKS, BLOCK_SIZE>(read_data),
-        _ => {
-            let read_data: DynArray<u8> = read_data.into();
-            run_field_expression_precomputed::<true>(
-                pre_compute.expr,
-                pre_compute.flag_idx as usize,
-                &read_data.0,
-            )
-            .into()
-        }
+    let output_data = if CURVE_TYPE == u8::MAX {
+        let read_data: DynArray<u8> = read_data.into();
+        run_field_expression_precomputed::<true>(
+            pre_compute.expr,
+            pre_compute.flag_idx as usize,
+            &read_data.0,
+        )
+        .into()
+    } else {
+        ec_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));

@@ -7,7 +7,7 @@ use std::{
 
 use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
-use openvm_algebra_circuit::FieldExprVecHeapStep;
+use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
     arch::{
         execution::ExecuteFunc,
@@ -33,15 +33,15 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExpressionCoreAir, FieldExpressionFiller,
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
 };
 use openvm_rv32_adapters::{
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{curves::get_curve_type_from_modulus, WeierstrassAir, WeierstrassChip};
-use crate::weierstrass_chip::curves::{ec_add_ne, CurveType};
+use super::{WeierstrassAir, WeierstrassChip};
+use crate::weierstrass_chip::curves::ec_add_ne;
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.
@@ -73,7 +73,7 @@ pub fn ec_add_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, InstructionExecutor, Deref, DerefMut)]
 pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>,
+    FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
 fn gen_base_expr(
@@ -118,7 +118,7 @@ pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     offset: usize,
 ) -> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
-    EcAddNeStep(FieldExprVecHeapStep::new(
+    EcAddNeStep(FieldExpressionStep::new(
         Rv32VecHeapAdapterStep::new(pointer_max_bits),
         expr,
         offset,
@@ -242,23 +242,40 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = {
+        } else if let Some(field_type) = {
             let modulus = &pre_compute.expr.builder.prime;
-            get_curve_type_from_modulus(modulus)
+            get_field_type(modulus)
         } {
-            match curve_type {
-                CurveType::K256 => {
-                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
-                }
-                CurveType::P256 => {
-                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
-                }
-                CurveType::BN254 => {
-                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
-                }
-                CurveType::BLS12_381 => {
-                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
-                }
+            match field_type {
+                FieldType::K256Coordinate => Ok(execute_e1_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::K256Coordinate as u8 },
+                >),
+                FieldType::P256Coordinate => Ok(execute_e1_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::P256Coordinate as u8 },
+                >),
+                FieldType::BN254Coordinate => Ok(execute_e1_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BN254Coordinate as u8 },
+                >),
+                FieldType::BLS12_381Coordinate => Ok(execute_e1_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BLS12_381Coordinate as u8 },
+                >),
+                _ => panic!("Unsupported field type"),
             }
         } else {
             Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
@@ -291,23 +308,40 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = {
+        } else if let Some(field_type) = {
             let modulus = &pre_compute.data.expr.builder.prime;
-            get_curve_type_from_modulus(modulus)
+            get_field_type(modulus)
         } {
-            match curve_type {
-                CurveType::K256 => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
-                }
-                CurveType::P256 => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
-                }
-                CurveType::BN254 => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
-                }
-                CurveType::BLS12_381 => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
-                }
+            match field_type {
+                FieldType::K256Coordinate => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::K256Coordinate as u8 },
+                >),
+                FieldType::P256Coordinate => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::P256Coordinate as u8 },
+                >),
+                FieldType::BN254Coordinate => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BN254Coordinate as u8 },
+                >),
+                FieldType::BLS12_381Coordinate => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BLS12_381Coordinate as u8 },
+                >),
+                _ => panic!("Unsupported field type"),
             }
         } else {
             Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
@@ -320,13 +354,13 @@ unsafe fn execute_e1_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
+    const FIELD_TYPE: u8,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e1_setup_impl<
@@ -348,7 +382,7 @@ unsafe fn execute_e2_impl<
     CTX: E2ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
+    const FIELD_TYPE: u8,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
@@ -357,7 +391,7 @@ unsafe fn execute_e2_impl<
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE>(&pre_compute.data, vm_state);
 }
 
 unsafe fn execute_e2_setup_impl<
@@ -381,7 +415,7 @@ unsafe fn execute_e12_impl<
     CTX: E1ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
+    const FIELD_TYPE: u8,
 >(
     pre_compute: &EcAddNePreCompute,
     vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
@@ -397,20 +431,16 @@ unsafe fn execute_e12_impl<
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
 
-    let output_data = match CURVE_TYPE {
-        x if x == CurveType::K256 as u8 => ec_add_ne::<0, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::P256 as u8 => ec_add_ne::<1, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BN254 as u8 => ec_add_ne::<2, BLOCKS, BLOCK_SIZE>(read_data),
-        x if x == CurveType::BLS12_381 as u8 => ec_add_ne::<3, BLOCKS, BLOCK_SIZE>(read_data),
-        _ => {
-            let read_data: DynArray<u8> = read_data.into();
-            run_field_expression_precomputed::<true>(
-                pre_compute.expr,
-                pre_compute.flag_idx as usize,
-                &read_data.0,
-            )
-            .into()
-        }
+    let output_data = if FIELD_TYPE == u8::MAX {
+        let read_data: DynArray<u8> = read_data.into();
+        run_field_expression_precomputed::<true>(
+            pre_compute.expr,
+            pre_compute.flag_idx as usize,
+            &read_data.0,
+        )
+        .into()
+    } else {
+        ec_add_ne::<FIELD_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
