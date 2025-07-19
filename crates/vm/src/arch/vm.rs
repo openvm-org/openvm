@@ -883,6 +883,27 @@ where
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
+        self.prove_continuations(input, |_, _| {})
+    }
+}
+
+impl<E, VC> VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VC: VmProverConfig<E>,
+    VC::Executor: InsExecutorE1<Val<E::SC>>
+        + InsExecutorE2<Val<E::SC>>
+        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+{
+    /// For internal use to resize trace matrices before proving.
+    ///
+    /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
+    pub fn prove_continuations(
+        &mut self,
+        input: impl Into<Streams<Val<E::SC>>>,
+        mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
         let vm = &mut self.vm;
         let exe = &self.exe;
@@ -913,7 +934,8 @@ where
             } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
             state = Some(to_state);
 
-            let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx);
             proofs.push(proof);
         }

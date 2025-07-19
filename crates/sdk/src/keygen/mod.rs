@@ -3,10 +3,7 @@ use std::sync::Arc;
 use derivative::Derivative;
 // use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
-    arch::{
-        AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig,
-        VmConfig,
-    },
+    arch::{AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig},
     system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
 };
 use openvm_continuations::verifier::{
@@ -29,12 +26,11 @@ use openvm_stark_sdk::{
         config::{Com, StarkGenericConfig},
         keygen::types::MultiStarkVerifyingKey,
         proof::Proof,
-        Chip,
     },
     p3_bn254_fr::Bn254Fr,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info_span;
+use tracing::{info_span, instrument};
 #[cfg(feature = "evm-prove")]
 use {
     crate::config::AggConfig,
@@ -48,7 +44,10 @@ use {
 use crate::{
     commit::babybear_digest_to_bn254,
     config::{AggStarkConfig, AppConfig},
-    keygen::{dummy::dummy_internal_proof_riscv_app_vm, perm::AirIdPermutation},
+    keygen::{
+        dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm},
+        perm::AirIdPermutation,
+    },
     prover::vm::types::VmProvingKey,
     NonRootCommittedExe, RootSC, F, SC,
 };
@@ -258,12 +257,17 @@ fn check_recursive_verifier_size<SC: StarkGenericConfig>(
 }
 
 impl AggStarkProvingKey {
-    pub fn keygen(config: AggStarkConfig) -> Self {
-        tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
-            .in_scope(|| Self::dummy_proof_and_keygen(config).0)
+    #[instrument(
+        name = "agg_stark_keygen",
+        fields(group = "agg_stark_keygen"),
+        skip_all
+    )]
+    pub fn keygen(config: AggStarkConfig) -> Result<Self, VirtualMachineError> {
+        let (pk, _) = Self::dummy_proof_and_keygen(config)?;
+        Ok(pk)
     }
 
-    pub fn dummy_proof_and_keygen(
+    fn dummy_proof_and_keygen(
         config: AggStarkConfig,
     ) -> Result<(Self, Proof<SC>), VirtualMachineError> {
         let leaf_vm_config = config.leaf_vm_config();
@@ -272,7 +276,7 @@ impl AggStarkProvingKey {
 
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
         let leaf_vm_pk = {
-            let (vm, vm_pk) = VirtualMachine::new_with_keygen(leaf_engine, leaf_vm_config.clone())?;
+            let (_, vm_pk) = VirtualMachine::new_with_keygen(leaf_engine, leaf_vm_config.clone())?;
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
             Arc::new(VmProvingKey {
                 fri_params: config.leaf_fri_params,
@@ -316,7 +320,7 @@ impl AggStarkProvingKey {
             internal_vm_pk.clone(),
             internal_committed_exe.clone(),
             config.max_num_user_public_values,
-        );
+        )?;
 
         let root_verifier_pk = {
             let mut root_engine = BabyBearPoseidon2RootEngine::new(config.root_fri_params);
@@ -329,18 +333,14 @@ impl AggStarkProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let (vm, vm_pk) = VirtualMachine::new_with_keygen(root_engine, root_vm_config.clone())?;
+            let (mut vm, mut vm_pk) =
+                VirtualMachine::new_with_keygen(root_engine, root_vm_config.clone())?;
             let root_committed_exe = Arc::new(vm.commit_exe(root_program));
 
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 
-            let vm_vk = vm_pk.get_vk();
-            let (air_heights, vm_heights) = compute_root_proof_heights(
-                root_vm_config.clone(),
-                root_committed_exe.exe.clone(),
-                &internal_proof,
-                &vm_vk.num_interactions(),
-            );
+            let air_heights =
+                compute_root_proof_heights(&mut vm, &root_committed_exe, &internal_proof)?;
             let root_air_perm = AirIdPermutation::compute(&air_heights);
             root_air_perm.permute(&mut vm_pk.per_air);
 
@@ -352,10 +352,9 @@ impl AggStarkProvingKey {
                 }),
                 root_committed_exe,
                 air_heights,
-                vm_heights,
             }
         };
-        (
+        Ok((
             Self {
                 leaf_vm_pk,
                 internal_vm_pk,
@@ -363,7 +362,7 @@ impl AggStarkProvingKey {
                 root_verifier_pk,
             },
             internal_proof,
-        )
+        ))
     }
 
     pub fn internal_program_commit(&self) -> [F; DIGEST_SIZE] {
@@ -383,7 +382,7 @@ impl AggStarkProvingKey {
 /// Proving key for the root verifier.
 /// Properties:
 /// - Traces heights of each AIR is constant. This is required by the static verifier.
-/// - Instead of the AIR order specified by VC. AIRs are ordered by trace heights.
+/// - Instead of the AIR order specified by VmConfig. AIRs are ordered by trace heights.
 #[derive(Serialize, Deserialize, Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct RootVerifierProvingKey {
@@ -394,7 +393,7 @@ pub struct RootVerifierProvingKey {
     pub vm_pk: Arc<VmProvingKey<RootSC, NativeConfig>>,
     /// Committed executable for the root VM.
     pub root_committed_exe: Arc<VmCommittedExe<RootSC>>,
-    /// The constant trace heights, ordered by AIR ID.
+    /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
     pub air_heights: Vec<usize>,
 }
 

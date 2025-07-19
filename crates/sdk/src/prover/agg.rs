@@ -121,7 +121,7 @@ where
         let mut proofs = leaf_proofs;
         while proofs.len() > 1 {
             let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-                self.internal_prover.exe_commitment().clone().into(),
+                (*self.internal_prover.exe_commitment()).into(),
                 &proofs,
                 self.num_children_internal,
             );
