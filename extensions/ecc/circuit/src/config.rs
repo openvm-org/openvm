@@ -7,7 +7,6 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::VmConfig;
 use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
-use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 
 use super::*;

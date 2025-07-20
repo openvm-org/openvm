@@ -36,11 +36,10 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            interface::{MemoryInterface, MemoryInterfaceAirs},
+            interface::MemoryInterfaceAirs,
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController, PersistentMemoryTraceHeights,
-            TimestampedEquipartition, VolatileMemoryTraceHeights, CHUNK,
+            MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{
@@ -540,6 +539,8 @@ impl<SC: StarkGenericConfig> SystemWithFixedTraceHeights for SystemChipInventory
 where
     Val<SC>: PrimeField32,
 {
+    /// Warning: this does not set the override for the PublicValuesChip. The PublicValuesChip
+    /// override must be set via the RecordArena.
     fn override_trace_heights(&mut self, heights: &[u32]) {
         assert_eq!(
             heights[PROGRAM_AIR_ID] as usize,
@@ -552,11 +553,7 @@ where
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         let mut memory_start_idx = PUBLIC_VALUES_AIR_ID;
-        if let Some(pv_chip) = &self.public_values_chip {
-            assert_eq!(
-                heights[PUBLIC_VALUES_AIR_ID] as usize,
-                pv_chip.inner.custom_pvs.lock().unwrap().len()
-            );
+        if self.public_values_chip.is_some() {
             memory_start_idx += 1;
         }
         self.memory_controller

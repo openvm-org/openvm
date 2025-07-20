@@ -95,9 +95,6 @@ mod guest_tests {
             Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
         };
         use openvm_sha256_circuit::{Sha256, Sha256Executor};
-        use openvm_stark_backend::{
-            config::StarkGenericConfig, engine::StarkEngine, p3_field::Field,
-        };
         use serde::{Deserialize, Serialize};
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]

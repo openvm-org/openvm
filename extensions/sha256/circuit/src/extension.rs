@@ -19,8 +19,7 @@ use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M,
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::{Field, PrimeField32},
+    p3_field::PrimeField32,
     prover::cpu::CpuBackend,
 };
 use serde::{Deserialize, Serialize};

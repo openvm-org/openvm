@@ -675,7 +675,7 @@ where
     ///   final memory state may be used to extract user public values afterwards.
     pub fn prove(
         &mut self,
-        exe: VmExe<Val<E::SC>>,
+        exe: impl Into<VmExe<Val<E::SC>>>,
         state: VmState<Val<E::SC>>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -690,7 +690,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = self.execute_preflight(exe, state, num_insns, trace_heights)?;
+        } = self.execute_preflight(exe.into(), state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
