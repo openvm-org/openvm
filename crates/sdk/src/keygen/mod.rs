@@ -72,12 +72,12 @@ pub struct AppVerifyingKey {
     pub memory_dimensions: MemoryDimensions,
 }
 
-// #[cfg(feature = "evm-prove")]
-// #[derive(Clone, Serialize, Deserialize)]
-// pub struct AggProvingKey {
-//     pub agg_stark_pk: AggStarkProvingKey,
-//     pub halo2_pk: Halo2ProvingKey,
-// }
+#[cfg(feature = "evm-prove")]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AggProvingKey {
+    pub agg_stark_pk: AggStarkProvingKey,
+    pub halo2_pk: Halo2ProvingKey,
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AggStarkProvingKey {
@@ -397,6 +397,7 @@ pub struct RootVerifierProvingKey {
     pub air_heights: Vec<u32>,
 }
 
+#[cfg(feature = "evm-prove")]
 impl RootVerifierProvingKey {
     pub(crate) fn air_id_permutation(&self) -> AirIdPermutation {
         AirIdPermutation::compute(&self.air_heights)
@@ -413,16 +414,16 @@ impl AggProvingKey {
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
         pv_handler: &impl StaticVerifierPvHandler,
-    ) -> Self {
+    ) -> Result<Self, VirtualMachineError> {
         let AggConfig {
             agg_stark_config,
             halo2_config,
         } = config;
         let (agg_stark_pk, dummy_internal_proof) =
-            AggStarkProvingKey::dummy_proof_and_keygen(agg_stark_config);
+            AggStarkProvingKey::dummy_proof_and_keygen(agg_stark_config)?;
         let dummy_root_proof = agg_stark_pk
             .root_verifier_pk
-            .generate_dummy_root_proof(dummy_internal_proof);
+            .generate_dummy_root_proof(dummy_internal_proof)?;
         let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
             &reader.read_params(halo2_config.verifier_k),
             dummy_root_proof,
@@ -439,10 +440,10 @@ impl AggProvingKey {
             wrapper,
             profiling: halo2_config.profiling,
         };
-        Self {
+        Ok(Self {
             agg_stark_pk,
             halo2_pk,
-        }
+        })
     }
 }
 

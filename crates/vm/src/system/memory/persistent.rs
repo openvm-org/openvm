@@ -208,7 +208,7 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 
     #[instrument(name = "boundary_finalize", skip_all)]
-    pub fn finalize<H>(
+    pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
         // Only touched stuff

@@ -19,6 +19,7 @@ impl AirIdPermutation {
                 .collect(),
         }
     }
+    #[cfg(feature = "evm-prove")]
     pub fn get_special_air_ids(&self) -> SpecialAirIds {
         let perm_len = self.perm.len();
         let mut ret = SpecialAirIds {

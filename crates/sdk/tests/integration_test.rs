@@ -100,7 +100,7 @@ fn run_leaf_verifier(
 }
 
 fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> {
-    let sdk: Sdk = Sdk::new();
+    let sdk = Sdk::new();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
     let vm_config = app_vm_config_for_test();
@@ -181,7 +181,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
     let leaf_vm_config = agg_stark_config.leaf_vm_config();
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
-    let sdk: Sdk = Sdk::new();
+    let sdk = Sdk::new();
     let mut app_proof =
         sdk.generate_app_proof(app_pk, app_committed_exe.clone(), StdIn::default())?;
 
@@ -434,7 +434,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 
 #[test]
 fn test_sdk_guest_build_and_transpile() {
-    let sdk: Sdk = Sdk::new();
+    let sdk = Sdk::new();
     let guest_opts = GuestOptions::default();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
@@ -471,7 +471,7 @@ fn test_sdk_guest_build_and_transpile() {
 #[test]
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
-    let sdk: Sdk = Sdk::new();
+    let sdk = Sdk::new();
     let vm_config = app_vm_config_for_test();
     assert!(vm_config.system.config.continuation_enabled);
     let fri_params = FriParameters::standard_fast();

@@ -29,6 +29,9 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
+    // Note[jpw]: this is indeed too many arguments, prefer to use `build_metered_ctx` in
+    // `VmExecutor` or `VirtualMachine`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
         has_public_values_chip: bool,

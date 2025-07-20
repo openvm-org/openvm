@@ -16,7 +16,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     prover::{
         cpu::{CpuBackend, CpuDevice},
-        hal::ProverBackend,
+        hal::{MatrixDimensions, ProverBackend},
         types::{AirProvingContext, CommittedTraceData},
     },
     AirRef, Chip,
@@ -30,15 +30,17 @@ use crate::{
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, VmProverConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
         memory::{
-            interface::MemoryInterfaceAirs,
+            interface::{MemoryInterface, MemoryInterfaceAirs},
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
+            MemoryAirInventory, MemoryController, PersistentMemoryTraceHeights,
+            TimestampedEquipartition, VolatileMemoryTraceHeights, CHUNK,
         },
         native_adapter::{NativeAdapterAir, NativeAdapterStep},
         phantom::{
@@ -90,6 +92,13 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
+}
+
+/// Trait meant to be implemented on a SystemChipComplex.
+pub trait SystemWithFixedTraceHeights {
+    /// `heights` will have length equal to number of system AIRs, in AIR ID order. This function
+    /// must guarantee that the system trace matrices generated have the required heights.
+    fn override_trace_heights(&mut self, heights: &[u32]);
 }
 
 pub struct SystemRecords<F> {
@@ -523,17 +532,34 @@ where
         let phantom_chip = PhantomChip::new(PhantomFiller, system.memory_controller.helper());
         inventory.add_executor_chip(phantom_chip);
 
-        // TODO: move this elsewhere
-        // let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
-        //     let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
-        //     1 << (BabyBear::TWO_ADICITY - min_log_blowup)
-        // } else {
-        //     tracing::warn!(
-        //         "constructing SystemComplex for unrecognized field; using max_trace_height =
-        // 2^30"     );
-        //     1 << 30
-        // };
-
         Ok(VmChipComplex { system, inventory })
+    }
+}
+
+impl<SC: StarkGenericConfig> SystemWithFixedTraceHeights for SystemChipInventory<SC>
+where
+    Val<SC>: PrimeField32,
+{
+    fn override_trace_heights(&mut self, heights: &[u32]) {
+        assert_eq!(
+            heights[PROGRAM_AIR_ID] as usize,
+            self.program_chip
+                .cached
+                .as_ref()
+                .expect("program not loaded")
+                .trace
+                .height()
+        );
+        assert_eq!(heights[CONNECTOR_AIR_ID], 2);
+        let mut memory_start_idx = PUBLIC_VALUES_AIR_ID;
+        if let Some(pv_chip) = &self.public_values_chip {
+            assert_eq!(
+                heights[PUBLIC_VALUES_AIR_ID] as usize,
+                pv_chip.inner.custom_pvs.lock().unwrap().len()
+            );
+            memory_start_idx += 1;
+        }
+        self.memory_controller
+            .set_override_trace_heights(&heights[memory_start_idx..]);
     }
 }

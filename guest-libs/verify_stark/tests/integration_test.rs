@@ -71,7 +71,7 @@ mod tests {
                 ..Default::default()
             },
             root_max_constraint_degree: (1 << ROOT_LOG_BLOWUP) + 1,
-        });
+        })?;
         let asm = sdk.generate_root_verifier_asm(&agg_pk);
         let asm_path = format!(
             "{}/examples/verify_openvm_stark/{}",

@@ -1,7 +1,6 @@
 use std::{fs::File, io::Write, path::Path, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::system::memory::MemoryTraceHeights;
 use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -206,12 +205,6 @@ pub fn get_default_segmentation_strategy() -> Arc<DefaultSegmentationStrategy> {
     Arc::new(DefaultSegmentationStrategy::default())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SystemTraceHeights {
-    pub memory: MemoryTraceHeights,
-    // All other chips have constant heights.
-}
-
 impl SystemConfig {
     pub fn new(
         max_constraint_degree: usize,
@@ -333,18 +326,6 @@ impl AsRef<SystemConfig> for SystemConfig {
 impl AsMut<SystemConfig> for SystemConfig {
     fn as_mut(&mut self) -> &mut SystemConfig {
         self
-    }
-}
-
-impl SystemTraceHeights {
-    /// Round all trace heights to the next power of two. This will round trace heights of 0 to 1.
-    pub fn round_to_next_power_of_two(&mut self) {
-        self.memory.round_to_next_power_of_two();
-    }
-
-    /// Round all trace heights to the next power of two, except 0 stays 0.
-    pub fn round_to_next_power_of_two_or_zero(&mut self) {
-        self.memory.round_to_next_power_of_two_or_zero();
     }
 }
 

@@ -13,11 +13,10 @@ use openvm_circuit::{
             tracegen::{TracegenCtx, TracegenExecutionControl},
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        DefaultSegmentationStrategy, SystemTraceHeights, VirtualMachine, VmComplexTraceHeights,
-        VmConfig, VmInventoryTraceHeights, VmSegmentExecutor, VmSegmentState,
+        DefaultSegmentationStrategy, VirtualMachine, VmSegmentExecutor, VmSegmentState,
     },
     system::{
-        memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
+        memory::{VolatileMemoryTraceHeights, CHUNK},
         program::trace::VmCommittedExe,
     },
     utils::{air_test, air_test_with_min_segments, test_system_config},

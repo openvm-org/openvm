@@ -5,7 +5,11 @@ use openvm_circuit::arch::{
     VmExecutionConfig, VmProverConfig,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
+#[cfg(feature = "evm-prove")]
+use openvm_continuations::{verifier::root::types::RootVmVerifierInput, RootSC};
 use openvm_native_circuit::NativeConfig;
+#[cfg(feature = "evm-prove")]
+use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
@@ -65,13 +69,19 @@ where
         self
     }
     #[cfg(feature = "evm-prove")]
-    pub fn generate_proof_for_outer_recursion(&self, input: StdIn) -> Proof<RootSC> {
-        let app_proof = self.app_prover.generate_app_proof(input);
+    pub fn generate_proof_for_outer_recursion(
+        &mut self,
+        input: StdIn,
+    ) -> Result<Proof<RootSC>, VirtualMachineError> {
+        let app_proof = self.app_prover.generate_app_proof(input)?;
         self.agg_prover.generate_root_proof(app_proof)
     }
     #[cfg(feature = "evm-prove")]
-    pub fn generate_root_verifier_input(&self, input: StdIn) -> RootVmVerifierInput<SC> {
-        let app_proof = self.app_prover.generate_app_proof(input);
+    pub fn generate_root_verifier_input(
+        &mut self,
+        input: StdIn,
+    ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
+        let app_proof = self.app_prover.generate_app_proof(input)?;
         self.agg_prover.generate_root_verifier_input(app_proof)
     }
 

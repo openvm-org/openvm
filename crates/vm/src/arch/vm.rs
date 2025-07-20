@@ -68,7 +68,7 @@ use crate::{
         },
         program::{trace::VmCommittedExe, ProgramHandler},
         public_values::PublicValuesStep,
-        SystemChipComplex, SystemRecords, PV_EXECUTOR_IDX,
+        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
     },
 };
 
@@ -160,10 +160,6 @@ where
     /// must store the executors in their initialized state. Internally, the executors are cloned
     /// into a separate instance before running a program.
     inventory: ExecutorInventory<VC::Executor>,
-    // pub overridden_heights: Option<VmComplexTraceHeights>,
-    // pub trace_height_constraints: Vec<LinearConstraint>,
-    // TEMPORARY: only needed for E3 arena allocation
-    // pub main_widths: Vec<usize>,
     phantom: PhantomData<F>,
 }
 
@@ -487,20 +483,6 @@ where
         &self.executor.config
     }
 
-    // TODO[jpw]
-    // pub fn new_with_overridden_trace_heights(
-    //     engine: E,
-    //     config: VC,
-    //     overridden_heights: Option<VmComplexTraceHeights>,
-    // ) -> Self {
-    //     let executor = VmExecutor::new_with_overridden_trace_heights(config, overridden_heights);
-    //     Self {
-    //         engine,
-    //         executor,
-    //         _marker: PhantomData,
-    //     }
-    // }
-
     // TODO[jpw]: I'd like to make a VmInstance struct that has a loaded program
     //
     /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
@@ -630,6 +612,18 @@ where
             .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
             .collect_vec();
         // TODO[jpw]: put back self.max_trace_height
+
+        // TODO: move this elsewhere
+        // let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+        //     let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+        //     1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        // } else {
+        //     tracing::warn!(
+        //         "constructing SystemComplex for unrecognized field; using max_trace_height =
+        // 2^30"     );
+        //     1 << 30
+        // };
+
         // if let Some(&(air_idx, height)) = idx_trace_heights
         //     .iter()
         //     .find(|(_, height)| *height > self.max_trace_height)
@@ -1213,5 +1207,21 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     match exit_code {
         Some(code) => check_exit_code(code),
         None => Err(ExecutionError::DidNotTerminate),
+    }
+}
+
+impl<E, VC> VirtualMachine<E, VC>
+where
+    E: StarkEngine,
+    VC: VmProverConfig<E>,
+    VC::SystemChipInventory: SystemWithFixedTraceHeights,
+{
+    /// Sets fixed trace heights for the system AIRs' trace matrices.
+    pub fn override_system_trace_heights(&mut self, heights: &[u32]) {
+        let num_sys_airs = self.config().as_ref().num_airs();
+        assert!(heights.len() >= num_sys_airs);
+        self.chip_complex
+            .system
+            .override_trace_heights(&heights[..num_sys_airs]);
     }
 }

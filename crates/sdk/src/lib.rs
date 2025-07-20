@@ -13,10 +13,10 @@ use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, SystemConfig, VerifiedExecutionPayload,
-        VmCircuitConfig, VmConfig, VmExecutionConfig, VmExecutor, VmProverConfig, CONNECTOR_AIR_ID,
-        PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        verify_segments, ContinuationVmProof, InitFileGenerator, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, SystemConfig, VerifiedExecutionPayload, VmCircuitConfig,
+        VmExecutionConfig, VmExecutor, VmProverConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{merkle::public_values::extract_public_values, CHUNK},
@@ -30,7 +30,7 @@ pub use openvm_continuations::static_verifier::{
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
     internal::types::{InternalVmVerifierPvs, VmStarkProof},
-    root::{types::RootVmVerifierInput, RootVmVerifierConfig},
+    root::RootVmVerifierConfig,
 };
 // Re-exports:
 pub use openvm_continuations::{RootSC, C, F, SC};
@@ -39,10 +39,7 @@ use openvm_native_circuit::NativeConfig;
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
     p3_bn254_fr::Bn254Fr,
 };
@@ -56,7 +53,7 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 #[cfg(feature = "evm-prove")]
-use crate::{config::AggConfig, prover::EvmHalo2Prover, types::EvmProof};
+use crate::{config::AggConfig, keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 use crate::{
     config::{AggStarkConfig, SdkVmConfig},
     keygen::{asm::program_to_asm, AggStarkProvingKey},
@@ -109,12 +106,14 @@ pub struct VerifiedContinuationVmPayload {
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
 // BabyBearPoseidon2RootEngine right now.
-pub struct Sdk<E = BabyBearPoseidon2Engine> {
+pub struct GenericSdk<E = BabyBearPoseidon2Engine> {
     agg_tree_config: AggregationTreeConfig,
     _phantom: PhantomData<E>,
 }
 
-impl<E> Default for Sdk<E> {
+pub type Sdk = GenericSdk;
+
+impl<E> Default for GenericSdk<E> {
     fn default() -> Self {
         Self {
             agg_tree_config: AggregationTreeConfig::default(),
@@ -125,7 +124,7 @@ impl<E> Default for Sdk<E> {
 
 // The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
 // aggregation supports.
-impl<E> Sdk<E>
+impl<E> GenericSdk<E>
 where
     E: StarkFriEngine<SC = SC>,
     NativeConfig: VmProverConfig<E>,
@@ -273,7 +272,7 @@ where
         reader: &impl Halo2ParamsReader,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
+        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler)?;
         Ok(agg_pk)
     }
 
@@ -420,7 +419,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn generate_evm_proof<VC: VmConfig<F>>(
+    pub fn generate_evm_proof<VC>(
         &self,
         reader: &impl Halo2ParamsReader,
         app_pk: Arc<AppProvingKey<VC>>,
@@ -429,12 +428,14 @@ where
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+        <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
+            + InsExecutorE2<F>
+            + InstructionExecutor<F, <VC as VmProverConfig<E>>::RecordArena>,
     {
-        let e2e_prover =
-            EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
-        let proof = e2e_prover.generate_proof_for_evm(inputs);
+        let mut e2e_prover =
+            EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config)?;
+        let proof = e2e_prover.generate_proof_for_evm(inputs)?;
         Ok(proof)
     }
 
