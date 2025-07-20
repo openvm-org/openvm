@@ -342,7 +342,12 @@ impl AggStarkProvingKey {
             let air_heights =
                 compute_root_proof_heights(&mut vm, &root_committed_exe, &internal_proof)?;
             let root_air_perm = AirIdPermutation::compute(&air_heights);
+            // ATTENTION: make sure to permute everything in vm_pk that references the original AIR
+            // ID ordering:
             root_air_perm.permute(&mut vm_pk.per_air);
+            for thc in &mut vm_pk.trace_height_constraints {
+                root_air_perm.permute(&mut thc.coefficients);
+            }
 
             RootVerifierProvingKey {
                 vm_pk: Arc::new(VmProvingKey {

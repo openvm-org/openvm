@@ -31,12 +31,26 @@ pub struct RootVerifierLocalProver {
 
 impl RootVerifierLocalProver {
     pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
-        let inner = new_local_prover(
+        let mut inner = new_local_prover(
             &root_verifier_pk.vm_pk,
             &root_verifier_pk.root_committed_exe,
         )?;
         let fixed_air_heights = root_verifier_pk.air_heights;
         let air_id_perm = AirIdPermutation::compute(&fixed_air_heights);
+        // The root_verifier_pk has the AIRs ordered by the fixed AIR height sorted ordering, but
+        // internally VirtualMachine still wants to use the original AIR ID ordering from VmConfig,
+        // so we apply the inverse permutation here. Note: this must exactly be the inverse
+        // of the permutation done in `AggStarkProvingKey::dummy_proof_and_keygen`.
+        let mut inverse_perm = vec![0usize; air_id_perm.perm.len()];
+        for (i, &perm_i) in air_id_perm.perm.iter().enumerate() {
+            inverse_perm[perm_i] = i;
+        }
+        let inverse_perm = AirIdPermutation { perm: inverse_perm };
+        inverse_perm.permute(&mut inner.vm.pk_mut().per_air);
+        for thc in &mut inner.vm.pk_mut().trace_height_constraints {
+            inverse_perm.permute(&mut thc.coefficients);
+        }
+
         Ok(Self {
             inner,
             fixed_air_heights,

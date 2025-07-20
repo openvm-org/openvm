@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
 };
 
-use getset::{Getters, Setters, WithSetters};
+use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -169,13 +169,6 @@ pub enum ExitCode {
     Error = 1,
     Suspended = -1, // Continuations
 }
-
-// TODO[jpw]: questionable struct
-// pub struct VmExecutorResult<SC: StarkGenericConfig> {
-//     pub per_segment: Vec<ProofInput<SC>>,
-//     /// When VM is running on persistent mode, public values are stored in a special memory
-// space.     pub final_memory: Option<MemoryImage>,
-// }
 
 pub struct VmState<F> {
     pub instret: u64,
@@ -422,6 +415,8 @@ pub enum VirtualMachineError {
     Generation(#[from] GenerationError),
     #[error("program committed trade data not loaded")]
     ProgramIsNotCommitted,
+    #[error("verification error: {0}")]
+    Verification(#[from] VmVerificationError),
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
@@ -431,7 +426,7 @@ pub enum VirtualMachineError {
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
 /// In other words, this struct _is_ the zkVM.
-#[derive(Getters, Setters, WithSetters)]
+#[derive(Getters, MutGetters, Setters, WithSetters)]
 pub struct VirtualMachine<E, VC>
 where
     E: StarkEngine,
@@ -442,7 +437,7 @@ where
     /// Runtime executor
     #[getset(get = "pub")]
     executor: VmExecutor<Val<E::SC>, VC>,
-    #[getset(get = "pub")]
+    #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
 }
