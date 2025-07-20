@@ -351,6 +351,11 @@ pub struct MatrixRecordArena<F> {
     pub trace_buffer: Vec<F>,
     pub width: usize,
     pub trace_offset: usize,
+    /// The arena is created with a specified capacity, but may be truncated before being converted
+    /// into a [RowMajorMatrix] if `allow_truncate == true`. If `allow_truncate == false`, then the
+    /// matrix will never be truncated. The latter is used if the trace matrix must have fixed
+    /// dimensions (e.g., for a static verifier).
+    pub(super) allow_truncate: bool,
 }
 
 impl<F: Field> MatrixRecordArena<F> {
@@ -370,6 +375,10 @@ impl<F: Field> MatrixRecordArena<F> {
         // - alignment of `u8` is always satisfied
         unsafe { &mut *std::ptr::slice_from_raw_parts_mut(ptr, size) }
     }
+
+    pub fn force_matrix_dimensions(&mut self) {
+        self.allow_truncate = false;
+    }
 }
 
 impl<F: Field> Arena for MatrixRecordArena<F> {
@@ -380,6 +389,7 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
             trace_buffer,
             width,
             trace_offset: 0,
+            allow_truncate: true,
         }
     }
 }
@@ -399,7 +409,20 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
         self.trace_offset
     }
 
-    fn into_matrix(self) -> RowMajorMatrix<F> {
+    fn into_matrix(mut self) -> RowMajorMatrix<F> {
+        let width = self.width();
+        assert_eq!(self.trace_offset() % width, 0);
+        let rows_used = self.trace_offset() / width;
+        let height = next_power_of_two_or_zero(rows_used);
+        // This should be automatic since trace_buffer's height is a power of two:
+        assert!(height.checked_mul(width).unwrap() <= self.trace_buffer.len());
+        if self.allow_truncate {
+            self.trace_buffer.truncate(height * width);
+        } else {
+            assert_eq!(self.trace_buffer.len() % width, 0);
+            let height = self.trace_buffer.len() / width;
+            assert!(height.is_power_of_two() || height == 0);
+        }
         RowMajorMatrix::new(self.trace_buffer, self.width)
     }
 }
@@ -764,14 +787,8 @@ where
     RA: RowMajorMatrixArena<Val<SC>>,
 {
     fn generate_proving_ctx(&self, arena: RA) -> AirProvingContext<CpuBackend<SC>> {
-        let width = arena.width();
-        assert_eq!(arena.trace_offset() % width, 0);
-        let rows_used = arena.trace_offset() / width;
-        let height = next_power_of_two_or_zero(rows_used);
+        let rows_used = arena.trace_offset() / arena.width();
         let mut trace = arena.into_matrix();
-        // This should be automatic since trace_buffer's height is a power of two:
-        assert!(height.checked_mul(width).unwrap() <= trace.values.len());
-        trace.values.truncate(height * width);
         let mem_helper = self.mem_helper.as_borrowed();
         self.inner.fill_trace(&mem_helper, &mut trace, rows_used);
 

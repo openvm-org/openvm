@@ -481,6 +481,7 @@ unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.vm_write(AS::Native as u32, pre_compute.a, &[pre_compute.return_pc]);
     // TODO(ayush): better way to do this
     vm_state.pc = (F::from_canonical_u32(vm_state.pc) + pre_compute.b).as_canonical_u32();
+    vm_state.instret += 1;
 }
 
 #[inline(always)]

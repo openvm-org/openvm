@@ -28,7 +28,7 @@ use crate::{
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
     #[instrument(name = "merkle_finalize", skip_all)]
-    pub fn finalize(
+    pub(crate) fn finalize(
         &mut self,
         initial_memory: &MemoryImage,
         final_memory: &Equipartition<F, CHUNK>,
@@ -37,7 +37,6 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         let mut tree = MerkleTree::from_memory(initial_memory, &self.air.memory_dimensions, hasher);
         self.final_state = Some(tree.finalize(hasher, final_memory, &self.air.memory_dimensions));
-        self.trace_height = Some(self.final_state.as_ref().unwrap().rows.len());
     }
 }
 
@@ -93,8 +92,7 @@ impl<const CHUNK: usize, F: PrimeField32> ChipUsageGetter for MemoryMerkleChip<C
     }
 
     fn current_trace_height(&self) -> usize {
-        // TODO is it ok?
-        self.trace_height.unwrap_or(0)
+        self.final_state.as_ref().map(|s| s.rows.len()).unwrap_or(0)
     }
 
     fn trace_width(&self) -> usize {

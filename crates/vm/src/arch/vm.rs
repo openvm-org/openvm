@@ -13,7 +13,7 @@ use std::{
     sync::Arc,
 };
 
-use getset::{Getters, Setters, WithSetters};
+use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -68,7 +68,7 @@ use crate::{
         },
         program::{trace::VmCommittedExe, ProgramHandler},
         public_values::PublicValuesStep,
-        SystemChipComplex, SystemRecords, PV_EXECUTOR_IDX,
+        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
     },
 };
 
@@ -76,8 +76,12 @@ use crate::{
 pub enum GenerationError {
     #[error("unexpected number of arenas: {actual} (expected num_airs={expected})")]
     UnexpectedNumArenas { actual: usize, expected: usize },
-    #[error("force_trace_heights len incorrect: {actual} (expected num_airs={expected})")]
-    UnexpectedForceTraceHeightsLen { actual: usize, expected: usize },
+    #[error("trace height for air_idx={air_idx} must be fixed to {expected}, actual={actual}")]
+    ForceTraceHeightIncorrect {
+        air_idx: usize,
+        actual: usize,
+        expected: usize,
+    },
     #[error("trace height of air {air_idx} has height {height} greater than maximum {max_height}")]
     TraceHeightsLimitExceeded {
         air_idx: usize,
@@ -156,10 +160,6 @@ where
     /// must store the executors in their initialized state. Internally, the executors are cloned
     /// into a separate instance before running a program.
     inventory: ExecutorInventory<VC::Executor>,
-    // pub overridden_heights: Option<VmComplexTraceHeights>,
-    // pub trace_height_constraints: Vec<LinearConstraint>,
-    // TEMPORARY: only needed for E3 arena allocation
-    // pub main_widths: Vec<usize>,
     phantom: PhantomData<F>,
 }
 
@@ -169,13 +169,6 @@ pub enum ExitCode {
     Error = 1,
     Suspended = -1, // Continuations
 }
-
-// TODO[jpw]: questionable struct
-// pub struct VmExecutorResult<SC: StarkGenericConfig> {
-//     pub per_segment: Vec<ProofInput<SC>>,
-//     /// When VM is running on persistent mode, public values are stored in a special memory
-// space.     pub final_memory: Option<MemoryImage>,
-// }
 
 pub struct VmState<F> {
     pub instret: u64,
@@ -422,6 +415,8 @@ pub enum VirtualMachineError {
     Generation(#[from] GenerationError),
     #[error("program committed trade data not loaded")]
     ProgramIsNotCommitted,
+    #[error("verification error: {0}")]
+    Verification(#[from] VmVerificationError),
 }
 
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
@@ -431,7 +426,7 @@ pub enum VirtualMachineError {
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
 /// In other words, this struct _is_ the zkVM.
-#[derive(Getters, Setters, WithSetters)]
+#[derive(Getters, MutGetters, Setters, WithSetters)]
 pub struct VirtualMachine<E, VC>
 where
     E: StarkEngine,
@@ -442,7 +437,7 @@ where
     /// Runtime executor
     #[getset(get = "pub")]
     executor: VmExecutor<Val<E::SC>, VC>,
-    #[getset(get = "pub")]
+    #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
 }
@@ -482,20 +477,6 @@ where
     pub fn config(&self) -> &VC {
         &self.executor.config
     }
-
-    // TODO[jpw]
-    // pub fn new_with_overridden_trace_heights(
-    //     engine: E,
-    //     config: VC,
-    //     overridden_heights: Option<VmComplexTraceHeights>,
-    // ) -> Self {
-    //     let executor = VmExecutor::new_with_overridden_trace_heights(config, overridden_heights);
-    //     Self {
-    //         engine,
-    //         executor,
-    //         _marker: PhantomData,
-    //     }
-    // }
 
     // TODO[jpw]: I'd like to make a VmInstance struct that has a loaded program
     //
@@ -626,6 +607,18 @@ where
             .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
             .collect_vec();
         // TODO[jpw]: put back self.max_trace_height
+
+        // TODO: move this elsewhere
+        // let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
+        //     let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
+        //     1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        // } else {
+        //     tracing::warn!(
+        //         "constructing SystemComplex for unrecognized field; using max_trace_height =
+        // 2^30"     );
+        //     1 << 30
+        // };
+
         // if let Some(&(air_idx, height)) = idx_trace_heights
         //     .iter()
         //     .find(|(_, height)| *height > self.max_trace_height)
@@ -677,7 +670,7 @@ where
     ///   final memory state may be used to extract user public values afterwards.
     pub fn prove(
         &mut self,
-        exe: VmExe<Val<E::SC>>,
+        exe: impl Into<VmExe<Val<E::SC>>>,
         state: VmState<Val<E::SC>>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -692,7 +685,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = self.execute_preflight(exe, state, num_insns, trace_heights)?;
+        } = self.execute_preflight(exe.into(), state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
@@ -844,6 +837,7 @@ where
     #[getset(get = "pub")]
     exe_commitment: Com<E::SC>,
     // TODO: store immutable parts of program handler here
+    #[getset(get = "pub")]
     exe: VmExe<Val<E::SC>>,
 }
 
@@ -883,6 +877,27 @@ where
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
+        self.prove_continuations(input, |_, _| {})
+    }
+}
+
+impl<E, VC> VmLocalProver<E, VC>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VC: VmProverConfig<E>,
+    VC::Executor: InsExecutorE1<Val<E::SC>>
+        + InsExecutorE2<Val<E::SC>>
+        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+{
+    /// For internal use to resize trace matrices before proving.
+    ///
+    /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
+    pub fn prove_continuations(
+        &mut self,
+        input: impl Into<Streams<Val<E::SC>>>,
+        mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
         let vm = &mut self.vm;
         let exe = &self.exe;
@@ -913,7 +928,8 @@ where
             } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
             state = Some(to_state);
 
-            let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx);
             proofs.push(proof);
         }
@@ -1186,5 +1202,21 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     match exit_code {
         Some(code) => check_exit_code(code),
         None => Err(ExecutionError::DidNotTerminate),
+    }
+}
+
+impl<E, VC> VirtualMachine<E, VC>
+where
+    E: StarkEngine,
+    VC: VmProverConfig<E>,
+    VC::SystemChipInventory: SystemWithFixedTraceHeights,
+{
+    /// Sets fixed trace heights for the system AIRs' trace matrices.
+    pub fn override_system_trace_heights(&mut self, heights: &[u32]) {
+        let num_sys_airs = self.config().as_ref().num_airs();
+        assert!(heights.len() >= num_sys_airs);
+        self.chip_complex
+            .system
+            .override_trace_heights(&heights[..num_sys_airs]);
     }
 }

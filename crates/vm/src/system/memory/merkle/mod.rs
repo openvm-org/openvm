@@ -25,8 +25,6 @@ pub use tree::*;
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,
     final_state: Option<FinalState<CHUNK, F>>,
-    // TODO(AG): how are these two different? Doesn't one just end up being copied to the other?
-    trace_height: Option<usize>,
     overridden_height: Option<usize>,
 }
 #[derive(Debug)]
@@ -53,7 +51,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
                 compression_bus,
             },
             final_state: None,
-            trace_height: None,
+            // trace_height: None,
             overridden_height: None,
         }
     }

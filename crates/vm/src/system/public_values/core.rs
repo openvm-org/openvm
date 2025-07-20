@@ -144,7 +144,7 @@ impl<F: Clone, A> PublicValuesStep<F, A> {
         }
     }
 
-    pub fn set_public_values(&mut self, public_values: &[F]) {
+    pub(crate) fn set_public_values(&mut self, public_values: &[F]) {
         let mut custom_pvs = self.custom_pvs.lock().unwrap();
         assert_eq!(public_values.len(), custom_pvs.len());
         for (pv_mut, value) in custom_pvs.iter_mut().zip(public_values) {

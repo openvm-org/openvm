@@ -1,5 +1,5 @@
 use openvm_circuit::{arch::PUBLIC_VALUES_AIR_ID, utils::air_test_impl};
-use openvm_native_circuit::{execute_program, test_native_config};
+use openvm_native_circuit::{execute_program_with_config, test_native_config};
 use openvm_native_compiler::{asm::AsmBuilder, prelude::*};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
 use openvm_stark_sdk::{
@@ -67,5 +67,12 @@ fn test_compiler_public_values_no_initial() {
     builder.halt();
 
     let program = builder.compile_isa();
-    execute_program(program, vec![]);
+    let (output, _) = execute_program_with_config::<BabyBearPoseidon2Engine>(
+        program,
+        vec![],
+        test_native_config(),
+    )
+    .unwrap();
+    assert_eq!(output.system_records.public_values[0], public_value_0);
+    assert_eq!(output.system_records.public_values[1], public_value_1);
 }

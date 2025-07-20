@@ -49,7 +49,8 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
         .instructions_and_debug_infos
         .iter()
         .enumerate()
-        .filter_map(|(i, entry)| entry.is_some().then(|| execution_frequencies[i]))
+        .filter(|(_, entry)| entry.is_some())
+        .map(|(i, _)| execution_frequencies[i])
         .collect();
     let original_height = filtered_exec_frequencies.len();
 

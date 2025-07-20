@@ -82,7 +82,11 @@ where
         executor: &mut Executor,
         pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError> {
-        tracing::trace!("timestamp: {}", state.memory.timestamp());
+        tracing::trace!(
+            "opcode: {} | timestamp: {}",
+            executor.get_opcode_name(pc_entry.insn.opcode.as_usize()),
+            state.memory.timestamp()
+        );
         let arena = unsafe {
             // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
             let air_idx = *self

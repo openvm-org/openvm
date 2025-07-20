@@ -76,6 +76,7 @@ where
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn create_air_with_air_ctx<SC: StarkGenericConfig>() -> (
     (AirRef<SC>, AirProvingContext<CpuBackend<SC>>),
     (

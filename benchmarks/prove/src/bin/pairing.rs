@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         .pairing(PairingExtension::new(vec![PairingCurve::Bn254]))
         .build();
     let elf = args.build_bench_program("pairing", &vm_config, None)?;
-    let sdk: Sdk = Sdk::new();
+    let sdk = Sdk::new();
     let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {

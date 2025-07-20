@@ -750,7 +750,7 @@ impl TracingMemory {
     pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
         let touched_blocks = self.touched_blocks();
 
-        // TODO[jpw]: Do we need this??
+        // TODO[jpw]: only needed for metrics, move somewhere else
         // Compute trace heights for access adapter chips and update their stored heights
         // self.access_adapter_inventory.compute_trace_heights();
 

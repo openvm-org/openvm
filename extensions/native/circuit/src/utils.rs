@@ -13,8 +13,8 @@ pub mod test_utils {
         arch::{
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine, VmProverConfig,
-            VmState,
+            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
+            VirtualMachineError, VmProverConfig, VmState,
         },
         utils::test_system_config,
     };
@@ -28,7 +28,7 @@ pub mod test_utils {
         config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
     };
     use openvm_stark_sdk::{
-        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
         engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
@@ -77,15 +77,19 @@ pub mod test_utils {
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
         config: NativeConfig,
-    ) -> eyre::Result<(
-        PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
-        VirtualMachine<E, NativeConfig>,
-    )>
+    ) -> Result<
+        (
+            PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+            VirtualMachine<E, NativeConfig>,
+        ),
+        VirtualMachineError,
+    >
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
         NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
     {
+        setup_tracing();
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
@@ -108,7 +112,11 @@ pub mod test_utils {
         assert_eq!(instret_start, 0);
         let exe = VmExe::new(program);
         let state = vm.executor().create_initial_state(&exe, input);
-        let output = vm.execute_preflight(exe, state, Some(num_insns), &trace_heights)?;
+        let output = vm.execute_preflight(exe, state, None, &trace_heights)?;
+        assert_eq!(
+            output.to_state.instret, num_insns,
+            "metered execution insn count doesn't match preflight execution"
+        );
         Ok((output, vm))
     }
 

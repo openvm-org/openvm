@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
     p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::{
         cpu::{CpuBackend, CpuDevice},
@@ -41,8 +41,8 @@ use super::{ExecutionBridge, ExecutionBus, InstructionExecutor};
 use crate::{
     arch::{
         testing::{execution::air::ExecutionDummyAir, program::air::ProgramDummyAir},
-        vm_poseidon2_config, Arena, ExecutionState, MatrixRecordArena, MemoryConfig,
-        RowMajorMatrixArena, Streams, VmStateMut,
+        vm_poseidon2_config, Arena, ExecutionState, MatrixRecordArena, MemoryConfig, Streams,
+        VmStateMut,
     },
     system::{
         memory::{
@@ -76,7 +76,6 @@ pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
 pub type ArenaId = usize;
-const MAX_INS_CAPACITY: usize = 128;
 
 pub struct TestChipHarness<F, E, A, C, RA = MatrixRecordArena<F>> {
     pub executor: E,
