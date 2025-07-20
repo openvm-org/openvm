@@ -1,8 +1,8 @@
 use getset::Getters;
 use itertools::zip_eq;
 use openvm_circuit::arch::{
-    GenerationError, PreflightExecutionOutput, SingleSegmentVmProver, Streams, VirtualMachineError,
-    VmLocalProver,
+    GenerationError, PreflightExecutionOutput, SingleSegmentVmProver, Streams, VirtualMachine,
+    VirtualMachineError, VmLocalProver,
 };
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
@@ -22,39 +22,35 @@ use crate::{
 /// Local prover for a root verifier.
 #[derive(Getters)]
 pub struct RootVerifierLocalProver {
+    /// The proving key in `inner` should always have ordering of AIRs in the sorted order by fixed
+    /// trace heights outside of the `prove` function.
     inner: VmLocalProver<BabyBearPoseidon2RootEngine, NativeConfig>,
     /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
     #[getset(get = "pub")]
     fixed_air_heights: Vec<u32>,
     air_id_perm: AirIdPermutation,
+    air_id_inv_perm: AirIdPermutation,
 }
 
 impl RootVerifierLocalProver {
     pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
-        let mut inner = new_local_prover(
+        let inner = new_local_prover(
             &root_verifier_pk.vm_pk,
             &root_verifier_pk.root_committed_exe,
         )?;
         let fixed_air_heights = root_verifier_pk.air_heights;
         let air_id_perm = AirIdPermutation::compute(&fixed_air_heights);
-        // The root_verifier_pk has the AIRs ordered by the fixed AIR height sorted ordering, but
-        // internally VirtualMachine still wants to use the original AIR ID ordering from VmConfig,
-        // so we apply the inverse permutation here. Note: this must exactly be the inverse
-        // of the permutation done in `AggStarkProvingKey::dummy_proof_and_keygen`.
         let mut inverse_perm = vec![0usize; air_id_perm.perm.len()];
         for (i, &perm_i) in air_id_perm.perm.iter().enumerate() {
             inverse_perm[perm_i] = i;
         }
-        let inverse_perm = AirIdPermutation { perm: inverse_perm };
-        inverse_perm.permute(&mut inner.vm.pk_mut().per_air);
-        for thc in &mut inner.vm.pk_mut().trace_height_constraints {
-            inverse_perm.permute(&mut thc.coefficients);
-        }
+        let air_id_inv_perm = AirIdPermutation { perm: inverse_perm };
 
         Ok(Self {
             inner,
             fixed_air_heights,
             air_id_perm,
+            air_id_inv_perm,
         })
     }
     pub fn vm_config(&self) -> &NativeConfig {
@@ -70,7 +66,9 @@ impl RootVerifierLocalProver {
         input: RootVmVerifierInput<SC>,
     ) -> Result<Vec<u32>, VirtualMachineError> {
         let exe = self.inner.exe().clone();
+        // See `SingleSegmentVmProver::prove` for explanation
         let vm = &mut self.inner.vm;
+        Self::permute_pk(vm, &self.air_id_inv_perm);
         assert!(!vm.config().as_ref().continuation_enabled);
         let input = input.write();
         let state = vm.executor().create_initial_state(&exe, input);
@@ -88,7 +86,20 @@ impl RootVerifierLocalProver {
             .iter()
             .map(|(_, air_ctx)| air_ctx.main_trace_height() as u32)
             .collect();
+        Self::permute_pk(vm, &self.air_id_perm);
         Ok(air_heights)
+    }
+
+    // ATTENTION: this must exactly match the permutation done in
+    // `AggStarkProvingKey::dummy_proof_and_keygen` except on DeviceMultiStarkProvingKey.
+    fn permute_pk(
+        vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeConfig>,
+        perm: &AirIdPermutation,
+    ) {
+        perm.permute(&mut vm.pk_mut().per_air);
+        for thc in &mut vm.pk_mut().trace_height_constraints {
+            perm.permute(&mut thc.coefficients);
+        }
     }
 }
 
@@ -113,6 +124,12 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         let input = input.into();
         let exe = self.inner.exe().clone();
         let vm = &mut self.inner.vm;
+        // The root_verifier_pk has the AIRs ordered by the fixed AIR height sorted ordering, but
+        // execute_preflight and generate_proving_ctx still expect the original AIR ID ordering from
+        // VmConfig, so we apply the inverse permutation here, and then undo it after tracegen. This
+        // could maybe be replaced by only changing `executor_idx_to_air_idx`, but applying the
+        // permutation is conceptually simpler to track.
+        Self::permute_pk(vm, &self.air_id_inv_perm);
         assert!(!vm.config().as_ref().continuation_enabled);
         let state = vm.executor().create_initial_state(&exe, input);
         vm.transport_init_memory_to_device(&state.memory);
@@ -158,6 +175,8 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         for (i, (air_idx, _)) in ctx.per_air.iter_mut().enumerate() {
             *air_idx = i;
         }
+        // We also undo the permutation on pk because `prove` needs pk and ctx ordering to match.
+        Self::permute_pk(vm, &self.air_id_perm);
         let proof = vm.engine.prove(vm.pk(), ctx);
         Ok(proof)
     }
