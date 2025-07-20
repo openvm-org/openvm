@@ -112,7 +112,11 @@ pub mod test_utils {
         assert_eq!(instret_start, 0);
         let exe = VmExe::new(program);
         let state = vm.executor().create_initial_state(&exe, input);
-        let output = vm.execute_preflight(exe, state, Some(num_insns), &trace_heights)?;
+        let output = vm.execute_preflight(exe, state, None, &trace_heights)?;
+        assert_eq!(
+            output.to_state.instret, num_insns,
+            "metered execution insn count doesn't match preflight execution"
+        );
         Ok((output, vm))
     }
 
