@@ -91,6 +91,7 @@ fn run_leaf_verifier(
     leaf_committed_exe: Arc<VmCommittedExe<SC>>,
     verifier_input: LeafVmVerifierInput<SC>,
 ) -> Result<Vec<F>, VirtualMachineError> {
+    assert!(leaf_vm_config.system.has_public_values_chip());
     let (output, _vm) = execute_program_with_config::<BabyBearPoseidon2Engine>(
         leaf_committed_exe.exe.program.clone(),
         verifier_input.write_to_stream(),

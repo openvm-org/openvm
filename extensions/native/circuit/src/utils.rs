@@ -28,7 +28,7 @@ pub mod test_utils {
         config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
     };
     use openvm_stark_sdk::{
-        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
         engine::StarkFriEngine,
         p3_baby_bear::BabyBear,
     };
@@ -89,6 +89,7 @@ pub mod test_utils {
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
         NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
     {
+        setup_tracing();
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 

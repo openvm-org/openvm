@@ -1,6 +1,7 @@
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
@@ -48,6 +49,7 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
     /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
     // TODO[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
     // this. We should make this a function within SystemChipComplex
+    #[instrument(name = "compute_user_public_values_proof", skip_all)]
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,

@@ -1,6 +1,6 @@
 use std::cmp::Reverse;
 
-use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
+#[cfg(feature = "evm-prove")]
 use openvm_continuations::verifier::common::types::SpecialAirIds;
 
 /// Permutation of the AIR IDs to order them by forced trace heights.
@@ -21,6 +21,8 @@ impl AirIdPermutation {
     }
     #[cfg(feature = "evm-prove")]
     pub fn get_special_air_ids(&self) -> SpecialAirIds {
+        use openvm_circuit::arch::{CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID};
+
         let perm_len = self.perm.len();
         let mut ret = SpecialAirIds {
             program_air_id: perm_len,
