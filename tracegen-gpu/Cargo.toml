@@ -7,6 +7,7 @@ edition.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
+cuda-runtime-sys = { workspace = true }
 rand = { version = "0.8.5", default-features = false }
 tracing = { workspace = true }
 derive-new = { workspace = true }
@@ -15,6 +16,8 @@ derive-new = { workspace = true }
 stark-backend-gpu = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+halo2curves-axiom = { workspace = true }
+num-traits = { workspace = true }
 
 # openvm
 openvm-circuit = { workspace = true }
@@ -28,6 +31,9 @@ openvm-rv32im-transpiler = { git = "https://github.com/openvm-org/openvm.git", b
 openvm-rv32im-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-algebra-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-algebra-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-mod-circuit-builder = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-ecc-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-ecc-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-keccak256-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 # p3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb" }
@@ -48,6 +54,8 @@ itertools = { version = "0.14.0", default-features = false, features = ["use_std
 openvm-instructions = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", features = ["test-utils"] }
+openvm-rv32-adapters = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", features = ["test-utils"] }
+openvm-mod-circuit-builder = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", features = ["test-utils"] }
 openvm-keccak256-transpiler = { workspace = true }
 
 [features]
