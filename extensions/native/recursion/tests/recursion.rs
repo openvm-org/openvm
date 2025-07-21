@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use openvm_circuit::arch::{
     instructions::program::Program, MatrixRecordArena, PreflightExecutionOutput, VmCircuitConfig,
-    VmProverConfig,
+    VmProverBuilder,
 };
 use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeConfig};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
@@ -58,7 +58,7 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
-    NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
+    NativeConfig: VmProverBuilder<E, RecordArena = MatrixRecordArena<BabyBear>>,
 {
     let fib_program = fibonacci_program(a, b, n);
     let mut config = test_native_config();

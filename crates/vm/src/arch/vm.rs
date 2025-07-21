@@ -52,7 +52,8 @@ use crate::{
         interpreter::InterpretedInstance,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, SystemConfig, TraceFiller,
-        VmExecutionConfig, VmProverConfig, VmSegmentExecutor, VmSegmentState, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, VmProverBuilder, VmSegmentExecutor, VmSegmentState,
+        PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -422,39 +423,40 @@ pub enum VirtualMachineError {
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkGenericConfig] and
-/// [ProverBackend] via associated types. The [VmProverConfig] also fixes the choice of
+/// [ProverBackend] via associated types. The [VmProverBuilder] also fixes the choice of
 /// `RecordArena` associated to the prover backend via an associated type.
 ///
 /// In other words, this struct _is_ the zkVM.
 #[derive(Getters, MutGetters, Setters, WithSetters)]
-pub struct VirtualMachine<E, VC>
+pub struct VirtualMachine<E, VB>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VB: VmProverBuilder<E>,
 {
     /// Proving engine
     pub engine: E,
     /// Runtime executor
     #[getset(get = "pub")]
-    executor: VmExecutor<Val<E::SC>, VC>,
+    executor: VmExecutor<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
-    chip_complex: VmChipComplex<E::SC, VC::RecordArena, E::PB, VC::SystemChipInventory>,
+    chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
 }
 
-impl<E, VC> VirtualMachine<E, VC>
+impl<E, VB> VirtualMachine<E, VB>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VB: VmProverBuilder<E>,
 {
     pub fn new(
         engine: E,
-        config: VC,
+        prover_builder: &VB,
+        config: VB::VmConfig,
         d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
         let circuit = config.create_airs()?;
-        let chip_complex = config.create_chip_complex(circuit)?;
-        let executor = VmExecutor::<Val<E::SC>, VC>::new(config)?;
+        let chip_complex = prover_builder.create_chip_complex(&config, circuit)?;
+        let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
         Ok(Self {
             engine,
             executor,
@@ -465,16 +467,17 @@ where
 
     pub fn new_with_keygen(
         engine: E,
-        config: VC,
+        prover_builder: &VB,
+        config: VB::VmConfig,
     ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
         let circuit = config.create_airs()?;
         let pk = circuit.keygen(&engine);
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = Self::new(engine, config, d_pk)?;
+        let vm = Self::new(engine, prover_builder, config, d_pk)?;
         Ok((vm, pk))
     }
 
-    pub fn config(&self) -> &VC {
+    pub fn config(&self) -> &VB::VmConfig {
         &self.executor.config
     }
 
@@ -493,10 +496,11 @@ where
         state: VmState<Val<E::SC>>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
-    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VC::RecordArena>, ExecutionError>
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
     where
         Val<E::SC>: PrimeField32,
-        VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
         let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
@@ -504,7 +508,7 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
-        let mut instance = VmSegmentExecutor::<Val<E::SC>, VC::Executor, _>::new(handler, ctrl);
+        let mut instance = VmSegmentExecutor::new(handler, ctrl);
 
         #[cfg(feature = "bench-metrics")]
         {
@@ -594,7 +598,7 @@ where
     pub fn generate_proving_ctx(
         &mut self,
         system_records: SystemRecords<Val<E::SC>>,
-        record_arenas: Vec<VC::RecordArena>,
+        record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
         let ctx = self
             .chip_complex
@@ -677,7 +681,8 @@ where
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
     where
         Val<E::SC>: PrimeField32,
-        VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
         self.transport_init_memory_to_device(&state.memory);
 
@@ -828,12 +833,12 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
 /// program directly on bare metal.
 #[derive(Getters)]
-pub struct VmLocalProver<E, VC>
+pub struct VmLocalProver<E, VB>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VB: VmProverBuilder<E>,
 {
-    pub vm: VirtualMachine<E, VC>,
+    pub vm: VirtualMachine<E, VB>,
     #[getset(get = "pub")]
     exe_commitment: Com<E::SC>,
     // TODO: store immutable parts of program handler here
@@ -841,13 +846,13 @@ where
     exe: VmExe<Val<E::SC>>,
 }
 
-impl<E, VC> VmLocalProver<E, VC>
+impl<E, VB> VmLocalProver<E, VB>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VB: VmProverBuilder<E>,
 {
     pub fn new(
-        mut vm: VirtualMachine<E, VC>,
+        mut vm: VirtualMachine<E, VB>,
         exe: VmExe<Val<E::SC>>,
         cached_program_trace: CommittedTraceData<E::PB>,
     ) -> Self {
@@ -861,14 +866,14 @@ where
     }
 }
 
-impl<E, VC> ContinuationVmProver<E::SC> for VmLocalProver<E, VC>
+impl<E, VB> ContinuationVmProver<E::SC> for VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E>,
-    VC::Executor: InsExecutorE1<Val<E::SC>>
+    VB: VmProverBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
         + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
 {
     /// First performs metered execution (E2) to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -881,14 +886,14 @@ where
     }
 }
 
-impl<E, VC> VmLocalProver<E, VC>
+impl<E, VB> VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E>,
-    VC::Executor: InsExecutorE1<Val<E::SC>>
+    VB: VmProverBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
         + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
 {
     /// For internal use to resize trace matrices before proving.
     ///
@@ -948,12 +953,13 @@ where
     }
 }
 
-impl<E, VC> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VC>
+impl<E, VB> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E>,
-    VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+    VB: VmProverBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+        InstructionExecutor<Val<E::SC>, VB::RecordArena>,
 {
     fn prove(
         &mut self,
@@ -1208,7 +1214,7 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
 impl<E, VC> VirtualMachine<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VC: VmProverBuilder<E>,
     VC::SystemChipInventory: SystemWithFixedTraceHeights,
 {
     /// Sets fixed trace heights for the system AIRs' trace matrices.

@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{
         ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
         InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmLocalProver,
-        VmProverConfig,
+        VmProverBuilder,
     },
     system::program::trace::VmCommittedExe,
 };
@@ -22,7 +22,7 @@ use crate::{
 pub struct AppProver<VC, E>
 where
     E: StarkEngine,
-    VC: VmProverConfig<E>,
+    VC: VmProverBuilder<E>,
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
@@ -33,7 +33,7 @@ impl<VC, E> AppProver<VC, E>
 where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E>,
+    VC: VmProverBuilder<E>,
 {
     pub fn new(
         app_vm_pk: Arc<VmProvingKey<E::SC, VC>>,

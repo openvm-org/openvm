@@ -1,8 +1,17 @@
 use openvm_circuit::{
-    arch::{InitFileGenerator, SystemConfig},
-    system::SystemExecutor,
+    arch::{
+        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
+        VmChipComplex, VmProverBuilder, VmProverExtension,
+    },
+    system::{SystemChipInventory, SystemCpuProverBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;
@@ -117,5 +126,68 @@ impl Rv32ImConfig {
             rv32i: Rv32IConfig::with_public_values_and_segment_len(public_values, segment_len),
             mul: Default::default(),
         }
+    }
+}
+
+pub struct Rv32ICpuProverBuilder;
+
+impl<E, SC> VmProverBuilder<E> for Rv32ICpuProverBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = Rv32IConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32IConfig,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmProverBuilder::<E>::create_chip_complex(
+            &SystemCpuProverBuilder,
+            &config.system,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        Ok(chip_complex)
+    }
+}
+
+pub struct Rv32ImCpuProverBuilder;
+
+impl<E, SC> VmProverBuilder<E> for Rv32ImCpuProverBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = Rv32ImConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32ImConfig,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmProverBuilder::<E>::create_chip_complex(
+            &Rv32ICpuProverBuilder,
+            &config.rv32i,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.mul, inventory)?;
+        Ok(chip_complex)
     }
 }

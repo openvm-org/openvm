@@ -1,3 +1,12 @@
+/// A full VM extension consists of three components, represented by sub-traits:
+/// - [VmExecutionExtension]
+/// - [VmCircuitExtension]
+/// - [VmProverExtension]: there may be multiple implementations of `VmProverExtension` for the
+///   same `VmCircuitExtension` for different prover backends.
+///
+/// It is intended that `VmExecutionExtension` and `VmCircuitExtension` are implemented on the
+/// same struct and `VmProverExtension` is implemented on a separate struct (usually a ZST) to
+/// get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
     iter::{self, zip},
@@ -25,13 +34,10 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashMap;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
-use crate::{
-    arch::MatrixRecordArena,
-    system::{
-        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-        phantom::PhantomExecutor,
-        SystemAirInventory, SystemChipComplex, SystemRecords,
-    },
+use crate::system::{
+    memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
+    phantom::PhantomExecutor,
+    SystemAirInventory, SystemChipComplex, SystemRecords,
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -52,26 +58,6 @@ pub type ExecutorId = u32;
 
 // ======================= VM Extension Traits =============================
 
-/// A full VM extension consists of three components, represented by sub-traits:
-/// - [VmExecutionExtension]
-/// - [VmCircuitExtension]
-/// - [VmProverExtension]
-pub trait VmExtension<SC, RA = MatrixRecordArena<Val<SC>>, PB = CpuBackend<SC>>:
-    VmExecutionExtension<Val<SC>> + VmCircuitExtension<SC> + VmProverExtension<SC, RA, PB>
-where
-    SC: StarkGenericConfig,
-    PB: ProverBackend,
-{
-}
-
-impl<SC, RA, PB, EXT> VmExtension<SC, RA, PB> for EXT
-where
-    SC: StarkGenericConfig,
-    PB: ProverBackend,
-    EXT: VmExecutionExtension<Val<SC>> + VmCircuitExtension<SC> + VmProverExtension<SC, RA, PB>,
-{
-}
-
 /// Extension of VM execution. Allows registration of custom execution of new instructions by
 /// opcode.
 pub trait VmExecutionExtension<F> {
@@ -89,20 +75,25 @@ pub trait VmCircuitExtension<SC: StarkGenericConfig> {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
 }
 
-/// Extension of VM trace generation.
-/// The returned vector should exactly match the order of AIRs in [`VmCircuitExtension`] for this
-/// extension.
-pub trait VmProverExtension<SC, RA, PB>
+/// Extension of VM trace generation. The generics are `E` for [StarkEngine], `RA` for record arena,
+/// and `EXT` for execution and circuit extension. The returned vector should exactly match the
+/// order of AIRs in [`VmCircuitExtension`] for this extension.
+///
+/// Note that this trait differs from [VmExecutionExtension] and [VmCircuitExtension]. This trait is
+/// meant to be implemented on a separate ZST which may be different for different [ProverBackend]s.
+/// This is done to get around Rust orphan rules.
+pub trait VmProverExtension<E, RA, EXT>
 where
-    SC: StarkGenericConfig,
-    PB: ProverBackend,
+    E: StarkEngine,
+    EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
 {
     /// We do not provide access to the [ExecutorInventory] because the process to find an executor
     /// from the inventory seems more cumbersome than to simply re-construct any necessary executors
     /// directly within this function implementation.
     fn extend_prover(
         &self,
-        inventory: &mut ChipInventory<SC, RA, PB>,
+        extension: &EXT,
+        inventory: &mut ChipInventory<E::SC, RA, E::PB>,
     ) -> Result<(), ChipInventoryError>;
 }
 
@@ -804,24 +795,6 @@ impl<SC: StarkGenericConfig, EXT: VmCircuitExtension<SC>> VmCircuitExtension<SC>
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         if let Some(extension) = self {
             extension.extend_circuit(inventory)
-        } else {
-            Ok(())
-        }
-    }
-}
-
-impl<SC, RA, PB, EXT> VmProverExtension<SC, RA, PB> for Option<EXT>
-where
-    SC: StarkGenericConfig,
-    PB: ProverBackend,
-    EXT: VmProverExtension<SC, RA, PB>,
-{
-    fn extend_prover(
-        &self,
-        inventory: &mut ChipInventory<SC, RA, PB>,
-    ) -> Result<(), ChipInventoryError> {
-        if let Some(extension) = self {
-            extension.extend_prover(inventory)
         } else {
             Ok(())
         }

@@ -28,8 +28,9 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
@@ -276,16 +277,19 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
     }
 }
 
+pub struct Rv32ImCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Rv32I
+impl<E, SC, RA> VmProverExtension<E, RA, Rv32I> for Rv32ImCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &Rv32I,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -500,14 +504,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32M {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Rv32M
+impl<E, SC, RA> VmProverExtension<E, RA, Rv32M> for Rv32ImCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        extension: &Rv32M,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -532,8 +538,8 @@ where
             let existing_chip = inventory
                 .find_chip::<SharedRangeTupleCheckerChip<2>>()
                 .find(|c| {
-                    c.bus().sizes[0] >= self.range_tuple_checker_sizes[0]
-                        && c.bus().sizes[1] >= self.range_tuple_checker_sizes[1]
+                    c.bus().sizes[0] >= extension.range_tuple_checker_sizes[0]
+                        && c.bus().sizes[1] >= extension.range_tuple_checker_sizes[1]
                 });
             if let Some(chip) = existing_chip {
                 chip.clone()
@@ -642,14 +648,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32Io {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Rv32Io
+impl<E, SC, RA> VmProverExtension<E, RA, Rv32Io> for Rv32ImCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &Rv32Io,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();

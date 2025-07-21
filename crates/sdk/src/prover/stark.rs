@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{
     InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmCircuitConfig,
-    VmExecutionConfig, VmProverConfig,
+    VmExecutionConfig, VmProverBuilder,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
 #[cfg(feature = "evm-prove")]
@@ -22,8 +22,8 @@ use crate::{
 pub struct StarkProver<VC, E>
 where
     E: StarkFriEngine<SC = SC>,
-    VC: VmProverConfig<E>,
-    NativeConfig: VmProverConfig<E>,
+    VC: VmProverBuilder<E>,
+    NativeConfig: VmProverBuilder<E>,
 {
     pub app_prover: AppProver<VC, E>,
     pub agg_prover: AggStarkProver<E>,
@@ -31,13 +31,13 @@ where
 impl<VC, E> StarkProver<VC, E>
 where
     E: StarkFriEngine<SC = SC>,
-    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
     <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
         + InsExecutorE2<F>
-        + InstructionExecutor<F, <VC as VmProverConfig<E>>::RecordArena>,
-    NativeConfig: VmProverConfig<E>,
+        + InstructionExecutor<F, <VC as VmProverBuilder<E>>::RecordArena>,
+    NativeConfig: VmProverBuilder<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
 {
     pub fn new(
         app_pk: Arc<AppProvingKey<VC>>,

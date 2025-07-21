@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{
     ContinuationVmProof, InstructionExecutor, SingleSegmentVmProver, VirtualMachineError,
-    VmExecutionConfig, VmLocalProver, VmProverConfig,
+    VmExecutionConfig, VmLocalProver, VmProverBuilder,
 };
 use openvm_continuations::verifier::{
     internal::types::{InternalVmVerifierInput, VmStarkProof},
@@ -28,7 +28,7 @@ use crate::{prover::RootVerifierLocalProver, RootSC};
 pub struct AggStarkProver<E>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<E>,
+    NativeConfig: VmProverBuilder<E>,
 {
     leaf_prover: VmLocalProver<E, NativeConfig>,
     leaf_controller: LeafProvingController,
@@ -48,9 +48,9 @@ pub struct LeafProvingController {
 impl<E> AggStarkProver<E>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<E>,
+    NativeConfig: VmProverBuilder<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
 {
     pub fn new(
         agg_stark_pk: AggStarkProvingKey,
@@ -216,9 +216,9 @@ impl LeafProvingController {
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError>
     where
         E: StarkFriEngine<SC = SC>,
-        NativeConfig: VmProverConfig<E>,
+        NativeConfig: VmProverBuilder<E>,
         <NativeConfig as VmExecutionConfig<F>>::Executor:
-            InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+            InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
     {
         #[cfg(feature = "bench-metrics")]
         {
@@ -256,9 +256,9 @@ fn wrap_e2e_stark_proof<E>(
 ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<E>,
+    NativeConfig: VmProverBuilder<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
 {
     fn heights_le(a: &[u32], b: &[u32]) -> bool {
         assert_eq!(a.len(), b.len());

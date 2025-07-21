@@ -9,7 +9,7 @@ use openvm_circuit::{
     arch::{
         instructions::NATIVE_AS, AirInventory, AirInventoryError, ChipInventoryError,
         ExecutorInventory, ExecutorInventoryError, InitFileGenerator, SystemConfig, VmChipComplex,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig,
+        VmCircuitConfig, VmExecutionConfig, VmProverBuilder,
     },
     derive::VmConfig,
     system::SystemExecutor,
@@ -206,13 +206,13 @@ where
     }
 }
 
-impl<E> VmProverConfig<E> for SdkVmConfig
+impl<E> VmProverBuilder<E> for SdkVmConfig
 where
     E: StarkEngine,
-    SdkVmConfigInner: VmProverConfig<E>,
+    SdkVmConfigInner: VmProverBuilder<E>,
 {
-    type RecordArena = <SdkVmConfigInner as VmProverConfig<E>>::RecordArena;
-    type SystemChipInventory = <SdkVmConfigInner as VmProverConfig<E>>::SystemChipInventory;
+    type RecordArena = <SdkVmConfigInner as VmProverBuilder<E>>::RecordArena;
+    type SystemChipInventory = <SdkVmConfigInner as VmProverBuilder<E>>::SystemChipInventory;
 
     fn create_chip_complex(
         &self,

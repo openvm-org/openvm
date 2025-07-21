@@ -6,7 +6,7 @@ use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
     instructions::exe::VmExe, verify_single, DefaultSegmentationStrategy, InsExecutorE1,
     InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmCircuitConfig, VmConfig,
-    VmExecutionConfig, VmProverConfig,
+    VmExecutionConfig, VmProverBuilder,
 };
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -169,7 +169,7 @@ impl BenchmarkCli {
     where
         VC: VmExecutionConfig<F>
             + VmCircuitConfig<SC>
-            + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
+            + VmProverBuilder<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
         <VC as VmExecutionConfig<F>>::Executor:
             InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
     {
@@ -203,12 +203,12 @@ pub fn bench_from_exe<VC, E: StarkFriEngine<SC = SC>>(
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
-    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
     <VC as VmExecutionConfig<F>>::Executor:
         InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VC::RecordArena>,
-    NativeConfig: VmProverConfig<E>,
+    NativeConfig: VmProverBuilder<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.

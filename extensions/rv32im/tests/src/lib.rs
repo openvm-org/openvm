@@ -9,7 +9,9 @@ mod tests {
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
-    use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
+    use openvm_rv32im_circuit::{
+        Rv32IConfig, Rv32ICpuProverBuilder, Rv32ImConfig, Rv32ImCpuProverBuilder,
+    };
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
@@ -49,7 +51,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         change_rv32m_insn_to_nop(&mut exe);
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        air_test_with_min_segments(&Rv32ICpuProverBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -65,7 +67,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension),
         )?;
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        air_test_with_min_segments(&Rv32ImCpuProverBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -86,7 +88,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension),
         )?;
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        air_test_with_min_segments(&Rv32ImCpuProverBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -102,7 +104,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
-        air_test_with_min_segments(config, exe, input, 1);
+        air_test_with_min_segments(&Rv32ImCpuProverBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -125,7 +127,7 @@ mod tests {
             "key".as_bytes().to_vec(),
             hint_load_by_key_encode(&input),
         )]));
-        air_test_with_min_segments(config, exe, streams, 1);
+        air_test_with_min_segments(&Rv32ImCpuProverBuilder, config, exe, streams, 1);
         Ok(())
     }
 
@@ -156,7 +158,7 @@ mod tests {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(config, exe, vec![input], 1);
+        air_test_with_min_segments(&Rv32ImCpuProverBuilder, config, exe, vec![input], 1);
         Ok(())
     }
 
@@ -212,7 +214,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(&Rv32ImCpuProverBuilder, config, exe);
         Ok(())
     }
 
@@ -253,7 +255,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(&Rv32ImCpuProverBuilder, config, exe);
         Ok(())
     }
 
@@ -273,7 +275,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(&Rv32ImCpuProverBuilder, config, exe);
         Ok(())
     }
 
@@ -315,7 +317,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        air_test(config, exe);
+        air_test(&Rv32ImCpuProverBuilder, config, exe);
     }
 
     // For testing programs that should only execute RV32I:

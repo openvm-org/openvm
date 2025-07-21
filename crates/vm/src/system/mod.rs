@@ -30,7 +30,7 @@ use crate::{
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
         RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, VmProverBuilder, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
         PUBLIC_VALUES_AIR_ID,
     },
     system::{
@@ -460,17 +460,21 @@ where
     }
 }
 
-impl<SC, E> VmProverConfig<E> for SystemConfig
+pub struct SystemCpuProverBuilder;
+
+impl<SC, E> VmProverBuilder<E> for SystemCpuProverBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: PrimeField32,
 {
+    type VmConfig = SystemConfig;
     type RecordArena = MatrixRecordArena<Val<SC>>;
     type SystemChipInventory = SystemChipInventory<SC>;
 
     fn create_chip_complex(
         &self,
+        config: &SystemConfig,
         airs: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
@@ -481,7 +485,7 @@ where
 
         let mut inventory = ChipInventory::new(airs);
         // PublicValuesChip is required when num_public_values > 0 in single segment mode.
-        if self.has_public_values_chip() {
+        if config.has_public_values_chip() {
             assert_eq!(
                 inventory.executor_idx_to_insertion_idx.len(),
                 PV_EXECUTOR_IDX
@@ -499,10 +503,10 @@ where
         inventory.next_air::<VariableRangeCheckerAir>()?;
         inventory.add_periphery_chip(range_checker.clone());
 
-        let hasher_chip = if self.continuation_enabled {
+        let hasher_chip = if config.continuation_enabled {
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
-            let direct_bus = if self.max_constraint_degree >= 7 {
+            let direct_bus = if config.max_constraint_degree >= 7 {
                 inventory
                     .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
                     .bus
@@ -514,7 +518,7 @@ where
             let chip = Arc::new(Poseidon2PeripheryChip::new(
                 vm_poseidon2_config(),
                 direct_bus.index,
-                self.max_constraint_degree,
+                config.max_constraint_degree,
             ));
             inventory.add_periphery_chip(chip.clone());
             Some(chip)
@@ -522,7 +526,7 @@ where
             None
         };
         let system = SystemChipInventory::new(
-            self,
+            config,
             &inventory.airs().system().memory,
             range_checker,
             hasher_chip,

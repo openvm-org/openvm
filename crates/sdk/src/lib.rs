@@ -15,7 +15,7 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, InitFileGenerator, InsExecutorE1, InsExecutorE2,
         InstructionExecutor, SystemConfig, VerifiedExecutionPayload, VmCircuitConfig,
-        VmExecutionConfig, VmExecutor, VmProverConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        VmExecutionConfig, VmExecutor, VmProverBuilder, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
@@ -127,9 +127,9 @@ impl<E> Default for GenericSdk<E> {
 impl<E> GenericSdk<E>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmProverConfig<E>,
+    NativeConfig: VmProverBuilder<E>,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
 {
     pub fn new() -> Self {
         Self::default()
@@ -216,7 +216,7 @@ where
         inputs: StdIn,
     ) -> Result<ContinuationVmProof<SC>>
     where
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
         <VC as VmExecutionConfig<F>>::Executor:
             InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VC::RecordArena>,
     {
@@ -307,10 +307,10 @@ where
         inputs: StdIn,
     ) -> Result<VmStarkProof<SC>>
     where
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
         <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
             + InsExecutorE2<F>
-            + InstructionExecutor<F, <VC as VmProverConfig<E>>::RecordArena>,
+            + InstructionExecutor<F, <VC as VmProverBuilder<E>>::RecordArena>,
     {
         let mut stark_prover =
             StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config)?;
@@ -428,10 +428,10 @@ where
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
         <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
             + InsExecutorE2<F>
-            + InstructionExecutor<F, <VC as VmProverConfig<E>>::RecordArena>,
+            + InstructionExecutor<F, <VC as VmProverBuilder<E>>::RecordArena>,
     {
         let mut e2e_prover =
             EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config)?;
