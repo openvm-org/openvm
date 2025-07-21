@@ -6,16 +6,14 @@ use std::borrow::{Borrow, BorrowMut};
 use openvm_circuit::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        E2PreCompute, ExecuteFunc, ExecutionError,
-        ExecutionError::InvalidInstruction,
-        InsExecutorE1, InsExecutorE2, VmChipWrapper, VmSegmentState,
+        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmChipWrapper,
+        VmSegmentState,
     },
     system::memory::online::GuestMemory,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, AlignedBytesBorrow,
 };
-use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
