@@ -29,18 +29,22 @@ use openvm_rv32_adapters::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
+use openvm_stark_sdk::engine::StarkEngine;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use crate::modular_chip::{
-    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-    ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
-    ModularStep, VmModularIsEqualStep,
+use crate::{
+    modular_chip::{
+        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+        ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
+        ModularStep, VmModularIsEqualStep,
+    },
+    AlgebraCpuProverExt,
 };
 
 #[serde_as]
@@ -340,14 +344,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for ModularExtension
+impl<E, SC, RA> VmProverExtension<E, RA, ModularExtension> for AlgebraCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        extension: &ModularExtension,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -367,7 +373,7 @@ where
                 chip
             }
         };
-        for (i, modulus) in self.supported_moduli.iter().enumerate() {
+        for (i, modulus) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
             let start_offset =

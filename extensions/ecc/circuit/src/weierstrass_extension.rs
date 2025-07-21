@@ -26,8 +26,9 @@ use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -35,7 +36,7 @@ use strum::EnumCount;
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcAddNeStep, EcDoubleStep, WeierstrassAir,
+    get_ec_double_step, EcAddNeStep, EcDoubleStep, EccCpuProverExt, WeierstrassAir,
 };
 
 #[serde_as]
@@ -291,14 +292,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for WeierstrassExtension
+impl<E, SC, RA> VmProverExtension<E, RA, WeierstrassExtension> for EccCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        extension: &WeierstrassExtension,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -318,7 +321,7 @@ where
                 chip
             }
         };
-        for curve in self.supported_curves.iter() {
+        for curve in extension.supported_curves.iter() {
             let bytes = curve.modulus.bits().div_ceil(8);
 
             if bytes <= 32 {
