@@ -191,8 +191,8 @@ where
         ChipInventoryError,
     > {
         let config = &self.0;
-        let system = SystemCpuBuilder(config.as_ref().clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let rv32i = Rv32ICpuBuilder(config.rv32i.clone());
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&rv32i, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
