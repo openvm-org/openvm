@@ -133,7 +133,7 @@ template <size_t NUM_LIMBS> struct BaseAluCore {
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             if (record.local_opcode == 0 || record.local_opcode == 1) {
-                bitwise_lookup.add_range(a[i], a[i]);
+                bitwise_lookup.add_xor(a[i], a[i]);
             } else {
                 bitwise_lookup.add_xor(record.b[i], record.c[i]);
             }
