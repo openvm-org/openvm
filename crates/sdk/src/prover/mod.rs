@@ -23,7 +23,7 @@ mod evm {
 
     use openvm_circuit::arch::{
         InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmBuilder,
-        VmCircuitConfig, VmExecutionConfig,
+        VmExecutionConfig,
     };
     use openvm_native_circuit::NativeConfig;
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
@@ -38,30 +38,32 @@ mod evm {
         NonRootCommittedExe, F, SC,
     };
 
-    pub struct EvmHalo2Prover<VC, E>
+    pub struct EvmHalo2Prover<E, VB, NativeBuilder>
     where
         E: StarkFriEngine<SC = SC>,
-        VC: VmBuilder<E>,
-        NativeConfig: VmBuilder<E>,
+        VB: VmBuilder<E>,
+        NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
     {
-        pub stark_prover: StarkProver<VC, E>,
+        pub stark_prover: StarkProver<E, VB, NativeBuilder>,
         pub halo2_prover: Halo2Prover,
     }
 
-    impl<VC, E> EvmHalo2Prover<VC, E>
+    impl<E, VB, NativeBuilder> EvmHalo2Prover<E, VB, NativeBuilder>
     where
         E: StarkFriEngine<SC = SC>,
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmBuilder<E>,
-        <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
+        VB: VmBuilder<E>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
             + InsExecutorE2<F>
-            + InstructionExecutor<F, <VC as VmBuilder<E>>::RecordArena>,
-        NativeConfig: VmBuilder<E>,
+            + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
+        NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
         <NativeConfig as VmExecutionConfig<F>>::Executor:
-            InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
+            InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
         pub fn new(
             reader: &impl Halo2ParamsReader,
-            app_pk: Arc<AppProvingKey<VC>>,
+            app_vm_builder: VB,
+            native_builder: NativeBuilder,
+            app_pk: Arc<AppProvingKey<VB::VmConfig>>,
             app_committed_exe: Arc<NonRootCommittedExe>,
             agg_pk: AggProvingKey,
             agg_tree_config: AggregationTreeConfig,
@@ -70,8 +72,14 @@ mod evm {
                 agg_stark_pk,
                 halo2_pk,
             } = agg_pk;
-            let stark_prover =
-                StarkProver::new(app_pk, app_committed_exe, agg_stark_pk, agg_tree_config)?;
+            let stark_prover = StarkProver::new(
+                app_vm_builder,
+                native_builder,
+                app_pk,
+                app_committed_exe,
+                agg_stark_pk,
+                agg_tree_config,
+            )?;
             Ok(Self {
                 stark_prover,
                 halo2_prover: Halo2Prover::new(reader, halo2_pk),

@@ -13,13 +13,16 @@ mod tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG};
+    use openvm_ecc_circuit::{
+        CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassCpuBuilder, P256_CONFIG,
+        SECP256K1_CONFIG,
+    };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sdk::{
-        config::{AppConfig, SdkVmConfig},
+        config::{AppConfig, SdkVmConfig, SdkVmCpuBuilder},
         StdIn,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -38,7 +41,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
-        config.system = test_system_config_with_continuations();
+        *config.as_mut() = test_system_config_with_continuations();
         config
     }
 
@@ -60,7 +63,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -82,7 +85,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -105,7 +108,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -171,7 +174,13 @@ mod tests {
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(config, openvm_exe, vec![coords], 1);
+        air_test_with_min_segments(
+            Rv32WeierstrassCpuBuilder,
+            config,
+            openvm_exe,
+            vec![coords],
+            1,
+        );
         Ok(())
     }
 
@@ -188,7 +197,7 @@ mod tests {
             &config,
         )?;
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
-        air_test(config, openvm_exe);
+        air_test(SdkVmCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -206,7 +215,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
         Ok(())
     }
 
@@ -224,7 +233,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
         Ok(())
     }
 
@@ -242,7 +251,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&k256_sec1_decoding_test_vectors());
-        air_test_with_min_segments(config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
         Ok(())
     }
 
@@ -268,6 +277,6 @@ mod tests {
         .unwrap();
         let config =
             test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
-        air_test(config, openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
     }
 }

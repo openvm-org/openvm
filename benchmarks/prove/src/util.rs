@@ -5,10 +5,10 @@ use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
     instructions::exe::VmExe, verify_single, DefaultSegmentationStrategy, InsExecutorE1,
-    InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmBuilder,
-    VmCircuitConfig, VmConfig, VmExecutionConfig,
+    InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmBuilder, VmConfig,
+    VmExecutionConfig,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     commit::commit_app_exe,
@@ -159,23 +159,24 @@ impl BenchmarkCli {
         build_elf(&manifest_dir, profile)
     }
 
-    pub fn bench_from_exe<VC>(
+    pub fn bench_from_exe<VB, VC>(
         &self,
         bench_name: impl ToString,
+        app_vm_builder: VB,
         vm_config: VC,
         exe: impl Into<VmExe<F>>,
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VC: VmExecutionConfig<F>
-            + VmCircuitConfig<SC>
-            + VmBuilder<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
+        VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
+        VC: VmExecutionConfig<F> + VmConfig<SC>,
         <VC as VmExecutionConfig<F>>::Executor:
             InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<VC, BabyBearPoseidon2Engine>(
+        bench_from_exe::<BabyBearPoseidon2Engine, _, NativeCpuBuilder>(
             bench_name,
+            app_vm_builder,
             app_config,
             exe,
             input_stream,
@@ -195,20 +196,22 @@ impl BenchmarkCli {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC, E: StarkFriEngine<SC = SC>>(
+pub fn bench_from_exe<E, VB, NativeBuilder>(
     bench_name: impl ToString,
-    app_config: AppConfig<VC>,
+    app_vm_builder: VB,
+    app_config: AppConfig<VB::VmConfig>,
     exe: impl Into<VmExe<F>>,
     input_stream: StdIn,
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
-    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmBuilder<E>,
-    <VC as VmExecutionConfig<F>>::Executor:
-        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VC::RecordArena>,
-    NativeConfig: VmBuilder<E>,
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VB::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.
@@ -222,16 +225,20 @@ where
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with
     //    timer.
     let app_vk = app_pk.get_app_vk();
-    let mut prover =
-        AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe)?.with_program_name(bench_name);
+    let mut prover = AppProver::<E, _>::new(app_vm_builder, app_pk.app_vm_pk, committed_exe)?
+        .with_program_name(bench_name);
     let app_proof = prover.generate_app_proof(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
-    let sdk = GenericSdk::<E>::new();
+    let sdk = GenericSdk::<E, NativeBuilder>::new();
     sdk.verify_app_proof(&app_vk, &app_proof)?;
     if let Some(leaf_vm_config) = leaf_vm_config {
         let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
         let vk = leaf_vm_pk.vm_pk.get_vk();
-        let mut leaf_prover = new_local_prover(&leaf_vm_pk, &app_pk.leaf_committed_exe)?;
+        let mut leaf_prover = new_local_prover(
+            sdk.native_builder().clone(),
+            &leaf_vm_pk,
+            &app_pk.leaf_committed_exe,
+        )?;
         let leaf_controller = LeafProvingController {
             num_children: AggregationTreeConfig::default().num_children_leaf,
         };

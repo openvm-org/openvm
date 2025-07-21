@@ -70,7 +70,8 @@ impl InitFileGenerator for Rv32PairingConfig {
     }
 }
 
-pub struct Rv32PairingCpuBuilder(pub Rv32PairingConfig);
+#[derive(Clone)]
+pub struct Rv32PairingCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32PairingCpuBuilder
 where
@@ -82,20 +83,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Rv32PairingConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let modular = Rv32ModularCpuBuilder(config.modular.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&modular, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
@@ -109,11 +106,5 @@ where
             inventory,
         )?;
         Ok(chip_complex)
-    }
-}
-
-impl From<Rv32PairingCpuBuilder> for Rv32PairingConfig {
-    fn from(builder: Rv32PairingCpuBuilder) -> Self {
-        builder.0
     }
 }

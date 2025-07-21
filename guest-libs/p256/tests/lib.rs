@@ -43,7 +43,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -61,7 +61,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -82,7 +82,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -136,7 +136,9 @@ mod guest_tests {
             }
         }
 
-        pub struct EcdsaCpuBuilder(pub EcdsaConfig);
+        #[derive(Clone)]
+        pub struct EcdsaCpuBuilder;
+
         impl<E, SC> VmBuilder<E> for EcdsaCpuBuilder
         where
             SC: StarkGenericConfig,
@@ -147,20 +149,19 @@ mod guest_tests {
             type SystemChipInventory = SystemChipInventory<SC>;
             type RecordArena = MatrixRecordArena<Val<SC>>;
 
-            fn config(&self) -> &Self::VmConfig {
-                &self.0
-            }
-
             fn create_chip_complex(
                 &self,
+                config: &EcdsaConfig,
                 circuit: AirInventory<SC>,
             ) -> Result<
                 VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
                 ChipInventoryError,
             > {
-                let config = &self.0;
-                let weierstrass = Rv32WeierstrassCpuBuilder(config.weierstrass.clone());
-                let mut chip_complex = VmBuilder::<E>::create_chip_complex(&weierstrass, circuit)?;
+                let mut chip_complex = VmBuilder::<E>::create_chip_complex(
+                    &Rv32WeierstrassCpuBuilder,
+                    &config.weierstrass,
+                    circuit,
+                )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<E, _, _>::extend_prover(
                     &Sha2CpuProverExt,
@@ -168,12 +169,6 @@ mod guest_tests {
                     inventory,
                 )?;
                 Ok(chip_complex)
-            }
-        }
-
-        impl From<EcdsaCpuBuilder> for EcdsaConfig {
-            fn from(builder: EcdsaCpuBuilder) -> Self {
-                builder.0
             }
         }
     }
@@ -194,7 +189,7 @@ mod guest_tests {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(EcdsaCpuBuilder(config), openvm_exe);
+        air_test(EcdsaCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -215,7 +210,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

@@ -66,7 +66,8 @@ pub mod inner {
         let (program, witness_stream) = build_verification_program(vparams, compiler_options);
         air_test_impl::<BabyBearPoseidon2Engine, _>(
             fri_params,
-            NativeCpuBuilder(test_native_config()),
+            NativeCpuBuilder,
+            test_native_config(),
             program,
             witness_stream,
             1,

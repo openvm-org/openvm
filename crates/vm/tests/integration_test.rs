@@ -104,7 +104,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 // See crates/sdk/src/prover/root.rs for intended usage
@@ -127,7 +127,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
 
     // Test getting heights.
     let vm_config = NativeConfig::aggregation(8, 3);
-    let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeCpuBuilder(vm_config))?;
+    let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeCpuBuilder, vm_config)?;
     let vk = pk.get_vk();
 
     let state = vm
@@ -174,7 +174,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     let config = NativeConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder(config))?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config)?;
     let num_airs = pk.per_air.len();
 
     let n = 6;
@@ -209,7 +209,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     assert!(!config.continuation_enabled);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder(config))?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config)?;
 
     let instructions = vec![
         Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
@@ -272,7 +272,7 @@ fn test_vm_initial_memory() {
         init_memory,
         fn_bounds: Default::default(),
     };
-    air_test(NativeCpuBuilder(config), exe);
+    air_test(NativeCpuBuilder, config, exe);
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn test_vm_1_persistent() -> eyre::Result<()> {
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
     let addr_space_height = config.system.memory_config.addr_space_height;
 
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder(config))?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config)?;
 
     let n = 6;
     let instructions = vec![
@@ -375,7 +375,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -422,7 +422,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -481,7 +481,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -554,7 +554,7 @@ fn test_vm_max_access_adapter_8() {
             num_sys_airs2 + num_ext_airs
         );
     }
-    air_test(NativeCpuBuilder(test_native_config()), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -578,7 +578,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = test_native_continuations_config();
-    air_test(NativeCpuBuilder(config), program);
+    air_test(NativeCpuBuilder, config, program);
 }
 
 #[test]
@@ -639,7 +639,7 @@ fn test_vm_hint() {
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = test_native_config();
-    air_test_with_min_segments(NativeCpuBuilder(config), program, input_stream, 1);
+    air_test_with_min_segments(NativeCpuBuilder, config, program, input_stream, 1);
 }
 
 #[test]
@@ -896,7 +896,7 @@ fn test_single_segment_executor_no_segmentation() {
     ));
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
-    let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder(config)).unwrap();
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config).unwrap();
     let instructions: Vec<_> = (0..1000)
         .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
         .chain(std::iter::once(Instruction::from_isize(

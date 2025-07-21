@@ -4,6 +4,8 @@ use openvm_circuit::arch::{
     ContinuationVmProof, InstructionExecutor, SingleSegmentVmProver, VirtualMachineError,
     VmBuilder, VmExecutionConfig, VmLocalProver,
 };
+#[cfg(feature = "evm-prove")]
+use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_continuations::verifier::{
     internal::types::{InternalVmVerifierInput, VmStarkProof},
     leaf::types::LeafVmVerifierInput,
@@ -12,11 +14,6 @@ use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
 use tracing::{info_span, instrument};
-#[cfg(feature = "evm-prove")]
-use {
-    openvm_continuations::verifier::root::types::RootVmVerifierInput,
-    openvm_native_compiler::ir::DIGEST_SIZE,
-};
 
 use crate::{
     config::AggregationTreeConfig, keygen::AggStarkProvingKey, prover::vm::new_local_prover,
@@ -25,15 +22,15 @@ use crate::{
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
 
-pub struct AggStarkProver<E>
+pub struct AggStarkProver<E, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmBuilder<E>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
 {
-    leaf_prover: VmLocalProver<E, NativeConfig>,
+    leaf_prover: VmLocalProver<E, NativeBuilder>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmLocalProver<E, NativeConfig>,
+    internal_prover: VmLocalProver<E, NativeBuilder>,
     #[cfg(feature = "evm-prove")]
     root_prover: RootVerifierLocalProver,
     pub num_children_internal: usize,
@@ -45,23 +42,29 @@ pub struct LeafProvingController {
     pub num_children: usize,
 }
 
-impl<E> AggStarkProver<E>
+impl<E, NativeBuilder> AggStarkProver<E, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmBuilder<E>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     pub fn new(
+        native_builder: NativeBuilder,
         agg_stark_pk: AggStarkProvingKey,
         leaf_committed_exe: Arc<NonRootCommittedExe>,
         tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
-        let leaf_prover = new_local_prover(&agg_stark_pk.leaf_vm_pk, &leaf_committed_exe)?;
+        let leaf_prover = new_local_prover(
+            native_builder.clone(),
+            &agg_stark_pk.leaf_vm_pk,
+            &leaf_committed_exe,
+        )?;
         let leaf_controller = LeafProvingController {
             num_children: tree_config.num_children_leaf,
         };
         let internal_prover = new_local_prover(
+            native_builder,
             &agg_stark_pk.internal_vm_pk,
             &agg_stark_pk.internal_committed_exe,
         )?;
@@ -179,13 +182,58 @@ where
         e2e_stark_proof: VmStarkProof<SC>,
     ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
         let internal_commit = (*self.internal_prover.exe_commitment()).into();
-        wrap_e2e_stark_proof(
-            &mut self.internal_prover,
-            &mut self.root_prover,
-            internal_commit,
-            self.max_internal_wrapper_layers,
-            e2e_stark_proof,
-        )
+        let internal_prover = &mut self.internal_prover;
+        let root_prover = &mut self.root_prover;
+        let max_internal_wrapper_layers = self.max_internal_wrapper_layers;
+        fn heights_le(a: &[u32], b: &[u32]) -> bool {
+            assert_eq!(a.len(), b.len());
+            a.iter().zip(b.iter()).all(|(a, b)| a <= b)
+        }
+
+        let VmStarkProof {
+            mut proof,
+            user_public_values,
+        } = e2e_stark_proof;
+        let mut wrapper_layers = 0;
+        loop {
+            let input = RootVmVerifierInput {
+                proofs: vec![proof.clone()],
+                public_values: user_public_values.clone(),
+            };
+            let actual_air_heights = root_prover.execute_for_air_heights(input)?;
+            // Root verifier can handle the internal proof. We can stop here.
+            if heights_le(&actual_air_heights, root_prover.fixed_air_heights()) {
+                break;
+            }
+            if wrapper_layers >= max_internal_wrapper_layers {
+                panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", max_internal_wrapper_layers);
+            }
+            wrapper_layers += 1;
+            let input = InternalVmVerifierInput {
+                self_program_commit: internal_commit,
+                proofs: vec![proof.clone()],
+            };
+            proof = info_span!(
+                "wrapper_layer",
+                group = format!("internal_wrapper.{wrapper_layers}")
+            )
+            .in_scope(|| {
+                #[cfg(feature = "bench-metrics")]
+                {
+                    metrics::counter!("fri.log_blowup")
+                        .absolute(internal_prover.vm.engine.fri_params().log_blowup as u64);
+                }
+                SingleSegmentVmProver::prove(
+                    internal_prover,
+                    input.write(),
+                    NATIVE_MAX_TRACE_HEIGHTS,
+                )
+            })?;
+        }
+        Ok(RootVmVerifierInput {
+            proofs: vec![proof],
+            public_values: user_public_values,
+        })
     }
 
     #[cfg(feature = "evm-prove")]
@@ -209,16 +257,16 @@ impl LeafProvingController {
     }
 
     #[instrument(name = "agg_layer", skip_all, fields(group = "leaf"))]
-    pub fn generate_proof<E>(
+    pub fn generate_proof<E, NativeBuilder>(
         &self,
-        prover: &mut VmLocalProver<E, NativeConfig>,
+        prover: &mut VmLocalProver<E, NativeBuilder>,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError>
     where
         E: StarkFriEngine<SC = SC>,
-        NativeConfig: VmBuilder<E>,
+        NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
         <NativeConfig as VmExecutionConfig<F>>::Executor:
-            InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
+            InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
         #[cfg(feature = "bench-metrics")]
         {
@@ -243,66 +291,4 @@ impl LeafProvingController {
             })
             .collect()
     }
-}
-
-/// Wrap the e2e stark proof until its heights meet the requirements of the root verifier.
-#[cfg(feature = "evm-prove")]
-fn wrap_e2e_stark_proof<E>(
-    internal_prover: &mut VmLocalProver<E, NativeConfig>,
-    root_prover: &mut RootVerifierLocalProver,
-    internal_commit: [F; DIGEST_SIZE],
-    max_internal_wrapper_layers: usize,
-    e2e_stark_proof: VmStarkProof<SC>,
-) -> Result<RootVmVerifierInput<SC>, VirtualMachineError>
-where
-    E: StarkFriEngine<SC = SC>,
-    NativeConfig: VmBuilder<E>,
-    <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
-{
-    fn heights_le(a: &[u32], b: &[u32]) -> bool {
-        assert_eq!(a.len(), b.len());
-        a.iter().zip(b.iter()).all(|(a, b)| a <= b)
-    }
-
-    let VmStarkProof {
-        mut proof,
-        user_public_values,
-    } = e2e_stark_proof;
-    let mut wrapper_layers = 0;
-    loop {
-        let input = RootVmVerifierInput {
-            proofs: vec![proof.clone()],
-            public_values: user_public_values.clone(),
-        };
-        let actual_air_heights = root_prover.execute_for_air_heights(input)?;
-        // Root verifier can handle the internal proof. We can stop here.
-        if heights_le(&actual_air_heights, root_prover.fixed_air_heights()) {
-            break;
-        }
-        if wrapper_layers >= max_internal_wrapper_layers {
-            panic!("The heights of the root verifier still exceed the required heights after {} wrapper layers", max_internal_wrapper_layers);
-        }
-        wrapper_layers += 1;
-        let input = InternalVmVerifierInput {
-            self_program_commit: internal_commit,
-            proofs: vec![proof.clone()],
-        };
-        proof = info_span!(
-            "wrapper_layer",
-            group = format!("internal_wrapper.{wrapper_layers}")
-        )
-        .in_scope(|| {
-            #[cfg(feature = "bench-metrics")]
-            {
-                metrics::counter!("fri.log_blowup")
-                    .absolute(internal_prover.vm.engine.fri_params().log_blowup as u64);
-            }
-            SingleSegmentVmProver::prove(internal_prover, input.write(), NATIVE_MAX_TRACE_HEIGHTS)
-        })?;
-    }
-    Ok(RootVmVerifierInput {
-        proofs: vec![proof],
-        public_values: user_public_values,
-    })
 }

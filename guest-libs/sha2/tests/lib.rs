@@ -27,7 +27,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(Sha256Rv32CpuBuilder(config), openvm_exe);
+        air_test(Sha256Rv32CpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     VirtualMachineError, VmLocalProver,
 };
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
-use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::hints::Hintable;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2_root::BabyBearPoseidon2RootEngine, FriParameters},
@@ -24,7 +24,8 @@ use crate::{
 pub struct RootVerifierLocalProver {
     /// The proving key in `inner` should always have ordering of AIRs in the sorted order by fixed
     /// trace heights outside of the `prove` function.
-    inner: VmLocalProver<BabyBearPoseidon2RootEngine, NativeConfig>,
+    // This is CPU-only for now because it uses RootSC
+    inner: VmLocalProver<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
     /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
     #[getset(get = "pub")]
     fixed_air_heights: Vec<u32>,
@@ -35,6 +36,7 @@ pub struct RootVerifierLocalProver {
 impl RootVerifierLocalProver {
     pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
         let inner = new_local_prover(
+            NativeCpuBuilder,
             &root_verifier_pk.vm_pk,
             &root_verifier_pk.root_committed_exe,
         )?;
@@ -93,7 +95,7 @@ impl RootVerifierLocalProver {
     // ATTENTION: this must exactly match the permutation done in
     // `AggStarkProvingKey::dummy_proof_and_keygen` except on DeviceMultiStarkProvingKey.
     fn permute_pk(
-        vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeConfig>,
+        vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
         perm: &AirIdPermutation,
     ) {
         perm.permute(&mut vm.pk_mut().per_air);

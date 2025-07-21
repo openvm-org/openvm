@@ -77,6 +77,7 @@ pub mod test_utils {
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
         builder: VB,
+        config: VB::VmConfig,
     ) -> Result<
         (
             PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
@@ -90,12 +91,11 @@ pub mod test_utils {
         VB: VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
     {
         setup_tracing();
-        let config = builder.config();
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
         let engine = E::new(FriParameters::new_for_testing(1));
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder)?;
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let mut segments = vm.executor().execute_metered(
@@ -131,7 +131,8 @@ pub mod test_utils {
         let (output, _) = execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program,
             input_stream,
-            NativeCpuBuilder(config),
+            NativeCpuBuilder,
+            config,
         )
         .unwrap();
         output.to_state

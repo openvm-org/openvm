@@ -46,7 +46,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -65,7 +65,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -84,7 +84,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -108,7 +108,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -132,7 +132,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -181,7 +181,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

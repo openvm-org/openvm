@@ -4,7 +4,8 @@ use getset::Getters;
 use openvm_circuit::{
     arch::{
         ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder, VmLocalProver,
+        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
+        VmExecutionConfig, VmLocalProver,
     },
     system::program::trace::VmCommittedExe,
 };
@@ -18,27 +19,28 @@ use crate::{
 };
 
 #[derive(Getters)]
-pub struct AppProver<VC, E>
+pub struct AppProver<E, VB>
 where
     E: StarkEngine,
-    VC: VmBuilder<E>,
+    VB: VmBuilder<E>,
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
-    app_prover: VmLocalProver<E, VC>,
+    app_prover: VmLocalProver<E, VB>,
 }
 
-impl<VC, E> AppProver<VC, E>
+impl<E, VB> AppProver<E, VB>
 where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmBuilder<E>,
+    VB: VmBuilder<E>,
 {
     pub fn new(
-        app_vm_pk: Arc<VmProvingKey<E::SC, VC>>,
+        vm_builder: VB,
+        app_vm_pk: Arc<VmProvingKey<E::SC, VB::VmConfig>>,
         app_committed_exe: Arc<VmCommittedExe<E::SC>>,
     ) -> Result<Self, VirtualMachineError> {
-        let app_prover = new_local_prover(&app_vm_pk, &app_committed_exe)?;
+        let app_prover = new_local_prover(vm_builder, &app_vm_pk, &app_committed_exe)?;
         Ok(Self {
             program_name: None,
             app_prover,
@@ -59,9 +61,9 @@ where
         input: StdIn<Val<E::SC>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        VC::Executor: InsExecutorE1<Val<E::SC>>
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
             + InsExecutorE2<Val<E::SC>>
-            + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+            + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
         assert!(
             self.vm_config().as_ref().continuation_enabled,
@@ -88,7 +90,8 @@ where
         trace_heights: &[u32],
     ) -> Result<Proof<E::SC>, VirtualMachineError>
     where
-        VC::Executor: InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
         assert!(
             !self.vm_config().as_ref().continuation_enabled,
@@ -110,7 +113,7 @@ where
     }
 
     /// App VM config
-    pub fn vm_config(&self) -> &VC {
+    pub fn vm_config(&self) -> &VB::VmConfig {
         self.app_prover.vm.config()
     }
 }

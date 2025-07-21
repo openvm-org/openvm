@@ -196,7 +196,8 @@ fn test_optional_air() {
         assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            NativeCpuBuilder(config.clone())
+            NativeCpuBuilder,
+            config.clone()
         )
         .is_ok());
     }
@@ -227,7 +228,8 @@ fn test_optional_air() {
         assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            NativeCpuBuilder(config.clone())
+            NativeCpuBuilder,
+            config.clone()
         )
         .is_ok());
     }
@@ -251,7 +253,8 @@ fn test_optional_air() {
         assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            NativeCpuBuilder(config.clone())
+            NativeCpuBuilder,
+            config.clone()
         )
         .is_err());
     }

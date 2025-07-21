@@ -193,7 +193,8 @@ impl Default for Int256Rv32Config {
     }
 }
 
-pub struct Int256Rv32CpuBuilder(pub Int256Rv32Config);
+#[derive(Clone)]
+pub struct Int256Rv32CpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Int256Rv32CpuBuilder
 where
@@ -205,20 +206,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Int256Rv32Config,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let system = SystemCpuBuilder(config.system.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
@@ -229,11 +226,5 @@ where
             inventory,
         )?;
         Ok(chip_complex)
-    }
-}
-
-impl From<Int256Rv32CpuBuilder> for Int256Rv32Config {
-    fn from(builder: Int256Rv32CpuBuilder) -> Self {
-        builder.0
     }
 }

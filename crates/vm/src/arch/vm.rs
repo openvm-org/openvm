@@ -451,11 +451,12 @@ where
     pub fn new(
         engine: E,
         builder: VB,
+        config: VB::VmConfig,
         d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
-        let circuit = builder.config().create_airs()?;
-        let chip_complex = builder.create_chip_complex(circuit)?;
-        let executor = VmExecutor::<Val<E::SC>, _>::new(builder.into())?;
+        let circuit = config.create_airs()?;
+        let chip_complex = builder.create_chip_complex(&config, circuit)?;
+        let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
         Ok(Self {
             engine,
             executor,
@@ -467,11 +468,12 @@ where
     pub fn new_with_keygen(
         engine: E,
         builder: VB,
+        config: VB::VmConfig,
     ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
-        let circuit = builder.config().create_airs()?;
+        let circuit = config.create_airs()?;
         let pk = circuit.keygen(&engine);
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = Self::new(engine, builder, d_pk)?;
+        let vm = Self::new(engine, builder, config, d_pk)?;
         Ok((vm, pk))
     }
 

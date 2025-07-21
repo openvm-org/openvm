@@ -91,7 +91,8 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
     }
 }
 
-pub struct Rv32ModularCpuBuilder(pub Rv32ModularConfig);
+#[derive(Clone)]
+pub struct Rv32ModularCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32ModularCpuBuilder
 where
@@ -103,20 +104,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Rv32ModularConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let system = SystemCpuBuilder(config.system.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.base, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.mul, inventory)?;
@@ -130,13 +127,9 @@ where
     }
 }
 
-impl From<Rv32ModularCpuBuilder> for Rv32ModularConfig {
-    fn from(builder: Rv32ModularCpuBuilder) -> Self {
-        builder.0
-    }
-}
+#[derive(Clone)]
+pub struct Rv32ModularWithFp2CpuBuilder;
 
-pub struct Rv32ModularWithFp2CpuBuilder(pub Rv32ModularWithFp2Config);
 impl<E, SC> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
     SC: StarkGenericConfig,
@@ -147,28 +140,18 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Rv32ModularWithFp2Config,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let modular = Rv32ModularCpuBuilder(config.modular.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&modular, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         Ok(chip_complex)
-    }
-}
-
-impl From<Rv32ModularWithFp2CpuBuilder> for Rv32ModularWithFp2Config {
-    fn from(builder: Rv32ModularWithFp2CpuBuilder) -> Self {
-        builder.0
     }
 }

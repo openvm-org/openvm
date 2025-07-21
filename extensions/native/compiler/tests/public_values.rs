@@ -38,7 +38,8 @@ fn test_compiler_public_values() {
     let fri_params = FriParameters::new_for_testing(1);
     let (_, mut vdata) = air_test_impl::<BabyBearPoseidon2Engine, _>(
         fri_params,
-        NativeCpuBuilder(config),
+        NativeCpuBuilder,
+        config,
         program,
         vec![],
         1,
@@ -76,7 +77,8 @@ fn test_compiler_public_values_no_initial() {
     let (output, _) = execute_program_with_config::<BabyBearPoseidon2Engine, _>(
         program,
         vec![],
-        NativeCpuBuilder(test_native_config()),
+        NativeCpuBuilder,
+        test_native_config(),
     )
     .unwrap();
     assert_eq!(output.system_records.public_values[0], public_value_0);

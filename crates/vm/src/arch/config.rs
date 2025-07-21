@@ -74,17 +74,16 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
 /// This trait is intended to be implemented on a new type wrapper of the VmConfig struct to get
 /// around Rust orphan rules.
 pub trait VmBuilder<E: StarkEngine>: Sized {
-    type VmConfig: VmConfig<E::SC> + From<Self>;
+    type VmConfig: VmConfig<E::SC>;
     type RecordArena: Arena;
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
-
-    fn config(&self) -> &Self::VmConfig;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_airs].
     #[allow(clippy::type_complexity)]
     fn create_chip_complex(
         &self,
+        config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,

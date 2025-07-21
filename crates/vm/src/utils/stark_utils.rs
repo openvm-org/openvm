@@ -27,7 +27,7 @@ use crate::{
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
-pub fn air_test<VB, VC>(builder: VB, exe: impl Into<VmExe<BabyBear>>)
+pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
     VB: VmBuilder<
         BabyBearPoseidon2Engine,
@@ -41,12 +41,13 @@ where
         + InsExecutorE2<BabyBear>
         + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
-    air_test_with_min_segments(builder, exe, Streams::default(), 1);
+    air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
 
 /// Executes and proves the VM and returns the final memory state.
 pub fn air_test_with_min_segments<VB, VC>(
     builder: VB,
+    config: VC,
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
@@ -65,13 +66,14 @@ where
         + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
     let mut log_blowup = 1;
-    while builder.config().as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
+    while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
     let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VB>(
         fri_params,
         builder,
+        config,
         exe,
         input,
         min_segments,
@@ -89,6 +91,7 @@ where
 pub fn air_test_impl<E, VB>(
     fri_params: FriParameters,
     builder: VB,
+    config: VB::VmConfig,
     exe: impl Into<VmExe<Val<E::SC>>>,
     input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
@@ -108,7 +111,7 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder)?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();

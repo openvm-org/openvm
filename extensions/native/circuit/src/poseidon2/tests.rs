@@ -592,11 +592,13 @@ fn test_vm_compress_poseidon2_as4() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        NativeCpuBuilder(NativeConfig::aggregation(0, 3)),
+        NativeCpuBuilder,
+        NativeConfig::aggregation(0, 3),
         program.clone(),
     );
     air_test(
-        NativeCpuBuilder(NativeConfig::aggregation(0, 7)),
+        NativeCpuBuilder,
+        NativeConfig::aggregation(0, 7),
         program.clone(),
     );
 }

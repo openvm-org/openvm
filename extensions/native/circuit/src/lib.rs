@@ -70,7 +70,9 @@ impl NativeConfig {
 // Default implementation uses no init file
 impl InitFileGenerator for NativeConfig {}
 
-pub struct NativeCpuBuilder(pub NativeConfig);
+#[derive(Clone, Default)]
+pub struct NativeCpuBuilder;
+
 impl<E, SC> VmBuilder<E> for NativeCpuBuilder
 where
     SC: StarkGenericConfig,
@@ -81,20 +83,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &NativeConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let system = SystemCpuBuilder(config.system.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &NativeCpuProverExt,
@@ -102,11 +100,6 @@ where
             inventory,
         )?;
         Ok(chip_complex)
-    }
-}
-impl From<NativeCpuBuilder> for NativeConfig {
-    fn from(builder: NativeCpuBuilder) -> Self {
-        builder.0
     }
 }
 
@@ -142,7 +135,8 @@ impl Default for Rv32WithKernelsConfig {
 // Default implementation uses no init file
 impl InitFileGenerator for Rv32WithKernelsConfig {}
 
-pub struct Rv32WithKernelsCpuBuilder(pub Rv32WithKernelsConfig);
+#[derive(Clone)]
+pub struct Rv32WithKernelsCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32WithKernelsCpuBuilder
 where
@@ -154,20 +148,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Rv32WithKernelsConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let system = SystemCpuBuilder(config.system.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
@@ -179,11 +169,5 @@ where
         )?;
         VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, &config.castf, inventory)?;
         Ok(chip_complex)
-    }
-}
-
-impl From<Rv32WithKernelsCpuBuilder> for Rv32WithKernelsConfig {
-    fn from(builder: Rv32WithKernelsCpuBuilder) -> Self {
-        builder.0
     }
 }

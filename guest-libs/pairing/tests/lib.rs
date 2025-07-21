@@ -88,7 +88,7 @@ mod bn254 {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -124,7 +124,7 @@ mod bn254 {
             .map(F::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -182,7 +182,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -231,7 +231,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -284,7 +284,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -341,7 +341,7 @@ mod bn254 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -400,7 +400,8 @@ mod bn254 {
         // Don't run debugger because it's slow
         air_test_impl::<BabyBearPoseidon2Engine, _>(
             FriParameters::new_for_testing(1),
-            Rv32PairingCpuBuilder(get_testing_config()),
+            Rv32PairingCpuBuilder,
+            get_testing_config(),
             openvm_exe,
             vec![io_all],
             1,
@@ -459,7 +460,7 @@ mod bn254 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 }
@@ -564,7 +565,7 @@ mod bls12_381 {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder(config), openvm_exe);
+        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -600,7 +601,7 @@ mod bls12_381 {
             .map(F::from_canonical_u8)
             .collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 
@@ -659,7 +660,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -708,7 +709,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -767,7 +768,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -823,7 +824,7 @@ mod bls12_381 {
 
         let io_all = io0.into_iter().chain(io1).collect::<Vec<_>>();
 
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io_all], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io_all], 1);
         Ok(())
     }
 
@@ -882,7 +883,8 @@ mod bls12_381 {
         // Don't run debugger because it's slow
         air_test_impl::<BabyBearPoseidon2Engine, _>(
             FriParameters::new_for_testing(1),
-            Rv32PairingCpuBuilder(get_testing_config()),
+            Rv32PairingCpuBuilder,
+            get_testing_config(),
             openvm_exe,
             vec![io_all],
             1,
@@ -941,7 +943,7 @@ mod bls12_381 {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(Rv32PairingCpuBuilder(config), openvm_exe, vec![io], 1);
+        air_test_with_min_segments(Rv32PairingCpuBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
     }
 }

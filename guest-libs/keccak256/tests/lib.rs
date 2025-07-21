@@ -27,7 +27,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(Keccak256Rv32CpuBuilder(config), openvm_exe);
+        air_test(Keccak256Rv32CpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

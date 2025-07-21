@@ -50,7 +50,8 @@ impl InitFileGenerator for Rv32WeierstrassConfig {
     }
 }
 
-pub struct Rv32WeierstrassCpuBuilder(pub Rv32WeierstrassConfig);
+#[derive(Clone)]
+pub struct Rv32WeierstrassCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32WeierstrassCpuBuilder
 where
@@ -62,20 +63,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &Self::VmConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let modular = Rv32ModularCpuBuilder(config.modular.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&modular, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,
@@ -83,11 +80,5 @@ where
             inventory,
         )?;
         Ok(chip_complex)
-    }
-}
-
-impl From<Rv32WeierstrassCpuBuilder> for Rv32WeierstrassConfig {
-    fn from(builder: Rv32WeierstrassCpuBuilder) -> Self {
-        builder.0
     }
 }

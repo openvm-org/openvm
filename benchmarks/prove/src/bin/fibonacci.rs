@@ -2,7 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -27,6 +27,6 @@ fn main() -> Result<()> {
         let n = 100_000u64;
         let mut stdin = StdIn::default();
         stdin.write(&n);
-        args.bench_from_exe("fibonacci_program", config, exe, stdin)
+        args.bench_from_exe("fibonacci_program", Rv32ImCpuBuilder, config, exe, stdin)
     })
 }

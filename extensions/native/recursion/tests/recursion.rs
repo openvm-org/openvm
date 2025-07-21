@@ -70,7 +70,8 @@ where
     let (output, mut vm) = execute_program_with_config::<E, _>(
         fib_program.clone(),
         vec![],
-        NativeCpuBuilder(config.clone()),
+        NativeCpuBuilder,
+        config.clone(),
     )
     .unwrap();
     let PreflightExecutionOutput {

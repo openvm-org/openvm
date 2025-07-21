@@ -9,7 +9,7 @@ use openvm_circuit::{
 use openvm_continuations::verifier::{
     internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
     config::Val,
@@ -276,7 +276,11 @@ impl AggStarkProvingKey {
 
         let leaf_engine = BabyBearPoseidon2Engine::new(config.leaf_fri_params);
         let leaf_vm_pk = {
-            let (_, vm_pk) = VirtualMachine::new_with_keygen(leaf_engine, leaf_vm_config.clone())?;
+            let (_, vm_pk) = VirtualMachine::new_with_keygen(
+                leaf_engine,
+                NativeCpuBuilder,
+                leaf_vm_config.clone(),
+            )?;
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
             Arc::new(VmProvingKey {
                 fri_params: config.leaf_fri_params,
@@ -292,8 +296,11 @@ impl AggStarkProvingKey {
         );
 
         let internal_engine = BabyBearPoseidon2Engine::new(config.internal_fri_params);
-        let (internal_vm, vm_pk) =
-            VirtualMachine::new_with_keygen(internal_engine, internal_vm_config.clone())?;
+        let (internal_vm, vm_pk) = VirtualMachine::new_with_keygen(
+            internal_engine,
+            NativeCpuBuilder,
+            internal_vm_config.clone(),
+        )?;
         assert!(vm_pk.max_constraint_degree <= config.internal_fri_params.max_constraint_degree());
         let internal_vm_pk = Arc::new(VmProvingKey {
             fri_params: config.internal_fri_params,
@@ -333,8 +340,11 @@ impl AggStarkProvingKey {
                 compiler_options: config.compiler_options,
             }
             .build_program(&leaf_vm_vk, &internal_vm_vk);
-            let (mut vm, mut vm_pk) =
-                VirtualMachine::new_with_keygen(root_engine, root_vm_config.clone())?;
+            let (mut vm, mut vm_pk) = VirtualMachine::new_with_keygen(
+                root_engine,
+                NativeCpuBuilder,
+                root_vm_config.clone(),
+            )?;
             let root_committed_exe = Arc::new(vm.commit_exe(root_program));
 
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());

@@ -129,7 +129,7 @@ impl InitFileGenerator for ExecuteConfig {
     }
 }
 
-pub struct ExecuteBuilder(pub ExecuteConfig);
+pub struct ExecuteBuilder;
 impl<E, SC> VmBuilder<E> for ExecuteBuilder
 where
     SC: StarkGenericConfig,
@@ -140,20 +140,16 @@ where
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
-    fn config(&self) -> &Self::VmConfig {
-        &self.0
-    }
-
     fn create_chip_complex(
         &self,
+        config: &ExecuteConfig,
         circuit: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        let config = &self.0;
-        let system = SystemCpuBuilder(config.system.clone());
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
@@ -188,11 +184,6 @@ where
         Ok(chip_complex)
     }
 }
-impl From<ExecuteBuilder> for ExecuteConfig {
-    fn from(builder: ExecuteBuilder) -> Self {
-        builder.0
-    }
-}
 
 fn main() {
     divan::main();
@@ -222,9 +213,9 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
 
 fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
     METERED_CTX.get_or_init(|| {
-        let builder = ExecuteBuilder(ExecuteConfig::default());
+        let config = ExecuteConfig::default();
         let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder).unwrap();
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         (ctx, executor_idx_to_air_idx)

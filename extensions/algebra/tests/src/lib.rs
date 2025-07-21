@@ -5,8 +5,8 @@ mod tests {
     use eyre::Result;
     use num_bigint::BigUint;
     use openvm_algebra_circuit::{
-        Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularCpuBuilder,
-        Rv32ModularWithFp2Config, Rv32ModularWithFp2CpuBuilder,
+        Fp2Extension, Rv32ModularConfig, Rv32ModularCpuBuilder, Rv32ModularWithFp2Config,
+        Rv32ModularWithFp2CpuBuilder,
     };
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{air_test, test_system_config_with_continuations};
@@ -33,7 +33,7 @@ mod tests {
         moduli_with_names: Vec<(String, BigUint)>,
     ) -> Rv32ModularWithFp2Config {
         let mut config = Rv32ModularWithFp2Config::new(moduli_with_names);
-        config.system = test_system_config_with_continuations();
+        *config.as_mut() = test_system_config_with_continuations();
         config
     }
 
@@ -52,7 +52,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -68,7 +68,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -95,7 +95,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -127,7 +127,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -147,7 +147,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -176,7 +176,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
     }
 
     #[test]
@@ -191,7 +191,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularCpuBuilder(config), openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }
