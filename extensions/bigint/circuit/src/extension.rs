@@ -8,12 +8,12 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, RowMajorMatrixArena,
-        SystemConfig, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
+    system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -25,45 +25,17 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::*;
 
-#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Int256Rv32Config {
-    #[config(executor = "SystemExecutor<F>")]
-    pub system: SystemConfig,
-    #[extension]
-    pub rv32i: Rv32I,
-    #[extension]
-    pub rv32m: Rv32M,
-    #[extension]
-    pub io: Rv32Io,
-    #[extension]
-    pub bigint: Int256,
-}
-
-// Default implementation uses no init file
-impl InitFileGenerator for Int256Rv32Config {}
-
-impl Default for Int256Rv32Config {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default().with_continuations(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
-            bigint: Int256::default(),
-        }
-    }
-}
-
+// =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Int256 {
     #[serde(default = "default_range_tuple_checker_sizes")]
@@ -231,16 +203,19 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Int256 {
     }
 }
 
+pub struct Int256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Int256
+impl<E, SC, RA> VmProverExtension<E, RA, Int256> for Int256CpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        extension: &Int256,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -266,8 +241,8 @@ where
             let existing_chip = inventory
                 .find_chip::<SharedRangeTupleCheckerChip<2>>()
                 .find(|c| {
-                    c.bus().sizes[0] >= self.range_tuple_checker_sizes[0]
-                        && c.bus().sizes[1] >= self.range_tuple_checker_sizes[1]
+                    c.bus().sizes[0] >= extension.range_tuple_checker_sizes[0]
+                        && c.bus().sizes[1] >= extension.range_tuple_checker_sizes[1]
                 });
             if let Some(chip) = existing_chip {
                 chip.clone()
