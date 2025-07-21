@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../src/extensions/rv32im_adapters/vec_heap.cuh"
+#include "../../src/extensions/rv32_adapters/vec_heap.cuh"
 #include "mod_builder/meta.cuh"
 #include "mod_builder/records.cuh"
 #include "trace_access.h"
@@ -48,7 +48,7 @@ __device__ inline void instantiate_rv32_vec_heap_adapter(
 ) {
     using AdapterRecord = Rv32VecHeapAdapterRecord<
         NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>;
-    using AdapterStep = Rv32VecHeapAdapterStep<
+    using AdapterStep = Rv32VecHeapAdapter<
         NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>;
     
     const auto* adapter_rec = reinterpret_cast<const AdapterRecord*>(rec_bytes);

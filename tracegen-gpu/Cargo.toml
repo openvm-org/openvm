@@ -35,6 +35,7 @@ openvm-mod-circuit-builder = { git = "https://github.com/openvm-org/openvm.git",
 openvm-ecc-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-ecc-transpiler = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 openvm-keccak256-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
+openvm-bigint-circuit = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/new-execution", default-features = false }
 # p3
 p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb" }
 p3-field = { workspace = true }

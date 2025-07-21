@@ -20,9 +20,8 @@ use openvm_rv32_adapters::{
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS, RV_B_TYPE_IMM_BITS},
-    BaseAluCoreAir, BaseAluStep, BranchEqualCoreAir, BranchEqualStep, BranchLessThanCoreAir,
-    BranchLessThanStep, LessThanCoreAir, LessThanStep, MultiplicationCoreAir, MultiplicationStep,
-    ShiftCoreAir, ShiftStep,
+    BaseAluCoreAir, BranchEqualCoreAir, BranchLessThanCoreAir, LessThanCoreAir,
+    MultiplicationCoreAir, ShiftCoreAir,
 };
 use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
@@ -134,38 +133,10 @@ fn set_and_execute_rand<E: InstructionExecutor<F>>(
     }
 }
 
-pub type Rv32BaseAlu256Step = BaseAluStep<
-    Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
-
-pub type Rv32BranchEqual256Step =
-    BranchEqualStep<Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>;
-
-pub type Rv32LessThan256Step = LessThanStep<
-    Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
-
-pub type Rv32BranchLessThan256Step = BranchLessThanStep<
-    Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
-
-pub type Rv32Shift256Step = ShiftStep<
-    Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
-
-pub type Rv32Multiplication256Step = MultiplicationStep<
-    Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    INT256_NUM_LIMBS,
-    RV32_CELL_BITS,
->;
+use openvm_bigint_circuit::{
+    Rv32BaseAlu256Step, Rv32BranchEqual256Step, Rv32BranchLessThan256Step, Rv32LessThan256Step,
+    Rv32Multiplication256Step, Rv32Shift256Step,
+};
 
 type DenseChip<F> = NewVmChipWrapper<F, Rv32BaseAlu256Air, Rv32BaseAlu256Step, DenseRecordArena>;
 type SparseChip<F> =

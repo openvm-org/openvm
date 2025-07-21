@@ -8,7 +8,7 @@
 #include "mod_builder/meta.cuh"
 #include "mod_builder/records.cuh"
 #include "mod_builder/rv32_vec_heap_router.cuh"
-#include "../extensions/rv32im_adapters/vec_heap.cuh"
+#include "../extensions/rv32_adapters/vec_heap.cuh"
 
 using namespace mod_builder;
 
