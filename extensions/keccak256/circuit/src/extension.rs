@@ -4,22 +4,29 @@ use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, RowMajorMatrixArena,
-        SystemConfig, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
+        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
+    system::{
+        memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
+        SystemPort,
+    },
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_instructions::*;
-use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -54,6 +61,52 @@ impl Default for Keccak256Rv32Config {
 // Default implementation uses no init file
 impl InitFileGenerator for Keccak256Rv32Config {}
 
+pub struct Keccak256Rv32CpuBuilder(pub Keccak256Rv32Config);
+
+impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = Keccak256Rv32Config;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn config(&self) -> &Self::VmConfig {
+        &self.0
+    }
+
+    fn create_chip_complex(
+        &self,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let config = &self.0;
+        let system = SystemCpuBuilder(config.system.clone());
+        let mut chip_complex = VmBuilder::<E>::create_chip_complex(&system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Keccak256CpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+impl From<Keccak256Rv32CpuBuilder> for Keccak256Rv32Config {
+    fn from(builder: Keccak256Rv32CpuBuilder) -> Self {
+        builder.0
+    }
+}
+
+// =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
@@ -116,16 +169,19 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
     }
 }
 
+pub struct Keccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Keccak256
+impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &Keccak256,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
