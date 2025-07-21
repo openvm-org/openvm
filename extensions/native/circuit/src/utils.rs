@@ -34,7 +34,7 @@ pub mod test_utils {
     };
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use crate::{extension::NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
+    use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
