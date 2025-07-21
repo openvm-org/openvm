@@ -72,5 +72,4 @@ static const size_t KECCAK_POINTER_MAX_BITS = 29;
 } // namespace keccak256
 namespace mod_builder {
 static const size_t MAX_LIMBS = 97;
-static const size_t THREAD_COUNT_LIMIT = 128;
 } // namespace mod_builder

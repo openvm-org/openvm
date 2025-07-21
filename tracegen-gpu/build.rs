@@ -90,6 +90,11 @@ fn main() {
     }
     {
         let mut b = common.clone();
+        b.file("cuda/src/mod_builder/field_expression.cu")
+            .compile("tracegen_mod_builder");
+    }
+    {
+        let mut b = common.clone();
         b.file("cuda/src/extensions/keccak256/keccak256.cu")
             .file("cuda/src/extensions/keccak256/keccakf.cu")
             .compile("tracegen_gpu_keccak");

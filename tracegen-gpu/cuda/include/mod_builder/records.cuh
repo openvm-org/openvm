@@ -4,7 +4,7 @@
 #include "meta.cuh"
 #include "trace_access.h"
 #include "system/memory/offline_checker.cuh"
-#include "../../src/extensions/rv32im_adapters/vec_heap.cuh"
+#include "../../src/extensions/rv32_adapters/vec_heap.cuh"
 
 struct FieldExprCoreRecord {
     uint8_t opcode;
