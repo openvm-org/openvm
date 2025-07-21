@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use openvm_native_circuit::{execute_program_with_config, test_native_config};
+use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeCpuBuilder};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
@@ -193,10 +193,10 @@ fn test_optional_air() {
             )
             .unwrap();
         // The VM program will panic when the program cannot verify the proof.
-        assert!(execute_program_with_config::<BabyBearPoseidon2Engine>(
+        assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            config.clone()
+            NativeCpuBuilder(config.clone())
         )
         .is_ok());
     }
@@ -224,10 +224,10 @@ fn test_optional_air() {
             )
             .unwrap();
         // The VM program will panic when the program cannot verify the proof.
-        assert!(execute_program_with_config::<BabyBearPoseidon2Engine>(
+        assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            config.clone()
+            NativeCpuBuilder(config.clone())
         )
         .is_ok());
     }
@@ -248,10 +248,10 @@ fn test_optional_air() {
         );
         assert!(engine.verify(&pk.get_vk(), &proof).is_err());
         // The VM program should panic when the proof cannot be verified.
-        assert!(execute_program_with_config::<BabyBearPoseidon2Engine>(
+        assert!(execute_program_with_config::<BabyBearPoseidon2Engine, _>(
             program.clone(),
             proof.write(),
-            config.clone()
+            NativeCpuBuilder(config.clone())
         )
         .is_err());
     }

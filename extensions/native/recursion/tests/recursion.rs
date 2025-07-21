@@ -1,9 +1,11 @@
 use itertools::Itertools;
 use openvm_circuit::arch::{
-    instructions::program::Program, MatrixRecordArena, PreflightExecutionOutput, VmCircuitConfig,
-    VmBuilder,
+    instructions::program::Program, MatrixRecordArena, PreflightExecutionOutput, VmBuilder,
+    VmCircuitConfig,
 };
-use openvm_native_circuit::{execute_program_with_config, test_native_config, NativeConfig};
+use openvm_native_circuit::{
+    execute_program_with_config, test_native_config, NativeConfig, NativeCpuBuilder,
+};
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 use openvm_stark_backend::{
@@ -58,14 +60,19 @@ where
     SC: StarkGenericConfig,
     E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
-    NativeConfig: VmBuilder<E, RecordArena = MatrixRecordArena<BabyBear>>,
+    NativeCpuBuilder:
+        VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
 {
     let fib_program = fibonacci_program(a, b, n);
     let mut config = test_native_config();
     config.as_mut().num_public_values = 3;
 
-    let (output, mut vm) =
-        execute_program_with_config::<E>(fib_program.clone(), vec![], config.clone()).unwrap();
+    let (output, mut vm) = execute_program_with_config::<E, _>(
+        fib_program.clone(),
+        vec![],
+        NativeCpuBuilder(config.clone()),
+    )
+    .unwrap();
     let PreflightExecutionOutput {
         system_records,
         record_arenas,

@@ -10,7 +10,7 @@ use crate::hints::InnerVal;
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
-    use openvm_native_circuit::test_native_config;
+    use openvm_native_circuit::{test_native_config, NativeCpuBuilder};
     use openvm_native_compiler::conversion::CompilerOptions;
     use openvm_stark_sdk::{
         config::{
@@ -66,7 +66,7 @@ pub mod inner {
         let (program, witness_stream) = build_verification_program(vparams, compiler_options);
         air_test_impl::<BabyBearPoseidon2Engine, _>(
             fri_params,
-            test_native_config(),
+            NativeCpuBuilder(test_native_config()),
             program,
             witness_stream,
             1,
