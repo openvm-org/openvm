@@ -21,8 +21,9 @@ use openvm_pairing_guest::{
 use openvm_pairing_transpiler::PairingPhantom;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
     p3_field::{Field, PrimeField32},
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
@@ -94,14 +95,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for PairingExtension {
     }
 }
 
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for PairingExtension
+pub struct PairingCpuProverExt;
+impl<E, SC, RA> VmProverExtension<E, RA, PairingExtension> for PairingCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &PairingExtension,
         _inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         Ok(())

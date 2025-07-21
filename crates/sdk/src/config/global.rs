@@ -1,34 +1,45 @@
 use bon::Builder;
 use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
+    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
+    ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256Executor};
+use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
         instructions::NATIVE_AS, AirInventory, AirInventoryError, ChipInventoryError,
-        ExecutorInventory, ExecutorInventoryError, InitFileGenerator, SystemConfig, VmChipComplex,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig,
+        ExecutorInventory, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
+        SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecutionConfig,
+        VmProverExtension,
     },
     derive::VmConfig,
-    system::SystemExecutor,
+    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_ecc_circuit::{WeierstrassExtension, WeierstrassExtensionExecutor};
+use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor};
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{CastFExtension, CastFExtensionExecutor, Native, NativeExecutor};
+use openvm_native_circuit::{
+    CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
+};
 use openvm_native_transpiler::LongFormTranspilerExtension;
-use openvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor};
+use openvm_pairing_circuit::{PairingCpuProverExt, PairingExtension, PairingExtensionExecutor};
 use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor};
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::{Field, PrimeField32},
+    prover::cpu::{CpuBackend, CpuDevice},
+};
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
@@ -52,6 +63,9 @@ pub struct SdkVmConfig {
     pub pairing: Option<PairingExtension>,
     pub ecc: Option<WeierstrassExtension>,
 }
+
+#[derive(Copy, Clone)]
+pub struct SdkVmCpuBuilder;
 
 /// Internal struct to use for the VmConfig derive macro.
 /// Can be obtained via [`SdkVmConfig::to_inner`].
@@ -206,22 +220,66 @@ where
     }
 }
 
-impl<E> VmProverConfig<E> for SdkVmConfig
+impl<E, SC> VmBuilder<E> for SdkVmCpuBuilder
 where
-    E: StarkEngine,
-    SdkVmConfigInner: VmProverConfig<E>,
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
 {
-    type RecordArena = <SdkVmConfigInner as VmProverConfig<E>>::RecordArena;
-    type SystemChipInventory = <SdkVmConfigInner as VmProverConfig<E>>::SystemChipInventory;
+    type VmConfig = SdkVmConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
 
     fn create_chip_complex(
         &self,
-        circuit: AirInventory<E::SC>,
+        config: &SdkVmConfig,
+        circuit: AirInventory<SC>,
     ) -> Result<
-        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     > {
-        self.to_inner().create_chip_complex(circuit)
+        let config = config.to_inner();
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        if let Some(rv32i) = &config.rv32i {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;
+        }
+        if let Some(io) = &config.io {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, io, inventory)?;
+        }
+        if let Some(keccak) = &config.keccak {
+            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+        }
+        if let Some(sha256) = &config.sha256 {
+            VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
+        }
+        if let Some(native) = &config.native {
+            VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, native, inventory)?;
+        }
+        if let Some(castf) = &config.castf {
+            VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, castf, inventory)?;
+        }
+
+        if let Some(rv32m) = &config.rv32m {
+            VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
+        }
+        if let Some(bigint) = &config.bigint {
+            VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
+        }
+        if let Some(modular) = &config.modular {
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
+        }
+        if let Some(pairing) = &config.pairing {
+            VmProverExtension::<E, _, _>::extend_prover(&PairingCpuProverExt, pairing, inventory)?;
+        }
+        if let Some(ecc) = &config.ecc {
+            VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;
+        }
+        Ok(chip_complex)
     }
 }
 

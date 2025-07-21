@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmCircuitConfig,
-    VmExecutionConfig, VmProverConfig,
+    InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmBuilder,
+    VmExecutionConfig,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
 #[cfg(feature = "evm-prove")]
@@ -19,28 +19,30 @@ use crate::{
     NonRootCommittedExe, StdIn, F, SC,
 };
 
-pub struct StarkProver<VC, E>
+pub struct StarkProver<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    VC: VmProverConfig<E>,
-    NativeConfig: VmProverConfig<E>,
+    VB: VmBuilder<E>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
 {
-    pub app_prover: AppProver<VC, E>,
-    pub agg_prover: AggStarkProver<E>,
+    pub app_prover: AppProver<E, VB>,
+    pub agg_prover: AggStarkProver<E, NativeBuilder>,
 }
-impl<VC, E> StarkProver<VC, E>
+impl<E, VB, NativeBuilder> StarkProver<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverConfig<E>,
-    <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
         + InsExecutorE2<F>
-        + InstructionExecutor<F, <VC as VmProverConfig<E>>::RecordArena>,
-    NativeConfig: VmProverConfig<E>,
+        + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeConfig as VmProverConfig<E>>::RecordArena>,
+        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     pub fn new(
-        app_pk: Arc<AppProvingKey<VC>>,
+        app_vm_builder: VB,
+        native_builder: NativeBuilder,
+        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         agg_stark_pk: AggStarkProvingKey,
         agg_tree_config: AggregationTreeConfig,
@@ -56,8 +58,13 @@ where
         );
 
         Ok(Self {
-            app_prover: AppProver::new(app_pk.app_vm_pk.clone(), app_committed_exe)?,
+            app_prover: AppProver::new(
+                app_vm_builder,
+                app_pk.app_vm_pk.clone(),
+                app_committed_exe,
+            )?,
             agg_prover: AggStarkProver::new(
+                native_builder,
                 agg_stark_pk,
                 app_pk.leaf_committed_exe.clone(),
                 agg_tree_config,

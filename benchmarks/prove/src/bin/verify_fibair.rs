@@ -2,7 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::{
@@ -62,9 +62,12 @@ fn main() -> Result<()> {
         let app_pk = sdk.app_keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;
-        let mut prover =
-            AppProver::<_, BabyBearPoseidon2Engine>::new(app_pk.app_vm_pk, committed_exe)?
-                .with_program_name("verify_fibair");
+        let mut prover = AppProver::<BabyBearPoseidon2Engine, _>::new(
+            NativeCpuBuilder,
+            app_pk.app_vm_pk,
+            committed_exe,
+        )?
+        .with_program_name("verify_fibair");
         let proof = prover.generate_app_proof_without_continuations(
             input_stream.into(),
             NATIVE_MAX_TRACE_HEIGHTS,

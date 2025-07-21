@@ -35,6 +35,8 @@ pub use fp2_extension::*;
 mod config;
 pub use config::*;
 
+pub struct AlgebraCpuProverExt;
+
 #[derive(Clone, InstructionExecutor)]
 pub struct FieldExprVecHeapStep<
     const NUM_READS: usize,

@@ -515,14 +515,10 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut executor_enum_fields = Vec::new();
     let mut create_executors = Vec::new();
     let mut create_airs = Vec::new();
-    let mut create_chip_complex = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
-    let mut prover_where_predicates: Vec<syn::WherePredicate> = Vec::new();
 
     let source_field_ty = source_field.ty.clone();
-    let record_arena =
-        quote! {<#source_field_ty as ::openvm_circuit::arch::VmProverConfig<E>>::RecordArena };
 
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
@@ -546,13 +542,6 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         circuit_where_predicates.push(parse_quote! {
             #extension_ty: ::openvm_circuit::arch::VmCircuitExtension<SC>
         });
-        create_chip_complex.push(quote! {
-            inventory.start_new_extension()?;
-            ::openvm_circuit::arch::VmProverExtension::extend_prover(&self.#ext_field_name, &mut inventory)?;
-        });
-        prover_where_predicates.push(parse_quote! {
-            #extension_ty: ::openvm_circuit::arch::VmProverExtension<E::SC, #record_arena, E::PB>
-        });
     }
 
     // The config type always needs <F> due to SystemExecutor
@@ -563,16 +552,8 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     circuit_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmCircuitConfig<SC>
     });
-    prover_where_predicates.push(parse_quote! {
-        #source_field_ty: ::openvm_circuit::arch::VmProverConfig<E>
-    });
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
-    let prover_where_clause = quote! { where
-        E: openvm_stark_backend::engine::StarkEngine,
-        Self: ::openvm_circuit::arch::VmConfig<E::SC>,
-        #(#prover_where_predicates),*
-    };
 
     let executor_type = Ident::new(&format!("{}Executor", name), name.span());
 
@@ -610,24 +591,6 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                 let mut inventory = self.#source_name.create_airs()?;
                 #(#create_airs)*
                 Ok(inventory)
-            }
-        }
-
-        impl<E> ::openvm_circuit::arch::VmProverConfig<E> for #name #prover_where_clause {
-            type RecordArena = #record_arena;
-            type SystemChipInventory = <#source_field_ty as ::openvm_circuit::arch::VmProverConfig<E>>::SystemChipInventory;
-
-            fn create_chip_complex(
-                &self,
-                circuit: ::openvm_circuit::arch::AirInventory<E::SC>,
-            ) -> Result<
-                ::openvm_circuit::arch::VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
-                ::openvm_circuit::arch::ChipInventoryError,
-            > {
-                let mut chip_complex = self.#source_name.create_chip_complex(circuit)?;
-                let mut inventory = &mut chip_complex.inventory;
-                #(#create_chip_complex)*
-                Ok(chip_complex)
             }
         }
 

@@ -7,7 +7,7 @@ mod tests {
     use openvm_native_compiler::conversion::CompilerOptions;
     use openvm_sdk::{
         commit::AppExecutionCommit,
-        config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
+        config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
         keygen::AggStarkProvingKey,
         Sdk, StdIn,
     };
@@ -81,6 +81,7 @@ mod tests {
         std::fs::write(asm_path, asm)?;
 
         let e2e_stark_proof = sdk.generate_e2e_stark_proof(
+            SdkVmCpuBuilder,
             Arc::new(app_pk),
             committed_app_exe,
             agg_pk,

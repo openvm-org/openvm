@@ -19,45 +19,60 @@ use crate::{
     arch::{
         execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
         InsExecutorE2, InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams,
-        VmCircuitConfig, VmExecutionConfig, VmProverConfig,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
 
-pub fn air_test<VC>(config: VC, exe: impl Into<VmExe<BabyBear>>)
+// NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
+// VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
+// The compiler also seems to need the extra VC even though VC=VB::VmConfig
+pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
+    VB: VmBuilder<
+        BabyBearPoseidon2Engine,
+        VmConfig = VC,
+        RecordArena = MatrixRecordArena<BabyBear>,
+    >,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
+        + VmConfig<BabyBearPoseidon2Config>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor: InsExecutorE1<BabyBear>
+        + InsExecutorE2<BabyBear>
+        + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
-    air_test_with_min_segments(config, exe, Streams::default(), 1);
+    air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
 
 /// Executes and proves the VM and returns the final memory state.
-pub fn air_test_with_min_segments<VC>(
+pub fn air_test_with_min_segments<VB, VC>(
+    builder: VB,
     config: VC,
     exe: impl Into<VmExe<BabyBear>>,
     input: impl Into<Streams<BabyBear>>,
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    // NOTE: the compiler cannot figure out Val<SC>=BabyBear without the VmExecutionConfig and
-    // VmCircuitConfig bounds even though VmProverConfig already includes them
+    VB: VmBuilder<
+        BabyBearPoseidon2Engine,
+        VmConfig = VC,
+        RecordArena = MatrixRecordArena<BabyBear>,
+    >,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<BabyBear>>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor:
-        InsExecutorE1<BabyBear> + InsExecutorE2<BabyBear> + InstructionExecutor<BabyBear>,
+        + VmConfig<BabyBearPoseidon2Config>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor: InsExecutorE1<BabyBear>
+        + InsExecutorE2<BabyBear>
+        + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VC>(
+    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VB>(
         fri_params,
+        builder,
         config,
         exe,
         input,
@@ -73,9 +88,10 @@ where
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 #[allow(clippy::type_complexity)]
-pub fn air_test_impl<E, VC>(
+pub fn air_test_impl<E, VB>(
     fri_params: FriParameters,
-    config: VC,
+    builder: VB,
+    config: VB::VmConfig,
     exe: impl Into<VmExe<Val<E::SC>>>,
     input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
@@ -87,15 +103,15 @@ pub fn air_test_impl<E, VC>(
 where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
-    VC: VmProverConfig<E>,
-    VC::Executor: InsExecutorE1<Val<E::SC>>
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
         + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VC::RecordArena>,
+        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     setup_tracing();
     let engine = E::new(fri_params);
-    let (mut vm, pk) = VirtualMachine::<E, VC>::new_with_keygen(engine, config)?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();

@@ -9,13 +9,12 @@ use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdap
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MemoryConfig,
-        RowMajorMatrixArena, SystemConfig, VmCircuitExtension, VmExecutionExtension,
-        VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::{memory::SharedMemoryHelper, SystemExecutor, SystemPort},
+    system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_native_compiler::{
     CastfOpcode, FieldArithmeticOpcode, FieldExtensionOpcode, FriOpcode, NativeBranchEqualOpcode,
@@ -23,14 +22,13 @@ use openvm_native_compiler::{
     NativeRangeCheckOpcode, Poseidon2Opcode, VerifyBatchOpcode, BLOCK_LOAD_STORE_SIZE,
 };
 use openvm_poseidon2_air::Poseidon2Config;
-use openvm_rv32im_circuit::{
-    BranchEqualCoreAir, Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
-};
+use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, PrimeField32},
-    prover::cpu::CpuBackend,
+    prover::cpu::{CpuBackend, CpuDevice},
 };
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -42,30 +40,7 @@ use crate::{
     *,
 };
 
-#[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
-pub struct NativeConfig {
-    #[config(executor = "SystemExecutor<F>")]
-    pub system: SystemConfig,
-    #[extension(generics = true)]
-    pub native: Native,
-}
-
-impl NativeConfig {
-    pub fn aggregation(num_public_values: usize, max_constraint_degree: usize) -> Self {
-        Self {
-            system: SystemConfig::new(
-                max_constraint_degree,
-                MemoryConfig::aggregation(),
-                num_public_values,
-            )
-            .with_max_segment_len((1 << 24) - 100),
-            native: Default::default(),
-        }
-    }
-}
-
-// Default implementation uses no init file
-impl InitFileGenerator for NativeConfig {}
+// ============ VmExtension Implementations ============
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Native;
@@ -81,8 +56,6 @@ pub enum NativeExecutor<F: Field> {
     FriReducedOpening(FriReducedOpeningStep),
     VerifyBatch(NativePoseidon2Step<F, 1>),
 }
-
-// ============ VmExtension Implementations ============
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Native {
     type Executor = NativeExecutor<F>;
@@ -253,16 +226,19 @@ where
     }
 }
 
+pub struct NativeCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for Native
+impl<E, SC, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &Native,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -505,14 +481,16 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
     }
 }
 
-impl<SC, RA> VmProverExtension<SC, RA, CpuBackend<SC>> for CastFExtension
+impl<E, SC, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
 where
     SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
     Val<SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
+        _: &CastFExtension,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -529,38 +507,6 @@ where
         Ok(())
     }
 }
-
-#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
-pub struct Rv32WithKernelsConfig {
-    #[config(executor = "SystemExecutor<F>")]
-    pub system: SystemConfig,
-    #[extension]
-    pub rv32i: Rv32I,
-    #[extension]
-    pub rv32m: Rv32M,
-    #[extension]
-    pub io: Rv32Io,
-    #[extension(generics = true)]
-    pub native: Native,
-    #[extension]
-    pub castf: CastFExtension,
-}
-
-impl Default for Rv32WithKernelsConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default().with_continuations(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
-            native: Native,
-            castf: CastFExtension,
-        }
-    }
-}
-
-// Default implementation uses no init file
-impl InitFileGenerator for Rv32WithKernelsConfig {}
 
 // Pre-computed maximum trace heights for NativeConfig. Found by doubling
 // the actual trace heights of kitchen-sink leaf verification (except for

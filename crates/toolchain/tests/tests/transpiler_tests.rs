@@ -157,6 +157,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(config, openvm_exe);
+    air_test(Rv32ImCpuBuilder, config, openvm_exe);
     Ok(())
 }

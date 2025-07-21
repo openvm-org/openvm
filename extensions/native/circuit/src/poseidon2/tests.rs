@@ -36,7 +36,7 @@ use crate::{
     air::NativePoseidon2Air,
     chip::NativePoseidon2Step,
     poseidon2::{chip::NativePoseidon2Filler, CHUNK},
-    NativeConfig, NativePoseidon2Chip,
+    NativeConfig, NativeCpuBuilder, NativePoseidon2Chip,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
@@ -591,6 +591,14 @@ fn test_vm_compress_poseidon2_as4() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeConfig::aggregation(0, 3), program.clone());
-    air_test(NativeConfig::aggregation(0, 7), program.clone());
+    air_test(
+        NativeCpuBuilder,
+        NativeConfig::aggregation(0, 3),
+        program.clone(),
+    );
+    air_test(
+        NativeCpuBuilder,
+        NativeConfig::aggregation(0, 7),
+        program.clone(),
+    );
 }

@@ -5168,6 +5168,7 @@ dependencies = [
  "serde",
  "tiny-keccak",
  "tokio",
+ "toml 0.8.23",
  "tracing",
 ]
 
@@ -5692,6 +5693,7 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
  "openvm-instructions",
+ "openvm-pairing",
  "openvm-pairing-circuit",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",

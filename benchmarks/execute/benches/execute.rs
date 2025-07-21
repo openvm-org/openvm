@@ -3,11 +3,12 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, ModularExtension, ModularExtensionExecutor,
+    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
+    ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::{Int256, Int256Executor};
+use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
@@ -19,23 +20,32 @@ use openvm_circuit::{
     derive::VmConfig,
     system::*,
 };
-use openvm_ecc_circuit::{WeierstrassExtension, WeierstrassExtensionExecutor};
+use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor};
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_pairing_circuit::{PairingCurve, PairingExtension, PairingExtensionExecutor};
+use openvm_pairing_circuit::{
+    PairingCpuProverExt, PairingCurve, PairingExtension, PairingExtensionExecutor,
+};
 use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
 use openvm_pairing_transpiler::PairingTranspilerExtension;
-use openvm_rv32im_circuit::{Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor};
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor};
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-    openvm_stark_backend,
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::{
+        self,
+        config::{StarkGenericConfig, Val},
+        p3_field::PrimeField32,
+        prover::cpu::{CpuBackend, CpuDevice},
+    },
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -119,6 +129,62 @@ impl InitFileGenerator for ExecuteConfig {
     }
 }
 
+pub struct ExecuteBuilder;
+impl<E, SC> VmBuilder<E> for ExecuteBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = ExecuteConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &ExecuteConfig,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Int256CpuProverExt,
+            &config.bigint,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Keccak256CpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &AlgebraCpuProverExt,
+            &config.modular,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &EccCpuProverExt,
+            &config.weierstrass,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &PairingCpuProverExt,
+            &config.pairing,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
 fn main() {
     divan::main();
 }
@@ -149,7 +215,7 @@ fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
     METERED_CTX.get_or_init(|| {
         let config = ExecuteConfig::default();
         let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, config).unwrap();
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         (ctx, executor_idx_to_air_idx)

@@ -14,7 +14,7 @@ pub mod test_utils {
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
             MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
-            VirtualMachineError, VmProverConfig, VmState,
+            VirtualMachineError, VmBuilder, VmState,
         },
         utils::test_system_config,
     };
@@ -34,7 +34,7 @@ pub mod test_utils {
     };
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use crate::{extension::NativeConfig, Rv32WithKernelsConfig};
+    use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -73,28 +73,29 @@ pub mod test_utils {
     // Besides taking in system_config, this also returns Result and the full
     // (PreflightExecutionOutput, VirtualMachine) for more advanced testing needs.
     #[allow(clippy::type_complexity)]
-    pub fn execute_program_with_config<E>(
+    pub fn execute_program_with_config<E, VB>(
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
-        config: NativeConfig,
+        builder: VB,
+        config: VB::VmConfig,
     ) -> Result<
         (
             PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
-            VirtualMachine<E, NativeConfig>,
+            VirtualMachine<E, VB>,
         ),
         VirtualMachineError,
     >
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
-        NativeConfig: VmProverConfig<E, RecordArena = MatrixRecordArena<BabyBear>>,
+        VB: VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
     {
         setup_tracing();
         assert!(!config.as_ref().continuation_enabled);
         let input = input_stream.into();
 
         let engine = E::new(FriParameters::new_for_testing(1));
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, config)?;
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let mut segments = vm.executor().execute_metered(
@@ -127,9 +128,13 @@ pub mod test_utils {
         let mut config = test_native_config();
         config.system.num_public_values = 4;
         // we set max segment len large so it doesn't segment
-        let (output, _) =
-            execute_program_with_config::<BabyBearPoseidon2Engine>(program, input_stream, config)
-                .unwrap();
+        let (output, _) = execute_program_with_config::<BabyBearPoseidon2Engine, _>(
+            program,
+            input_stream,
+            NativeCpuBuilder,
+            config,
+        )
+        .unwrap();
         output.to_state
     }
 

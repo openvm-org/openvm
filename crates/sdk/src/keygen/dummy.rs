@@ -7,8 +7,7 @@ use openvm_circuit::{
         },
         ContinuationVmProof, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
         PreflightExecutionOutput, SingleSegmentVmProver, SystemConfig, VirtualMachine,
-        VirtualMachineError, VmCircuitConfig, VmExecutionConfig, VmProverConfig,
-        PUBLIC_VALUES_AIR_ID,
+        VirtualMachineError, VmBuilder, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -18,10 +17,10 @@ use openvm_continuations::verifier::{
     leaf::{types::LeafVmVerifierInput, LeafVmVerifierConfig},
     root::types::RootVmVerifierInput,
 };
-use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_native_recursion::hints::Hintable;
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     prover::{
@@ -55,7 +54,7 @@ use crate::{
 ///
 /// All trace heights are rounded to the next power of two (or 0 -> 0).
 pub(super) fn compute_root_proof_heights(
-    root_vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeConfig>,
+    root_vm: &mut VirtualMachine<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
     root_committed_exe: &VmCommittedExe<BabyBearPoseidon2RootConfig>,
     dummy_internal_proof: &Proof<SC>,
 ) -> Result<Vec<u32>, VirtualMachineError> {
@@ -103,8 +102,11 @@ pub(super) fn dummy_internal_proof(
         1,
     );
     let internal_input = internal_inputs.pop().unwrap();
-    let mut internal_prover =
-        new_local_prover::<BabyBearPoseidon2Engine, _>(&internal_vm_pk, &internal_exe)?;
+    let mut internal_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
+        NativeCpuBuilder,
+        &internal_vm_pk,
+        &internal_exe,
+    )?;
     SingleSegmentVmProver::prove(
         &mut internal_prover,
         internal_input.write(),
@@ -129,7 +131,7 @@ pub(super) fn dummy_leaf_proof_riscv_app_vm(
     app_fri_params: FriParameters,
 ) -> Result<Proof<SC>, VirtualMachineError> {
     let app_vm_pk = Arc::new(dummy_riscv_app_vm_pk(num_public_values, app_fri_params)?);
-    let app_proof = dummy_app_proof(app_vm_pk.clone())?;
+    let app_proof = dummy_app_proof(Rv32ImCpuBuilder, app_vm_pk.clone())?;
     dummy_leaf_proof(leaf_vm_pk, app_vm_pk, &app_proof)
 }
 
@@ -157,7 +159,8 @@ where
         leaf_program.into(),
         e.config().pcs(),
     ));
-    let mut leaf_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(&leaf_vm_pk, &leaf_exe)?;
+    let mut leaf_prover =
+        new_local_prover::<BabyBearPoseidon2Engine, _>(NativeCpuBuilder, &leaf_vm_pk, &leaf_exe)?;
     let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(app_proof, 1);
     let leaf_input = leaf_inputs.pop().unwrap();
     SingleSegmentVmProver::prove(
@@ -174,6 +177,7 @@ fn dummy_riscv_app_vm_pk(
     let vm_config = Rv32ImConfig::with_public_values(num_public_values);
     let (_, vm_pk) = VirtualMachine::new_with_keygen(
         BabyBearPoseidon2Engine::new(fri_params),
+        Rv32ImCpuBuilder,
         vm_config.clone(),
     )?;
     Ok(VmProvingKey {
@@ -183,19 +187,20 @@ fn dummy_riscv_app_vm_pk(
     })
 }
 
-fn dummy_app_proof<VC>(
+fn dummy_app_proof<VB, VC>(
+    app_vm_builder: VB,
     app_vm_pk: Arc<VmProvingKey<SC, VC>>,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>
 where
-    VC: VmExecutionConfig<F>
-        + VmCircuitConfig<SC>
-        + VmProverConfig<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
+    VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
+    VC: VmExecutionConfig<F>,
     <VC as VmExecutionConfig<F>>::Executor:
         InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
 {
     let fri_params = app_vm_pk.fri_params;
     let dummy_exe = dummy_app_committed_exe(fri_params);
-    let mut app_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(&app_vm_pk, &dummy_exe)?;
+    let mut app_prover =
+        new_local_prover::<BabyBearPoseidon2Engine, VB>(app_vm_builder, &app_vm_pk, &dummy_exe)?;
     // Force all AIRs to have non-empty trace matrices (height 0 -> height 1)
     let modify_ctx = |_seg_idx: usize, ctx: &mut ProvingContext<CpuBackend<SC>>| {
         for (i, pk) in app_vm_pk.vm_pk.per_air.iter().enumerate() {

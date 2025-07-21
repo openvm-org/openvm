@@ -29,6 +29,7 @@ use crate::{
     system::{
         memory::{online::GuestMemory, AddressMap},
         program::trace::VmCommittedExe,
+        SystemCpuBuilder,
     },
 };
 
@@ -67,7 +68,8 @@ fn test_vm_connector_wrong_is_terminate() {
 fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingContext<PB>)) {
     let vm_config = SystemConfig::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
-    let (mut vm, pk) = VirtualMachine::new_with_keygen(engine, vm_config.clone()).unwrap();
+    let (mut vm, pk) =
+        VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, vm_config.clone()).unwrap();
     let vk = pk.get_vk();
 
     let instructions = vec![Instruction::<F>::from_isize(

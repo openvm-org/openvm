@@ -44,8 +44,8 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 /// For users who only need to create an execution environment, use the sub-trait
 /// [VmExecutionConfig] to avoid the `SC` generic.
 ///
-/// This trait does not contain the [VmProverConfig] trait, because a single VM configuration may
-/// implement multiple [VmProverConfig]s for different prover backends.
+/// This trait does not contain the [VmProverBuilder] trait, because a single VM configuration may
+/// implement multiple [VmProverBuilder]s for different prover backends.
 pub trait VmConfig<SC>:
     Clone
     + Serialize
@@ -71,10 +71,10 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
-pub trait VmProverConfig<E>: VmConfig<E::SC>
-where
-    E: StarkEngine,
-{
+/// This trait is intended to be implemented on a new type wrapper of the VmConfig struct to get
+/// around Rust orphan rules.
+pub trait VmBuilder<E: StarkEngine>: Sized {
+    type VmConfig: VmConfig<E::SC>;
     type RecordArena: Arena;
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
 
@@ -83,6 +83,7 @@ where
     #[allow(clippy::type_complexity)]
     fn create_chip_complex(
         &self,
+        config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
