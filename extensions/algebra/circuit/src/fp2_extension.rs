@@ -62,7 +62,7 @@ impl Fp2Extension {
             .iter()
             .map(|(name, modulus)| {
                 format!(
-                    "{} {{ mod_idx = {} }}",
+                    "\"{}\" {{ mod_idx = {} }}",
                     name,
                     get_index_of_modulus(modulus, modular_config)
                 )
