@@ -29,9 +29,8 @@ use crate::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
         ChipInventoryError, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
         ExecutorInventory, ExecutorInventoryError, MatrixRecordArena, PhantomSubExecutor,
-        RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmChipComplex, VmChipWrapper,
-        VmCircuitConfig, VmExecutionConfig, VmProverBuilder, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
-        PUBLIC_VALUES_AIR_ID,
+        RowMajorMatrixArena, SystemConfig, VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper,
+        VmCircuitConfig, VmExecutionConfig, CONNECTOR_AIR_ID, PROGRAM_AIR_ID, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         connector::VmConnectorChip,
@@ -460,9 +459,9 @@ where
     }
 }
 
-pub struct SystemCpuProverBuilder;
+pub struct SystemCpuBuilder(pub SystemConfig);
 
-impl<SC, E> VmProverBuilder<E> for SystemCpuProverBuilder
+impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -472,14 +471,18 @@ where
     type RecordArena = MatrixRecordArena<Val<SC>>;
     type SystemChipInventory = SystemChipInventory<SC>;
 
+    fn config(&self) -> &Self::VmConfig {
+        &self.0
+    }
+
     fn create_chip_complex(
         &self,
-        config: &SystemConfig,
         airs: AirInventory<SC>,
     ) -> Result<
         VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
         ChipInventoryError,
     > {
+        let config = &self.0;
         let range_bus = airs.range_checker().bus;
         let range_checker = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
@@ -536,6 +539,12 @@ where
         inventory.add_executor_chip(phantom_chip);
 
         Ok(VmChipComplex { system, inventory })
+    }
+}
+
+impl From<SystemCpuBuilder> for SystemConfig {
+    fn from(builder: SystemCpuBuilder) -> Self {
+        builder.0
     }
 }
 

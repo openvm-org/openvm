@@ -8,8 +8,8 @@ use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
         instructions::NATIVE_AS, AirInventory, AirInventoryError, ChipInventoryError,
-        ExecutorInventory, ExecutorInventoryError, InitFileGenerator, SystemConfig, VmChipComplex,
-        VmCircuitConfig, VmExecutionConfig, VmProverBuilder,
+        ExecutorInventory, ExecutorInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+        VmChipComplex, VmCircuitConfig, VmExecutionConfig,
     },
     derive::VmConfig,
     system::SystemExecutor,
@@ -206,13 +206,13 @@ where
     }
 }
 
-impl<E> VmProverBuilder<E> for SdkVmConfig
+impl<E> VmBuilder<E> for SdkVmConfig
 where
     E: StarkEngine,
-    SdkVmConfigInner: VmProverBuilder<E>,
+    SdkVmConfigInner: VmBuilder<E>,
 {
-    type RecordArena = <SdkVmConfigInner as VmProverBuilder<E>>::RecordArena;
-    type SystemChipInventory = <SdkVmConfigInner as VmProverBuilder<E>>::SystemChipInventory;
+    type RecordArena = <SdkVmConfigInner as VmBuilder<E>>::RecordArena;
+    type SystemChipInventory = <SdkVmConfigInner as VmBuilder<E>>::SystemChipInventory;
 
     fn create_chip_complex(
         &self,

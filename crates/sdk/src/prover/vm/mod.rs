@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{VirtualMachine, VirtualMachineError, VmLocalProver, VmProverBuilder},
+    arch::{VirtualMachine, VirtualMachineError, VmLocalProver, VmBuilder},
     system::program::trace::VmCommittedExe,
 };
 use openvm_stark_backend::prover::hal::DeviceDataTransporter;
@@ -15,7 +15,7 @@ pub fn new_local_prover<E, VC>(
 ) -> Result<VmLocalProver<E, VC>, VirtualMachineError>
 where
     E: StarkFriEngine,
-    VC: VmProverBuilder<E>,
+    VC: VmBuilder<E>,
 {
     let engine = E::new(vm_pk.fri_params);
     let d_pk = engine.device().transport_pk_to_device(&vm_pk.vm_pk);

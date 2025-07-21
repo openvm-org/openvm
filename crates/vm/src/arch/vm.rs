@@ -52,7 +52,7 @@ use crate::{
         interpreter::InterpretedInstance,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, SystemConfig, TraceFiller,
-        VmCircuitConfig, VmExecutionConfig, VmProverBuilder, VmSegmentExecutor, VmSegmentState,
+        VmBuilder, VmCircuitConfig, VmExecutionConfig, VmSegmentExecutor, VmSegmentState,
         PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
@@ -431,7 +431,7 @@ pub enum VirtualMachineError {
 pub struct VirtualMachine<E, VB>
 where
     E: StarkEngine,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
 {
     /// Proving engine
     pub engine: E,
@@ -446,17 +446,16 @@ where
 impl<E, VB> VirtualMachine<E, VB>
 where
     E: StarkEngine,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
 {
     pub fn new(
         engine: E,
-        prover_builder: &VB,
-        config: VB::VmConfig,
+        builder: VB,
         d_pk: DeviceMultiStarkProvingKey<E::PB>,
     ) -> Result<Self, VirtualMachineError> {
-        let circuit = config.create_airs()?;
-        let chip_complex = prover_builder.create_chip_complex(&config, circuit)?;
-        let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
+        let circuit = builder.config().create_airs()?;
+        let chip_complex = builder.create_chip_complex(circuit)?;
+        let executor = VmExecutor::<Val<E::SC>, _>::new(builder.into())?;
         Ok(Self {
             engine,
             executor,
@@ -467,13 +466,12 @@ where
 
     pub fn new_with_keygen(
         engine: E,
-        prover_builder: &VB,
-        config: VB::VmConfig,
+        builder: VB,
     ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError> {
-        let circuit = config.create_airs()?;
+        let circuit = builder.config().create_airs()?;
         let pk = circuit.keygen(&engine);
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = Self::new(engine, prover_builder, config, d_pk)?;
+        let vm = Self::new(engine, builder, d_pk)?;
         Ok((vm, pk))
     }
 
@@ -836,7 +834,7 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
 pub struct VmLocalProver<E, VB>
 where
     E: StarkEngine,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
 {
     pub vm: VirtualMachine<E, VB>,
     #[getset(get = "pub")]
@@ -849,7 +847,7 @@ where
 impl<E, VB> VmLocalProver<E, VB>
 where
     E: StarkEngine,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
 {
     pub fn new(
         mut vm: VirtualMachine<E, VB>,
@@ -870,7 +868,7 @@ impl<E, VB> ContinuationVmProver<E::SC> for VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
         + InsExecutorE2<Val<E::SC>>
         + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
@@ -890,7 +888,7 @@ impl<E, VB> VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
         + InsExecutorE2<Val<E::SC>>
         + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
@@ -957,7 +955,7 @@ impl<E, VB> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    VB: VmProverBuilder<E>,
+    VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         InstructionExecutor<Val<E::SC>, VB::RecordArena>,
 {
@@ -1214,7 +1212,7 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
 impl<E, VC> VirtualMachine<E, VC>
 where
     E: StarkEngine,
-    VC: VmProverBuilder<E>,
+    VC: VmBuilder<E>,
     VC::SystemChipInventory: SystemWithFixedTraceHeights,
 {
     /// Sets fixed trace heights for the system AIRs' trace matrices.

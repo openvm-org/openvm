@@ -17,7 +17,7 @@ use super::{
 use crate::{
     arch::{
         AirInventory, AirInventoryError, Arena, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError, InsExecutorE1, InsExecutorE2, InstructionExecutor,
+        ExecutorInventoryError,
     },
     system::{
         memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK},
@@ -71,17 +71,20 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 
-pub trait VmProverBuilder<E: StarkEngine> {
-    type VmConfig: VmConfig<E::SC>;
+/// This trait is intended to be implemented on a new type wrapper of the VmConfig struct to get
+/// around Rust orphan rules.
+pub trait VmBuilder<E: StarkEngine>: Sized {
+    type VmConfig: VmConfig<E::SC> + From<Self>;
     type RecordArena: Arena;
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
+
+    fn config(&self) -> &Self::VmConfig;
 
     /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
     /// [VmCircuitConfig::create_airs].
     #[allow(clippy::type_complexity)]
     fn create_chip_complex(
         &self,
-        config: &Self::VmConfig,
         circuit: AirInventory<E::SC>,
     ) -> Result<
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,

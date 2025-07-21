@@ -14,7 +14,7 @@ pub mod test_utils {
             execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
             MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
-            VirtualMachineError, VmProverBuilder, VmState,
+            VirtualMachineError, VmBuilder, VmState,
         },
         utils::test_system_config,
     };
@@ -87,7 +87,7 @@ pub mod test_utils {
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
-        NativeConfig: VmProverBuilder<E, RecordArena = MatrixRecordArena<BabyBear>>,
+        NativeConfig: VmBuilder<E, RecordArena = MatrixRecordArena<BabyBear>>,
     {
         setup_tracing();
         assert!(!config.as_ref().continuation_enabled);

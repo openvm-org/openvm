@@ -23,7 +23,7 @@ mod evm {
 
     use openvm_circuit::arch::{
         InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmCircuitConfig,
-        VmExecutionConfig, VmProverBuilder,
+        VmExecutionConfig, VmBuilder,
     };
     use openvm_native_circuit::NativeConfig;
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
@@ -41,8 +41,8 @@ mod evm {
     pub struct EvmHalo2Prover<VC, E>
     where
         E: StarkFriEngine<SC = SC>,
-        VC: VmProverBuilder<E>,
-        NativeConfig: VmProverBuilder<E>,
+        VC: VmBuilder<E>,
+        NativeConfig: VmBuilder<E>,
     {
         pub stark_prover: StarkProver<VC, E>,
         pub halo2_prover: Halo2Prover,
@@ -51,13 +51,13 @@ mod evm {
     impl<VC, E> EvmHalo2Prover<VC, E>
     where
         E: StarkFriEngine<SC = SC>,
-        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmProverBuilder<E>,
+        VC: VmExecutionConfig<F> + VmCircuitConfig<SC> + VmBuilder<E>,
         <VC as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
             + InsExecutorE2<F>
-            + InstructionExecutor<F, <VC as VmProverBuilder<E>>::RecordArena>,
-        NativeConfig: VmProverBuilder<E>,
+            + InstructionExecutor<F, <VC as VmBuilder<E>>::RecordArena>,
+        NativeConfig: VmBuilder<E>,
         <NativeConfig as VmExecutionConfig<F>>::Executor:
-            InstructionExecutor<F, <NativeConfig as VmProverBuilder<E>>::RecordArena>,
+            InstructionExecutor<F, <NativeConfig as VmBuilder<E>>::RecordArena>,
     {
         pub fn new(
             reader: &impl Halo2ParamsReader,

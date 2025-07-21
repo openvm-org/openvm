@@ -7,8 +7,7 @@ use openvm_circuit::{
         },
         ContinuationVmProof, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
         PreflightExecutionOutput, SingleSegmentVmProver, SystemConfig, VirtualMachine,
-        VirtualMachineError, VmCircuitConfig, VmExecutionConfig, VmProverBuilder,
-        PUBLIC_VALUES_AIR_ID,
+        VirtualMachineError, VmBuilder, VmCircuitConfig, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -189,7 +188,7 @@ fn dummy_app_proof<VC>(
 where
     VC: VmExecutionConfig<F>
         + VmCircuitConfig<SC>
-        + VmProverBuilder<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
+        + VmBuilder<BabyBearPoseidon2Engine, RecordArena = MatrixRecordArena<F>>,
     <VC as VmExecutionConfig<F>>::Executor:
         InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
 {
