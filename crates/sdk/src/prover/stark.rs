@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmCircuitConfig,
-    VmExecutionConfig, VmBuilder,
+    InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmBuilder,
+    VmCircuitConfig, VmExecutionConfig,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
 #[cfg(feature = "evm-prove")]

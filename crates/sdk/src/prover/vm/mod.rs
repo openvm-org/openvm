@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{VirtualMachine, VirtualMachineError, VmLocalProver, VmBuilder},
+    arch::{VirtualMachine, VirtualMachineError, VmBuilder, VmLocalProver},
     system::program::trace::VmCommittedExe,
 };
 use openvm_stark_backend::prover::hal::DeviceDataTransporter;

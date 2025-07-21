@@ -4,8 +4,7 @@ use getset::Getters;
 use openvm_circuit::{
     arch::{
         ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmLocalProver,
-        VmBuilder,
+        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder, VmLocalProver,
     },
     system::program::trace::VmCommittedExe,
 };

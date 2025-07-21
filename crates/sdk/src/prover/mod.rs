@@ -22,8 +22,8 @@ mod evm {
     use std::sync::Arc;
 
     use openvm_circuit::arch::{
-        InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmCircuitConfig,
-        VmExecutionConfig, VmBuilder,
+        InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmBuilder,
+        VmCircuitConfig, VmExecutionConfig,
     };
     use openvm_native_circuit::NativeConfig;
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
