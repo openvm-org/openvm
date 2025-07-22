@@ -155,7 +155,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if instret < self.instret_last_segment_check + self.segment_check_insns {
             return;
         }
-        self.memory_ctx.lazy_update_heights(&mut self.trace_heights);
+        self.memory_ctx
+            .lazy_update_boundary_heights(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
             &self.trace_heights,
@@ -222,7 +223,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
         vm_state
             .ctx
             .memory_ctx
-            .lazy_update_heights(&mut vm_state.ctx.trace_heights);
+            .lazy_update_boundary_heights(&mut vm_state.ctx.trace_heights);
         vm_state
             .ctx
             .segmentation_ctx

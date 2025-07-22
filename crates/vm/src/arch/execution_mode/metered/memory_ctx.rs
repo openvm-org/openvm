@@ -29,6 +29,7 @@ impl BitSet {
     /// Set all bits within [start, end) to 1, return the number of flipped bits.
     #[inline(always)]
     pub fn insert_range(&mut self, start: usize, end: usize) -> usize {
+        debug_assert!(start < end);
         let mut ret = 0;
         let start_word_index = start / u64::BITS as usize;
         let end_word_index = (end - 1) / u64::BITS as usize;
@@ -136,19 +137,27 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         self.page_indices.clear();
     }
 
+    /// For each memory access, record the minimal necessary data to update heights of
+    /// memory-related chips. The actual height updates happen during segment checks. The
+    /// implementation is in `lazy_update_boundary_heights`.
     #[inline(always)]
-    pub fn update_boundary_merkle_heights(&mut self, address_space: u32, ptr: u32, size: u32) {
+    pub(crate) fn update_boundary_merkle_heights(
+        &mut self,
+        address_space: u32,
+        ptr: u32,
+        size: u32,
+    ) {
         let num_blocks = (size + self.chunk - 1) >> self.chunk_bits;
         let start_chunk_id = ptr >> self.chunk_bits;
-        let star_block_id = if self.chunk == 1 {
+        let start_block_id = if self.chunk == 1 {
             start_chunk_id
         } else {
             self.memory_dimensions
                 .label_to_index((address_space, start_chunk_id)) as u32
         };
         // Because `self.chunk == 1 << self.chunk_bits`
-        let end_block_id = star_block_id + num_blocks;
-        let start_page_id = star_block_id >> PAGE_BITS;
+        let end_block_id = start_block_id + num_blocks;
+        let start_page_id = start_block_id >> PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
         for page_id in start_page_id..end_page_id {
             if self.page_indices.insert(page_id as usize) {
@@ -189,8 +198,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
+    /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
-    pub(crate) fn lazy_update_heights(&mut self, trace_heights: &mut [u32]) {
+    pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
         // On page fault, assume we add all leaves in a page
         let leaves = (self.page_access_count << PAGE_BITS) as u32;
         trace_heights[self.boundary_idx] += leaves;
