@@ -7,6 +7,7 @@
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
 use std::{
+    any::TypeId,
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
@@ -21,8 +22,8 @@ use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
-    p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32},
-    p3_util::log2_strict_usize,
+    p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField},
+    p3_util::{log2_ceil_usize, log2_strict_usize},
     proof::Proof,
     prover::{
         hal::{DeviceDataTransporter, MatrixDimensions},
@@ -30,6 +31,7 @@ use openvm_stark_backend::{
     },
     verifier::VerificationError,
 };
+use p3_baby_bear::BabyBear;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -588,11 +590,11 @@ where
         })
     }
 
-    // @dev: This function mutates `self` but should only depend on internal state in the sense
-    // that:
-    // - program must already be loaded as cached trace
-    // - initial memory image was already sent to device
-    // - all other state should be given by `system_records` and `record_arenas`
+    /// This function mutates `self` but should only depend on internal state in the sense that:
+    /// - program must already be loaded as cached trace via [`load_program`](Self::load_program).
+    /// - initial memory image was already sent to device via
+    ///   [`transport_init_memory_to_device`](Self::transport_init_memory_to_device).
+    /// - all other state should be given by `system_records` and `record_arenas`
     #[instrument(name = "tracegen", skip_all)]
     pub fn generate_proving_ctx(
         &mut self,
@@ -603,35 +605,33 @@ where
             .chip_complex
             .generate_proving_ctx(system_records, record_arenas)?;
 
-        // Defensive checks that the trace heights satisfy the linear constraints:
+        // ==== Defensive checks that the trace heights satisfy the linear constraints: ====
         let idx_trace_heights = ctx
             .per_air
             .iter()
             .map(|(air_idx, ctx)| (*air_idx, ctx.main_trace_height()))
             .collect_vec();
-        // TODO[jpw]: put back self.max_trace_height
-
-        // TODO: move this elsewhere
-        // let max_trace_height = if TypeId::of::<F>() == TypeId::of::<BabyBear>() {
-        //     let min_log_blowup = log2_ceil_usize(config.max_constraint_degree - 1);
-        //     1 << (BabyBear::TWO_ADICITY - min_log_blowup)
-        // } else {
-        //     tracing::warn!(
-        //         "constructing SystemComplex for unrecognized field; using max_trace_height =
-        // 2^30"     );
-        //     1 << 30
-        // };
-
-        // if let Some(&(air_idx, height)) = idx_trace_heights
-        //     .iter()
-        //     .find(|(_, height)| *height > self.max_trace_height)
-        // {
-        //     return Err(GenerationError::TraceHeightsLimitExceeded {
-        //         air_idx,
-        //         height,
-        //         max_height: self.max_trace_height,
-        //     });
-        // }
+        // 1. check max trace height isn't exceeded
+        let max_trace_height = if TypeId::of::<Val<E::SC>>() == TypeId::of::<BabyBear>() {
+            let min_log_blowup = log2_ceil_usize(self.config().as_ref().max_constraint_degree - 1);
+            1 << (BabyBear::TWO_ADICITY - min_log_blowup)
+        } else {
+            tracing::warn!(
+                "constructing VirtualMachine for unrecognized field; using max_trace_height=2^30"
+            );
+            1 << 30
+        };
+        if let Some(&(air_idx, height)) = idx_trace_heights
+            .iter()
+            .find(|(_, height)| *height > max_trace_height)
+        {
+            return Err(GenerationError::TraceHeightsLimitExceeded {
+                air_idx,
+                height,
+                max_height: max_trace_height,
+            });
+        }
+        // 2. check linear constraints on trace heights are satisfied
         let trace_height_constraints = &self.pk.trace_height_constraints;
         if trace_height_constraints.is_empty() {
             tracing::warn!("generating proving context without trace height constraints");
@@ -727,6 +727,10 @@ where
         VmCommittedExe::commit(exe, self.engine.config().pcs())
     }
 
+    /// Convenience method to transport a host committed Exe to device. If the Exe has already been
+    /// committed directly on device (either via a different caching mechanism or directly using
+    /// device committer), then you can directly call [`load_program`](Self::load_program) and skip
+    /// this function.
     pub fn transport_committed_exe_to_device(
         &self,
         committed_exe: &VmCommittedExe<E::SC>,

@@ -646,59 +646,6 @@ where
     pub fn system_config(&self) -> &SystemConfig {
         self.inventory.config()
     }
-    // pub fn finalize_memory(&mut self)
-    // where
-    //     P: AnyEnum,
-    // {
-    //     if self.config.continuation_enabled {
-    //         let chip = self
-    //             .inventory
-    //             .periphery
-    //             .get_mut(Self::POSEIDON2_PERIPHERY_IDX)
-    //             .expect("Poseidon2 chip required for persistent memory");
-    //         let hasher: &mut Poseidon2PeripheryChip<F> = chip
-    //             .as_any_kind_mut()
-    //             .downcast_mut()
-    //             .expect("Poseidon2 chip required for persistent memory");
-    //         self.base.memory_controller.finalize(Some(hasher));
-    //     } else {
-    //         self.base
-    //             .memory_controller
-    //             .finalize(None::<&mut Poseidon2PeripheryChip<F>>);
-    //     };
-    // }
-
-    // TODO: move these two into SystemChipComplex trait
-    // pub(crate) fn set_program(&mut self, program: Program<F>) {
-    //     self.base.program_chip.set_program(program);
-    // }
-
-    // pub(crate) fn set_initial_memory(&mut self, memory: MemoryImage) {
-    //     self.base.memory_controller.set_initial_memory(memory);
-    // }
-
-    // // This is O(1).
-    // pub fn num_airs(&self) -> usize {
-    //     3 + self.memory_controller().num_airs() + self.inventory.num_airs()
-    // }
-
-    // Note[jpw]: do we still need this?
-    // /// Return dummy trace heights of (SystemBase, Inventory). Usually this is for aggregation to
-    // /// generate a dummy proof and not useful for regular users.
-    // ///
-    // /// **Warning**: the order of `get_dummy_trace_heights` is deterministic, but it is not the
-    // same /// as the order of `air_names`. In other words, the order here does not match the
-    // order of /// AIR IDs.
-    // pub fn get_dummy_internal_trace_heights(&self) -> VmComplexTraceHeights
-    // where
-    //     E: ChipUsageGetter,
-    //     P: ChipUsageGetter,
-    // {
-    //     VmComplexTraceHeights::new(
-    //         self.base.get_dummy_system_trace_heights(),
-    //         self.inventory.get_dummy_trace_heights(),
-    //     )
-    // }
 
     /// `record_arenas` is expected to have length equal to the number of AIRs in the verifying key
     /// and in the same order as the AIRs appearing in the verifying key, even though some chips may
@@ -756,25 +703,6 @@ where
             per_air: ctx_without_empties,
         })
     }
-
-    // TODO[jpw]: This doesn't belong here!
-    // #[cfg(feature = "bench-metrics")]
-    // fn finalize_metrics(&self, metrics: &mut VmMetrics)
-    // where
-    //     E: ChipUsageGetter,
-    //     P: ChipUsageGetter,
-    // {
-    //     tracing::info!(metrics.cycle_count);
-    //     counter!("total_cycles").absolute(metrics.cycle_count as u64);
-    //     counter!("main_cells_used")
-    //         .absolute(self.current_trace_cells().into_iter().sum::<usize>() as u64);
-
-    //     if self.config.profiling {
-    //         metrics.chip_heights =
-    //             itertools::izip!(self.air_names(), self.current_trace_heights()).collect();
-    //         metrics.emit();
-    //     }
-    // }
 }
 
 // ============ Blanket implementation of VM extension traits for Option<E> ===========
