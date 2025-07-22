@@ -1,25 +1,22 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    NUM_BITWISE_OP_LOOKUP_COLS,
+    BitwiseOperationLookupChip, NUM_BITWISE_OP_LOOKUP_COLS,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
     cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
     prover_backend::GpuBackend,
-    types::SC,
+    types::F,
 };
 
-use crate::{primitives::cuda::bitwise_op_lookup::tracegen, DeviceChip};
+use crate::primitives::cuda::bitwise_op_lookup::tracegen;
 
 #[cfg(test)]
 mod tests;
 
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {
-    pub air: BitwiseOperationLookupAir<NUM_BITS>,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<BitwiseOperationLookupChip<NUM_BITS>>>,
 }
@@ -29,14 +26,13 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         1 << (2 * NUM_BITS)
     }
 
-    pub fn new(bus: BitwiseOperationLookupBus) -> Self {
+    pub fn new() -> Self {
         // The first 2^(2 * NUM_BITS) indices are for range checking, the rest are for XOR
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(
             NUM_BITWISE_OP_LOOKUP_COLS * Self::num_rows(),
         ));
         count.fill_zero().unwrap();
         Self {
-            air: BitwiseOperationLookupAir::new(bus),
             count,
             cpu_chip: None,
         }
@@ -50,33 +46,20 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChipGPU<NUM_BITS> {
         ));
         count.fill_zero().unwrap();
         Self {
-            air: cpu_chip.air,
             count,
             cpu_chip: Some(cpu_chip),
         }
     }
 }
 
-impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChipGPU<NUM_BITS> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        Self::num_rows()
-    }
-
-    fn trace_width(&self) -> usize {
-        NUM_BITWISE_OP_LOOKUP_COLS
+impl<const NUM_BITS: usize> Default for BitwiseOperationLookupChipGPU<NUM_BITS> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
-impl<const NUM_BITS: usize> DeviceChip<SC, GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
+impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupChipGPU<NUM_BITS> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         debug_assert_eq!(
             Self::num_rows() * NUM_BITWISE_OP_LOOKUP_COLS,
             self.count.len()
@@ -99,6 +82,6 @@ impl<const NUM_BITS: usize> DeviceChip<SC, GpuBackend> for BitwiseOperationLooku
         unsafe {
             tracegen(&self.count, &cpu_count, trace.buffer(), NUM_BITS as u32).unwrap();
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }

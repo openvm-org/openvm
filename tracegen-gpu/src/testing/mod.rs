@@ -3,9 +3,12 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         instructions::instruction::Instruction,
-        testing::{EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS},
+        testing::{
+            execution::air::ExecutionDummyAir, program::air::ProgramDummyAir, TestChipHarness,
+            EXECUTION_BUS, MEMORY_BUS, RANGE_CHECKER_BUS, READ_INSTRUCTION_BUS,
+        },
         ExecutionBridge, ExecutionBus, ExecutionState, InstructionExecutor, MemoryConfig, Streams,
-        SystemPort,
+        VmStateMut,
     },
     system::{
         memory::{
@@ -13,29 +16,39 @@ use openvm_circuit::{
             MemoryController, SharedMemoryHelper,
         },
         program::ProgramBus,
+        SystemPort,
     },
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::BitwiseOperationLookupBus,
-    range_tuple::RangeTupleCheckerBus,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    range_tuple::{
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        SharedRangeTupleCheckerChip,
+    },
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
+        VariableRangeCheckerChip,
+    },
 };
 use openvm_stark_backend::{
-    engine::VerificationData,
     p3_field::{Field, FieldAlgebra},
-    p3_util::log2_strict_usize,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    rap::AnyRap,
     verifier::VerificationError,
     AirRef, Chip,
 };
 use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
-    engine::StarkFriEngine,
+    engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use stark_backend_gpu::{
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
-    types::{DeviceAirProofRawInput, F, SC},
+    types::{F, SC},
 };
 use tracing::Level;
 
@@ -47,7 +60,6 @@ use crate::{
     testing::{
         execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
     },
-    DeviceChip,
 };
 
 pub mod cuda;
@@ -87,19 +99,15 @@ impl GpuChipTestBuilder {
     pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
         let mem_bus = MemoryBus::new(MEMORY_BUS);
-        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
-        ));
-        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let mut memory_controller =
-            MemoryController::with_volatile_memory(mem_bus, mem_config, range_checker);
-        memory_controller
-            .memory
-            .access_adapter_inventory
-            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
+        )));
         Self {
-            memory: DeviceMemoryTester::new(memory_controller),
+            memory: DeviceMemoryTester::new(
+                default_tracing_memory(&mem_config, 1),
+                MemoryController::with_volatile_memory(mem_bus, mem_config, range_checker),
+            ),
             execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
             program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
             streams: Default::default(),
@@ -112,19 +120,24 @@ impl GpuChipTestBuilder {
         }
     }
 
-    pub fn with_variable_range_checker(mut self) -> Self {
-        let bus = self.memory.controller.range_checker.bus();
-        self.var_range_checker = Some(Arc::new(VariableRangeCheckerChipGPU::new(bus)));
+    pub fn with_variable_range_checker(mut self, bus: VariableRangeCheckerBus) -> Self {
+        self.var_range_checker = Some(Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+            VariableRangeCheckerChip::new(bus),
+        ))));
         self
     }
 
     pub fn with_bitwise_op_lookup(mut self, bus: BitwiseOperationLookupBus) -> Self {
-        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::new(bus)));
+        self.bitwise_op_lookup = Some(Arc::new(BitwiseOperationLookupChipGPU::hybrid(Arc::new(
+            BitwiseOperationLookupChip::new(bus),
+        ))));
         self
     }
 
     pub fn with_range_tuple_checker(mut self, bus: RangeTupleCheckerBus<2>) -> Self {
-        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::new(bus)));
+        self.range_tuple_checker = Some(Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
+            RangeTupleCheckerChip::new(bus),
+        ))));
         self
     }
 
@@ -132,38 +145,74 @@ impl GpuChipTestBuilder {
         self.rng.next_u32() % (1 << (F::bits() - 2))
     }
 
-    pub fn execute<E: InstructionExecutor<F>>(
-        &mut self,
-        executor: &mut E,
-        instruction: &Instruction<F>,
-    ) {
+    pub fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
+    where
+        E: InstructionExecutor<F, RA>,
+    {
         let initial_pc = self.next_elem_size_u32();
-        self.execute_with_pc(executor, instruction, initial_pc);
+        self.execute_with_pc(executor, arena, instruction, initial_pc);
     }
 
-    pub fn execute_with_pc<E: InstructionExecutor<F>>(
+    pub fn execute_harness<E, A, C, RA>(
+        &mut self,
+        harness: &mut TestChipHarness<F, E, A, C, RA>,
+        instruction: &Instruction<F>,
+    ) where
+        E: InstructionExecutor<F, RA>,
+    {
+        self.execute(&mut harness.executor, &mut harness.arena, instruction);
+    }
+
+    pub fn execute_with_pc<E, RA>(
         &mut self,
         executor: &mut E,
+        arena: &mut RA,
         instruction: &Instruction<F>,
         initial_pc: u32,
-    ) {
+    ) where
+        E: InstructionExecutor<F, RA>,
+    {
         let initial_state = ExecutionState {
             pc: initial_pc,
-            timestamp: self.memory.controller.timestamp(),
+            timestamp: self.memory.memory.timestamp(),
         };
-        tracing::debug!(?initial_state.timestamp);
-        let final_state = executor
-            .execute(
-                &mut self.memory.controller,
-                &mut self.streams,
-                &mut self.rng,
-                instruction,
-                initial_state,
-            )
+        tracing::debug!("initial_timestamp={}", initial_state.timestamp);
+
+        let mut pc = initial_pc;
+        let state_mut = VmStateMut {
+            pc: &mut pc,
+            memory: &mut self.memory.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            ctx: arena,
+        };
+
+        executor
+            .execute(state_mut, instruction)
             .expect("Expected the execution not to fail");
+        let final_state = ExecutionState {
+            pc,
+            timestamp: self.memory.memory.timestamp(),
+        };
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
+    }
+
+    pub fn execute_with_pc_harness<E, A, C, RA>(
+        &mut self,
+        harness: &mut TestChipHarness<F, E, A, C, RA>,
+        instruction: &Instruction<F>,
+        initial_pc: u32,
+    ) where
+        E: InstructionExecutor<F, RA>,
+    {
+        self.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.arena,
+            instruction,
+            initial_pc,
+        );
     }
 
     pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
@@ -307,7 +356,30 @@ impl GpuChipTestBuilder {
     }
 
     pub fn cpu_range_checker(&self) -> SharedVariableRangeCheckerChip {
-        self.memory.controller.range_checker.clone()
+        self.var_range_checker
+            .as_ref()
+            .expect("Initialize GpuChipTestBuilder with .with_variable_range_checker()")
+            .cpu_chip
+            .clone()
+            .unwrap()
+    }
+
+    pub fn cpu_bitwise_op_lookup(&self) -> SharedBitwiseOperationLookupChip<8> {
+        self.bitwise_op_lookup
+            .as_ref()
+            .expect("Initialize GpuChipTestBuilder with .with_bitwise_op_lookup()")
+            .cpu_chip
+            .clone()
+            .unwrap()
+    }
+
+    pub fn cpu_range_tuple_checker(&self) -> SharedRangeTupleCheckerChip<2> {
+        self.range_tuple_checker
+            .as_ref()
+            .expect("Initialize GpuChipTestBuilder with .with_range_tuple_checker()")
+            .cpu_chip
+            .clone()
+            .unwrap()
     }
 
     pub fn cpu_memory_helper(&self) -> SharedMemoryHelper<F> {
@@ -321,61 +393,121 @@ impl GpuChipTestBuilder {
             range_tuple_checker: self.range_tuple_checker,
             ..Default::default()
         }
-        .load(self.execution)
-        .load(self.program)
+        .load(
+            ExecutionDummyAir::new(self.execution.bus()),
+            self.execution,
+            (),
+        )
+        .load(ProgramDummyAir::new(self.program.bus()), self.program, ())
     }
 }
 
 #[derive(Default)]
 pub struct GpuChipTester {
     pub airs: Vec<AirRef<SC>>,
-    pub raw_inputs: Vec<DeviceAirProofRawInput<GpuBackend>>,
+    pub ctxs: Vec<AirProvingContext<GpuBackend>>,
     pub var_range_checker: Option<Arc<VariableRangeCheckerChipGPU>>,
     pub bitwise_op_lookup: Option<Arc<BitwiseOperationLookupChipGPU<8>>>,
     pub range_tuple_checker: Option<Arc<RangeTupleCheckerChipGPU<2>>>,
 }
 
 impl GpuChipTester {
-    pub fn load<G: DeviceChip<SC, GpuBackend>>(mut self, trace_generator: G) -> Self {
-        if trace_generator.current_trace_height() > 0 {
-            self.airs.push(trace_generator.air());
-            self.raw_inputs
-                .push(trace_generator.generate_device_air_proof_input());
+    pub fn load<A, G, RA>(mut self, air: A, gpu_chip: G, gpu_arena: RA) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        G: Chip<RA, GpuBackend>,
+    {
+        let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
+        if proving_ctx.common_main.is_some() {
+            self.airs.push(Arc::new(air) as AirRef<SC>);
+            self.ctxs.push(proving_ctx);
         }
         self
     }
 
-    pub fn load_and_compare<G: DeviceChip<SC, GpuBackend>, C: Chip<SC>>(
+    pub fn load_harness<E, A, G, RA>(self, harness: TestChipHarness<F, E, A, G, RA>) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        G: Chip<RA, GpuBackend>,
+    {
+        self.load(harness.air, harness.chip, harness.arena)
+    }
+
+    pub fn load_periphery<A, G>(self, air: A, gpu_chip: G) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        G: Chip<(), GpuBackend>,
+    {
+        self.load(air, gpu_chip, ())
+    }
+
+    pub fn load_air_proving_ctx<A>(
         mut self,
-        trace_generator: G,
-        expected_chip: C,
-    ) -> Self {
-        if trace_generator.current_trace_height() > 0 {
-            self.airs.push(trace_generator.air());
-            let raw_input = trace_generator.generate_device_air_proof_input();
-            let expected_trace = Arc::new(
-                expected_chip
-                    .generate_air_proof_input()
-                    .raw
-                    .common_main
-                    .unwrap(),
-            );
-            assert_eq_cpu_and_gpu_matrix(expected_trace, raw_input.common_main.as_ref().unwrap());
-            self.raw_inputs.push(raw_input);
+        air: A,
+        proving_ctx: AirProvingContext<GpuBackend>,
+    ) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+    {
+        self.airs.push(Arc::new(air) as AirRef<SC>);
+        self.ctxs.push(proving_ctx);
+        self
+    }
+
+    pub fn load_and_compare<A, G, RA, C, CRA>(
+        mut self,
+        air: A,
+        gpu_chip: G,
+        gpu_arena: RA,
+        cpu_chip: C,
+        cpu_arena: CRA,
+    ) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        C: Chip<CRA, CpuBackend<SC>>,
+        G: Chip<RA, GpuBackend>,
+    {
+        let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
+        let expected_trace = cpu_chip.generate_proving_ctx(cpu_arena).common_main;
+        if proving_ctx.common_main.is_none() {
+            assert!(expected_trace.is_none());
+            return self;
         }
+        assert_eq_cpu_and_gpu_matrix(
+            expected_trace.unwrap(),
+            proving_ctx.common_main.as_ref().unwrap(),
+        );
+        self.airs.push(Arc::new(air) as AirRef<SC>);
+        self.ctxs.push(proving_ctx);
         self
     }
 
     pub fn finalize(mut self) -> Self {
-        // TODO[stephen]: finalize memory
+        // TODO[stephen]: memory chips tracegen
         if let Some(var_range_checker) = self.var_range_checker.clone() {
-            self = self.load(var_range_checker);
+            self = self.load(
+                VariableRangeCheckerAir::new(var_range_checker.cpu_chip.as_ref().unwrap().bus()),
+                var_range_checker,
+                (),
+            );
         }
         if let Some(bitwise_op_lookup) = self.bitwise_op_lookup.clone() {
-            self = self.load(bitwise_op_lookup);
+            self = self.load(
+                BitwiseOperationLookupAir::<8>::new(
+                    bitwise_op_lookup.cpu_chip.as_ref().unwrap().bus(),
+                ),
+                bitwise_op_lookup,
+                (),
+            );
         }
         if let Some(range_tuple_checker) = self.range_tuple_checker.clone() {
-            self = self.load(range_tuple_checker);
+            self = self.load(
+                RangeTupleCheckerAir {
+                    bus: *range_tuple_checker.cpu_chip.as_ref().unwrap().bus(),
+                },
+                range_tuple_checker,
+                (),
+            );
         }
         self
     }
@@ -383,11 +515,11 @@ impl GpuChipTester {
     pub fn test<P: Fn() -> GpuBabyBearPoseidon2Engine>(
         self,
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerificationError> {
-        engine_provider().gpu_run_test(self.airs, self.raw_inputs)
+    ) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
+        engine_provider().run_test(self.airs, self.ctxs)
     }
 
-    pub fn simple_test(self) -> Result<VerificationData<SC>, VerificationError> {
+    pub fn simple_test(self) -> Result<VerificationDataWithFriParams<SC>, VerificationError> {
         self.test(|| GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
     }
 

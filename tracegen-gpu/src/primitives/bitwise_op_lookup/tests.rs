@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
 use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_stark_backend::prover::types::AirProvingContext;
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
 use p3_field::FieldAlgebra;
 use rand::Rng;
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    types::{DeviceAirProofRawInput, F},
-};
+use stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D, types::F};
 
 use crate::{
     dummy::bitwise_op_lookup::DummyInteractionChipGPU,
@@ -26,9 +23,7 @@ const NUM_INPUTS: usize = 1 << 16;
 #[test]
 fn bitwise_op_lookup_test() {
     let mut tester = GpuChipTestBuilder::default();
-    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<RV32_CELL_BITS>::new(
-        BitwiseOperationLookupBus::new(0),
-    ));
+    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<RV32_CELL_BITS>::new());
 
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
@@ -42,8 +37,11 @@ fn bitwise_op_lookup_test() {
 
     tester
         .build()
-        .load(dummy_chip)
-        .load(bitwise)
+        .load_periphery(DummyInteractionAir::new(4, true, 0), dummy_chip)
+        .load_periphery(
+            BitwiseOperationLookupAir::<8>::new(BitwiseOperationLookupBus::new(0)),
+            bitwise,
+        )
         .finalize()
         .simple_test()
         .expect("Verification failed");
@@ -95,23 +93,23 @@ fn bitwise_op_lookup_hybrid_test() {
         .collect::<Vec<_>>()
         .to_device()
         .unwrap();
-    let cpu_air = DummyInteractionAir::new(4, true, bus.inner.index);
 
-    let mut tester = tester.build();
-    tester.airs.push(Arc::new(cpu_air));
-    tester.raw_inputs.push(DeviceAirProofRawInput {
+    let dummy_air = DummyInteractionAir::new(4, true, bus.inner.index);
+    let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
         common_main: Some(DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
-            BaseAir::<F>::width(&cpu_air),
+            BaseAir::<F>::width(&dummy_air),
         )),
         public_values: vec![],
-    });
+    };
 
     tester
-        .load(gpu_dummy_chip)
-        .load(bitwise)
+        .build()
+        .load_air_proving_ctx(dummy_air, cpu_proving_ctx)
+        .load_periphery(dummy_air, gpu_dummy_chip)
+        .load_periphery(BitwiseOperationLookupAir::<8>::new(bus), bitwise)
         .finalize()
         .simple_test()
         .expect("Verification failed");

@@ -1,30 +1,30 @@
-use std::{collections::HashMap, slice::from_raw_parts, sync::Arc};
+use std::{collections::HashMap, slice::from_raw_parts};
 
 use openvm_circuit::{
     arch::testing::memory::air::{MemoryDummyAir, MemoryDummyChip},
-    system::memory::{offline_checker::MemoryBus, MemoryController},
+    system::memory::{offline_checker::MemoryBus, online::TracingMemory, MemoryController},
+    utils::next_power_of_two_or_zero,
 };
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
-    AirRef, ChipUsageGetter,
+    prover::types::AirProvingContext,
+    Chip, ChipUsageGetter,
 };
 use rand::Rng;
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{testing::cuda::memory_testing, DeviceChip};
+use crate::testing::cuda::memory_testing;
 
 pub struct DeviceMemoryTester {
     pub chip_for_block: HashMap<usize, FixedSizeMemoryTester>,
+    pub memory: TracingMemory,
     pub controller: MemoryController<F>,
 }
 
 impl DeviceMemoryTester {
-    pub fn new(controller: MemoryController<F>) -> Self {
+    pub fn new(memory: TracingMemory, controller: MemoryController<F>) -> Self {
         let mut chip_for_block = HashMap::new();
         for log_block_size in 0..6 {
             let block_size = 1 << log_block_size;
@@ -35,26 +35,19 @@ impl DeviceMemoryTester {
         }
         Self {
             chip_for_block,
+            memory,
             controller,
         }
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
-        let controller = &mut self.controller;
-        let t = controller.memory.timestamp();
+        let t = self.memory.timestamp();
         let (t_prev, data) = if addr_space <= 3 {
-            let (t_prev, data) = unsafe {
-                controller
-                    .memory
-                    .read::<u8, N, 4>(addr_space as u32, ptr as u32)
-            };
+            let (t_prev, data) =
+                unsafe { self.memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
             (t_prev, data.map(F::from_canonical_u8))
         } else {
-            unsafe {
-                controller
-                    .memory
-                    .read::<F, N, 1>(addr_space as u32, ptr as u32)
-            }
+            unsafe { self.memory.read::<F, N, 1>(addr_space as u32, ptr as u32) }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(
             addr_space as u32,
@@ -70,11 +63,10 @@ impl DeviceMemoryTester {
     }
 
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
-        let controller = &mut self.controller;
-        let t = controller.memory.timestamp();
+        let t = self.memory.timestamp();
         let (t_prev, data_prev) = if addr_space <= 3 {
             let (t_prev, data_prev) = unsafe {
-                controller.memory.write::<u8, N, 4>(
+                self.memory.write::<u8, N, 4>(
                     addr_space as u32,
                     ptr as u32,
                     data.map(|x| x.as_canonical_u32() as u8),
@@ -83,8 +75,7 @@ impl DeviceMemoryTester {
             (t_prev, data_prev.map(F::from_canonical_u8))
         } else {
             unsafe {
-                controller
-                    .memory
+                self.memory
                     .write::<F, N, 1>(addr_space as u32, ptr as u32, data)
             }
         };
@@ -131,7 +122,7 @@ impl FixedSizeMemoryTester {
 
 impl ChipUsageGetter for FixedSizeMemoryTester {
     fn air_name(&self) -> String {
-        format!("MemoryDummyAir<{}>", self.0.air.block_size)
+        self.0.air_name()
     }
 
     fn current_trace_height(&self) -> usize {
@@ -143,14 +134,18 @@ impl ChipUsageGetter for FixedSizeMemoryTester {
     }
 }
 
-impl DeviceChip<SC, GpuBackend> for FixedSizeMemoryTester {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.0.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let height = self.0.current_trace_height().next_power_of_two();
+impl<RA> Chip<RA, GpuBackend> for FixedSizeMemoryTester {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+        let height = next_power_of_two_or_zero(self.0.current_trace_height());
         let width = self.0.trace_width();
+
+        if height == 0 {
+            return AirProvingContext {
+                cached_mains: vec![],
+                common_main: None,
+                public_values: vec![],
+            };
+        }
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
 
         let records = &self.0.trace;
@@ -170,6 +165,6 @@ impl DeviceChip<SC, GpuBackend> for FixedSizeMemoryTester {
             )
             .unwrap();
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }
