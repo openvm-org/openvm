@@ -746,7 +746,10 @@ where
                     .map(|(chip, records)| chip.generate_proving_ctx(records)),
             )
             .enumerate()
-            .filter(|(_air_id, ctx)| ctx.main_trace_height() > 0)
+            .filter(|(_air_id, ctx)| {
+                (!ctx.cached_mains.is_empty() || ctx.common_main.is_some())
+                    && ctx.main_trace_height() > 0
+            })
             .collect();
 
         Ok(ProvingContext {
