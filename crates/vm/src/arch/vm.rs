@@ -25,7 +25,6 @@ use openvm_stark_backend::{
     p3_util::log2_strict_usize,
     proof::Proof,
     prover::{
-        cpu::PcsData,
         hal::{DeviceDataTransporter, MatrixDimensions},
         types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
     },
@@ -722,6 +721,7 @@ where
         }
     }
 
+    /// Generates and then commits to program trace entirely on host.
     pub fn commit_exe(&self, exe: impl Into<VmExe<Val<E::SC>>>) -> VmCommittedExe<E::SC> {
         let exe = exe.into();
         VmCommittedExe::commit(exe, self.engine.config().pcs())
@@ -732,20 +732,11 @@ where
         committed_exe: &VmCommittedExe<E::SC>,
     ) -> CommittedTraceData<E::PB> {
         let commitment = committed_exe.commitment.clone();
-        let trace = self
-            .engine
+        let trace = &committed_exe.trace;
+        let prover_data = &committed_exe.prover_data;
+        self.engine
             .device()
-            .transport_matrix_to_device(&committed_exe.trace);
-        let data = PcsData::new(
-            committed_exe.prover_data.clone(),
-            vec![log2_strict_usize(trace.height()).try_into().unwrap()],
-        );
-        let data = self.engine.device().transport_pcs_data_to_device(&data);
-        CommittedTraceData {
-            commitment,
-            trace,
-            data,
-        }
+            .transport_committed_trace_to_device(commitment, trace, prover_data)
     }
 
     pub fn load_program(&mut self, cached_program_trace: CommittedTraceData<E::PB>) {
