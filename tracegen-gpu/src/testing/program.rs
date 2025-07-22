@@ -1,22 +1,18 @@
-use std::{slice::from_raw_parts, sync::Arc};
+use std::slice::from_raw_parts;
 
 use openvm_circuit::{
     arch::{
-        instructions::instruction::Instruction,
-        testing::program::{air::ProgramDummyAir, ProgramTester},
-        ExecutionState,
+        instructions::instruction::Instruction, testing::program::ProgramTester, ExecutionState,
     },
     system::program::{ProgramBus, ProgramExecutionCols},
+    utils::next_power_of_two_or_zero,
 };
-use openvm_stark_backend::{AirRef, ChipUsageGetter};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{testing::cuda::program_testing, DeviceChip};
+use crate::testing::cuda::program_testing;
 
 pub struct DeviceProgramTester(ProgramTester<F>);
 
@@ -48,14 +44,18 @@ impl ChipUsageGetter for DeviceProgramTester {
     }
 }
 
-impl DeviceChip<SC, GpuBackend> for DeviceProgramTester {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(ProgramDummyAir::new(self.0.bus))
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let height = self.0.current_trace_height().next_power_of_two();
+impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+        let height = next_power_of_two_or_zero(self.0.current_trace_height());
         let width = self.0.trace_width();
+
+        if height == 0 {
+            return AirProvingContext {
+                cached_mains: vec![],
+                common_main: None,
+                public_values: vec![],
+            };
+        }
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
 
         let records = &self.0.records;
@@ -68,6 +68,6 @@ impl DeviceChip<SC, GpuBackend> for DeviceProgramTester {
             program_testing::tracegen(trace.buffer(), height, width, &records, num_records)
                 .unwrap();
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }

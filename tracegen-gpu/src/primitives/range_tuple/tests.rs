@@ -1,16 +1,15 @@
 use core::array::from_fn;
 use std::sync::Arc;
 
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
+use openvm_circuit_primitives::range_tuple::{
+    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+};
+use openvm_stark_backend::prover::types::AirProvingContext;
 use openvm_stark_sdk::dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir;
 use p3_air::BaseAir;
 use p3_field::FieldAlgebra;
 use rand::Rng;
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    types::{DeviceAirProofRawInput, F},
-};
+use stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D, types::F};
 
 use crate::{
     dummy::range_tuple::DummyInteractionChipGPU, primitives::range_tuple::RangeTupleCheckerChipGPU,
@@ -25,6 +24,7 @@ fn range_tuple_test() {
     let mut tester = GpuChipTestBuilder::default();
 
     let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << tester.rng().gen_range(1..5));
+    let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
             sizes
@@ -34,15 +34,19 @@ fn range_tuple_test() {
         })
         .collect::<Vec<_>>();
 
-    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(RangeTupleCheckerBus::<
-        TUPLE_SIZE,
-    >::new(0, sizes)));
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus));
     let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
 
     tester
         .build()
-        .load(dummy_chip)
-        .load(range_tuple_checker)
+        .load_periphery(
+            DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index),
+            dummy_chip,
+        )
+        .load_periphery(
+            RangeTupleCheckerAir::<TUPLE_SIZE> { bus },
+            range_tuple_checker,
+        )
         .finalize()
         .simple_test()
         .expect("Verification failed");
@@ -90,23 +94,26 @@ fn range_tuple_hybrid_test() {
         .collect::<Vec<_>>()
         .to_device()
         .unwrap();
-    let cpu_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);
 
-    let mut tester = tester.build();
-    tester.airs.push(Arc::new(cpu_air));
-    tester.raw_inputs.push(DeviceAirProofRawInput {
+    let dummy_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);
+    let cpu_proving_ctx = AirProvingContext {
         cached_mains: vec![],
         common_main: Some(DeviceMatrix::new(
             Arc::new(cpu_dummy_trace),
             NUM_INPUTS,
-            BaseAir::<F>::width(&cpu_air),
+            BaseAir::<F>::width(&dummy_air),
         )),
         public_values: vec![],
-    });
+    };
 
     tester
-        .load(gpu_dummy_chip)
-        .load(range_tuple_checker)
+        .build()
+        .load_air_proving_ctx(dummy_air, cpu_proving_ctx)
+        .load_periphery(dummy_air, gpu_dummy_chip)
+        .load_periphery(
+            RangeTupleCheckerAir::<TUPLE_SIZE> { bus },
+            range_tuple_checker,
+        )
         .finalize()
         .simple_test()
         .expect("Verification failed");

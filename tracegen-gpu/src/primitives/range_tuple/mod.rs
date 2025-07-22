@@ -1,26 +1,25 @@
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_circuit_primitives::range_tuple::{
-    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS,
+    RangeTupleCheckerBus, RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
     cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
     prover_backend::GpuBackend,
-    types::SC,
+    types::F,
 };
 
-use crate::{primitives::cuda::range_tuple::tracegen, DeviceChip};
+use crate::primitives::cuda::range_tuple::tracegen;
 
 #[cfg(test)]
 mod tests;
 
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
-    pub air: RangeTupleCheckerAir<N>,
     pub count: Arc<DeviceBuffer<F>>,
     pub cpu_chip: Option<Arc<RangeTupleCheckerChip<N>>>,
+    pub sizes: [u32; N],
 }
 
 impl<const N: usize> RangeTupleCheckerChipGPU<N> {
@@ -29,43 +28,26 @@ impl<const N: usize> RangeTupleCheckerChipGPU<N> {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(range_max));
         count.fill_zero().unwrap();
         Self {
-            air: RangeTupleCheckerAir { bus },
             count,
             cpu_chip: None,
+            sizes: bus.sizes,
         }
     }
 
     pub fn hybrid(cpu_chip: Arc<RangeTupleCheckerChip<N>>) -> Self {
         let count = Arc::new(DeviceBuffer::<F>::with_capacity(cpu_chip.count.len()));
         count.fill_zero().unwrap();
+        let sizes = *cpu_chip.sizes();
         Self {
-            air: cpu_chip.air,
             count,
             cpu_chip: Some(cpu_chip),
+            sizes,
         }
     }
 }
 
-impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChipGPU<N> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.count.len()
-    }
-
-    fn trace_width(&self) -> usize {
-        NUM_RANGE_TUPLE_COLS
-    }
-}
-
-impl<const N: usize> DeviceChip<SC, GpuBackend> for RangeTupleCheckerChipGPU<N> {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
+impl<RA, const N: usize> Chip<RA, GpuBackend> for RangeTupleCheckerChipGPU<N> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let cpu_count = self.cpu_chip.as_ref().map(|cpu_chip| {
             cpu_chip
                 .count
@@ -80,6 +62,6 @@ impl<const N: usize> DeviceChip<SC, GpuBackend> for RangeTupleCheckerChipGPU<N> 
         unsafe {
             tracegen(&self.count, &cpu_count, trace.buffer()).unwrap();
         }
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }
