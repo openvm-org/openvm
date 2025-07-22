@@ -4,6 +4,8 @@
 #include "shared_buffer.cuh"
 #include "trace_access.h"
 
+#include <cassert>
+
 static const size_t PERSISTENT_CHUNK = 8;
 static const size_t VOLATILE_CHUNK = 1;
 
@@ -87,18 +89,23 @@ __global__ void cukernel_volatile_boundary_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    BoundaryRecord<VOLATILE_CHUNK> *records,
+    BoundaryRecord<VOLATILE_CHUNK> const* records,
     size_t num_records,
     uint32_t *range_checker,
-    uint32_t range_checker_num_bins,
+    size_t range_checker_num_bins,
     size_t as_max_bits,
     size_t ptr_max_bits
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row = RowSlice(trace + idx, height);
     VariableRangeChecker rc(range_checker, range_checker_num_bins);
+    assert(idx < height);
 
     if (idx < num_records) {
+        if (idx == num_records - 1) {
+            // For the sake of always filling `addr_lt_aux`
+            row.fill_zero(0, width);
+        }
         BoundaryRecord<VOLATILE_CHUNK> record = records[idx];
         rc.decompose(
             record.address_space,
@@ -206,16 +213,16 @@ extern "C" int _volatile_boundary_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint32_t *d_raw_records,
+    uint32_t const* d_raw_records,
     size_t num_records,
     uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
+    size_t range_checker_num_bins,
     size_t as_max_bits,
     size_t ptr_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height);
-    BoundaryRecord<VOLATILE_CHUNK> *d_records =
-        reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> *>(d_raw_records);
+    auto d_records =
+        reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> const*>(d_raw_records);
     cukernel_volatile_boundary_tracegen<<<grid, block>>>(
         d_trace,
         height,
