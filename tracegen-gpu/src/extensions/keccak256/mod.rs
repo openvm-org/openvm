@@ -8,15 +8,13 @@ use openvm_keccak256_circuit::{
     columns::NUM_KECCAK_VM_COLS,
     trace::{KeccakVmMetadata, KeccakVmRecordMut},
     utils::num_keccak_f,
-    KeccakVmAir,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use p3_keccak_air::NUM_ROUNDS;
 use stark_backend_gpu::{
     base::DeviceMatrix,
     cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::{F, SC},
+    prelude::F,
     prover_backend::GpuBackend,
 };
 
@@ -24,60 +22,37 @@ use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
     },
-    DeviceChip,
+    testing::get_empty_air_proving_ctx,
 };
 
 mod cuda;
 use cuda::keccak256::*;
+
+mod extension;
 
 #[cfg(test)]
 mod test;
 
 #[derive(new)]
 pub struct Keccak256ChipGpu {
-    pub air: KeccakVmAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub ptr_max_bits: u32,
-    pub arena: DenseRecordArena,
 }
 
-impl ChipUsageGetter for Keccak256ChipGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        // TODO[arayi]: This is temporary we probably need to get rid of `current_trace_height` or add a counter to `arena`
-        self.arena.allocated().len()
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl DeviceChip<SC, GpuBackend> for Keccak256ChipGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let records = self.arena.allocated();
+impl Chip<DenseRecordArena, GpuBackend> for Keccak256ChipGpu {
+    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let records = arena.allocated_mut();
         if records.is_empty() {
-            return DeviceMatrix::<F>::with_capacity(0, NUM_KECCAK_VM_COLS);
+            return get_empty_air_proving_ctx::<GpuBackend>();
         }
-
-        // TODO[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
-        let input =
-            unsafe { std::slice::from_raw_parts_mut(records.as_ptr() as *mut u8, records.len()) };
 
         let mut record_offsets = Vec::<usize>::new();
         let mut block_to_record_idx = Vec::<u32>::new();
         let mut block_offsets = Vec::<u32>::new();
         let mut offset_so_far = 0;
         let mut num_blocks_so_far = 0;
-        while offset_so_far < input.len() {
+        while offset_so_far < records.len() {
             record_offsets.push(offset_so_far);
             block_offsets.push(num_blocks_so_far);
 
@@ -85,7 +60,7 @@ impl DeviceChip<SC, GpuBackend> for Keccak256ChipGpu {
                 DenseRecordArena,
                 KeccakVmRecordMut,
                 MultiRowLayout<KeccakVmMetadata>,
-            >::get_record_at(&mut offset_so_far, input);
+            >::get_record_at(&mut offset_so_far, records);
 
             let num_blocks = num_keccak_f(record.inner.len as usize);
             let record_idx = record_offsets.len() - 1;
@@ -93,11 +68,11 @@ impl DeviceChip<SC, GpuBackend> for Keccak256ChipGpu {
             num_blocks_so_far += num_blocks as u32;
         }
         assert_eq!(num_blocks_so_far as usize, block_to_record_idx.len());
-        assert_eq!(offset_so_far, input.len());
+        assert_eq!(offset_so_far, records.len());
         assert_eq!(block_offsets.len(), record_offsets.len());
 
         let records_num = record_offsets.len();
-        let d_records = input.to_device().unwrap();
+        let d_records = records.to_device().unwrap();
         let d_record_offsets = record_offsets.to_device().unwrap();
         let d_block_offsets = block_offsets.to_device().unwrap();
         let d_block_to_record_idx = block_to_record_idx.to_device().unwrap();
@@ -144,6 +119,6 @@ impl DeviceChip<SC, GpuBackend> for Keccak256ChipGpu {
             .unwrap();
         }
 
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }

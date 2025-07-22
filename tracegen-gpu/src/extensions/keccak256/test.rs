@@ -1,18 +1,11 @@
 use std::array;
 
-use openvm_circuit::{
-    arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS, RANGE_CHECKER_BUS},
-        InstructionExecutor, MemoryConfig, NewVmChipWrapper,
-    },
-    utils::get_random_message,
-};
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    var_range::VariableRangeCheckerBus,
-};
+use openvm_circuit::{arch::testing::memory::gen_pointer, utils::get_random_message};
+use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_keccak256_circuit::{utils::keccak256, KeccakVmChip, KeccakVmStep};
+use openvm_keccak256_circuit::{
+    utils::keccak256, KeccakVmAir, KeccakVmChip, KeccakVmFiller, KeccakVmStep,
+};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::utils::create_seeded_rng;
@@ -20,63 +13,47 @@ use rand::{rngs::StdRng, Rng};
 
 #[cfg(test)]
 use super::*;
-use crate::testing::GpuChipTestBuilder;
+use crate::testing::{
+    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+    GpuTestChipHarness,
+};
 
 const MAX_INS_CAPACITY: usize = 1024;
+type Harness = GpuTestChipHarness<F, KeccakVmStep, KeccakVmAir, Keccak256ChipGpu, KeccakVmChip<F>>;
 
-type KeccakVmDenseChip<F> = NewVmChipWrapper<F, KeccakVmAir, KeccakVmStep, DenseRecordArena>;
+fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
+    // getting bus from tester since `gpu_chip` and `air` must use the same bus
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-fn create_test_dense_chip(tester: &GpuChipTestBuilder) -> KeccakVmDenseChip<F> {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-    let mut chip = KeccakVmDenseChip::new(
-        KeccakVmAir::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            bitwise_bus,
-            tester.address_bits(),
-            Rv32KeccakOpcode::CLASS_OFFSET,
-        ),
-        KeccakVmStep::new(
-            bitwise_chip.clone(),
-            Rv32KeccakOpcode::CLASS_OFFSET,
-            tester.address_bits(),
-        ),
-        tester.cpu_memory_helper(),
+    let air = KeccakVmAir::new(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        bitwise_bus,
+        tester.address_bits(),
+        Rv32KeccakOpcode::CLASS_OFFSET,
     );
 
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-    chip
-}
-
-fn create_test_sparse_chip(
-    tester: &mut GpuChipTestBuilder,
-) -> (KeccakVmChip<F>, SharedBitwiseOperationLookupChip<8>) {
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<8>::new(bitwise_bus);
-    let mut chip = KeccakVmChip::new(
-        KeccakVmAir::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            bitwise_bus,
-            tester.address_bits(),
-            Rv32KeccakOpcode::CLASS_OFFSET,
-        ),
-        KeccakVmStep::new(
-            bitwise_chip.clone(),
-            Rv32KeccakOpcode::CLASS_OFFSET,
-            tester.address_bits(),
-        ),
+    let executor = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
+    let cpu_chip = KeccakVmChip::new(
+        KeccakVmFiller::new(dummy_bitwise_chip, tester.address_bits()),
         tester.cpu_memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    let gpu_chip = Keccak256ChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits() as u32,
+    );
 
-    (chip, bitwise_chip)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute(
     tester: &mut GpuChipTestBuilder,
-    chip: &mut E,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: Rv32KeccakOpcode,
     message: Option<&[u8]>,
@@ -109,7 +86,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     });
 
     tester.execute(
-        chip,
+        &mut harness.executor,
+        &mut harness.dense_arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 
@@ -124,58 +102,33 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn test_keccak256_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default()
-        .with_variable_range_checker()
-        .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
+        .with_variable_range_checker(default_var_range_checker_bus())
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    // CPU execution
-    let mut dense_chip = create_test_dense_chip(&tester);
+    let mut harness = create_test_harness(&tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut dense_chip,
-            &mut rng,
-            KECCAK256,
-            None,
-            None,
-        );
+        set_and_execute(&mut tester, &mut harness, &mut rng, KECCAK256, None, None);
     }
 
     set_and_execute(
         &mut tester,
-        &mut dense_chip,
+        &mut harness,
         &mut rng,
         KECCAK256,
         None,
         Some(2000),
     );
 
-    let (mut sparse_chip, sparse_bitwise_chip) = create_test_sparse_chip(&mut tester);
-    dense_chip
-        .arena
+    harness
+        .dense_arena
         .get_record_seeker::<KeccakVmRecordMut, _>()
-        .transfer_to_matrix_arena(&mut sparse_chip.arena);
-
-    // GPU tracegen
-    let bitwise_gpu_chip = Arc::new(BitwiseOperationLookupChipGPU::<RV32_CELL_BITS>::new(
-        sparse_bitwise_chip.bus(),
-    ));
-    let mem_config = MemoryConfig::default();
-    let var_range_gpu_chip = Arc::new(VariableRangeCheckerChipGPU::new(
-        VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp),
-    ));
-    let gpu_chip = Keccak256ChipGpu::new(
-        sparse_chip.air,
-        var_range_gpu_chip,
-        bitwise_gpu_chip,
-        mem_config.pointer_max_bits as u32,
-        dense_chip.arena,
-    );
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()
-        .load_and_compare(gpu_chip, sparse_chip)
+        .load_gpu_harness(harness)
         .finalize()
         .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
 }
