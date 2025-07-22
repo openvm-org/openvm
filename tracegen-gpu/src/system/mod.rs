@@ -18,6 +18,7 @@ pub mod boundary;
 pub mod connector;
 pub mod cuda;
 pub mod memory;
+pub mod merkle_tree;
 pub mod phantom;
 pub mod poseidon2;
 pub mod program;

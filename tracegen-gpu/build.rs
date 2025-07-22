@@ -136,6 +136,7 @@ fn main() {
             .file("cuda/src/system/poseidon2.cu")
             .file("cuda/src/system/program.cu")
             .file("cuda/src/system/public_values.cu")
+            .file("cuda/src/system/memory/merkle_tree.cu")
             .compile("tracegen_gpu_system");
     }
 
