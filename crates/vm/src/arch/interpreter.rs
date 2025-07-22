@@ -209,7 +209,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    // let start = Instant::now();
+    // let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()

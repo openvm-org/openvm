@@ -283,6 +283,7 @@ impl GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
@@ -305,6 +306,7 @@ impl GuestMemory {
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
+    #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,

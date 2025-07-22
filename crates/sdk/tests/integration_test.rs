@@ -174,7 +174,9 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
 #[test]
 fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
     let app_log_blowup = 1;
-    let app_config = small_test_app_config(app_log_blowup);
+    let mut app_config = small_test_app_config(app_log_blowup);
+    app_config.app_vm_config.system.config.segmentation_strategy =
+        Arc::new(DefaultSegmentationStrategy::new_with_max_segment_len(256));
     let app_pk = Arc::new(AppProvingKey::keygen(app_config)?);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     let pc_start = app_committed_exe.exe.pc_start;
