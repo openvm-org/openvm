@@ -206,7 +206,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    // let start = std::time::Instant::now();
+    let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -226,7 +226,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     {
         Ctx::on_terminate(vm_state);
     }
-    // println!("execute time: {}ms", start.elapsed().as_millis());
+    println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
 #[inline(always)]

@@ -26,6 +26,7 @@ mod paged_vec;
 pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 pub use paged_vec::PagedVec;
 
 #[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
@@ -265,12 +266,16 @@ impl<M: LinearMemory> AddressMap<M> {
 // guest memory
 #[derive(Debug, Clone)]
 pub struct GuestMemory {
+    pub regs: [u8; 4 * 32],
     pub memory: AddressMap,
 }
 
 impl GuestMemory {
     pub fn new(addr: AddressMap) -> Self {
-        Self { memory: addr }
+        Self {
+            regs: [0; 4 * 32],
+            memory: addr,
+        }
     }
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
@@ -279,6 +284,7 @@ impl GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
@@ -288,6 +294,10 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        if addr_space == RV32_REGISTER_AS {
+            let ret = self.regs.as_ptr().add(ptr as usize) as *const [T; BLOCK_SIZE];
+            return *ret;
+        }
         // SAFETY:
         // - `T` should be "plain old data"
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
@@ -301,6 +311,7 @@ impl GuestMemory {
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
+    #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
@@ -310,6 +321,10 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        if addr_space == RV32_REGISTER_AS {
+            let mem_values = self.regs.as_mut_ptr().add(ptr as usize) as *mut [T; BLOCK_SIZE];
+            *mem_values = values;
+        }
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
@@ -332,6 +347,11 @@ impl GuestMemory {
         T: Copy + Debug,
     {
         debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        if addr_space == RV32_REGISTER_AS {
+            let mem_values = self.regs.as_mut_ptr().add(ptr as usize) as *mut [T; BLOCK_SIZE];
+            #[allow(clippy::swap_ptr_to_ref)]
+            std::mem::swap(&mut *mem_values, values);
+        }
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
