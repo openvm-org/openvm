@@ -37,7 +37,7 @@ jobs:
 
       # Build and test from base branch
       - name: Build base branch CLI
-        run: cargo install --force --path crates/cli
+        run: cargo install --force --locked --path crates/cli
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
@@ -81,7 +81,7 @@ jobs:
           clean: false
 
       - name: Build tagged CLI
-        run: cargo install --force --path crates/cli
+        run: cargo install --force --locked --path crates/cli
 
       - name: Run setup from tagged version
         run: |
