@@ -1,5 +1,5 @@
 #include "columns.cuh"
-#include "constants.cuh"
+#include "constants.h"
 #include "histogram.cuh"
 #include "keccakvm.cuh"
 #include "launcher.cuh"

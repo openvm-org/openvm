@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include "constants.cuh"
 
 typedef enum {
     EXPR_INPUT = 0,
