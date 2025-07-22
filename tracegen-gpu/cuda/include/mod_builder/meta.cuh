@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
 #include "symbolic_expr.cuh"
-#include "constants.cuh"
 
 // Flat 128-bit encoded expression ops
 typedef unsigned __int128 ExprOp;

@@ -30,4 +30,4 @@ pub use mul::*;
 pub use mulh::*;
 pub use shift::*;
 
-mod extension;
+// mod extension;

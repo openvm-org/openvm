@@ -28,7 +28,7 @@ use crate::{
 mod cuda;
 use cuda::keccak256::*;
 
-mod extension;
+// mod extension;
 
 #[cfg(test)]
 mod test;
