@@ -1,5 +1,6 @@
 #pragma once
 #include "fp.h"
+#include "poseidon2.cuh"
 #include "trace_access.h"
 
 namespace poseidon2 {
@@ -47,30 +48,6 @@ template <size_t WIDTH> __device__ __forceinline__ void mds_light_permutation(Ro
         }
     }
 }
-
-//-----------------------------------------------------------------------------
-// Precomputed "1 + diag(V)" for BabyBear WIDTH=16
-//-----------------------------------------------------------------------------
-
-// V = [-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16, -1/2^27]
-__constant__ inline Fp internal_diag16[16] = {
-    -Fp::one().doubled().doubled(),
-    Fp::one(),
-    Fp::one().doubled(),
-    Fp::one().mul_2exp_neg_n(1),
-    Fp::one().doubled() + Fp::one(),
-    Fp::one().doubled().doubled(),
-    -(Fp::one().mul_2exp_neg_n(1)),
-    -(Fp::one().doubled() + Fp::one()),
-    -(Fp::one().doubled().doubled()),
-    Fp::one().mul_2exp_neg_n(8),
-    Fp::one().mul_2exp_neg_n(2),
-    Fp::one().mul_2exp_neg_n(3),
-    Fp::one().mul_2exp_neg_n(27),
-    -(Fp::one().mul_2exp_neg_n(8)),
-    -(Fp::one().mul_2exp_neg_n(4)),
-    -(Fp::one().mul_2exp_neg_n(27)),
-};
 
 //-----------------------------------------------------------------------------
 // Poseidon2 linear layers

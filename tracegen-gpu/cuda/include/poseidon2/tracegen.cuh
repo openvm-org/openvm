@@ -1,7 +1,6 @@
 #pragma once
 
-#include "constants.cuh"
-#include "fp.h"
+#include "poseidon2.cuh"
 #include "poseidon2/columns.cuh"
 #include "poseidon2/linearlayer.cuh"
 #include "trace_access.h"
