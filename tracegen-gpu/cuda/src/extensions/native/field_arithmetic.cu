@@ -81,7 +81,8 @@ __global__ void field_arithmetic_tracegen(
     uint8_t *d_records,
     size_t num_records,
     uint32_t *d_range_checker,
-    size_t range_checker_bins
+    size_t range_checker_bins,
+    uint32_t timestamp_max_bits
 ) {
     const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -89,7 +90,10 @@ __global__ void field_arithmetic_tracegen(
     if (idx < num_records) {
         const auto rec = reinterpret_cast<FieldArithmeticCompositeRecord<Fp> *>(d_records)[idx];
 
-        AluNativeAdapter adapter(VariableRangeChecker(d_range_checker, range_checker_bins));
+        AluNativeAdapter adapter(
+            VariableRangeChecker(d_range_checker, range_checker_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, rec.adapter);
 
         FieldArithmeticCore core;
@@ -106,7 +110,8 @@ extern "C" int _field_arithmetic_tracegen(
     uint8_t *d_records,
     size_t record_len,
     uint32_t *d_range_checker,
-    size_t range_checker_bins
+    size_t range_checker_bins,
+    uint32_t timestamp_max_bits
 ) {
     // Validate input parameters
     assert((height & (height - 1)) == 0); // height must be power of 2
@@ -116,7 +121,8 @@ extern "C" int _field_arithmetic_tracegen(
     const auto [grid, block] = kernel_launch_params(height);
 
     field_arithmetic_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, num_records, d_range_checker, range_checker_bins
+        d_trace, height, d_records, num_records, d_range_checker,
+        range_checker_bins, timestamp_max_bits
     );
 
     return cudaGetLastError();

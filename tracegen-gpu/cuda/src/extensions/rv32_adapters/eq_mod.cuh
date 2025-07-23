@@ -1,8 +1,8 @@
 #pragma once
 
 #include "execution.h"
-#include "system/memory/controller.cuh"
 #include "histogram.cuh"
+#include "system/memory/controller.cuh"
 #include "trace_access.h"
 
 using namespace riscv;
@@ -36,23 +36,27 @@ struct Rv32IsEqualModAdapter {
     BitwiseOperationLookup bitwise_lookup;
     size_t address_bits;
 
-    template<typename T> using Cols = Rv32IsEqualModAdapterCols<T, NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>;
+    template <typename T>
+    using Cols = Rv32IsEqualModAdapterCols<T, NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>;
 
     __device__ Rv32IsEqualModAdapter(
         VariableRangeChecker range_checker,
         BitwiseOperationLookup lookup,
-        size_t addr_bits
-    ) : mem_helper(range_checker), bitwise_lookup(lookup), address_bits(addr_bits) {}
+        size_t addr_bits,
+        uint32_t timestamp_max_bits
+    )
+        : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup),
+          address_bits(addr_bits) {}
 
     __device__ void fill_trace_row(
-        RowSlice row, 
+        RowSlice row,
         Rv32IsEqualModAdapterRecord<NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS> record
     ) {
         const uint32_t ts = record.timestamp;
-        
+
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Cols, from_state.timestamp, record.timestamp);
-        
+
         for (size_t i = 0; i < NUM_READS; i++) {
             COL_WRITE_VALUE(row, Cols, rs_ptr[i], record.rs_ptr[i]);
 
@@ -65,13 +69,14 @@ struct Rv32IsEqualModAdapter {
                 ts + i
             );
         }
-        
+
         constexpr uint32_t MSL_SHIFT = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
         const uint32_t limb_shift = 1u << (RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - address_bits);
         const uint32_t high_limb_0 = (record.rs_val[0] >> MSL_SHIFT) * limb_shift;
-        const uint32_t high_limb_1 = (NUM_READS > 1) ? (record.rs_val[1] >> MSL_SHIFT) * limb_shift : 0u;
+        const uint32_t high_limb_1 =
+            (NUM_READS > 1) ? (record.rs_val[1] >> MSL_SHIFT) * limb_shift : 0u;
         bitwise_lookup.add_range(high_limb_0, high_limb_1);
-        
+
         constexpr size_t TOTAL_READ_SIZE = NUM_LANES * LANE_SIZE;
         assert(TOTAL_READ_SIZE == TOTAL_LIMBS);
         for (size_t i = 0; i < NUM_READS; i++) {
@@ -83,7 +88,7 @@ struct Rv32IsEqualModAdapter {
                 );
             }
         }
-        
+
         COL_WRITE_VALUE(row, Cols, rd_ptr, record.rd_ptr);
         COL_WRITE_ARRAY(row, Cols, writes_aux.prev_data, record.writes_aux.prev_data);
         mem_helper.fill(
@@ -92,4 +97,4 @@ struct Rv32IsEqualModAdapter {
             ts + NUM_READS + NUM_READS * NUM_LANES
         );
     }
-}; 
+};

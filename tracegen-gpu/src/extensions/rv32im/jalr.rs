@@ -11,7 +11,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend,
 };
 
-use super::cuda::jalr::tracegen;
+use super::cuda::jalr_cuda::tracegen;
 use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
@@ -23,6 +23,7 @@ use crate::{
 pub struct Rv32JalrChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32JalrChipGpu {
@@ -48,6 +49,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32JalrChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -73,7 +75,7 @@ mod tests {
         Rv32JalrStep,
     };
     use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use stark_backend_gpu::prelude::F;
@@ -111,10 +113,14 @@ mod tests {
                 dummy_bitwise_chip,
                 dummy_range_checker_chip,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
-        let gpu_chip = Rv32JalrChipGpu::new(tester.range_checker(), tester.bitwise_op_lookup());
+        let gpu_chip = Rv32JalrChipGpu::new(
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
+            tester.timestamp_max_bits(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -175,6 +181,7 @@ mod tests {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

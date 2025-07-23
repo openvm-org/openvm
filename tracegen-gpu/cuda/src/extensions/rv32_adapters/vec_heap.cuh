@@ -71,10 +71,11 @@ struct Rv32VecHeapAdapter {
     __device__ Rv32VecHeapAdapter(
         size_t pointer_max_bits,
         VariableRangeChecker range_checker,
-        BitwiseOperationLookup bitwise_lookup
+        BitwiseOperationLookup bitwise_lookup,
+        uint32_t timestamp_max_bits
     )
         : pointer_max_bits(pointer_max_bits), bitwise_lookup(bitwise_lookup),
-          mem_helper(range_checker) {}
+          mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T>
     using Cols = Rv32VecHeapAdapterCols<

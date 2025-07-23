@@ -54,9 +54,13 @@ struct Rv32LoadStoreAdapter {
     VariableRangeChecker range_checker;
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32LoadStoreAdapter(size_t pointer_max_bits, VariableRangeChecker range_checker)
+    __device__ Rv32LoadStoreAdapter(
+        size_t pointer_max_bits,
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    )
         : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
-          mem_helper(range_checker) {}
+          mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32LoadStoreAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32LoadStoreAdapterCols, from_state.pc, record.from_pc);
@@ -112,7 +116,8 @@ struct Rv32LoadStoreAdapter {
             );
 
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv32LoadStoreAdapterCols, write_base_aux))
+            mem_helper.fill_zero(
+                row.slice_from(COL_INDEX(Rv32LoadStoreAdapterCols, write_base_aux))
             );
         }
     }

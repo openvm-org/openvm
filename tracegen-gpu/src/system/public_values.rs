@@ -33,6 +33,7 @@ pub struct PublicValuesChipGPU {
     pub public_values: Vec<F>,
     pub num_custom_pvs: usize,
     pub max_degree: u32,
+    pub timestamp_max_bits: u32,
 }
 
 impl PublicValuesChipGPU {
@@ -41,6 +42,7 @@ impl PublicValuesChipGPU {
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         num_custom_pvs: usize,
         max_degree: u32,
+        timestamp_max_bits: u32,
     ) -> Self {
         Self {
             air,
@@ -48,6 +50,7 @@ impl PublicValuesChipGPU {
             public_values: Vec::new(),
             num_custom_pvs,
             max_degree,
+            timestamp_max_bits,
         }
     }
 }
@@ -78,6 +81,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
                 &arena.allocated().to_device().unwrap(),
                 num_records,
                 &self.range_checker.count,
+                self.timestamp_max_bits,
                 self.num_custom_pvs,
                 self.max_degree,
             )
@@ -126,7 +130,7 @@ mod tests {
         let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
         let num_custom_pvs = system_config.num_public_values;
         let max_degree = system_config.max_constraint_degree as u32 - 1;
-        let clk_max_bits = mem_config.clk_max_bits;
+        let timestamp_max_bits = mem_config.clk_max_bits;
 
         let mut tester = GpuChipTestBuilder::volatile(mem_config, bus);
         let mut rng = create_seeded_rng();
@@ -145,6 +149,7 @@ mod tests {
             tester.range_checker(),
             num_custom_pvs,
             max_degree,
+            timestamp_max_bits as u32,
         );
         let mut harness = TestChipHarness::with_capacity(executor, air, chip, num_custom_pvs);
 
@@ -204,7 +209,7 @@ mod tests {
                 num_custom_pvs,
                 max_degree,
             ),
-            dummy_memory_helper(bus, clk_max_bits),
+            dummy_memory_helper(bus, timestamp_max_bits),
         );
         let mut cpu_arena = MatrixRecordArena::<F>::with_capacity(
             next_power_of_two_or_zero(num_custom_pvs),

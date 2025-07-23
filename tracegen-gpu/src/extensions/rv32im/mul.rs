@@ -13,7 +13,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend,
 };
 
-use super::cuda::mul::tracegen as mul_tracegen;
+use super::cuda::mul_cuda::tracegen as mul_tracegen;
 use crate::{
     primitives::{range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU},
     testing::get_empty_air_proving_ctx,
@@ -24,6 +24,7 @@ use crate::{
 pub struct Rv32MultiplicationChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
@@ -59,6 +60,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
                 self.range_checker.count.len() / 2,
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -81,7 +83,7 @@ mod tests {
         Rv32MultiplicationAir, Rv32MultiplicationChip, Rv32MultiplicationStep,
     };
     use openvm_rv32im_transpiler::MulOpcode;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
 
@@ -120,11 +122,14 @@ mod tests {
                 dummy_range_tuple_chip,
                 MulOpcode::CLASS_OFFSET,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
-        let gpu_chip =
-            Rv32MultiplicationChipGpu::new(tester.range_checker(), tester.range_tuple_checker());
+        let gpu_chip = Rv32MultiplicationChipGpu::new(
+            tester.range_checker(),
+            tester.range_tuple_checker(),
+            tester.timestamp_max_bits(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -192,6 +197,7 @@ mod tests {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

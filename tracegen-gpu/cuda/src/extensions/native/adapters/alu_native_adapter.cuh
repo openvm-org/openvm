@@ -9,8 +9,7 @@
 using namespace riscv;
 using namespace native;
 
-template <typename T>
-struct AluNativeAdapterCols {
+template <typename T> struct AluNativeAdapterCols {
     ExecutionState<T> from_state;
     T a_pointer;
     T b_pointer;
@@ -34,10 +33,10 @@ struct AluNativeAdapterRecord {
 struct AluNativeAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ AluNativeAdapter(VariableRangeChecker rc)
-        : mem_helper(rc) {}
+    __device__ AluNativeAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+        : mem_helper(rc, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, AluNativeAdapterRecord rec) {  
+    __device__ void fill_trace_row(RowSlice row, AluNativeAdapterRecord rec) {
         COL_WRITE_VALUE(row, AluNativeAdapterCols, from_state.pc, Fp(rec.from_pc));
         COL_WRITE_VALUE(row, AluNativeAdapterCols, from_state.timestamp, Fp(rec.from_timestamp));
         COL_WRITE_VALUE(row, AluNativeAdapterCols, a_pointer, Fp::fromRaw(rec.a_ptr));
@@ -49,10 +48,8 @@ struct AluNativeAdapter {
         for (int i = 0; i < 2; i++) {
             const uint32_t prev_timestamp = rec.reads_aux[i].prev_timestamp;
             const uint32_t current_timestamp = rec.from_timestamp + i;
-            RowSlice aux_slice = row.slice_from(
-                COL_INDEX(AluNativeAdapterCols, reads_aux[i])
-            );
-            
+            RowSlice aux_slice = row.slice_from(COL_INDEX(AluNativeAdapterCols, reads_aux[i]));
+
             if (prev_timestamp == UINT32_MAX) {
                 // Immediate
                 mem_helper.fill(aux_slice, 0, current_timestamp);
@@ -66,7 +63,9 @@ struct AluNativeAdapter {
             } else {
                 // Memory
                 mem_helper.fill(aux_slice, prev_timestamp, current_timestamp);
-                COL_WRITE_VALUE(row, AluNativeAdapterCols, reads_aux[i].is_zero_aux, inv(native_as));
+                COL_WRITE_VALUE(
+                    row, AluNativeAdapterCols, reads_aux[i].is_zero_aux, inv(native_as)
+                );
                 COL_WRITE_VALUE(row, AluNativeAdapterCols, reads_aux[i].is_immediate, Fp::zero());
                 if (i == 0) {
                     COL_WRITE_VALUE(row, AluNativeAdapterCols, e_as, native_as);
@@ -83,4 +82,4 @@ struct AluNativeAdapter {
             rec.from_timestamp + 2
         );
     }
-}; 
+};

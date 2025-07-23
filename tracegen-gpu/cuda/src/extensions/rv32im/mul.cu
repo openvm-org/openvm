@@ -31,14 +31,18 @@ __global__ void mul_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
-    uint2 range_tuple_sizes
+    uint2 range_tuple_sizes,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < num_records) {
         auto rec = reinterpret_cast<Rv32MultiplicationRecord *>(d_records)[idx];
 
-        Rv32MultAdapter adapter(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        Rv32MultAdapter adapter(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, rec.adapter);
 
         RangeTupleChecker<2> range_tuple_checker(
@@ -60,7 +64,8 @@ extern "C" int _mul_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
-    uint2 range_tuple_sizes
+    uint2 range_tuple_sizes,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(Rv32MultiplicationRecord) >= record_len);
@@ -76,7 +81,8 @@ extern "C" int _mul_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_range_tuple_ptr,
-        range_tuple_sizes
+        range_tuple_sizes,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

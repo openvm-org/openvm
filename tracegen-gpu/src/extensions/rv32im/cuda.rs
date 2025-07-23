@@ -1,10 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
 
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::UInt2;
 
-pub mod auipc {
+pub mod auipc_cuda {
     use super::*;
 
     extern "C" {
@@ -18,6 +19,7 @@ pub mod auipc {
             range_checker_max_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -28,6 +30,7 @@ pub mod auipc {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_auipc_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -39,11 +42,12 @@ pub mod auipc {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod hintstore {
+pub mod hintstore_cuda {
     use super::{super::hintstore::OffsetInfo, *};
 
     unsafe extern "C" {
@@ -59,6 +63,7 @@ pub mod hintstore {
             range_checker_num_bins: u32,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -73,6 +78,7 @@ pub mod hintstore {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: u32,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_hintstore_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -86,11 +92,12 @@ pub mod hintstore {
             d_range_checker.len() as u32,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod jalr {
+pub mod jalr_cuda {
     use super::*;
 
     extern "C" {
@@ -104,6 +111,7 @@ pub mod jalr {
             range_checker_max_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -114,6 +122,7 @@ pub mod jalr {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_jalr_tracegen(
@@ -126,11 +135,12 @@ pub mod jalr {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod less_than {
+pub mod less_than_cuda {
     use super::*;
 
     extern "C" {
@@ -144,6 +154,7 @@ pub mod less_than {
             range_checker_num_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -154,6 +165,7 @@ pub mod less_than {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rv32_less_than_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -165,11 +177,12 @@ pub mod less_than {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod mul {
+pub mod mul_cuda {
     use super::*;
 
     extern "C" {
@@ -183,6 +196,7 @@ pub mod mul {
             range_bins: usize,
             d_range_tuple: *mut u32,
             range_tuple_sizes: UInt2,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -194,6 +208,7 @@ pub mod mul {
         range_bins: usize,
         d_range_tuple: &DeviceBuffer<T>,
         range_tuple_sizes: UInt2,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
         CudaError::from_result(_mul_tracegen(
@@ -206,6 +221,7 @@ pub mod mul {
             range_bins,
             d_range_tuple.as_ptr() as *mut u32,
             range_tuple_sizes,
+            timestamp_max_bits,
         ))
     }
 }
@@ -226,6 +242,7 @@ pub mod divrem_cuda {
             bitwise_num_bits: u32,
             d_range_tuple_checker: *mut u32,
             range_tuple_checker_sizes: UInt2,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -241,6 +258,7 @@ pub mod divrem_cuda {
         bitwise_num_bits: u32,
         d_range_tuple_checker: &DeviceBuffer<T>,
         range_tuple_checker_sizes: UInt2,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rv32_div_rem_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -254,11 +272,12 @@ pub mod divrem_cuda {
             bitwise_num_bits,
             d_range_tuple_checker.as_mut_ptr() as *mut u32,
             range_tuple_checker_sizes,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod shift {
+pub mod shift_cuda {
     use super::*;
 
     extern "C" {
@@ -272,6 +291,7 @@ pub mod shift {
             range_checker_num_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -282,6 +302,7 @@ pub mod shift {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rv32_shift_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -293,11 +314,12 @@ pub mod shift {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod alu {
+pub mod alu_cuda {
     use super::*;
     extern "C" {
         fn _alu_tracegen(
@@ -310,6 +332,7 @@ pub mod alu {
             range_checker_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -321,6 +344,7 @@ pub mod alu {
         range_bins: usize,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
         CudaError::from_result(_alu_tracegen(
@@ -333,6 +357,7 @@ pub mod alu {
             range_bins,
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -350,6 +375,7 @@ pub mod loadstore_cuda {
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -361,6 +387,7 @@ pub mod loadstore_cuda {
         rows_used: usize,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<T>,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rv32_load_store_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -371,6 +398,7 @@ pub mod loadstore_cuda {
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            timestamp_max_bits,
         ))
     }
 }
@@ -388,6 +416,7 @@ pub mod load_sign_extend_cuda {
             pointer_max_bits: usize,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -399,6 +428,7 @@ pub mod load_sign_extend_cuda {
         rows_used: usize,
         pointer_max_bits: usize,
         d_range_checker: &DeviceBuffer<T>,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rv32_load_sign_extend_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -409,11 +439,12 @@ pub mod load_sign_extend_cuda {
             pointer_max_bits,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod jal_lui {
+pub mod jal_lui_cuda {
     use super::*;
 
     extern "C" {
@@ -427,6 +458,7 @@ pub mod jal_lui {
             range_checker_max_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -437,6 +469,7 @@ pub mod jal_lui {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_jal_lui_tracegen(
@@ -449,11 +482,12 @@ pub mod jal_lui {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod beq {
+pub mod beq_cuda {
     use super::*;
 
     extern "C" {
@@ -465,6 +499,7 @@ pub mod beq {
             record_len: usize,
             d_range_checker: *mut u32,
             range_checker_max_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -473,6 +508,7 @@ pub mod beq {
         height: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<T>,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_beq_tracegen(
@@ -483,11 +519,12 @@ pub mod beq {
             d_records.len(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len(),
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod branch_lt {
+pub mod branch_lt_cuda {
     use super::*;
 
     extern "C" {
@@ -501,6 +538,7 @@ pub mod branch_lt {
             range_checker_max_bits: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -511,6 +549,7 @@ pub mod branch_lt {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_blt_tracegen(
@@ -523,11 +562,12 @@ pub mod branch_lt {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
 
-pub mod mulh {
+pub mod mulh_cuda {
     use super::*;
 
     extern "C" {
@@ -543,6 +583,7 @@ pub mod mulh {
             bitwise_num_bits: usize,
             d_range_tuple_checker: *mut u32,
             range_tuple_checker_sizes: UInt2,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -556,6 +597,7 @@ pub mod mulh {
         bitwise_num_bits: usize,
         d_range_tuple_checker: &DeviceBuffer<T>,
         range_tuple_checker_sizes: UInt2,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_mulh_tracegen(
@@ -570,6 +612,7 @@ pub mod mulh {
             bitwise_num_bits,
             d_range_tuple_checker.as_mut_ptr() as *mut u32,
             range_tuple_checker_sizes,
+            timestamp_max_bits,
         ))
     }
 }

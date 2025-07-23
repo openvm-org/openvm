@@ -58,7 +58,8 @@ __global__ void jal_lui_tracegen(
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t *bw_ptr,
-    uint32_t bw_bits
+    uint32_t bw_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -66,7 +67,7 @@ __global__ void jal_lui_tracegen(
     if (idx < num_records) {
         auto full = reinterpret_cast<Rv32JalLuiRecord *>(records)[idx];
 
-        Rv32CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins));
+        Rv32CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
         Rv32JalLuiCore core(bw_ptr, bw_bits);
         core.fill_trace_row(row.slice_from(COL_INDEX(Rv32JalLuiCols, core)), full.core);
@@ -84,7 +85,8 @@ extern "C" int _jal_lui_tracegen(
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t *d_bw,
-    uint32_t bw_bits
+    uint32_t bw_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(Rv32JalLuiRecord) >= record_len);
@@ -100,7 +102,8 @@ extern "C" int _jal_lui_tracegen(
         d_rc,
         rc_bins,
         d_bw,
-        bw_bits
+        bw_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

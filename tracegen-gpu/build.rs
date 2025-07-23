@@ -70,7 +70,6 @@ fn main() {
             .file("cuda/src/extensions/rv32im/mulh.cu")
             .compile("tracegen_gpu_rv32im");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/native/field_arithmetic.cu")

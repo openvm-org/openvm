@@ -32,6 +32,7 @@ __global__ void public_values_tracegen(
     size_t num_records,
     uint32_t *range_checker,
     uint32_t range_checker_bins,
+    uint32_t timestamp_max_bits,
     uint32_t num_custom_pvs,
     uint32_t max_degree,
     uint32_t k
@@ -41,8 +42,10 @@ __global__ void public_values_tracegen(
     if (idx < num_records) {
         PublicValuesRecord record = reinterpret_cast<PublicValuesRecord *>(records)[idx];
 
-        auto adapter =
-            NativeAdapter<Fp, 2, 0>(VariableRangeChecker(range_checker, range_checker_bins));
+        auto adapter = NativeAdapter<Fp, 2, 0>(
+            VariableRangeChecker(range_checker, range_checker_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(
             row.slice_from(COL_INDEX(PublicValuesCols, adapter)), record.adapter
         );
@@ -71,6 +74,7 @@ extern "C" int _public_values_tracegen(
     size_t num_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_bins,
+    uint32_t timestamp_max_bits,
     uint32_t num_custom_pvs,
     uint32_t max_degree
 ) {
@@ -87,6 +91,7 @@ extern "C" int _public_values_tracegen(
         num_records,
         d_range_checker,
         range_checker_bins,
+        timestamp_max_bits,
         num_custom_pvs,
         max_degree,
         k

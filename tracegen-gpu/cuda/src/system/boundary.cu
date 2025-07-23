@@ -220,7 +220,7 @@ extern "C" int _volatile_boundary_tracegen(
     size_t as_max_bits,
     size_t ptr_max_bits
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     auto d_records =
         reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> const*>(d_raw_records);
     cukernel_volatile_boundary_tracegen<<<grid, block>>>(

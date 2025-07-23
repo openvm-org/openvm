@@ -32,13 +32,14 @@ __global__ void rv32_shift_tracegen(
     uint32_t *range_ptr,
     uint32_t range_bins,
     uint32_t *lookup_ptr,
-    uint32_t lookup_bits
+    uint32_t lookup_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto rec = reinterpret_cast<ShiftRecord *>(records)[idx];
-        auto adapter = Rv32BaseAluAdapter(VariableRangeChecker(range_ptr, range_bins));
+        auto adapter = Rv32BaseAluAdapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv32ShiftCore(
             BitwiseOperationLookup(lookup_ptr, lookup_bits),
@@ -59,7 +60,8 @@ extern "C" int _rv32_shift_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(ShiftRecord) >= record_len);
@@ -75,7 +77,8 @@ extern "C" int _rv32_shift_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

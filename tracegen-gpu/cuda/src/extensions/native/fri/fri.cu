@@ -47,7 +47,8 @@ template <typename F> struct FriReducedOpeningWorkloadRowRecord {
 struct FriReducedOpening {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ FriReducedOpening(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ FriReducedOpening(VariableRangeChecker range_checker, uint32_t timestamp_max_bits) 
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_instruction1_row(
         RowSlice row,
@@ -208,7 +209,8 @@ __global__ void fri_reduced_opening_tracegen(
     uint32_t rows_used,
     RowInfo *rows_info,
     uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx < rows_used) {
@@ -230,8 +232,10 @@ __global__ void fri_reduced_opening_tracegen(
 
         auto common_rec = *reinterpret_cast<FriReducedOpeningCommonRecord<Fp> *>(common_rec_start);
 
-        auto step =
-            FriReducedOpening(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        auto step = FriReducedOpening(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
         RowSlice row(trace + idx, height);
         if (local_idx == header.length) {
             auto wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start
@@ -268,11 +272,13 @@ extern "C" int _fri_reduced_opening_tracegen(
     uint32_t rows_used,
     RowInfo *d_rows_info,
     uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height);
     fri_reduced_opening_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, rows_used, d_rows_info, d_range_checker, range_checker_num_bins
+        d_trace, height, d_records, rows_used, d_rows_info,
+        d_range_checker, range_checker_num_bins, timestamp_max_bits
     );
     return cudaGetLastError();
 }

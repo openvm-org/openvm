@@ -33,13 +33,19 @@ template <typename F, uint32_t NUM_CELLS> struct NativeLoadStoreAdapterRecord {
 
 template <typename F, uint32_t NUM_CELLS> struct NativeLoadStoreAdapter {
     template <typename T> using Cols = NativeLoadStoreAdapterCols<T, NUM_CELLS>;
-    
+
     MemoryAuxColsFactory mem_helper;
 
-    __device__ NativeLoadStoreAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ NativeLoadStoreAdapter(
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    )
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice& row, NativeLoadStoreAdapterRecord<F, NUM_CELLS>& record) {
+    __device__ void fill_trace_row(
+        RowSlice &row,
+        NativeLoadStoreAdapterRecord<F, NUM_CELLS> &record
+    ) {
         bool is_hint_storew = (record.data_read.prev_timestamp == UINT32_MAX);
 
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);

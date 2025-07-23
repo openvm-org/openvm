@@ -21,6 +21,7 @@ use crate::{
 pub struct Rv32LoadSignExtendChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
@@ -52,6 +53,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadSignExtendChipGpu {
                 height,
                 self.pointer_max_bits,
                 &self.range_checker.count,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -74,7 +76,7 @@ mod test {
         Rv32LoadSignExtendStep,
     };
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng, RngCore};
     use test_case::test_case;
@@ -121,11 +123,14 @@ mod test {
                 ),
                 dummy_range_checker_chip,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
-        let gpu_chip =
-            Rv32LoadSignExtendChipGpu::new(tester.range_checker(), tester.address_bits());
+        let gpu_chip = Rv32LoadSignExtendChipGpu::new(
+            tester.range_checker(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -220,6 +225,7 @@ mod test {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

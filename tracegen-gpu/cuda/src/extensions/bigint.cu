@@ -62,7 +62,8 @@ __global__ void alu256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -72,7 +73,8 @@ __global__ void alu256_tracegen(
         Rv32HeapAdapterStep256 adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -92,7 +94,8 @@ extern "C" int _alu256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(BaseAlu256Record) >= record_len);
@@ -108,7 +111,8 @@ extern "C" int _alu256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
@@ -135,7 +139,8 @@ __global__ void branch_equal256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -145,7 +150,8 @@ __global__ void branch_equal256_tracegen(
         Rv32HeapBranchAdapter256 adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -165,7 +171,8 @@ extern "C" int _branch_equal256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(BranchEqual256Record) >= record_len);
@@ -181,7 +188,8 @@ extern "C" int _branch_equal256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
@@ -204,7 +212,8 @@ __global__ void less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -214,7 +223,8 @@ __global__ void less_than256_tracegen(
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -234,7 +244,8 @@ extern "C" int _less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(LessThan256Record) >= record_len);
@@ -250,7 +261,8 @@ extern "C" int _less_than256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
@@ -273,7 +285,8 @@ __global__ void branch_less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -283,7 +296,8 @@ __global__ void branch_less_than256_tracegen(
         Rv32HeapBranchAdapter256 adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -303,7 +317,8 @@ extern "C" int _branch_less_than256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(BranchLessThan256Record) >= record_len);
@@ -319,7 +334,8 @@ extern "C" int _branch_less_than256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
@@ -342,7 +358,8 @@ __global__ void shift256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -352,7 +369,8 @@ __global__ void shift256_tracegen(
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -375,7 +393,8 @@ extern "C" int _shift256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(Shift256Record) >= record_len);
@@ -391,7 +410,8 @@ extern "C" int _shift256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
@@ -416,7 +436,8 @@ __global__ void multiplication256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
-    uint2 range_tuple_sizes
+    uint2 range_tuple_sizes,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -426,7 +447,8 @@ __global__ void multiplication256_tracegen(
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             32,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits)
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -451,7 +473,8 @@ extern "C" int _multiplication256_tracegen(
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
-    uint2 range_tuple_sizes
+    uint2 range_tuple_sizes,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(Multiplication256Record) >= record_len);
@@ -469,7 +492,8 @@ extern "C" int _multiplication256_tracegen(
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
         d_range_tuple_ptr,
-        range_tuple_sizes
+        range_tuple_sizes,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

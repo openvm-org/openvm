@@ -28,6 +28,7 @@ pub struct Rv32DivRemChipGpu {
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
     pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
@@ -64,6 +65,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
                 RV32_CELL_BITS as u32,
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -90,7 +92,7 @@ mod test {
         DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemChip, Rv32DivRemStep,
     };
     use openvm_rv32im_transpiler::DivRemOpcode::{self, *};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use test_case::test_case;
@@ -134,7 +136,7 @@ mod test {
                 dummy_range_tuple_chip,
                 DivRemOpcode::CLASS_OFFSET,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
         let gpu_chip = Rv32DivRemChipGpu::new(
@@ -142,6 +144,7 @@ mod test {
             tester.bitwise_op_lookup(),
             tester.range_tuple_checker(),
             tester.address_bits(),
+            tester.timestamp_max_bits(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -265,6 +268,7 @@ mod test {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

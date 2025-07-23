@@ -35,7 +35,8 @@ template <typename F, size_t R, size_t W> struct NativeAdapter {
 
     template <typename T> using Cols = NativeAdapterCols<T, R, W>;
 
-    __device__ NativeAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ NativeAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, NativeAdapterRecord<F, R, W> record) {
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);

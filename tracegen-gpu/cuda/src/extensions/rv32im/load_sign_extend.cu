@@ -92,7 +92,8 @@ __global__ void rv32_load_sign_extend_tracegen(
     size_t num_records,
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -100,7 +101,7 @@ __global__ void rv32_load_sign_extend_tracegen(
         auto record = reinterpret_cast<Rv32LoadSignExtendRecord *>(records)[idx];
 
         auto adapter = Rv32LoadStoreAdapter(
-            pointer_max_bits, VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            pointer_max_bits, VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
@@ -121,7 +122,8 @@ extern "C" int _rv32_load_sign_extend_tracegen(
     size_t num_records,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadSignExtendCols<uint8_t>));
@@ -135,7 +137,8 @@ extern "C" int _rv32_load_sign_extend_tracegen(
         num_records,
         pointer_max_bits,
         d_range_checker,
-        range_checker_num_bins
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }
