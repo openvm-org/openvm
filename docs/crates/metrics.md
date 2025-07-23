@@ -23,6 +23,7 @@ For a segment proof, the following metrics are collected:
   - The sum `execute_metered_time_ms + execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms` for non-app proofs.
 - `insns` (counter): The total number of instructions executed in the segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
+- `total_cells_used` (counter): The total number of preprocessed, main, and permutation trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights.
 
 ## Scoping
 

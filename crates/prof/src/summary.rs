@@ -5,8 +5,8 @@ use itertools::Itertools;
 
 use crate::{
     aggregate::{
-        AggregateMetrics, CELLS_USED_LABEL, EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL,
-        INSNS_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
+        AggregateMetrics, EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL, INSNS_LABEL,
+        MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
     },
     types::MdTableCell,
 };
@@ -212,7 +212,7 @@ impl AggregateMetrics {
             MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
         };
         let cells_used = stats
-            .get(CELLS_USED_LABEL)
+            .get(MAIN_CELLS_USED_LABEL)
             .map(|s| s.sum)
             .unwrap_or_default();
         let insns = stats.get(INSNS_LABEL).map(|s| s.sum).unwrap_or_default();
