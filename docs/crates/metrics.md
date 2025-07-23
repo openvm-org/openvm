@@ -21,7 +21,7 @@ For a segment proof, the following metrics are collected:
 - The `total_proof_time_ms` of the proof is:
   - The sum `execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms` for app proofs. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
   - The sum `execute_metered_time_ms + execute_e3_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms` for non-app proofs.
-- `total_cycles` (counter): The total number of cycles in the segment.
+- `insns` (counter): The total number of instructions executed in the segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 
 ## Scoping

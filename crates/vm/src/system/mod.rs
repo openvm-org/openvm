@@ -90,6 +90,18 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
+
+    /// This function is only used for metric collection purposes and custom implementations are
+    /// free to ignore it.
+    ///
+    /// Since system chips (primarily memory) will only have all information needed to compute the
+    /// true used trace heights after `generate_proving_ctx` is called, this method will be called
+    /// after `generate_proving_ctx` on the trace `heights` of all AIRs (including non-system AIRs)
+    /// in the AIR ID order.
+    ///
+    /// The default implementation does nothing.
+    #[cfg(feature = "bench-metrics")]
+    fn update_trace_heights(&self, _heights: &mut [usize]) {}
 }
 
 /// Trait meant to be implemented on a SystemChipComplex.
@@ -456,6 +468,43 @@ where
             .chain(pv_ctx)
             .chain(memory_ctxs)
             .collect()
+    }
+
+    #[cfg(feature = "bench-metrics")]
+    fn update_trace_heights(&self, heights: &mut [usize]) {
+        use openvm_stark_backend::ChipUsageGetter;
+
+        use crate::system::memory::interface::MemoryInterface;
+
+        let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values_chip.is_some());
+        match &self.memory_controller.interface_chip {
+            MemoryInterface::Volatile { boundary_chip } => {
+                let boundary_height = boundary_chip
+                    .final_memory
+                    .as_ref()
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                heights[boundary_idx] = boundary_height;
+            }
+            MemoryInterface::Persistent {
+                boundary_chip,
+                merkle_chip,
+                ..
+            } => {
+                let boundary_height = 2 * boundary_chip.touched_labels.len();
+                heights[boundary_idx] = boundary_height;
+                heights[boundary_idx + 1] = merkle_chip.current_height;
+
+                // Poseidon2Periphery height also varies based on memory, so set it now even though
+                // it's not a system chip:
+                let poseidon_chip = self.memory_controller.hasher_chip.as_ref().unwrap();
+                let poseidon_height = poseidon_chip.current_trace_height();
+                // We know the chip insertion index, which starts from *the end* of the the AIR
+                // ordering
+                let poseidon_idx = heights.len() - 1 - POSEIDON2_INSERTION_IDX;
+                heights[poseidon_idx] = poseidon_height;
+            }
+        }
     }
 }
 

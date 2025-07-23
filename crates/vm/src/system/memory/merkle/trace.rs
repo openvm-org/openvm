@@ -65,6 +65,10 @@ where
         rows.reverse();
         rows.swap(0, 1);
 
+        #[cfg(feature = "bench-metrics")]
+        {
+            self.current_height = rows.len();
+        }
         let width = MemoryMerkleCols::<Val<SC>, CHUNK>::width();
         let mut height = rows.len().next_power_of_two();
         if let Some(mut oh) = self.overridden_height {

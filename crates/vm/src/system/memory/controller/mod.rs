@@ -331,30 +331,6 @@ impl<F: PrimeField32> MemoryController<F> {
         num_airs += self.access_adapter_inventory.num_access_adapters();
         num_airs
     }
-
-    // The following function is for instrumentation but not necessarily required by any traits. It
-    // may be deleted in the future.
-    #[cfg(feature = "bench-metrics")]
-    pub(crate) fn current_trace_cells(&self) -> Vec<usize> {
-        use openvm_stark_backend::ChipUsageGetter;
-
-        let mut ret = Vec::new();
-        match &self.interface_chip {
-            MemoryInterface::Volatile { boundary_chip } => {
-                ret.push(boundary_chip.current_trace_cells())
-            }
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                ret.push(boundary_chip.current_trace_cells());
-                ret.push(merkle_chip.current_trace_cells());
-            }
-        }
-        ret.extend(self.access_adapter_inventory.get_cells());
-        ret
-    }
 }
 
 /// Owned version of [MemoryAuxColsFactory].

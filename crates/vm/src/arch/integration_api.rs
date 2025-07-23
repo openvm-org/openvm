@@ -97,8 +97,17 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 }
 
 pub trait Arena {
-    // TODO[jpw]: specify what width is
+    /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
+
+    /// Only used for metric collection purposes. Intended usage is that for a record arena that
+    /// corresponds to a single trace matrix, this function can extract the current number of used
+    /// rows of the corresponding trace matrix. This is currently expected to work only for
+    /// [MatrixRecordArena].
+    #[cfg(feature = "bench-metrics")]
+    fn current_trace_height(&self) -> usize {
+        0
+    }
 }
 
 /// Given some minimum layout of type `Layout`, the `RecordArena` should allocate a buffer, of
@@ -391,6 +400,11 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
             trace_offset: 0,
             allow_truncate: true,
         }
+    }
+
+    #[cfg(feature = "bench-metrics")]
+    fn current_trace_height(&self) -> usize {
+        self.trace_offset / self.width
     }
 }
 

@@ -185,7 +185,7 @@ where
     fn execute_instruction(
         &mut self,
         state: &mut VmSegmentState<F, Ctrl::Memory, Ctrl::Ctx>,
-        prev_backtrace: &mut Option<Backtrace>,
+        _prev_backtrace: &mut Option<Backtrace>,
     ) -> Result<(), ExecutionError> {
         let pc = state.pc;
         let (executor, pc_entry) = self.handler.get_executor(pc)?;

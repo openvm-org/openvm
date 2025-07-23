@@ -1,9 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-#[cfg(not(feature = "parallel"))]
-#[cfg(feature = "parallel")]
-use openvm_stark_backend::prover::types::AirProvingContext;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_air::BaseAir,

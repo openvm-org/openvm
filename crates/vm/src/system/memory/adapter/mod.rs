@@ -11,7 +11,7 @@ use enum_dispatch::enum_dispatch;
 use getset::Setters;
 use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
-    var_range::SharedVariableRangeCheckerChip, ChipUsageGetter, TraceSubRowGenerator,
+    var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
 use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
@@ -22,7 +22,6 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
     prover::{cpu::CpuBackend, types::AirProvingContext},
-    ChipUsageGetter,
 };
 
 use crate::{
@@ -48,7 +47,6 @@ pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
     #[getset(set = "pub")]
     arena: DenseRecordArena,
-    air_names: Vec<String>,
 }
 
 impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
@@ -73,11 +71,9 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         .into_iter()
         .flatten()
         .collect();
-        let air_names = (0..chips.len()).map(|i| air_name(1 << (i + 1))).collect();
         Self {
             chips,
             arena: DenseRecordArena::with_byte_capacity(0),
-            air_names,
         }
     }
 
@@ -108,40 +104,16 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         self.arena.set_byte_capacity(size_bound);
     }
 
-    fn get_heights(&self) -> Vec<usize> {
-        self.chips
-            .iter()
-            .map(|chip| chip.current_trace_height())
-            .collect()
-    }
     pub fn get_widths(&self) -> Vec<usize> {
         self.chips
             .iter()
             .map(|chip: &GenericAccessAdapterChip<F>| chip.trace_width())
             .collect()
     }
-    pub(crate) fn get_cells(&self) -> Vec<usize> {
-        self.chips
-            .iter()
-            .map(|chip| chip.current_trace_cells())
-            .collect()
-    }
-    pub fn air_names(&self) -> Vec<String> {
-        self.air_names.clone()
-    }
-    pub fn compute_trace_heights(&mut self) {
-        let num_adapters = self.chips.len();
-        let mut heights = vec![0; num_adapters];
 
-        self.compute_heights_from_arena(&mut heights);
-        self.apply_overridden_heights(&mut heights);
-        for (chip, height) in self.chips.iter_mut().zip(heights) {
-            chip.set_computed_trace_height(height);
-        }
-    }
-
-    fn compute_heights_from_arena(&mut self, heights: &mut [usize]) {
-        let bytes = self.arena.allocated_mut();
+    /// `heights` should have length equal to the number of access adapter chips.
+    pub(crate) fn compute_heights_from_arena(arena: &DenseRecordArena, heights: &mut [usize]) {
+        let bytes = arena.allocated();
         tracing::debug!(
             "Computing heights from memory adapters arena: used {} bytes",
             bytes.len()
@@ -189,7 +161,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let num_adapters = self.chips.len();
 
         let mut heights = vec![0; num_adapters];
-        self.compute_heights_from_arena(&mut heights);
+        Self::compute_heights_from_arena(&self.arena, &mut heights);
         self.apply_overridden_heights(&mut heights);
 
         let widths = self
@@ -294,9 +266,9 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
 
 #[enum_dispatch]
 pub(crate) trait GenericAccessAdapterChipTrait<F> {
+    fn trace_width(&self) -> usize;
     fn set_override_trace_height(&mut self, overridden_height: usize);
     fn overridden_trace_height(&self) -> Option<usize>;
-    fn set_computed_trace_height(&mut self, height: usize);
 
     fn fill_trace_row(
         &self,
@@ -310,7 +282,6 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
         F: PrimeField32;
 }
 
-#[derive(ChipUsageGetter)]
 #[enum_dispatch(GenericAccessAdapterChipTrait<F>)]
 enum GenericAccessAdapterChip<F> {
     N2(AccessAdapterChip<F, 2>),
@@ -344,7 +315,6 @@ pub(crate) struct AccessAdapterChip<F, const N: usize> {
     air: AccessAdapterAir<N>,
     range_checker: SharedVariableRangeCheckerChip,
     overridden_height: Option<usize>,
-    computed_trace_height: Option<usize>,
     _marker: PhantomData<F>,
 }
 
@@ -359,22 +329,21 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,
             overridden_height: None,
-            computed_trace_height: None,
             _marker: PhantomData,
         }
     }
 }
 impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F, N> {
+    fn trace_width(&self) -> usize {
+        BaseAir::<F>::width(&self.air)
+    }
+
     fn set_override_trace_height(&mut self, overridden_height: usize) {
         self.overridden_height = Some(overridden_height);
     }
 
     fn overridden_trace_height(&self) -> Option<usize> {
         self.overridden_height
-    }
-
-    fn set_computed_trace_height(&mut self, height: usize) {
-        self.computed_trace_height = Some(height);
     }
 
     fn fill_trace_row(
@@ -416,34 +385,4 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             (&mut row.lt_aux, &mut row.is_right_larger),
         );
     }
-}
-
-impl<F, const N: usize> ChipUsageGetter for AccessAdapterChip<F, N> {
-    fn air_name(&self) -> String {
-        air_name(N)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.computed_trace_height.unwrap_or(0)
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-#[inline]
-fn air_name(n: usize) -> String {
-    format!("AccessAdapter<{}>", n)
-}
-
-#[inline(always)]
-pub fn get_chip_index(block_size: usize) -> usize {
-    assert!(
-        block_size.is_power_of_two() && block_size >= 2,
-        "Invalid block size {}",
-        block_size
-    );
-    let index = block_size.trailing_zeros() - 1;
-    index as usize
 }

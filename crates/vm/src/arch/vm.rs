@@ -601,6 +601,10 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        #[cfg(feature = "bench-metrics")]
+        let mut current_trace_heights =
+            self.get_trace_heights_from_arenas(&system_records, &record_arenas);
+        // main tracegen call:
         let ctx = self
             .chip_complex
             .generate_proving_ctx(system_records, record_arenas)?;
@@ -657,6 +661,8 @@ where
                 });
             }
         }
+        #[cfg(feature = "bench-metrics")]
+        self.finalize_metrics(&mut current_trace_heights);
 
         Ok(ctx)
     }
@@ -791,6 +797,16 @@ where
             &widths,
             &interactions,
         )
+    }
+
+    pub fn num_airs(&self) -> usize {
+        let num_airs = self.pk.per_air.len();
+        debug_assert_eq!(num_airs, self.chip_complex.inventory.airs().num_airs());
+        num_airs
+    }
+
+    pub fn air_names(&self) -> impl Iterator<Item = &'_ str> {
+        self.pk.per_air.iter().map(|pk| pk.air_name.as_str())
     }
 }
 
@@ -1219,5 +1235,82 @@ where
         self.chip_complex
             .system
             .override_trace_heights(&heights[..num_sys_airs]);
+    }
+}
+
+#[cfg(feature = "bench-metrics")]
+mod vm_metrics {
+    use std::iter::zip;
+
+    use metrics::counter;
+
+    use super::*;
+    use crate::{arch::Arena, system::memory::adapter::AccessAdapterInventory};
+
+    impl<E, VB> VirtualMachine<E, VB>
+    where
+        E: StarkEngine,
+        VB: VmBuilder<E>,
+    {
+        /// Best effort calculation of the used trace heights per chip without padding to powers of
+        /// two. This is best effort because some periphery chips may not have record arenas
+        /// to instrument.
+        pub(crate) fn get_trace_heights_from_arenas(
+            &self,
+            system_records: &SystemRecords<Val<E::SC>>,
+            record_arenas: &[VB::RecordArena],
+        ) -> Vec<usize> {
+            let num_airs = self.num_airs();
+            assert_eq!(num_airs, record_arenas.len());
+            // First, get used heights from record arenas
+            let mut heights: Vec<usize> = record_arenas
+                .iter()
+                .map(|arena| arena.current_trace_height())
+                .collect();
+            // Memory is special case, so extract the memory AIR's trace heights from the special
+            // arena
+            let sys_config = self.config().as_ref();
+            let num_sys_airs = sys_config.num_airs();
+            let access_adapter_offset = sys_config.access_adapter_air_id_offset();
+            AccessAdapterInventory::<Val<E::SC>>::compute_heights_from_arena(
+                &system_records.access_adapter_records,
+                &mut heights[access_adapter_offset..num_sys_airs],
+            );
+            // If there are any constant trace heights, set them
+            for (pk, height) in zip(&self.pk.per_air, &mut heights) {
+                if let Some(constant_height) =
+                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height())
+                {
+                    *height = constant_height;
+                }
+            }
+            // Program chip used height
+            heights[PROGRAM_AIR_ID] = system_records.filtered_exec_frequencies.len();
+
+            heights
+        }
+
+        /// Update used trace heights after tracegen is done (primarily updating memory-related
+        /// metrics) and then emit the final metrics.
+        pub(crate) fn finalize_metrics(&self, heights: &mut [usize]) {
+            self.chip_complex.system.update_trace_heights(heights);
+            let mut main_cells_used = 0usize;
+            let mut total_cells_used = 0usize;
+            for (pk, height) in zip(&self.pk.per_air, heights.iter()) {
+                let width = &pk.vk.params.width;
+                main_cells_used += width.main_width() * *height;
+                total_cells_used +=
+                    width.total_width(<E::SC as StarkGenericConfig>::Challenge::D) * *height;
+            }
+            counter!("main_cells_used").absolute(main_cells_used as u64);
+            counter!("total_cells_used").absolute(total_cells_used as u64);
+
+            if self.config().as_ref().profiling {
+                for (name, value) in zip(self.air_names(), heights) {
+                    let labels = [("air_name", name.to_string())];
+                    counter!("rows_used", &labels).absolute(*value as u64);
+                }
+            }
+        }
     }
 }
