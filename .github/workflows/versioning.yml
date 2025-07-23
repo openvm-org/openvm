@@ -85,8 +85,7 @@ jobs:
 
       - name: Run setup from tagged version
         run: |
-          # TODO: Add --evm after v1.3.0 release
-          cargo openvm setup
+          cargo openvm setup --evm
 
       # - name: Build and keygen examples from tagged version
       #   run: |
@@ -113,7 +112,7 @@ jobs:
               cd "$benchmark"
               cargo openvm build --no-transpile
               mkdir -p "../../../tagged-outputs/benchmarks/$benchmark_name"
-              cargo openvm keygen --output-dir "../../../tagged-outputs/benchmarks/$benchmark_name/app.vk"
+              cargo openvm keygen --output-dir "../../../tagged-outputs/benchmarks/$benchmark_name"
               cd ../../..
             fi
           done
@@ -165,8 +164,6 @@ jobs:
           fi
 
       # Compare all outputs
-      # TODO: After v1.3.0 release, just compare the contents of ~/.openvm-base
-      # and ~/.openvm
       - name: Compare ~/.openvm contents
         run: |
           echo "🔍 Comparing ~/.openvm agg and halo2 outputs between base branch and ${{ env.version }}..."
@@ -174,10 +171,10 @@ jobs:
           failed=0
 
           # Compare agg.pk with agg_halo2.pk
-          if cmp ~/.openvm-base/agg.pk ~/.openvm/agg_halo2.pk; then
-            echo "✅ agg.pk and agg_halo2.pk are identical"
+          if cmp ~/.openvm-base/agg.pk ~/.openvm/agg.pk; then
+            echo "✅ agg.pk are identical"
           else
-            echo "❌ agg.pk and agg_halo2.pk differ"
+            echo "❌ agg.pk differ"
             failed=1
           fi
 
