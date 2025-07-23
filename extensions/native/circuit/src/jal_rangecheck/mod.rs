@@ -41,7 +41,7 @@ mod tests;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
-struct JalRangeCheckCols<T> {
+pub struct JalRangeCheckCols<T> {
     is_jal: T,
     is_range_check: T,
     a_pointer: T,
