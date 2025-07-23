@@ -41,7 +41,7 @@ use openvm_stark_backend::{
     config::Val,
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, FieldAlgebra},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
+    prover::{cpu::CpuBackend, hal::MatrixDimensions, types::AirProvingContext},
     rap::AnyRap,
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -55,6 +55,7 @@ use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use stark_backend_gpu::{
+    cuda::copy::MemCopyD2H,
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{F, SC},
@@ -444,6 +445,28 @@ impl GpuChipTestBuilder {
     }
 }
 
+#[cfg(feature = "touchemall")]
+fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>) {
+    let trace = proving_ctx.common_main.as_ref().unwrap();
+    let height = trace.height();
+    let width = trace.width();
+    let trace = trace.to_host().unwrap();
+    for r in 0..height {
+        for c in 0..width {
+            let value = trace[c * height + r];
+            let value_u32 = unsafe { *(&value as *const F as *const u32) };
+            assert!(
+                value_u32 != 0xffffffff,
+                "potentially untouched value at ({}, {}) of a trace of size {}x{}",
+                r,
+                c,
+                height,
+                width
+            );
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct GpuChipTester {
     pub airs: Vec<AirRef<SC>>,
@@ -462,8 +485,7 @@ impl GpuChipTester {
     {
         let proving_ctx = gpu_chip.generate_proving_ctx(gpu_arena);
         if proving_ctx.common_main.is_some() {
-            self.airs.push(Arc::new(air) as AirRef<SC>);
-            self.ctxs.push(proving_ctx);
+            self = self.load_air_proving_ctx(Arc::new(air) as AirRef<SC>, proving_ctx);
         }
         self
     }
@@ -489,6 +511,10 @@ impl GpuChipTester {
         air: AirRef<SC>,
         proving_ctx: AirProvingContext<GpuBackend>,
     ) -> Self {
+        #[cfg(feature = "touchemall")]
+        {
+            check_trace_validity(&proving_ctx);
+        }
         self.airs.push(air);
         self.ctxs.push(proving_ctx);
         self
@@ -512,6 +538,10 @@ impl GpuChipTester {
         if proving_ctx.common_main.is_none() {
             assert!(expected_trace.is_none());
             return self;
+        }
+        #[cfg(feature = "touchemall")]
+        {
+            check_trace_validity(&proving_ctx);
         }
         assert_eq_cpu_and_gpu_matrix(
             expected_trace.unwrap(),
