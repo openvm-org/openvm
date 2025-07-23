@@ -1,18 +1,17 @@
 use std::marker::PhantomData;
 
-use openvm_stark_backend::p3_field::PrimeField32;
-
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
-    arch::{
-        execution_control::ExecutionControl, Arena, ExecutionError, InstructionExecutor,
-        VmSegmentState, VmStateMut,
-    },
+    arch::{Arena, ExecutionError, InstructionExecutor, VmSegmentState, VmStateMut},
     system::{memory::online::TracingMemory, program::PcEntry},
 };
 
 pub struct TracegenCtx<RA> {
     pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
+    #[cfg(feature = "bench-metrics")]
+    pub(crate) metrics: VmMetrics,
 }
 
 impl<RA: Arena> TracegenCtx<RA> {
@@ -20,7 +19,11 @@ impl<RA: Arena> TracegenCtx<RA> {
     /// The length of `capacities` must equal the number of AIRs.
     /// Here `height` will always mean an overestimate of the trace height for that AIR, while
     /// `width` may have different meanings depending on the `RA` type.
-    pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
+    pub fn new_with_capacity(
+        capacities: &[(usize, usize)],
+        instret_end: Option<u64>,
+        #[cfg(feature = "bench-metrics")] metrics: VmMetrics,
+    ) -> Self {
         let arenas = capacities
             .iter()
             .map(|&(height, width)| RA::with_capacity(height, width))
@@ -29,16 +32,18 @@ impl<RA: Arena> TracegenCtx<RA> {
         Self {
             arenas,
             instret_end,
+            #[cfg(feature = "bench-metrics")]
+            metrics,
         }
     }
 }
 
-pub struct TracegenExecutionControl<RA> {
+pub struct TracegenExecutionControl<F> {
     executor_idx_to_air_idx: Vec<usize>,
-    phantom: PhantomData<RA>,
+    phantom: PhantomData<F>,
 }
 
-impl<RA> TracegenExecutionControl<RA> {
+impl<F> TracegenExecutionControl<F> {
     pub fn new(executor_idx_to_air_idx: Vec<usize>) -> Self {
         Self {
             executor_idx_to_air_idx,
@@ -47,41 +52,51 @@ impl<RA> TracegenExecutionControl<RA> {
     }
 }
 
-impl<F, RA, Executor> ExecutionControl<F, Executor> for TracegenExecutionControl<RA>
-where
-    F: PrimeField32,
-    Executor: InstructionExecutor<F, RA>,
-{
-    type Memory = TracingMemory;
-    type Ctx = TracegenCtx<RA>;
-
-    fn should_suspend(&self, state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>) -> bool {
+impl<F> TracegenExecutionControl<F> {
+    #[inline(always)]
+    pub fn should_suspend<RA>(
+        &self,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+    ) -> bool {
         state
             .ctx
             .instret_end
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
-    fn on_suspend_or_terminate(
+    #[inline(always)]
+    pub fn on_suspend_or_terminate<RA>(
         &self,
-        _state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>,
+        _state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
         _exit_code: Option<u32>,
     ) {
-        // This should be handled in VmSegmentExecutor
-        // let timestamp = state.memory.timestamp();
-        // chip_complex
-        //     .connector_chip_mut()
-        //     .end(ExecutionState::new(state.pc, timestamp), exit_code);
+    }
+
+    #[inline(always)]
+    pub fn on_suspend<RA>(&self, state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>) {
+        self.on_suspend_or_terminate(state, None);
+    }
+
+    #[inline(always)]
+    pub fn on_terminate<RA>(
+        &self,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        exit_code: u32,
+    ) {
+        self.on_suspend_or_terminate(state, Some(exit_code));
     }
 
     /// Execute a single instruction
     #[inline(always)]
-    fn execute_instruction(
+    pub fn execute_instruction<RA, Executor>(
         &self,
-        state: &mut VmSegmentState<F, Self::Memory, Self::Ctx>,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
         executor: &mut Executor,
         pc_entry: &PcEntry<F>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), ExecutionError>
+    where
+        Executor: InstructionExecutor<F, RA>,
+    {
         tracing::trace!(
             "opcode: {} | timestamp: {}",
             executor.get_opcode_name(pc_entry.insn.opcode.as_usize()),

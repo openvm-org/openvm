@@ -2,8 +2,6 @@ mod config;
 /// Instruction execution traits and types.
 /// Execution bus and interface.
 pub mod execution;
-/// Module for controlling VM execution flow, including segmentation and instruction execution
-pub mod execution_control;
 pub mod execution_mode;
 /// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;

@@ -177,7 +177,6 @@ pub struct VmState<F> {
     pub pc: u32,
     pub memory: GuestMemory,
     pub input: Streams<F>,
-    // TODO(ayush): make generic over SeedableRng
     pub rng: StdRng,
     #[cfg(feature = "bench-metrics")]
     pub metrics: VmMetrics,
@@ -267,7 +266,15 @@ where
 
     pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {
         let memory_config = &self.config.as_ref().memory_config;
-        create_initial_state(memory_config, exe, input, 0)
+        let memory = create_memory_image(memory_config, exe.init_memory.clone());
+        let seed = 0;
+        #[allow(unused_mut)]
+        let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
+        #[cfg(feature = "bench-metrics")]
+        {
+            state.metrics.fn_bounds = exe.fn_bounds.clone();
+        }
+        state
     }
 }
 
@@ -345,7 +352,7 @@ where
             input: state.streams,
             rng: state.rng,
             #[cfg(feature = "bench-metrics")]
-            metrics: VmMetrics::default(),
+            metrics: Default::default(),
         })
     }
 
@@ -506,12 +513,6 @@ where
         let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
         let mut instance = VmSegmentExecutor::new(handler, ctrl);
 
-        #[cfg(feature = "bench-metrics")]
-        {
-            instance.metrics = state.metrics;
-            instance.set_fn_bounds(exe.fn_bounds.clone());
-        }
-
         let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
         let main_widths = self
@@ -523,7 +524,12 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = TracegenCtx::new_with_capacity(
+            &capacities,
+            instret_end,
+            #[cfg(feature = "bench-metrics")]
+            state.metrics,
+        );
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -576,7 +582,7 @@ where
             input: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "bench-metrics")]
-            metrics: Default::default(),
+            metrics: exec_state.ctx.metrics,
         };
         Ok(PreflightExecutionOutput {
             system_records,
@@ -1182,24 +1188,6 @@ pub(super) fn create_memory_image(
         memory_config.addr_space_sizes.clone(),
         init_memory,
     ))
-}
-
-fn create_initial_state<F>(
-    memory_config: &MemoryConfig,
-    exe: &VmExe<F>,
-    input: impl Into<Streams<F>>,
-    seed: u64,
-) -> VmState<F> {
-    let memory = create_memory_image(memory_config, exe.init_memory.clone());
-    #[cfg(feature = "bench-metrics")]
-    let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
-    #[cfg(not(feature = "bench-metrics"))]
-    let state = VmState::new(0, exe.pc_start, memory, input, seed);
-    #[cfg(feature = "bench-metrics")]
-    {
-        state.metrics.fn_bounds = exe.fn_bounds.clone();
-    }
-    state
 }
 
 fn check_exit_code(exit_code: u32) -> Result<(), ExecutionError> {

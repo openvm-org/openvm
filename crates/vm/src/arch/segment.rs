@@ -1,17 +1,23 @@
 use std::fmt::Debug;
 
 use backtrace::Backtrace;
-#[cfg(feature = "bench-metrics")]
-use openvm_instructions::exe::FnBounds;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
-use super::{execution_control::ExecutionControl, ExecutionError, Streams};
-#[cfg(feature = "bench-metrics")]
-use crate::metrics::VmMetrics;
+use super::{ExecutionError, Streams};
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, instructions::*, VmStateMut},
-    system::{memory::online::GuestMemory, program::ProgramHandler},
+    arch::{
+        execution_mode::{
+            tracegen::{TracegenCtx, TracegenExecutionControl},
+            E1ExecutionCtx,
+        },
+        instructions::*,
+        InstructionExecutor, VmStateMut,
+    },
+    system::{
+        memory::online::{GuestMemory, TracingMemory},
+        program::ProgramHandler,
+    },
 };
 
 pub struct VmSegmentState<F, MEM, CTX> {
@@ -121,46 +127,29 @@ where
 }
 
 // TODO[jpw]: rename. this will essentially be just interpreted instance for preflight(E3)
-pub struct VmSegmentExecutor<F, E, Ctrl> {
+pub struct VmSegmentExecutor<F, E> {
     pub handler: ProgramHandler<F, E>,
     /// Execution control for determining segmentation and stopping conditions
-    pub ctrl: Ctrl,
-
-    // Air names for debug purposes only.
-    // #[cfg(feature = "bench-metrics")]
-    // pub(crate) air_names: Vec<String>,
-    /// Metrics collected for this execution segment alone.
-    #[cfg(feature = "bench-metrics")]
-    pub metrics: VmMetrics,
+    pub ctrl: TracegenExecutionControl<F>,
 }
 
-impl<F, E, Ctrl> VmSegmentExecutor<F, E, Ctrl>
+impl<F, E> VmSegmentExecutor<F, E>
 where
     F: PrimeField32,
-    Ctrl: ExecutionControl<F, E>,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(handler: ProgramHandler<F, E>, ctrl: Ctrl) -> Self {
-        Self {
-            handler,
-            ctrl,
-            // #[cfg(feature = "bench-metrics")]
-            // air_names,
-            #[cfg(feature = "bench-metrics")]
-            metrics: VmMetrics::default(),
-        }
-    }
-
-    #[cfg(feature = "bench-metrics")]
-    pub fn set_fn_bounds(&mut self, fn_bounds: FnBounds) {
-        self.metrics.fn_bounds = fn_bounds;
+    pub fn new(handler: ProgramHandler<F, E>, ctrl: TracegenExecutionControl<F>) -> Self {
+        Self { handler, ctrl }
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_state(
+    pub fn execute_from_state<RA>(
         &mut self,
-        state: &mut VmSegmentState<F, Ctrl::Memory, Ctrl::Ctx>,
-    ) -> Result<(), ExecutionError> {
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+    ) -> Result<(), ExecutionError>
+    where
+        E: InstructionExecutor<F, RA>,
+    {
         let mut prev_backtrace: Option<Backtrace> = None;
 
         loop {
@@ -182,11 +171,14 @@ where
 
     /// Executes a single instruction and updates VM state
     #[inline(always)]
-    fn execute_instruction(
+    fn execute_instruction<RA>(
         &mut self,
-        state: &mut VmSegmentState<F, Ctrl::Memory, Ctrl::Ctx>,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
         _prev_backtrace: &mut Option<Backtrace>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), ExecutionError>
+    where
+        E: InstructionExecutor<F, RA>,
+    {
         let pc = state.pc;
         let (executor, pc_entry) = self.handler.get_executor(pc)?;
         tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
