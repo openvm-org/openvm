@@ -1,3 +1,4 @@
+use getset::WithSetters;
 use openvm_instructions::riscv::{
     RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
@@ -17,7 +18,7 @@ use crate::{
 pub const DEFAULT_PAGE_BITS: usize = 6;
 const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     // TODO[jpw]: should this be in Ctrl?
@@ -27,6 +28,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub segmentation_ctx: SegmentationCtx,
     pub continuations_enabled: bool,
     instret_last_segment_check: u64,
+    #[getset(set_with = "pub")]
     segment_check_insns: u64,
 }
 
@@ -93,6 +95,10 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
             instret_last_segment_check: 0,
         };
+        if !continuations_enabled {
+            // force single segment
+            ctx.segment_check_insns = u64::MAX;
+        }
 
         // Add merkle height contributions for all registers
         ctx.add_register_merkle_heights();
@@ -125,11 +131,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
-    pub fn with_segment_check_insns(mut self, segment_check_insns: u64) -> Self {
-        self.segment_check_insns = segment_check_insns;
-        self
-    }
-
     pub fn segments(&self) -> &[Segment] {
         &self.segmentation_ctx.segments
     }
@@ -152,7 +153,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn check_and_segment(&mut self, instret: u64) {
         // Avoid checking segment too often.
-        if instret < self.instret_last_segment_check + self.segment_check_insns {
+        if instret
+            < self
+                .instret_last_segment_check
+                .saturating_add(self.segment_check_insns)
+        {
             return;
         }
         self.memory_ctx
