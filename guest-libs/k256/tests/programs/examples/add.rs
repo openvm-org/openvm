@@ -10,7 +10,7 @@ use openvm_k256::Secp256k1Point;
 mod test_vectors;
 use test_vectors::ADD_TEST_VECTORS;
 
-openvm::init!("openvm_init_simple.rs");
+openvm::init!("openvm_init_add.rs");
 
 openvm::entry!(main);
 

@@ -84,7 +84,7 @@ impl WeierstrassExtension {
         let supported_curves = self
             .supported_curves
             .iter()
-            .map(|curve_config| curve_config.struct_name.to_string())
+            .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
             .collect::<Vec<String>>()
             .join(", ");
 
