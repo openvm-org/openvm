@@ -12,7 +12,7 @@ use tempfile::tempdir;
 #[test]
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd("cargo", &["install", "--path", ".", "--force", "--locked"])?;
     let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
     let temp_pk = temp_dir.path().join("app.pk");
     let temp_vk = temp_dir.path().join("app.vk");
@@ -87,7 +87,7 @@ fn test_cli_app_e2e() -> Result<()> {
 
 #[test]
 fn test_cli_app_e2e_simplified() -> Result<()> {
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd("cargo", &["install", "--path", ".", "--force", "--locked"])?;
     run_cmd(
         "cargo",
         &[
@@ -128,7 +128,7 @@ fn test_cli_init_build() -> Result<()> {
     let temp_path = temp_dir.path();
     let config_path = temp_path.join("openvm.toml");
     let manifest_path = temp_path.join("Cargo.toml");
-    run_cmd("cargo", &["install", "--path", ".", "--force"])?;
+    run_cmd("cargo", &["install", "--path", ".", "--force", "--locked"])?;
 
     // Cargo will not respect patches if run within a workspace
     run_cmd(

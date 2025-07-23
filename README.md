@@ -1,6 +1,6 @@
 # OpenVM
 
-[![Telegram Chat][tg-badge]][tg-url]
+[![Telegram Chat][tg-badge]][tg-url] [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openvm-org/openvm)
 
 [**Install**](https://book.openvm.dev/getting-started/install.html)
 | [User Book](https://book.openvm.dev)
