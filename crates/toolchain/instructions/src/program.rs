@@ -1,4 +1,8 @@
-use std::{fmt, fmt::Display};
+use std::{
+    fmt::{self, Display},
+    ops::Deref,
+    sync::Arc,
+};
 
 use itertools::Itertools;
 use openvm_stark_backend::p3_field::Field;
@@ -26,6 +30,13 @@ pub struct Program<F> {
     pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
     pub step: u32,
     pub pc_base: u32,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ProgramDebugInfo {
+    inner: Arc<Vec<Option<DebugInfo>>>,
+    pc_base: u32,
+    step: u32,
 }
 
 impl<F: Field> Program<F> {
@@ -120,14 +131,6 @@ impl<F: Field> Program<F> {
         self.defined_instructions().len()
     }
 
-    pub fn debug_infos(&self) -> Vec<Option<DebugInfo>> {
-        self.instructions_and_debug_infos
-            .iter()
-            .flatten()
-            .map(|(_, debug_info)| debug_info.clone())
-            .collect()
-    }
-
     pub fn enumerate_by_pc(&self) -> Vec<(u32, Instruction<F>, Option<DebugInfo>)> {
         self.instructions_and_debug_infos
             .iter()
@@ -172,6 +175,22 @@ impl<F: Field> Program<F> {
             .extend(other.instructions_and_debug_infos);
     }
 }
+
+impl<F> Program<F> {
+    pub fn debug_infos(&self) -> ProgramDebugInfo {
+        let debug_infos = self
+            .instructions_and_debug_infos
+            .iter()
+            .map(|opt| opt.as_ref().and_then(|(_, debug_info)| debug_info.clone()))
+            .collect();
+        ProgramDebugInfo {
+            inner: Arc::new(debug_infos),
+            pc_base: self.pc_base,
+            step: self.step,
+        }
+    }
+}
+
 impl<F: Field> Display for Program<F> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for instruction in self.defined_instructions().iter() {
@@ -192,6 +211,25 @@ impl<F: Field> Display for Program<F> {
             )?;
         }
         Ok(())
+    }
+}
+
+impl ProgramDebugInfo {
+    /// ## Panics
+    /// If `pc` is out of bounds.
+    pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
+        let step = self.step;
+        let pc_base = self.pc_base;
+        let pc_idx = ((pc - pc_base) / step) as usize;
+        &self.inner[pc_idx]
+    }
+}
+
+impl Deref for ProgramDebugInfo {
+    type Target = [Option<DebugInfo>];
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 

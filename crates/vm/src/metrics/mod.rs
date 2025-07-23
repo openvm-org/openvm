@@ -1,14 +1,18 @@
 use std::{collections::BTreeMap, mem};
 
+use backtrace::Backtrace;
 use cycle_tracker::CycleTracker;
 use metrics::counter;
-use openvm_instructions::exe::{FnBound, FnBounds};
+use openvm_instructions::{
+    exe::{FnBound, FnBounds},
+    program::ProgramDebugInfo,
+};
 
 pub mod cycle_tracker;
 
 #[derive(Clone, Debug, Default)]
 pub struct VmMetrics {
-    pub cycle_count: usize,
+    pub debug_infos: ProgramDebugInfo,
     pub chip_heights: Vec<(String, usize)>,
     /// Maps (dsl_ir, opcode) to number of times opcode was executed
     pub counts: BTreeMap<(Option<String>, String), usize>,
@@ -16,6 +20,8 @@ pub struct VmMetrics {
     pub trace_cells: BTreeMap<(Option<String>, String, String), usize>,
     /// Metric collection tools. Only collected when `config.profiling` is true.
     pub cycle_tracker: CycleTracker,
+    /// Backtrace for guest debug panic display
+    pub prev_backtrace: Option<Backtrace>,
     #[allow(dead_code)]
     pub(crate) fn_bounds: FnBounds,
     /// Cycle span by function if function start/end addresses are available

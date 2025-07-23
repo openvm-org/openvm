@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use openvm_native_circuit::execute_program;
 use openvm_native_compiler::{asm::AsmBuilder, conversion::CompilerOptions, ir::Var};
 use openvm_stark_backend::p3_field::{extension::BinomialExtensionField, FieldAlgebra};
@@ -43,7 +45,7 @@ fn test_cycle_tracker() {
         ..Default::default()
     });
 
-    for (i, debug_info) in program.debug_infos().iter().enumerate() {
+    for (i, debug_info) in program.debug_infos().deref().iter().enumerate() {
         println!("debug_info {}: {:?}", i, debug_info);
     }
 

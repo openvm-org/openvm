@@ -270,9 +270,10 @@ where
         let seed = 0;
         #[allow(unused_mut)]
         let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "function-span")]
         {
             state.metrics.fn_bounds = exe.fn_bounds.clone();
+            state.metrics.debug_infos = exe.program.debug_infos();
         }
         state
     }
@@ -495,7 +496,7 @@ where
     /// [`prove`](Self::prove) directly.
     pub fn execute_preflight(
         &self,
-        exe: VmExe<Val<E::SC>>,
+        exe: &VmExe<Val<E::SC>>,
         state: VmState<Val<E::SC>>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -505,7 +506,7 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        let handler = ProgramHandler::new(exe.program, &self.executor.inventory)?;
+        let handler = ProgramHandler::new(&exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         debug_assert!(executor_idx_to_air_idx
             .iter()
@@ -680,7 +681,7 @@ where
     ///   final memory state may be used to extract user public values afterwards.
     pub fn prove(
         &mut self,
-        exe: impl Into<VmExe<Val<E::SC>>>,
+        exe: &VmExe<Val<E::SC>>,
         state: VmState<Val<E::SC>>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -696,7 +697,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = self.execute_preflight(exe.into(), state, num_insns, trace_heights)?;
+        } = self.execute_preflight(exe, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
@@ -942,7 +943,7 @@ where
                 system_records,
                 record_arenas,
                 to_state,
-            } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
+            } = vm.execute_preflight(exe, from_state, Some(num_insns), &trace_heights)?;
             state = Some(to_state);
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
@@ -985,7 +986,7 @@ where
         let mut trace_heights = trace_heights.to_vec();
         trace_heights[PUBLIC_VALUES_AIR_ID] = vm.config().as_ref().num_public_values as u32;
         let state = vm.executor().create_initial_state(exe, input);
-        let (proof, _) = vm.prove(exe.clone(), state, None, &trace_heights)?;
+        let (proof, _) = vm.prove(exe, state, None, &trace_heights)?;
         Ok(proof)
     }
 }

@@ -145,7 +145,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = vm.execute_preflight(exe.clone(), from_state, Some(num_insns), &trace_heights)?;
+        } = vm.execute_preflight(&exe, from_state, Some(num_insns), &trace_heights)?;
         state = Some(to_state);
         exit_code = system_records.exit_code;
 

@@ -1,7 +1,5 @@
 use openvm_instructions::{
-    instruction::{DebugInfo, Instruction},
-    program::Program,
-    LocalOpcode, SystemOpcode, VmOpcode,
+    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     config::StarkGenericConfig,
@@ -59,16 +57,18 @@ pub struct ProgramHandler<F, E> {
     // u32 may be better for cache efficiency.
     pc_handler: Vec<PcEntry<F>>,
     execution_frequencies: Vec<u32>,
-    debug_infos: Vec<Option<DebugInfo>>,
     pc_base: u32,
     step: u32,
 }
 
 impl<F: Field, E> ProgramHandler<F, E> {
     /// Rewrite the program into compiled handlers.
+    ///
+    /// ## Assumption
+    /// There are less than `u32::MAX` total AIRs.
     // @dev: We need to clone the executors because they are not completely stateless
     pub fn new(
-        program: Program<F>,
+        program: &Program<F>,
         inventory: &ExecutorInventory<E>,
     ) -> Result<Self, StaticProgramError>
     where
@@ -80,9 +80,9 @@ impl<F: Field, E> ProgramHandler<F, E> {
         }
         let len = program.instructions_and_debug_infos.len();
         let mut pc_handler = Vec::with_capacity(len);
-        let mut debug_infos = Vec::with_capacity(len);
-        for insn_and_debug_info in program.instructions_and_debug_infos {
-            if let Some((insn, debug_info)) = insn_and_debug_info {
+        for insn_and_debug_info in &program.instructions_and_debug_infos {
+            if let Some((insn, _)) = insn_and_debug_info {
+                let insn = insn.clone();
                 let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode() {
                     // The execution loop will always branch to terminate before using this executor
                     0
@@ -99,10 +99,8 @@ impl<F: Field, E> ProgramHandler<F, E> {
                 );
                 let pc_entry = PcEntry { insn, executor_idx };
                 pc_handler.push(pc_entry);
-                debug_infos.push(debug_info);
             } else {
                 pc_handler.push(PcEntry::undefined());
-                debug_infos.push(None);
             }
         }
         let executors = inventory.executors.clone();
@@ -111,7 +109,6 @@ impl<F: Field, E> ProgramHandler<F, E> {
             execution_frequencies: vec![0u32; len],
             executors,
             pc_handler,
-            debug_infos,
             pc_base: program.pc_base,
             step: program.step,
         })
@@ -150,18 +147,6 @@ impl<F: Field, E> ProgramHandler<F, E> {
         };
 
         Ok((executor, entry))
-    }
-
-    pub fn get_debug_info(&self, pc: u32) -> Result<&Option<DebugInfo>, ExecutionError> {
-        let pc_idx = self.get_pc_index(pc);
-        self.debug_infos
-            .get(pc_idx)
-            .ok_or_else(|| ExecutionError::PcOutOfBounds {
-                pc: pc_idx as u32 * self.step + self.pc_base,
-                step: self.step,
-                pc_base: self.pc_base,
-                program_len: self.pc_handler.len(),
-            })
     }
 
     pub fn filtered_execution_frequencies(&self) -> Vec<u32>

@@ -117,6 +117,8 @@ impl<F> TracegenExecutionControl<F> {
             streams: &mut state.streams,
             rng: &mut state.rng,
             ctx: arena,
+            #[cfg(feature = "bench-metrics")]
+            metrics: &mut state.ctx.metrics,
         };
         executor.execute(state_mut, &pc_entry.insn)?;
 

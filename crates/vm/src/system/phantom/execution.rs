@@ -107,19 +107,16 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 }
 
 #[inline(always)]
-pub(super) fn execute_impl<F>(
+fn execute_impl<F>(
     state: PhantomStateMut<F>,
     operands: &PhantomOperands,
     sub_executor: &dyn PhantomSubExecutor<F>,
-) -> Result<(), ExecutionError>
-where
-    F: PrimeField32,
-{
+) -> Result<(), ExecutionError> {
     let &PhantomOperands { a, b, c } = operands;
 
     let discriminant = PhantomDiscriminant(c as u16);
-    // If not a system phantom sub-instruction (which is handled in
-    // ExecutionSegment), look for a phantom sub-executor to handle it.
+    // SysPhantom::{CtStart, CtEnd} are only handled in Preflight Execution, so the only SysPhantom
+    // to handle here is DebugPanic.
     if let Some(discr) = SysPhantom::from_repr(discriminant.0) {
         if discr == SysPhantom::DebugPanic {
             return Err(ExecutionError::Fail { pc: *state.pc });

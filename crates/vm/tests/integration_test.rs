@@ -140,7 +140,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
         system_records,
         mut record_arenas,
         ..
-    } = vm.execute_preflight(committed_exe.exe.clone(), state, None, &fixed_air_heights)?;
+    } = vm.execute_preflight(&committed_exe.exe, state, None, &fixed_air_heights)?;
 
     let mut expected_actual_heights = vec![0; vk.inner.per_air.len()];
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();

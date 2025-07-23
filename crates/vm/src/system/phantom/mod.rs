@@ -32,10 +32,7 @@ use crate::{
         ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
         TraceFiller, VmChipWrapper, VmStateMut,
     },
-    system::{
-        memory::MemoryAuxColsFactory,
-        phantom::execution::{PhantomOperands, PhantomStateMut},
-    },
+    system::memory::MemoryAuxColsFactory,
 };
 
 mod execution;
@@ -125,32 +122,68 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
-        record.pc = *state.pc;
+        let pc = *state.pc;
+        record.pc = pc;
         record.timestamp = state.memory.timestamp;
         let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
         record.operands = [a, b, c];
 
         debug_assert_eq!(instruction.opcode, self.phantom_opcode);
-        let c_u32 = instruction.c.as_canonical_u32() as u16;
-        if SysPhantom::from_repr(c_u32).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get(&PhantomDiscriminant(c_u32))
-                .unwrap();
-            execution::execute_impl(
-                PhantomStateMut {
-                    pc: state.pc,
-                    memory: &mut state.memory.data,
-                    streams: state.streams,
-                    rng: state.rng,
-                },
-                &PhantomOperands {
-                    a: instruction.a.as_canonical_u32(),
-                    b: instruction.b.as_canonical_u32(),
-                    c: instruction.c.as_canonical_u32(),
-                },
-                sub_executor.as_ref(),
-            )?;
+        let discriminant = PhantomDiscriminant(c as u16);
+        if let Some(sys) = SysPhantom::from_repr(discriminant.0) {
+            tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
+            match sys {
+                SysPhantom::DebugPanic => {
+                    #[cfg(feature = "bench-metrics")]
+                    {
+                        let metrics = state.metrics;
+                        if let Some(info) = metrics.debug_infos.get(pc) {
+                            if let Some(trace) = info.trace.clone() {
+                                metrics.prev_backtrace = Some(trace);
+                            }
+                        }
+                        if let Some(mut backtrace) = metrics.prev_backtrace.take() {
+                            backtrace.resolve();
+                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
+                        } else {
+                            eprintln!("openvm program failure; no backtrace");
+                        }
+                    }
+                    return Err(ExecutionError::Fail { pc });
+                }
+                #[cfg(feature = "bench-metrics")]
+                SysPhantom::CtStart => {
+                    let metrics = state.metrics;
+                    if let Some(info) = metrics.debug_infos.get(pc) {
+                        metrics.cycle_tracker.start(info.dsl_instruction.clone());
+                    }
+                }
+                #[cfg(feature = "bench-metrics")]
+                SysPhantom::CtEnd => {
+                    let metrics = state.metrics;
+                    if let Some(info) = metrics.debug_infos.get(pc) {
+                        metrics.cycle_tracker.end(info.dsl_instruction.clone());
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            let sub_executor = self.phantom_executors.get(&discriminant).unwrap();
+            sub_executor
+                .phantom_execute(
+                    &state.memory.data,
+                    state.streams,
+                    state.rng,
+                    discriminant,
+                    a,
+                    b,
+                    (c >> 16) as u16,
+                )
+                .map_err(|err| ExecutionError::Phantom {
+                    pc,
+                    discriminant,
+                    inner: err,
+                })?;
         }
         *state.pc += DEFAULT_PC_STEP;
         state.memory.increment_timestamp();
@@ -211,7 +244,7 @@ impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
         _b: u32,
         _c_upper: u16,
     ) -> eyre::Result<()> {
-        // TODO: implement cycle tracker for E1/E2
+        // Cycle tracking is implemented separately only in Preflight Execution
         Ok(())
     }
 }
@@ -228,7 +261,7 @@ impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
         _b: u32,
         _c_upper: u16,
     ) -> eyre::Result<()> {
-        // TODO: implement cycle tracker for E1/E2
+        // Cycle tracking is implemented separately only in Preflight Execution
         Ok(())
     }
 }

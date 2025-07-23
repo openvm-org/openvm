@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+#[cfg(feature = "bench-metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
     arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
     system::{
@@ -86,6 +88,8 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
     pub ctx: &'a mut CTX,
+    #[cfg(feature = "bench-metrics")]
+    pub metrics: &'a mut VmMetrics,
 }
 
 // TODO[jpw]: Can we avoid Clone by making executors stateless?
@@ -136,15 +140,13 @@ pub trait InsExecutorE2<F> {
 
     fn pre_compute_e2<Ctx>(
         &self,
-        chip_idx: usize,
+        air_idx: usize,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>>
     where
         Ctx: E2ExecutionCtx;
-
-    // fn set_trace_height(&mut self, height: usize);
 }
 
 #[repr(C)]
