@@ -95,66 +95,90 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
 mod tests {
     use openvm_circuit::{
         arch::{
-            testing::{memory::gen_pointer, TestChipHarness, RANGE_CHECKER_BUS},
-            Arena, DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena, MemoryConfig,
-            SystemConfig, VmChipWrapper,
+            testing::{memory::gen_pointer, RANGE_CHECKER_BUS},
+            EmptyAdapterCoreLayout, MemoryConfig, SystemConfig, VmChipWrapper,
         },
         system::{
             native_adapter::{NativeAdapterAir, NativeAdapterRecord, NativeAdapterStep},
             public_values::{
-                PublicValuesAir, PublicValuesCoreAir, PublicValuesRecord, PublicValuesStep,
+                PublicValuesAir, PublicValuesChip, PublicValuesCoreAir, PublicValuesRecord,
+                PublicValuesStep,
             },
         },
-        utils::next_power_of_two_or_zero,
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode, NATIVE_AS,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
-    use p3_air::BaseAir;
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
     use stark_backend_gpu::types::F;
 
     use crate::{
         system::public_values::PublicValuesChipGPU,
-        testing::{dummy_memory_helper, GpuChipTestBuilder},
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
     };
 
-    #[test]
-    #[should_panic(expected = "LogUp multiset equality check failed.")]
-    fn test_public_values_tracegen() {
-        let system_config = SystemConfig::default();
-        let mem_config = MemoryConfig::default();
-        let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
+    type Harness = GpuTestChipHarness<
+        F,
+        PublicValuesStep<F>,
+        PublicValuesAir,
+        PublicValuesChipGPU,
+        PublicValuesChip<F>,
+    >;
+
+    fn create_test_harness(
+        tester: &GpuChipTestBuilder,
+        mem_config: &MemoryConfig,
+        system_config: &SystemConfig,
+    ) -> Harness {
         let num_custom_pvs = system_config.num_public_values;
         let max_degree = system_config.max_constraint_degree as u32 - 1;
         let timestamp_max_bits = mem_config.clk_max_bits;
 
-        let mut tester = GpuChipTestBuilder::volatile(mem_config, bus);
-        let mut rng = create_seeded_rng();
+        let air = PublicValuesAir::new(
+            NativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+            PublicValuesCoreAir::new(num_custom_pvs, max_degree),
+        );
 
         let executor = PublicValuesStep::new(
             NativeAdapterStep::<F, 2, 0>::default(),
             num_custom_pvs,
             max_degree,
         );
-        let air = PublicValuesAir::new(
-            NativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            PublicValuesCoreAir::new(num_custom_pvs, max_degree),
+
+        let cpu_chip = VmChipWrapper::new(
+            PublicValuesStep::new(
+                NativeAdapterStep::<F, 2, 0>::default(),
+                num_custom_pvs,
+                max_degree,
+            ),
+            tester.dummy_memory_helper(),
         );
-        let chip = PublicValuesChipGPU::new(
+
+        let gpu_chip = PublicValuesChipGPU::new(
             air.clone(),
             tester.range_checker(),
             num_custom_pvs,
             max_degree,
             timestamp_max_bits as u32,
         );
-        let mut harness = TestChipHarness::with_capacity(executor, air, chip, num_custom_pvs);
 
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, num_custom_pvs)
+    }
+
+    #[test]
+    fn test_public_values_tracegen() {
+        let mut rng = create_seeded_rng();
+        let system_config = SystemConfig::default();
+        let mem_config = MemoryConfig::default();
+        let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
+        let mut tester = GpuChipTestBuilder::volatile(mem_config.clone(), bus);
+
+        let mut harness = create_test_harness(&tester, &mem_config, &system_config);
         let mut public_values = vec![];
-        for idx in 0..num_custom_pvs {
+        for idx in 0..system_config.num_public_values {
             let (b, e) = if rng.gen_bool(0.5) {
                 let val = F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32));
                 public_values.push(val);
@@ -195,43 +219,29 @@ mod tests {
                 f,
                 g: F::ZERO,
             };
-            tester.execute_harness::<_, _, _, DenseRecordArena>(&mut harness, &instruction);
+            tester.execute(
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &instruction,
+            );
         }
-        harness.chip.public_values = public_values;
+        harness.gpu_chip.public_values = public_values;
 
         type Record<'a> = (
             &'a mut NativeAdapterRecord<F, 2, 0>,
             &'a mut PublicValuesRecord<F>,
         );
-        let cpu_chip = VmChipWrapper::new(
-            PublicValuesStep::new(
-                NativeAdapterStep::<F, 2, 0>::default(),
-                num_custom_pvs,
-                max_degree,
-            ),
-            dummy_memory_helper(bus, timestamp_max_bits),
-        );
-        let mut cpu_arena = MatrixRecordArena::<F>::with_capacity(
-            next_power_of_two_or_zero(num_custom_pvs),
-            <PublicValuesAir as BaseAir<F>>::width(&harness.air),
-        );
         harness
-            .arena
+            .dense_arena
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
-                &mut cpu_arena,
+                &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<F, NativeAdapterStep<F, 2, 0>>::new(),
             );
 
         tester
             .build()
-            .load_and_compare(
-                harness.air,
-                harness.chip,
-                harness.arena,
-                cpu_chip,
-                cpu_arena,
-            )
+            .load_gpu_harness(harness)
             .finalize()
             .simple_test()
             .expect("Verification failed");

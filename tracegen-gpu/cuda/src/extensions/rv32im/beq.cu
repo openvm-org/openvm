@@ -7,8 +7,6 @@
 
 using namespace riscv;
 
-static constexpr uint8_t BEQ = 0;
-
 // Concrete type aliases for 32-bit
 using Rv32BranchEqualCore = BranchEqualCore<RV32_REGISTER_NUM_LIMBS>;
 template <typename T>
@@ -66,8 +64,13 @@ extern "C" int _beq_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     beq_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, record_len / sizeof(BranchEqualRecord), 
-        d_rc, rc_bins, timestamp_max_bits
+        d_trace,
+        height,
+        d_records,
+        record_len / sizeof(BranchEqualRecord),
+        d_rc,
+        rc_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

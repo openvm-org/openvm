@@ -57,7 +57,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32MultiplicationChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
-                self.range_checker.count.len() / 2,
+                self.range_checker.count.len(),
                 &self.range_tuple_checker.count,
                 tuple_checker_sizes,
                 self.timestamp_max_bits as u32,

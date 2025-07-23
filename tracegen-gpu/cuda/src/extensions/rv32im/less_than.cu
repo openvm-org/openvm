@@ -40,7 +40,8 @@ __global__ void rv32_less_than_tracegen(
         auto record = reinterpret_cast<LessThanRecord *>(records)[idx];
 
         auto adapter = Rv32BaseAluAdapter(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), 
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);

@@ -41,7 +41,7 @@ use openvm_stark_backend::{
     config::Val,
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, FieldAlgebra},
-    prover::{cpu::CpuBackend, hal::MatrixDimensions, types::AirProvingContext},
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
     utils::disable_debug_builder,
     verifier::VerificationError,
@@ -55,7 +55,6 @@ use p3_air::BaseAir;
 use p3_field::PrimeField32;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use stark_backend_gpu::{
-    cuda::copy::MemCopyD2H,
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{F, SC},
@@ -458,6 +457,9 @@ impl GpuChipTestBuilder {
 
 #[cfg(feature = "touchemall")]
 fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>) {
+    use openvm_stark_backend::prover::hal::MatrixDimensions;
+    use stark_backend_gpu::cuda::copy::MemCopyD2H;
+
     let trace = proving_ctx.common_main.as_ref().unwrap();
     let height = trace.height();
     let width = trace.width();

@@ -179,7 +179,7 @@ mod tests {
         );
     }
 
-    #[test_case(BaseAluOpcode::ADD, 2)] // TEMP: for testing, remove and fix
+    #[test_case(BaseAluOpcode::ADD, 100)]
     #[test_case(BaseAluOpcode::SUB, 100)]
     #[test_case(BaseAluOpcode::XOR, 100)]
     #[test_case(BaseAluOpcode::OR, 100)]

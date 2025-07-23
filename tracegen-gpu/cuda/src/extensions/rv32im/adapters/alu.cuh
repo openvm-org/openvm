@@ -30,9 +30,10 @@ struct Rv32BaseAluAdapterRecord {
 
 struct Rv32BaseAluAdapter {
     MemoryAuxColsFactory mem_helper;
+    BitwiseOperationLookup bitwise_lookup;
 
-    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
-        : mem_helper(range_checker, timestamp_max_bits) {}
+    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker, BitwiseOperationLookup lookup, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32BaseAluAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, from_state.pc, record.from_pc);
@@ -63,6 +64,8 @@ struct Rv32BaseAluAdapter {
             for (size_t i = 0; i < sizeof(MemoryReadAuxCols<uint8_t>); i++) {
                 rs2_aux.write(i, 0);
             }
+            uint32_t mask = (1u << RV32_CELL_BITS) - 1u;
+            bitwise_lookup.add_range(record.rs2 & mask, (record.rs2 >> RV32_CELL_BITS) & mask);
         }
 
         COL_WRITE_ARRAY(
