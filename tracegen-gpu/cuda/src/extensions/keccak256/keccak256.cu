@@ -214,7 +214,7 @@ __global__ void keccak256_tracegen(
 
                 bitwise_lookup.add_range(
                     (vm_record.dst >> msl_rshift) << msl_lshift,
-                    (vm_record.dst >> msl_rshift) << msl_lshift
+                    (vm_record.src >> msl_rshift) << msl_lshift
                 );
                 bitwise_lookup.add_range(
                     (vm_record.len >> msl_rshift) << msl_lshift,

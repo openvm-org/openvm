@@ -87,6 +87,12 @@ struct Rv32HintStore {
         COL_WRITE_ARRAY(row, Rv32HintStoreCols, mem_ptr_limbs, mem_ptr_limbs);
 
         if (local_idx == 0) {
+            uint32_t msl_rshift = (RV32_REGISTER_NUM_LIMBS - 1) * RV32_CELL_BITS;
+            uint32_t msl_lshift = RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - pointer_max_bits;
+            bitwise_lookup.add_range(
+                (record.mem_ptr >> msl_rshift) << msl_lshift,
+                (record.num_words >> msl_rshift) << msl_lshift
+            );
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv32HintStoreCols, mem_ptr_aux_cols)),
                 record.mem_ptr_aux_record.prev_timestamp,
@@ -145,7 +151,7 @@ __global__ void hintstore_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    // Dummy rows are assumed to already be filled with 0s
+
     if (idx < rows_used) {
         auto record_offset = record_offsets[idx].record_offset;
         auto local_idx = record_offsets[idx].local_idx;
@@ -156,13 +162,13 @@ __global__ void hintstore_tracegen(
 
         auto data_write = reinterpret_cast<Rv32HintStoreVars *>(writes_start)[local_idx];
 
-        auto step = Rv32HintStore(
+        auto filler = Rv32HintStore(
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
-        step.fill_trace_row(row, record_header, data_write, local_idx);
+        filler.fill_trace_row(row, record_header, data_write, local_idx);
     } else {
         row.fill_zero(0, sizeof(Rv32HintStoreCols<uint8_t>));
     }

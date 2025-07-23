@@ -7,7 +7,7 @@ use openvm_keccak256_circuit::{
     utils::keccak256, KeccakVmAir, KeccakVmChip, KeccakVmFiller, KeccakVmStep,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
-use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::utils::create_seeded_rng;
 use rand::{rngs::StdRng, Rng};
 
@@ -37,7 +37,7 @@ fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
     let executor = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
     let cpu_chip = KeccakVmChip::new(
         KeccakVmFiller::new(dummy_bitwise_chip, tester.address_bits()),
-        tester.cpu_memory_helper(),
+        tester.dummy_memory_helper(),
     );
     let gpu_chip = Keccak256ChipGpu::new(
         tester.range_checker(),
@@ -127,5 +127,6 @@ fn test_keccak256_tracegen() {
         .build()
         .load_gpu_harness(harness)
         .finalize()
-        .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+        .simple_test()
+        .unwrap();
 }

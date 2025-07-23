@@ -24,8 +24,6 @@ template <typename T, size_t NUM_LIMBS> struct BranchEqualCoreCols {
 template <size_t NUM_LIMBS> struct BranchEqualCore {
     template <typename T> using Cols = BranchEqualCoreCols<T, NUM_LIMBS>;
 
-    __device__ BranchEqualCore() = default;
-
     __device__ void fill_trace_row(RowSlice row, BranchEqualCoreRecord<NUM_LIMBS> rec) {
         size_t diff_idx = NUM_LIMBS;
         for (size_t i = 0; i < NUM_LIMBS; ++i) {

@@ -197,10 +197,11 @@ template <size_t NUM_LIMBS> struct DivRemCore {
             carry = carry >> RV32_CELL_BITS;
             range_tuple_checker.add_count((uint32_t[2]){(uint32_t)q[i], carry});
         }
-        uint32_t c_ext = c_sign << (RV32_CELL_BITS - 1);
-        uint32_t r_ext = (is_signed && (r[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)))
-                         << (RV32_CELL_BITS - 1);
-        uint32_t q_ext = q_sign << (RV32_CELL_BITS - 1);
+        bool r_sign = is_signed && (r[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1));
+
+        uint32_t q_ext = (q_sign && is_signed) * ((1 << RV32_CELL_BITS) - 1);
+        uint32_t c_ext = (c_sign << RV32_CELL_BITS) - c_sign;
+        uint32_t r_ext = (r_sign << RV32_CELL_BITS) - r_sign;
 
         uint32_t c_pref = 0;
         uint32_t q_pref = 0;
@@ -250,8 +251,7 @@ __global__ void rv32_div_rem_tracegen(
         auto record = reinterpret_cast<Rv32DivRemRecord *>(d_records)[idx];
 
         Rv32MultAdapter adapter(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bits), 
-            timestamp_max_bits
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 

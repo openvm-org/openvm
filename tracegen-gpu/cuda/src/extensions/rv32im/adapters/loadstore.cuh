@@ -98,14 +98,8 @@ struct Rv32LoadStoreAdapter {
         COL_WRITE_ARRAY(row, Rv32LoadStoreAdapterCols, mem_ptr_limbs, ptr_limbs);
         COL_WRITE_VALUE(row, Rv32LoadStoreAdapterCols, mem_as, record.mem_as);
 
-        range_checker.add_count((uint32_t)ptr_limbs[0], RV32_CELL_BITS * 2 - 2);
+        range_checker.add_count((uint32_t)ptr_limbs[0] >> 2, RV32_CELL_BITS * 2 - 2);
         range_checker.add_count((uint32_t)ptr_limbs[1], pointer_max_bits - 16);
-
-        mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv32LoadStoreAdapterCols, write_base_aux)),
-            record.write_prev_timestamp,
-            record.from_timestamp
-        );
 
         COL_WRITE_VALUE(row, Rv32LoadStoreAdapterCols, needs_write, needs_write);
         if (needs_write) {
@@ -114,7 +108,6 @@ struct Rv32LoadStoreAdapter {
                 record.write_prev_timestamp,
                 record.from_timestamp + 2
             );
-
         } else {
             mem_helper.fill_zero(
                 row.slice_from(COL_INDEX(Rv32LoadStoreAdapterCols, write_base_aux))

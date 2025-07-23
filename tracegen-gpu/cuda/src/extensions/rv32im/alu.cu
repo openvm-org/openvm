@@ -39,7 +39,8 @@ __global__ void alu_tracegen(
         auto rec = reinterpret_cast<Rv32BaseAluRecord *>(d_records)[idx];
 
         Rv32BaseAluAdapter adapter(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
+            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

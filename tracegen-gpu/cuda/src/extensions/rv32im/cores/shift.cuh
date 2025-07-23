@@ -159,9 +159,11 @@ template <size_t NUM_LIMBS> struct ShiftCore {
         bit_marker[bit_shift] = 1u;
         COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_marker);
 
-        COL_WRITE_VALUE(
-            row, Cols, b_sign, is_sra ? (record.b[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) : 0u
-        );
+        uint8_t b_sign_val = is_sra ? (record.b[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) : 0u;
+        COL_WRITE_VALUE(row, Cols, b_sign, b_sign_val);
+        if (is_sra) {
+            bitwise_lookup.add_xor(record.b[NUM_LIMBS - 1], 1u << (RV32_CELL_BITS - 1));
+        }
         COL_WRITE_VALUE(row, Cols, bit_multiplier_left, is_sll ? (1u << bit_shift) : 0u);
         COL_WRITE_VALUE(row, Cols, bit_multiplier_right, is_sll ? 0u : (1u << bit_shift));
 

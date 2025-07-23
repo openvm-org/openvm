@@ -39,7 +39,11 @@ __global__ void rv32_shift_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto rec = reinterpret_cast<ShiftRecord *>(records)[idx];
-        auto adapter = Rv32BaseAluAdapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+        auto adapter = Rv32BaseAluAdapter(
+            VariableRangeChecker(range_ptr, range_bins),
+            BitwiseOperationLookup(lookup_ptr, lookup_bits),
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv32ShiftCore(
             BitwiseOperationLookup(lookup_ptr, lookup_bits),

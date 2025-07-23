@@ -227,7 +227,7 @@ extern "C" int _access_adapters_tracegen(
     uint32_t* d_range_checker,
     size_t range_checker_bins
 ) {
-    auto [grid, block] = kernel_launch_params(num_records);
+    auto [grid, block] = kernel_launch_params(num_records, 512);
     access_adapters_tracegen<<<grid, block>>>(
         d_trace,
         num_adapters,

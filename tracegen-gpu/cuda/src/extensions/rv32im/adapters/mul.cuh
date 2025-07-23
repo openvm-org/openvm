@@ -46,12 +46,6 @@ __device__ inline void Rv32MultAdapter::fill_trace_row(RowSlice row, Rv32MultAda
     );
 
     for (int i = 0; i < 2; i++) {
-        COL_WRITE_VALUE(
-            row,
-            Rv32MultAdapterCols,
-            reads_aux[i].base.prev_timestamp,
-            record.reads_aux[i].prev_timestamp
-        );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv32MultAdapterCols, reads_aux[i])),
             record.reads_aux[i].prev_timestamp,
