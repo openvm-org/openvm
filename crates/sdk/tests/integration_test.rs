@@ -26,7 +26,7 @@ use openvm_sdk::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
+        setup_tracing, FriParameters,
     },
     openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
@@ -173,10 +173,9 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
 
 #[test]
 fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
+    setup_tracing();
     let app_log_blowup = 1;
-    let mut app_config = small_test_app_config(app_log_blowup);
-    app_config.app_vm_config.system.config.segmentation_strategy =
-        Arc::new(DefaultSegmentationStrategy::new_with_max_segment_len(256));
+    let app_config = small_test_app_config(app_log_blowup);
     let app_pk = Arc::new(AppProvingKey::keygen(app_config)?);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     let pc_start = app_committed_exe.exe.pc_start;
