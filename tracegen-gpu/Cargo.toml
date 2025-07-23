@@ -62,3 +62,4 @@ openvm-keccak256-transpiler = { workspace = true }
 [features]
 default = ["test-utils"]
 test-utils = ["openvm-circuit/test-utils"]
+touchemall = ["stark-backend-gpu/touchemall"]
