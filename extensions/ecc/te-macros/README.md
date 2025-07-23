@@ -32,7 +32,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
 }
 
 openvm_ecc_guest::te_macros::te_init! {
-    Ed25519Point,
+    "Ed25519Point",
 }
 
 pub fn main() {
@@ -50,7 +50,7 @@ The crate provides two macros: `te_declare!` and `te_init!`. The signatures are:
 
 - `te_declare!` receives comma-separated list of moduli classes descriptions. Each description looks like `TeStruct { mod_type = ModulusName, a = a_expr, d = d_expr }`. Here `ModulusName` is the name of any struct that implements `trait IntMod` -- in particular, the ones created by `moduli_declare!` do. Parameters `a` and `d` correspond to the coefficients of the equation defining the curve. They **must be compile-time constants**. Both the parameters `a` and `d` are required.
 
-- `te_init!` receives comma-separated list of struct names. The struct name must exactly match the name in `te_declare!` -- type defs are not allowed (see point 5 below).
+- `te_init!` receives comma-separated list of struct names as string literals. The struct name must exactly match the name in `te_declare!` -- type defs are not allowed (see point 5 below).
 
 What happens under the hood:
 
@@ -114,7 +114,7 @@ te_declare! {
 pub type Te = Ed25519Point;
 
 te_init! {
-    Te,
+    "Te",
 }
 ```
 
