@@ -110,7 +110,8 @@ __global__ void modular_is_equal_tracegen_kernel(
     const uint32_t* d_range_ctr,
     size_t range_bins,
     const uint32_t* d_bitwise_lut,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
@@ -121,7 +122,7 @@ __global__ void modular_is_equal_tracegen_kernel(
 
         VariableRangeChecker rc(const_cast<uint32_t*>(d_range_ctr), range_bins);
         BitwiseOperationLookup bl(const_cast<uint32_t*>(d_bitwise_lut), bitwise_num_bits);
-        Rv32IsEqualModAdapter<NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS> adapter(rc, bl, rc.max_bits());
+        Rv32IsEqualModAdapter<NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS> adapter(rc, bl, rc.max_bits(), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
 
         constexpr size_t adapter_cols = sizeof(Rv32IsEqualModAdapterCols<uint8_t, NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>);
@@ -147,7 +148,8 @@ extern "C" int _modular_is_equal_tracegen(
     const uint32_t* d_range_ctr,
     size_t range_bins,
     const uint32_t* d_bitwise_lut,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
@@ -171,7 +173,8 @@ extern "C" int _modular_is_equal_tracegen(
             d_range_ctr,
             range_bins,
             d_bitwise_lut,
-            bitwise_num_bits
+            bitwise_num_bits,
+            timestamp_max_bits
         );
     } else if (num_lanes == 3 && lane_size == 16 && total_limbs == 48) {
         using RecordType = ModularIsEqualRecord<NUM_READS, 3, 16, 48>;
@@ -190,7 +193,8 @@ extern "C" int _modular_is_equal_tracegen(
             d_range_ctr,
             range_bins,
             d_bitwise_lut,
-            bitwise_num_bits
+            bitwise_num_bits,
+            timestamp_max_bits
         );
     } else {
         return cudaErrorInvalidValue;

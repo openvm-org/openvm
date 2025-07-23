@@ -26,7 +26,8 @@ struct Rv32BranchAdapterRecord {
 struct Rv32BranchAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32BranchAdapter(VariableRangeChecker rc) : mem_helper(rc) {}
+    __device__ Rv32BranchAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+        : mem_helper(rc, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32BranchAdapterRecord rec) {
 

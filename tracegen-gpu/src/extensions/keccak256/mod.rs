@@ -38,6 +38,7 @@ pub struct Keccak256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub ptr_max_bits: u32,
+    pub timestamp_max_bits: u32,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Keccak256ChipGpu {
@@ -115,6 +116,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Keccak256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.timestamp_max_bits,
             )
             .unwrap();
         }

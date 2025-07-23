@@ -96,7 +96,8 @@ __global__ void jalr_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -105,7 +106,10 @@ __global__ void jalr_tracegen(
         auto full = reinterpret_cast<Rv32JalrRecord *>(records)[idx];
 
         // adapter pass
-        Rv32JalrAdapter adapter(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        Rv32JalrAdapter adapter(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, full.adapter);
 
         // core pass
@@ -128,7 +132,8 @@ extern "C" int _jalr_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert(height * sizeof(Rv32JalrRecord) >= record_len);
     assert(width == sizeof(Rv32JalrCols<uint8_t>));
@@ -143,7 +148,8 @@ extern "C" int _jalr_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

@@ -31,15 +31,18 @@ __global__ void rv32_less_than_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < num_records) {
         auto record = reinterpret_cast<LessThanRecord *>(records)[idx];
 
-        auto adapter =
-            Rv32BaseAluAdapter(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        auto adapter = Rv32BaseAluAdapter(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, record.adapter);
 
         auto core = Rv32LessThanCore(BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits));
@@ -58,7 +61,8 @@ extern "C" int _rv32_less_than_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     // We require the height to be a power of two for the tracegen to work
     assert((height & (height - 1)) == 0);
@@ -74,7 +78,8 @@ extern "C" int _rv32_less_than_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

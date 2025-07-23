@@ -56,7 +56,8 @@ __global__ void castf_tracegen(
     uint8_t *records,
     uint32_t rows_used,
     uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -64,7 +65,8 @@ __global__ void castf_tracegen(
         auto record = reinterpret_cast<CastFRecord<Fp> *>(records)[idx];
 
         auto adapter = ConvertAdapter<Fp, RV32_REGISTER_NUM_LIMBS>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
@@ -83,13 +85,15 @@ extern "C" int _castf_tracegen(
     uint8_t *d_records,
     uint32_t rows_used,
     uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(CastFCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     castf_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, rows_used, d_range_checker, range_checker_num_bins
+        d_trace, height, width, d_records, rows_used, d_range_checker, 
+        range_checker_num_bins, timestamp_max_bits
     );
     return cudaGetLastError();
 }

@@ -21,6 +21,7 @@ use crate::{
 pub struct Rv32LoadStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
@@ -52,6 +53,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
                 height,
                 self.pointer_max_bits,
                 &self.range_checker.count,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -68,7 +70,6 @@ mod test {
         arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout, MemoryConfig},
         system::memory::merkle::public_values::PUBLIC_VALUES_AS,
     };
-    use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
     use openvm_instructions::{
         instruction::Instruction,
         riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
@@ -79,13 +80,15 @@ mod test {
         LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreChip, Rv32LoadStoreStep,
     };
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness};
+    use crate::testing::{
+        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+    };
 
     const IMM_BITS: usize = 16;
     const MAX_INS_CAPACITY: usize = 128;
@@ -101,7 +104,7 @@ mod test {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
         let range_bus = default_var_range_checker_bus();
         // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_range_checker_chip = dummy_range_checker(range_bus);
         let air = Rv32LoadStoreAir::new(
             Rv32LoadStoreAdapterAir::new(
                 tester.memory_bridge(),
@@ -120,10 +123,14 @@ mod test {
                 Rv32LoadStoreAdapterFiller::new(tester.address_bits(), dummy_range_checker_chip),
                 Rv32LoadStoreOpcode::CLASS_OFFSET,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
-        let gpu_chip = Rv32LoadStoreChipGpu::new(tester.range_checker(), tester.address_bits());
+        let gpu_chip = Rv32LoadStoreChipGpu::new(
+            tester.range_checker(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+        );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -241,6 +248,7 @@ mod test {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

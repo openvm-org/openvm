@@ -12,7 +12,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use super::cuda::hintstore::tracegen;
+use super::cuda::hintstore_cuda::tracegen;
 use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
@@ -25,6 +25,7 @@ pub struct Rv32HintStoreChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub pointer_max_bits: usize,
+    pub timestamp_max_bits: usize,
 }
 
 // This is the info needed by each row to do parallel tracegen
@@ -75,6 +76,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS as u32,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -96,7 +98,7 @@ mod test {
         Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreFiller, Rv32HintStoreStep,
     };
     use openvm_rv32im_transpiler::Rv32HintStoreOpcode;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng, RngCore};
     use Rv32HintStoreOpcode::*;
@@ -132,13 +134,14 @@ mod test {
             Rv32HintStoreStep::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32HintStoreChip::<F>::new(
             Rv32HintStoreFiller::new(tester.address_bits(), dummy_bitwise_chip),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
         let gpu_chip = Rv32HintStoreChipGpu::new(
             tester.range_checker(),
             tester.bitwise_op_lookup(),
             tester.address_bits(),
+            tester.timestamp_max_bits(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -215,6 +218,7 @@ mod test {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

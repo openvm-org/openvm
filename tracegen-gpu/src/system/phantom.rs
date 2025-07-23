@@ -103,7 +103,7 @@ mod tests {
         }
 
         type Record<'a> = &'a mut PhantomRecord;
-        let cpu_chip = VmChipWrapper::new(PhantomFiller, tester.cpu_memory_helper());
+        let cpu_chip = VmChipWrapper::new(PhantomFiller, tester.dummy_memory_helper());
         let mut cpu_arena = MatrixRecordArena::<F>::with_capacity(
             next_power_of_two_or_zero(NUM_NOPS),
             <PhantomAir as BaseAir<F>>::width(&harness.air),

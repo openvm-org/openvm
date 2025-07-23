@@ -78,7 +78,7 @@ __device__ void _fill_trace_row(
     Fp *out = &row[COL_INDEX(typename Cols<N>::template type, is_right_larger)];
     Fp *decomp = &row[COL_INDEX(typename Cols<N>::template type, lt_aux)];
 
-    // TODO: replace 29 with `clk_max_bits` that we send here?
+    // TODO: replace 29 with `timestamp_max_bits` that we send here?
     IsLessThan::generate_subrow(
         range_checker, 29, left_timestamp, right_timestamp, AUX_LEN, RowSlice(decomp, padded_height), out
     );

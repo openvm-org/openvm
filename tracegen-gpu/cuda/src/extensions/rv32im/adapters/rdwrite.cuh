@@ -22,7 +22,8 @@ struct Rv32RdWriteAdapterRecord {
 struct Rv32RdWriteAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32RdWriteAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ Rv32RdWriteAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ inline void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32RdWriteAdapterCols, from_state.pc, record.from_pc);
@@ -46,9 +47,13 @@ template <typename T> struct Rv32CondRdWriteAdapterCols {
 
 struct Rv32CondRdWriteAdapter {
     MemoryAuxColsFactory mem_helper;
+    uint32_t timestamp_max_bits;
 
-    __device__ Rv32CondRdWriteAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ Rv32CondRdWriteAdapter(
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    )
+        : mem_helper(range_checker, timestamp_max_bits), timestamp_max_bits(timestamp_max_bits) {}
 
     __device__ inline void fill_trace_row(RowSlice row, Rv32RdWriteAdapterRecord record) {
         bool do_write = (record.rd_ptr != UINT32_MAX);
@@ -57,7 +62,7 @@ struct Rv32CondRdWriteAdapter {
         RowSlice inner = row.slice_from(COL_INDEX(Rv32CondRdWriteAdapterCols, inner));
 
         if (do_write) {
-            Rv32RdWriteAdapter adapter(mem_helper.range_checker);
+            Rv32RdWriteAdapter adapter(mem_helper.range_checker, timestamp_max_bits);
             adapter.fill_trace_row(inner, record);
         } else {
             inner.fill_zero(0, sizeof(Rv32RdWriteAdapterCols<uint8_t>));

@@ -31,8 +31,11 @@ template <typename F, size_t N> struct NativeVectorizedAdapterRecord {
 template <typename F, size_t N> struct NativeVectorizedAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ NativeVectorizedAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ NativeVectorizedAdapter(
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    )
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T> using Cols = NativeVectorizedAdapterCols<T, N>;
 

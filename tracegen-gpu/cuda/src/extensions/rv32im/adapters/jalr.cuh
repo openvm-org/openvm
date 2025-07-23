@@ -31,7 +31,8 @@ struct Rv32JalrAdapterRecord {
 struct Rv32JalrAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32JalrAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ Rv32JalrAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32JalrAdapterRecord record) {
         bool do_write = record.rd_ptr != UINT32_MAX;

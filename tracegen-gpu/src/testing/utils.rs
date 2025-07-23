@@ -116,8 +116,11 @@ pub fn dummy_range_tuple_checker(bus: RangeTupleCheckerBus<2>) -> SharedRangeTup
     SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::new(bus))
 }
 
-pub fn dummy_memory_helper(bus: VariableRangeCheckerBus, max_bits: usize) -> SharedMemoryHelper<F> {
-    SharedMemoryHelper::new(dummy_range_checker(bus), max_bits)
+pub fn dummy_memory_helper(
+    bus: VariableRangeCheckerBus,
+    timestamp_max_bits: usize,
+) -> SharedMemoryHelper<F> {
+    SharedMemoryHelper::new(dummy_range_checker(bus), timestamp_max_bits)
 }
 
 pub fn get_empty_air_proving_ctx<PB: ProverBackend>() -> AirProvingContext<PB> {

@@ -31,7 +31,8 @@ struct Rv32BaseAluAdapterRecord {
 struct Rv32BaseAluAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32BaseAluAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv32BaseAluAdapterCols, from_state.pc, record.from_pc);

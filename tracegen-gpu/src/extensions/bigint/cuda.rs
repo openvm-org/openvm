@@ -18,6 +18,7 @@ pub mod alu256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -28,6 +29,7 @@ pub mod alu256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_alu256_tracegen(
@@ -40,6 +42,7 @@ pub mod alu256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -58,6 +61,7 @@ pub mod beq256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -68,6 +72,7 @@ pub mod beq256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_branch_equal256_tracegen(
@@ -80,6 +85,7 @@ pub mod beq256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -98,6 +104,7 @@ pub mod lt256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -108,6 +115,7 @@ pub mod lt256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_less_than256_tracegen(
@@ -120,6 +128,7 @@ pub mod lt256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -138,6 +147,7 @@ pub mod blt256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -148,6 +158,7 @@ pub mod blt256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_branch_less_than256_tracegen(
@@ -160,6 +171,7 @@ pub mod blt256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -178,6 +190,7 @@ pub mod shift256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -188,6 +201,7 @@ pub mod shift256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_shift256_tracegen(
@@ -200,6 +214,7 @@ pub mod shift256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }
@@ -220,6 +235,7 @@ pub mod mul256 {
             bitwise_num_bits: usize,
             d_range_tuple: *const u32,
             range_tuple_sizes: UInt2,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -233,6 +249,7 @@ pub mod mul256 {
         bitwise_num_bits: usize,
         d_range_tuple: &DeviceBuffer<T>,
         range_tuple_sizes: UInt2,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
         CudaError::from_result(_multiplication256_tracegen(
@@ -247,6 +264,7 @@ pub mod mul256 {
             bitwise_num_bits,
             d_range_tuple.as_mut_ptr() as *mut u32,
             range_tuple_sizes,
+            timestamp_max_bits,
         ))
     }
 }

@@ -30,14 +30,18 @@ __global__ void alu_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < num_records) {
         auto rec = reinterpret_cast<Rv32BaseAluRecord *>(d_records)[idx];
 
-        Rv32BaseAluAdapter adapter(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        Rv32BaseAluAdapter adapter(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
+            timestamp_max_bits
+        );
         adapter.fill_trace_row(row, rec.adapter);
 
         Rv32BaseAluCore core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
@@ -56,7 +60,8 @@ extern "C" int _alu_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits
+    size_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(Rv32BaseAluRecord) >= record_len);
@@ -71,7 +76,8 @@ extern "C" int _alu_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

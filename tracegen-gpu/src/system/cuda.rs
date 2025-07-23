@@ -216,6 +216,7 @@ pub mod public_values {
             num_records: usize,
             d_range_checker: *mut u32,
             range_checker_bins: u32,
+            timestamp_max_bits: u32,
             num_custom_pvs: u32,
             max_degree: u32,
         ) -> i32;
@@ -229,6 +230,7 @@ pub mod public_values {
         d_records: &DeviceBuffer<u8>,
         num_records: usize,
         d_range_checker: &DeviceBuffer<T>,
+        timestamp_max_bits: u32,
         num_custom_pvs: usize,
         max_degree: u32,
     ) -> Result<(), CudaError> {
@@ -240,6 +242,7 @@ pub mod public_values {
             num_records,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            timestamp_max_bits,
             num_custom_pvs as u32,
             max_degree,
         ))

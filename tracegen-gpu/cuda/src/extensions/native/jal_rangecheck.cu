@@ -34,8 +34,8 @@ struct JalRangeCheck {
     MemoryAuxColsFactory mem_helper;
     VariableRangeChecker* range_checker;
 
-    __device__ JalRangeCheck(VariableRangeChecker* range_checker)
-        : mem_helper(*range_checker), range_checker(range_checker) {}
+    __device__ JalRangeCheck(VariableRangeChecker* range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(*range_checker, timestamp_max_bits), range_checker(range_checker) {}
 
     __device__ void fill_trace_row(RowSlice row, const JalRangeCheckRecord<Fp>& record) {
         COL_WRITE_VALUE(row, JalRangeCheckCols, is_jal, record.is_jal);
@@ -86,7 +86,8 @@ __global__ void jal_rangecheck_tracegen(
     const uint8_t* __restrict__ records,
     uint32_t num_records,
     uint32_t* __restrict__ range_checker_ptr,
-    uint32_t range_checker_max_bins) {
+    uint32_t range_checker_max_bins,
+    uint32_t timestamp_max_bits) {
     
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -96,7 +97,7 @@ __global__ void jal_rangecheck_tracegen(
         
         VariableRangeChecker range_checker(range_checker_ptr, range_checker_max_bins);
         
-        JalRangeCheck chip(&range_checker);
+        JalRangeCheck chip(&range_checker, timestamp_max_bits);
         chip.fill_trace_row(row, record);
     } else {
         row.fill_zero(0, width);
@@ -110,7 +111,8 @@ extern "C" int _native_jal_rangecheck_tracegen(
     const uint8_t* d_records,
     uint32_t num_records,
     uint32_t* d_range_checker,
-    uint32_t range_checker_max_bins) {
+    uint32_t range_checker_max_bins,
+    uint32_t timestamp_max_bits) {
     
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(JalRangeCheckCols<uint8_t>));
@@ -118,7 +120,7 @@ extern "C" int _native_jal_rangecheck_tracegen(
     auto [grid, block] = kernel_launch_params(height);
     jal_rangecheck_tracegen<<<grid, block>>>(
         (Fp*)d_trace, height, width, d_records, num_records,
-        d_range_checker, range_checker_max_bins);
+        d_range_checker, range_checker_max_bins, timestamp_max_bits);
     
     return cudaGetLastError();
 }

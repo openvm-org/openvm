@@ -64,7 +64,8 @@ __global__ void native_loadstore_tracegen(
     uint8_t *records,
     uint32_t rows_used,
     uint32_t *range_checker_ptr,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -72,7 +73,8 @@ __global__ void native_loadstore_tracegen(
         auto record = reinterpret_cast<NativeLoadStoreRecord<Fp, NUM_CELLS> *>(records)[idx];
 
         auto adapter = NativeLoadStoreAdapter<Fp, NUM_CELLS>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
         
@@ -94,7 +96,8 @@ extern "C" int _native_loadstore_tracegen(
     uint32_t rows_used,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t num_cells
+    uint32_t num_cells,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     auto [grid, block] = kernel_launch_params(height);
@@ -103,13 +106,15 @@ extern "C" int _native_loadstore_tracegen(
     case 1:
         assert(width == sizeof(NativeLoadStoreCols<uint8_t, 1>));
         native_loadstore_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, d_records, rows_used, d_range_checker, range_checker_num_bins
+            d_trace, height, width, d_records, rows_used, d_range_checker, 
+            range_checker_num_bins, timestamp_max_bits
         );
         break;
     case 4:
         assert(width == sizeof(NativeLoadStoreCols<uint8_t, 4>));
         native_loadstore_tracegen<4><<<grid, block>>>(
-            d_trace, height, width, d_records, rows_used, d_range_checker, range_checker_num_bins
+            d_trace, height, width, d_records, rows_used, d_range_checker, 
+            range_checker_num_bins, timestamp_max_bits
         );
         break;
     default:

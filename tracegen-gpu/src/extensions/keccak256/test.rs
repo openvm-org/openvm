@@ -43,6 +43,7 @@ fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

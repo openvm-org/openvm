@@ -40,6 +40,7 @@ pub mod keccak256 {
             range_checker_num_bins: usize,
             d_bitwise_lookup: *mut u32,
             bitwise_num_bits: usize,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -96,6 +97,7 @@ pub mod keccak256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_keccak256_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -113,6 +115,7 @@ pub mod keccak256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }

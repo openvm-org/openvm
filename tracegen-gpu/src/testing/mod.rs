@@ -428,6 +428,17 @@ impl GpuChipTestBuilder {
         SharedMemoryHelper::new(self.cpu_range_checker(), self.memory.config.clk_max_bits)
     }
 
+    // See [cpu_memory_helper]. Use this utility for creation of CPU chips that
+    // are meant for tracegen comparison purposes which should not update other
+    // periphery chips (e.g., range checker).
+    pub fn dummy_memory_helper(&self) -> SharedMemoryHelper<F> {
+        dummy_memory_helper(self.cpu_range_checker().bus(), self.timestamp_max_bits())
+    }
+
+    pub fn timestamp_max_bits(&self) -> usize {
+        self.memory.config.clk_max_bits
+    }
+
     pub fn build(self) -> GpuChipTester {
         GpuChipTester {
             var_range_checker: Some(self.var_range_checker),

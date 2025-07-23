@@ -95,7 +95,8 @@ __global__ void keccak256_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     auto row_idx = blockIdx.x * blockDim.x + threadIdx.x;
     auto round_idx = row_idx % NUM_ROUNDS;
@@ -103,7 +104,7 @@ __global__ void keccak256_tracegen(
     RowSlice row(trace + row_idx, height);
     if (row_idx < rows_used) {
         MemoryAuxColsFactory mem_helper(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         auto bitwise_lookup = BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits);
 
@@ -318,7 +319,8 @@ extern "C" int _keccak256_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height > total_num_blocks * NUM_ROUNDS);
@@ -338,7 +340,8 @@ extern "C" int _keccak256_tracegen(
         range_checker_ptr,
         range_checker_num_bins,
         bitwise_lookup_ptr,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

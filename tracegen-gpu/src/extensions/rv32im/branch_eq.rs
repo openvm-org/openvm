@@ -11,7 +11,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend,
 };
 
-use super::cuda::beq::tracegen;
+use super::cuda::beq_cuda::tracegen;
 use crate::{
     primitives::var_range::VariableRangeCheckerChipGPU, testing::get_empty_air_proving_ctx,
 };
@@ -19,6 +19,7 @@ use crate::{
 #[derive(new)]
 pub struct Rv32BranchEqualChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchEqualChipGpu {
@@ -46,6 +47,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32BranchEqualChipGpu {
                 trace_height,
                 &d_records,
                 &self.range_checker.count,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
@@ -72,7 +74,7 @@ mod tests {
         Rv32BranchEqualChip, Rv32BranchEqualStep,
     };
     use openvm_rv32im_transpiler::BranchEqualOpcode;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use stark_backend_gpu::prelude::F;
@@ -109,10 +111,11 @@ mod tests {
                 BranchEqualOpcode::CLASS_OFFSET,
                 DEFAULT_PC_STEP,
             ),
-            tester.cpu_memory_helper(),
+            tester.dummy_memory_helper(),
         );
 
-        let gpu_chip = Rv32BranchEqualChipGpu::new(tester.range_checker());
+        let gpu_chip =
+            Rv32BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
         GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -185,6 +188,7 @@ mod tests {
             .build()
             .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

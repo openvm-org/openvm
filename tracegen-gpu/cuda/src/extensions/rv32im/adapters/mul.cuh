@@ -29,7 +29,8 @@ struct Rv32MultAdapterRecord {
 struct Rv32MultAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv32MultAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ Rv32MultAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32MultAdapterRecord record);
 };

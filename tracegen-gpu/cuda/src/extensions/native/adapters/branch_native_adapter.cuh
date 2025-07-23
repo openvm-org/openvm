@@ -31,8 +31,8 @@ template <typename F> struct BranchNativeAdapterRecord {
 template <typename F> struct BranchNativeAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ BranchNativeAdapter(VariableRangeChecker range_checker)
-        : mem_helper(range_checker) {}
+    __device__ BranchNativeAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(RowSlice row, BranchNativeAdapterRecord<F> record) {
         COL_WRITE_VALUE(row, BranchNativeAdapterCols, from_state.pc, record.from_pc);

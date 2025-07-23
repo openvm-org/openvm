@@ -66,9 +66,11 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
             PARTIAL_ROUNDS>(poseidon2_row, RowSlice(state, 1));
     }
 
-    __device__ static void fill_specific(RowSlice row, VariableRangeChecker range_checker) {
+    __device__ static void fill_specific(
+        RowSlice row, VariableRangeChecker range_checker, uint32_t timestamp_max_bits
+    ) {
         RowSlice specific = row.slice_from(COL_INDEX(Cols, specific));
-        MemoryAuxColsFactory mem_helper(range_checker);
+        MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
         uint32_t start_timestamp = row[COL_INDEX(Cols, start_timestamp)].asUInt32();
 
         if (row[COL_INDEX(Cols, simple)] == Fp::one()) {
@@ -207,14 +209,15 @@ __global__ void cukernel_inplace_native_poseidon2_tracegen(
     size_t trace_width,
     size_t num_records,
     uint32_t *range_checker,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, trace_height);
     Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
     if (idx < num_records) {
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_specific(
-            row, VariableRangeChecker(range_checker, range_checker_num_bins)
+            row, VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
         );
     }
 }
@@ -227,7 +230,8 @@ __global__ void cukernel_native_poseidon2_tracegen(
     Fp *records,
     size_t num_records,
     uint32_t *range_checker,
-    uint32_t range_checker_num_bins
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, trace_height);
@@ -238,7 +242,7 @@ __global__ void cukernel_native_poseidon2_tracegen(
         }
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_specific(
-            row, VariableRangeChecker(range_checker, range_checker_num_bins)
+            row, VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
         );
     } else {
         row.fill_zero(0, trace_width);
@@ -253,20 +257,21 @@ extern "C" int _inplace_native_poseidon2_tracegen(
     size_t num_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    size_t sbox_regs
+    size_t sbox_regs,
+    uint32_t timestamp_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height);
     switch (sbox_regs) {
     case 1:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
         cukernel_inplace_native_poseidon2_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins
+            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
         );
         break;
     case 0:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
         cukernel_inplace_native_poseidon2_tracegen<0><<<grid, block>>>(
-            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins
+            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
         );
         break;
     default:
@@ -283,20 +288,22 @@ extern "C" int _native_poseidon2_tracegen(
     size_t num_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    size_t sbox_regs
+    size_t sbox_regs,
+    uint32_t timestamp_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height);
     switch (sbox_regs) {
     case 1:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
         cukernel_native_poseidon2_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins
+            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
         );
         break;
     case 0:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
         cukernel_native_poseidon2_tracegen<0><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins
+            d_trace, height, width, d_records, num_records,
+            d_range_checker,range_checker_num_bins, timestamp_max_bits
         );
         break;
     default:

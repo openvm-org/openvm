@@ -18,6 +18,7 @@ pub mod field_expression {
             range_checker_num_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -32,6 +33,7 @@ pub mod field_expression {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: u32,
+        timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_field_expression_tracegen(
             d_records.as_ptr(),
@@ -45,6 +47,7 @@ pub mod field_expression {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            timestamp_max_bits,
         ))
     }
 }

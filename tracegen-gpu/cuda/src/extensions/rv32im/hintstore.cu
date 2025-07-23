@@ -59,10 +59,11 @@ struct Rv32HintStore {
     __device__ Rv32HintStore(
         BitwiseOperationLookup bitwise_lookup,
         size_t pointer_max_bits,
-        VariableRangeChecker range_checker
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
     )
         : bitwise_lookup(bitwise_lookup), pointer_max_bits(pointer_max_bits),
-          mem_helper(range_checker) {}
+          mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_trace_row(
         RowSlice row,
@@ -139,7 +140,8 @@ __global__ void hintstore_tracegen(
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -157,7 +159,8 @@ __global__ void hintstore_tracegen(
         auto step = Rv32HintStore(
             BitwiseOperationLookup(bitwise_lookup_ptr, bitwise_num_bits),
             pointer_max_bits,
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins)
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
         );
         step.fill_trace_row(row, record_header, data_write, local_idx);
     } else {
@@ -176,7 +179,8 @@ extern "C" int _hintstore_tracegen(
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
-    uint32_t bitwise_num_bits
+    uint32_t bitwise_num_bits,
+    uint32_t timestamp_max_bits
 ) {
     assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
@@ -191,7 +195,8 @@ extern "C" int _hintstore_tracegen(
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,
-        bitwise_num_bits
+        bitwise_num_bits,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

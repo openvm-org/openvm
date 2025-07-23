@@ -31,7 +31,8 @@ __global__ void beq_tracegen(
     uint8_t *records,
     size_t num_records,
     uint32_t *rc_ptr,
-    uint32_t rc_bins
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
@@ -39,7 +40,7 @@ __global__ void beq_tracegen(
     if (idx < num_records) {
         auto full = reinterpret_cast<BranchEqualRecord *>(records)[idx];
 
-        Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins));
+        Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
 
         Rv32BranchEqualCore core;
@@ -56,7 +57,8 @@ extern "C" int _beq_tracegen(
     uint8_t *d_records,
     size_t record_len,
     uint32_t *d_rc,
-    uint32_t rc_bins
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
     assert(height * sizeof(BranchEqualRecord) >= record_len);
@@ -64,7 +66,8 @@ extern "C" int _beq_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     beq_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, record_len / sizeof(BranchEqualRecord), d_rc, rc_bins
+        d_trace, height, d_records, record_len / sizeof(BranchEqualRecord), 
+        d_rc, rc_bins, timestamp_max_bits
     );
     return cudaGetLastError();
 }

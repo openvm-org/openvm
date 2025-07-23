@@ -29,7 +29,8 @@ template <typename F, size_t WRITE_SIZE> struct ConvertAdapterRecord {
 template <typename F, size_t WRITE_SIZE> struct ConvertAdapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ ConvertAdapter(VariableRangeChecker range_checker) : mem_helper(range_checker) {}
+    __device__ ConvertAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
+        : mem_helper(range_checker, timestamp_max_bits) {}
 
     template <typename T> using Cols = ConvertAdapterCols<T, WRITE_SIZE>;
 
