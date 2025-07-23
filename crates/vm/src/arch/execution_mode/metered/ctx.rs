@@ -118,6 +118,10 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
+        let max_check_freq = (max_trace_height / 2) as u64;
+        if max_check_freq < self.segment_check_insns {
+            self.segment_check_insns = max_check_freq;
+        }
         self
     }
 
