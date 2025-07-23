@@ -170,11 +170,19 @@ jobs:
 
           failed=0
 
-          # Compare agg.pk with agg_halo2.pk
-          if cmp ~/.openvm-base/agg.pk ~/.openvm/agg.pk; then
-            echo "✅ agg.pk are identical"
+          # Compare agg_stark.pk
+          if cmp ~/.openvm-base/agg_stark.pk ~/.openvm/agg_stark.pk; then
+            echo "✅ agg_stark.pk are identical"
           else
-            echo "❌ agg.pk differ"
+            echo "❌ agg_stark.pk differ"
+            failed=1
+          fi
+
+          # Compare agg_halo2.pk
+          if cmp ~/.openvm-base/agg_halo2.pk ~/.openvm/agg_halo2.pk; then
+            echo "✅ agg_halo2.pk are identical"
+          else
+            echo "❌ agg_halo2.pk differ"
             failed=1
           fi
 
