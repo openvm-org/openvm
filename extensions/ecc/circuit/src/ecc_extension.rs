@@ -127,7 +127,7 @@ impl EccExtension {
         let supported_te_curves = self
             .supported_te_curves
             .iter()
-            .map(|curve_config| curve_config.struct_name.to_string())
+            .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
             .collect::<Vec<String>>()
             .join(", ");
 
