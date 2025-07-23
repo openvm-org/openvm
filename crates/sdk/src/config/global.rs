@@ -15,9 +15,7 @@ use openvm_circuit::{
     circuit_derive::{Chip, ChipUsageGetter},
     derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor},
 };
-use openvm_ecc_circuit::{
-    WeierstrassExtension, WeierstrassExtensionExecutor, WeierstrassExtensionPeriphery,
-};
+use openvm_ecc_circuit::{EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -62,7 +60,7 @@ pub struct SdkVmConfig {
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
-    pub ecc: Option<WeierstrassExtension>,
+    pub ecc: Option<EccExtension>,
 }
 
 #[derive(
@@ -92,7 +90,7 @@ pub enum SdkVmConfigExecutor<F: PrimeField32> {
     #[any_enum]
     Pairing(PairingExtensionExecutor<F>),
     #[any_enum]
-    Ecc(WeierstrassExtensionExecutor<F>),
+    Ecc(EccExtensionExecutor<F>),
     #[any_enum]
     CastF(CastFExtensionExecutor<F>),
 }
@@ -122,7 +120,7 @@ pub enum SdkVmConfigPeriphery<F: PrimeField32> {
     #[any_enum]
     Pairing(PairingExtensionPeriphery<F>),
     #[any_enum]
-    Ecc(WeierstrassExtensionPeriphery<F>),
+    Ecc(EccExtensionPeriphery<F>),
     #[any_enum]
     CastF(CastFExtensionPeriphery<F>),
 }
@@ -264,7 +262,7 @@ impl InitFileGenerator for SdkVmConfig {
             }
 
             if let Some(ecc_config) = &self.ecc {
-                contents.push_str(&ecc_config.generate_sw_init());
+                contents.push_str(&ecc_config.generate_ecc_init());
                 contents.push('\n');
             }
 
@@ -355,7 +353,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub modular: Option<ModularExtension>,
     pub fp2: Option<Fp2Extension>,
     pub pairing: Option<PairingExtension>,
-    pub ecc: Option<WeierstrassExtension>,
+    pub ecc: Option<EccExtension>,
 }
 
 impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {

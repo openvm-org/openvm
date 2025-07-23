@@ -22,7 +22,7 @@ use super::{WeierstrassAir, WeierstrassChip, WeierstrassStep};
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.
-pub fn ec_add_ne_expr(
+pub fn sw_add_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
 ) -> FieldExpr {
@@ -50,12 +50,12 @@ pub fn ec_add_ne_expr(
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 
 #[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
-pub struct EcAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub struct SwAddNeChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     pub WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
 );
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    EcAddNeChip<F, BLOCKS, BLOCK_SIZE>
+    SwAddNeChip<F, BLOCKS, BLOCK_SIZE>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -68,11 +68,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker: SharedVariableRangeCheckerChip,
     ) -> Self {
-        let expr = ec_add_ne_expr(config, range_checker.bus());
+        let expr = sw_add_ne_expr(config, range_checker.bus());
 
         let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-            Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+            Rv32WeierstrassOpcode::SW_ADD_NE as usize,
+            Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
         ];
 
         let air = WeierstrassAir::new(

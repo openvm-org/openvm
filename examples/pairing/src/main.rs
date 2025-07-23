@@ -19,7 +19,7 @@ openvm_algebra_moduli_macros::moduli_init! {
 }
 
 openvm_algebra_complex_macros::complex_init! {
-    Bls12_381Fp2 { mod_idx = 0 },
+    "Bls12_381Fp2" { mod_idx = 0 },
 }
 */
 // ANCHOR_END: init
