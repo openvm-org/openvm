@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Expr, ExprPath, Path, Token,
+    parse_macro_input, ExprPath, LitStr, Token,
 };
 
 /// This macro generates the code to setup a Twisted Edwards elliptic curve for a given modular
@@ -86,7 +86,7 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #te_add_extern_func(rd: usize, rs1: usize, rs2: usize);
-                fn #te_setup_extern_func();
+                fn #te_setup_extern_func(uninit: *mut core::ffi::c_void, p1: *const u8, p2: *const u8);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -143,7 +143,15 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
                     is_setup.get_or_init(|| {
-                        unsafe { #te_setup_extern_func(); }
+                        let modulus_bytes = <<Self as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                        let mut zero = [0u8; <<Self as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
+                        let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<Self as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
+                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
+                        let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
+                        let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
+
+                        unsafe { #te_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
                         <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
                     });
@@ -266,22 +274,16 @@ pub fn te_declare(input: TokenStream) -> TokenStream {
 }
 
 struct TeDefine {
-    items: Vec<Path>,
+    items: Vec<String>,
 }
 
 impl Parse for TeDefine {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
+        let items = input.parse_terminated(<LitStr as Parse>::parse, Token![,])?;
         Ok(Self {
             items: items
                 .into_iter()
-                .map(|e| {
-                    if let Expr::Path(p) = e {
-                        p.path
-                    } else {
-                        panic!("expected path");
-                    }
-                })
+                .map(|e| e.value())
                 .collect(),
         })
     }
@@ -295,17 +297,11 @@ pub fn te_init(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
-    for (ec_idx, item) in items.into_iter().enumerate() {
-        let str_path = item
-            .segments
-            .iter()
-            .map(|x| x.ident.to_string())
-            .collect::<Vec<_>>()
-            .join("_");
+    for (ec_idx, struct_id) in items.into_iter().enumerate() {
         let add_extern_func =
-            syn::Ident::new(&format!("te_add_extern_func_{}", str_path), span.into());
+            syn::Ident::new(&format!("te_add_extern_func_{}", struct_id), span.into());
         let setup_extern_func =
-            syn::Ident::new(&format!("te_setup_extern_func_{}", str_path), span.into());
+            syn::Ident::new(&format!("te_setup_extern_func_{}", struct_id), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #add_extern_func(rd: usize, rs1: usize, rs2: usize) {
@@ -321,26 +317,19 @@ pub fn te_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #setup_extern_func() {
+            extern "C" fn #setup_extern_func(uninit: *mut core::ffi::c_void, p1: *const u8, p2: *const u8) {
                 #[cfg(target_os = "zkvm")]
                 {
-                    use super::#item;
-                    let modulus_bytes = <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                    let mut zero = [0u8; <<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                    let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_A);
-                    let curve_d_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::edwards::TwistedEdwardsPoint>::CURVE_D);
-                    let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
-                    let p2 = [curve_d_bytes.as_ref(), zero.as_ref()].concat();
-                    let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
+
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_ecc_guest::TE_OPCODE,
                         funct3 = ::openvm_ecc_guest::TE_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::TeBaseFunct7::TeSetup as usize
                             + #ec_idx
                                 * (::openvm_ecc_guest::TeBaseFunct7::TWISTED_EDWARDS_MAX_KINDS as usize),
-                        rd = In uninit.as_mut_ptr(),
-                        rs1 = In p1.as_ptr(),
-                        rs2 = In p2.as_ptr(),
+                        rd = In uninit,
+                        rs1 = In p1,
+                        rs2 = In p2,
                     );
                 }
             }
