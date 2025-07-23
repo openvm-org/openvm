@@ -120,7 +120,7 @@ impl EccExtension {
         let supported_sw_curves = self
             .supported_sw_curves
             .iter()
-            .map(|curve_config| curve_config.struct_name.to_string())
+            .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
             .collect::<Vec<String>>()
             .join(", ");
 
