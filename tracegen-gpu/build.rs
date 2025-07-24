@@ -52,7 +52,8 @@ fn main() {
         .flag(format!("arch=compute_{},code=sm_{}", cuda_arch, cuda_arch));
 
     if is_debug {
-        common.flag("-O0").flag("-g");
+        println!("cargo:warning=Building in debug mode with -O1 -g");
+        common.flag("-O1").flag("-g");
     } else {
         common.flag(format!("--ptxas-options=-O{}", opt_level));
     }
