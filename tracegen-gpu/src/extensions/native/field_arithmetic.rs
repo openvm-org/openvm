@@ -1,161 +1,122 @@
 use std::{mem::size_of, sync::Arc};
 
+use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_native_circuit::{
-    adapters::AluNativeAdapterRecord, FieldArithmeticAir, FieldArithmeticRecord,
+    adapters::{AluNativeAdapterCols, AluNativeAdapterRecord},
+    FieldArithmeticCoreCols, FieldArithmeticRecord,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
-    prover_backend::GpuBackend,
-    types::SC,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
-    extensions::native::field_arithmetic_cuda, primitives::var_range::VariableRangeCheckerChipGPU,
-    DeviceChip,
+    extensions::native::field_arithmetic_cuda, get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
-pub struct FieldArithmeticChipGpu<'a> {
-    pub air: FieldArithmeticAir,
+#[derive(new)]
+pub struct FieldArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub arena: Option<&'a DenseRecordArena>,
+    pub timestamp_max_bits: usize,
 }
 
-impl<'a> FieldArithmeticChipGpu<'a> {
-    pub fn new(
-        air: FieldArithmeticAir,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-        arena: Option<&'a DenseRecordArena>,
-    ) -> Self {
-        Self {
-            air,
-            range_checker,
-            arena,
-        }
-    }
-}
-
-impl ChipUsageGetter for FieldArithmeticChipGpu<'_> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
+impl Chip<DenseRecordArena, GpuBackend> for FieldArithmeticChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(AluNativeAdapterRecord<F>, FieldArithmeticRecord<F>)>();
-        let buf = &self.arena.unwrap().allocated();
-        buf.len() / RECORD_SIZE
-    }
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+        assert_eq!(records.len() % RECORD_SIZE, 0);
 
-    fn trace_width(&self) -> usize {
-        use openvm_stark_backend::p3_air::BaseAir;
-        BaseAir::<F>::width(&self.air)
-    }
-}
+        let height = records.len() / RECORD_SIZE;
+        let padded_height = next_power_of_two_or_zero(height);
+        let trace_width =
+            AluNativeAdapterCols::<F>::width() + FieldArithmeticCoreCols::<F>::width();
+        let trace = DeviceMatrix::<F>::with_capacity(padded_height, trace_width);
 
-impl DeviceChip<SC, GpuBackend> for FieldArithmeticChipGpu<'_> {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
+        let d_records = records.to_device().unwrap();
 
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let buf = &self.arena.unwrap().allocated();
-        let d_records: DeviceBuffer<u8> = buf.to_device().unwrap();
-        let height = next_power_of_two_or_zero(self.current_trace_height());
-        let trace = DeviceMatrix::<F>::with_capacity(height, self.trace_width());
         unsafe {
             field_arithmetic_cuda::tracegen(
                 trace.buffer(),
-                height,
-                self.trace_width(),
+                padded_height,
+                trace_width,
                 &d_records,
                 self.range_checker.count.as_ptr() as *const u32,
                 self.range_checker.count.len(),
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
-        trace
+
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::arch::{
-        testing::memory::gen_pointer, DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena,
-        NewVmChipWrapper, VmAirWrapper,
-    };
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
-        adapters::{AluNativeAdapterAir, AluNativeAdapterStep},
-        FieldArithmeticCoreAir, FieldArithmeticStep,
+        adapters::{AluNativeAdapterAir, AluNativeAdapterFiller, AluNativeAdapterStep},
+        FieldArithmeticAir, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreFiller,
+        FieldArithmeticStep,
     };
     use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
-    use openvm_stark_backend::{
-        p3_field::{Field, FieldAlgebra},
-        verifier::VerificationError,
-    };
+    use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use test_case::test_case;
 
     use super::*;
-    use crate::{extensions::native::write_native_array, testing::GpuChipTestBuilder};
+    use crate::{
+        extensions::native::write_native_array,
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    };
 
     const MAX_INS_CAPACITY: usize = 128;
 
-    fn create_dense_native_chip(
+    fn create_test_harness(
         tester: &GpuChipTestBuilder,
-    ) -> NewVmChipWrapper<F, FieldArithmeticAir, FieldArithmeticStep, DenseRecordArena> {
-        let mut chip =
-            NewVmChipWrapper::<F, FieldArithmeticAir, FieldArithmeticStep, DenseRecordArena>::new(
-                VmAirWrapper::new(
-                    AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-                    FieldArithmeticCoreAir::new(),
-                ),
-                FieldArithmeticStep::new(AluNativeAdapterStep::new()),
-                tester.cpu_memory_helper(),
-            );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+    ) -> GpuTestChipHarness<
+        F,
+        FieldArithmeticStep,
+        FieldArithmeticAir,
+        FieldArithmeticChipGpu,
+        FieldArithmeticChip<F>,
+    > {
+        let adapter_air =
+            AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+        let core_air = FieldArithmeticCoreAir::new();
+        let air = FieldArithmeticAir::new(adapter_air, core_air);
+
+        let adapter_step = AluNativeAdapterStep::new();
+        let executor = FieldArithmeticStep::new(adapter_step);
+
+        let core_filler = FieldArithmeticCoreFiller::new(AluNativeAdapterFiller);
+
+        let cpu_chip = FieldArithmeticChip::new(core_filler, tester.dummy_memory_helper());
+        let gpu_chip =
+            FieldArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn create_sparse_native_chip(
-        tester: &GpuChipTestBuilder,
-    ) -> NewVmChipWrapper<F, FieldArithmeticAir, FieldArithmeticStep, MatrixRecordArena<F>> {
-        let mut chip = NewVmChipWrapper::<
-            F,
-            FieldArithmeticAir,
-            FieldArithmeticStep,
-            MatrixRecordArena<F>,
-        >::new(
-            VmAirWrapper::new(
-                AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-                FieldArithmeticCoreAir::new(),
-            ),
-            FieldArithmeticStep::new(AluNativeAdapterStep::new()),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
-
-    #[test_case(FieldArithmeticOpcode::ADD)]
-    #[test_case(FieldArithmeticOpcode::SUB)]
-    #[test_case(FieldArithmeticOpcode::MUL)]
-    #[test_case(FieldArithmeticOpcode::DIV)]
-    fn rand_field_arithmetic_tracegen_test(opcode: FieldArithmeticOpcode) {
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker();
+    #[test_case(FieldArithmeticOpcode::ADD, 100)]
+    #[test_case(FieldArithmeticOpcode::SUB, 100)]
+    #[test_case(FieldArithmeticOpcode::MUL, 100)]
+    #[test_case(FieldArithmeticOpcode::DIV, 100)]
+    fn rand_field_arithmetic_tracegen_test(opcode: FieldArithmeticOpcode, num_ops: usize) {
+        let mut tester = GpuChipTestBuilder::default();
         let mut rng = create_seeded_rng();
 
-        let mut dense_chip = create_dense_native_chip(&tester);
-        let mut gpu_chip =
-            FieldArithmeticChipGpu::new(dense_chip.air, tester.range_checker(), None);
-        let mut cpu_chip = create_sparse_native_chip(&tester);
+        let mut harness = create_test_harness(&tester);
 
-        for _ in 0..100 {
+        for _ in 0..num_ops {
             let b_val = rng.gen::<F>();
             let c_val = if opcode == FieldArithmeticOpcode::DIV {
                 loop {
@@ -173,7 +134,8 @@ mod tests {
 
             let a = gen_pointer(&mut rng, 1);
             tester.execute(
-                &mut dense_chip,
+                &mut harness.executor,
+                &mut harness.dense_arena,
                 &Instruction::new(
                     opcode.global_opcode(),
                     F::from_canonical_usize(a),
@@ -192,19 +154,19 @@ mod tests {
             &'a mut FieldArithmeticRecord<F>,
         );
 
-        dense_chip
-            .arena
+        harness
+            .dense_arena
             .get_record_seeker::<Record<'_>, _>()
             .transfer_to_matrix_arena(
-                &mut cpu_chip.arena,
+                &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<F, AluNativeAdapterStep>::new(),
             );
-        gpu_chip.arena = Some(&dense_chip.arena);
 
         tester
             .build()
-            .load_and_compare(gpu_chip, cpu_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

@@ -1,6 +1,7 @@
 mod branch_eq;
 mod castf;
 mod cuda;
+//mod extension;
 mod field_arithmetic;
 mod field_extension;
 mod fri;

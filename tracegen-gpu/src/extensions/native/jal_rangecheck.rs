@@ -1,57 +1,40 @@
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_native_circuit::{JalRangeCheckAir, JalRangeCheckRecord};
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
+use openvm_native_circuit::{JalRangeCheckCols, JalRangeCheckRecord};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
-    extensions::native::native_jal_rangecheck_cuda,
-    primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip,
+    extensions::native::native_jal_rangecheck_cuda, get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
 #[derive(new)]
 pub struct JalRangeCheckGpu {
-    pub air: JalRangeCheckAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub arena: DenseRecordArena,
+    pub timestamp_max_bits: usize,
 }
 
-impl ChipUsageGetter for JalRangeCheckGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
+impl Chip<DenseRecordArena, GpuBackend> for JalRangeCheckGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        const RECORD_SIZE: usize = size_of::<JalRangeCheckRecord<F>>();
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+        assert_eq!(records.len() % RECORD_SIZE, 0);
 
-    fn current_trace_height(&self) -> usize {
-        let record_size = size_of::<JalRangeCheckRecord<F>>();
-        let records_len = self.arena.allocated().len();
-        assert_eq!(records_len % record_size, 0);
-        records_len / record_size
-    }
+        let width = JalRangeCheckCols::<F>::width();
 
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl DeviceChip<SC, GpuBackend> for JalRangeCheckGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let d_records = self.arena.allocated().to_device().unwrap();
-        let height = self.current_trace_height();
+        let height = records.len() / RECORD_SIZE;
         let padded_height = next_power_of_two_or_zero(height);
-        let width = self.trace_width();
         let trace = DeviceMatrix::<F>::with_capacity(padded_height, width);
+
+        let d_records = records.to_device().unwrap();
 
         unsafe {
             native_jal_rangecheck_cuda::tracegen(
@@ -61,70 +44,61 @@ impl DeviceChip<SC, GpuBackend> for JalRangeCheckGpu {
                 &d_records,
                 height as u32,
                 &self.range_checker.count,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
 
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use openvm_circuit::arch::{EmptyMultiRowLayout, NewVmChipWrapper};
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyMultiRowLayout};
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
-    use openvm_native_circuit::{JalRangeCheckChip, JalRangeCheckStep};
+    use openvm_native_circuit::{
+        JalRangeCheckAir, JalRangeCheckFiller, JalRangeCheckStep, NativeJalRangeCheckChip,
+    };
     use openvm_native_compiler::{conversion::AS, NativeJalOpcode, NativeRangeCheckOpcode};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::GpuChipTestBuilder;
+    use crate::testing::{
+        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+    };
 
     const MAX_INS_CAPACITY: usize = 128;
-    type DenseChip<F> = NewVmChipWrapper<F, JalRangeCheckAir, JalRangeCheckStep, DenseRecordArena>;
-    type SparseChip<F> = JalRangeCheckChip<F>;
 
-    fn create_test_dense_chip(tester: &GpuChipTestBuilder) -> DenseChip<F> {
-        let range_checker = tester.cpu_range_checker().clone();
-        let mut chip = DenseChip::<F>::new(
-            JalRangeCheckAir::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                range_checker.bus(),
-            ),
-            JalRangeCheckStep::new(range_checker),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
+    fn create_test_harness(
+        tester: &GpuChipTestBuilder,
+    ) -> GpuTestChipHarness<
+        F,
+        JalRangeCheckStep,
+        JalRangeCheckAir,
+        JalRangeCheckGpu,
+        NativeJalRangeCheckChip<F>,
+    > {
+        let range_bus = default_var_range_checker_bus();
+        let air =
+            JalRangeCheckAir::new(tester.execution_bridge(), tester.memory_bridge(), range_bus);
+        let executor = JalRangeCheckStep::new();
+        let filler = JalRangeCheckFiller::new(dummy_range_checker(range_bus));
+        let cpu_chip = NativeJalRangeCheckChip::<F>::new(filler, tester.dummy_memory_helper());
+        let gpu_chip = JalRangeCheckGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
-    fn create_test_sparse_chip(tester: &GpuChipTestBuilder) -> SparseChip<F> {
-        let range_checker = tester.cpu_range_checker().clone();
-        let mut chip = SparseChip::<F>::new(
-            JalRangeCheckAir::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                range_checker.bus(),
-            ),
-            JalRangeCheckStep::new(range_checker),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[test_case(NativeJalOpcode::JAL.global_opcode(), 100)]
     #[test_case(NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(), 100)]
     fn test_jal_rangecheck_tracegen(opcode: VmOpcode, num_ops: usize) {
-        use openvm_circuit::arch::testing::memory::gen_pointer;
-
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker();
-        let mut dense_chip = create_test_dense_chip(&tester);
+        let mut tester = GpuChipTestBuilder::default();
+        let mut harness = create_test_harness(&tester);
 
         for _ in 0..num_ops {
             if opcode == NativeJalOpcode::JAL.global_opcode() {
@@ -133,7 +107,8 @@ mod test {
                 let b = rng.gen_range(0..(1 << 16));
 
                 tester.execute_with_pc(
-                    &mut dense_chip,
+                    &mut harness.executor,
+                    &mut harness.dense_arena,
                     &Instruction::from_usize(
                         opcode,
                         [a, b as usize, 0, AS::Native as usize, 0, 0, 0],
@@ -154,7 +129,8 @@ mod test {
                 let c = rng.gen_range(min_c..=14);
 
                 tester.execute(
-                    &mut dense_chip,
+                    &mut harness.executor,
+                    &mut harness.dense_arena,
                     &Instruction::from_usize(
                         opcode,
                         [a, b as usize, c as usize, AS::Native as usize, 0, 0, 0],
@@ -163,22 +139,18 @@ mod test {
             }
         }
 
-        let mut sparse_chip = create_test_sparse_chip(&tester);
-
         type Record<'a> = &'a mut JalRangeCheckRecord<F>;
 
-        dense_chip
-            .arena
+        harness
+            .dense_arena
             .get_record_seeker::<Record<'_>, EmptyMultiRowLayout>()
-            .transfer_to_matrix_arena(&mut sparse_chip.arena);
-
-        let gpu_chip =
-            JalRangeCheckGpu::new(dense_chip.air, tester.range_checker(), dense_chip.arena);
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

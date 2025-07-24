@@ -643,7 +643,6 @@ impl GpuChipTester {
                 self = self.load_air_proving_ctx(air, ctx);
             }
         }
-
         if let Some(var_range_checker) = self.var_range_checker.take() {
             self = self.load_periphery(
                 VariableRangeCheckerAir::new(var_range_checker.cpu_chip.as_ref().unwrap().bus()),

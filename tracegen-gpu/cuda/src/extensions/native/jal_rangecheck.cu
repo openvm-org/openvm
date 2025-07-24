@@ -4,6 +4,7 @@
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include "trace_access.h"
+#include <cstdio>
 
 using namespace riscv;
 using namespace program;
@@ -32,10 +33,10 @@ template <typename F> struct JalRangeCheckRecord {
 
 struct JalRangeCheck {
     MemoryAuxColsFactory mem_helper;
-    VariableRangeChecker* range_checker;
+    VariableRangeChecker range_checker;
 
-    __device__ JalRangeCheck(VariableRangeChecker* range_checker, uint32_t timestamp_max_bits)
-        : mem_helper(*range_checker, timestamp_max_bits), range_checker(range_checker) {}
+    __device__ JalRangeCheck(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+        : mem_helper(rc, timestamp_max_bits), range_checker(rc) {}
 
     __device__ void fill_trace_row(RowSlice row, const JalRangeCheckRecord<Fp>& record) {
         COL_WRITE_VALUE(row, JalRangeCheckCols, is_jal, record.is_jal);
@@ -68,27 +69,30 @@ struct JalRangeCheck {
             uint32_t b_bits = record.b.asUInt32();
             uint32_t c_bits = record.c.asUInt32();
 
+#ifdef DEBUG
             assert(b_bits <= 16);
             assert(c_bits <= 14);
             assert(x < (1 << b_bits));
             assert(y < (1 << c_bits));
-            
-            range_checker->add_count(x, b_bits);
-            range_checker->add_count(y, c_bits);
+#endif
+
+            range_checker.add_count(x, b_bits);
+            range_checker.add_count(y, c_bits);
         }
     }
 };
 
 __global__ void jal_rangecheck_tracegen(
-    Fp* __restrict__ trace,
+    Fp *__restrict__ trace,
     uint32_t height,
     uint32_t width,
-    const uint8_t* __restrict__ records,
+    const uint8_t *__restrict__ records,
     uint32_t num_records,
-    uint32_t* __restrict__ range_checker_ptr,
+    uint32_t *range_checker_ptr,
     uint32_t range_checker_max_bins,
-    uint32_t timestamp_max_bits) {
-    
+    uint32_t timestamp_max_bits
+) {
+
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     
@@ -96,8 +100,8 @@ __global__ void jal_rangecheck_tracegen(
         auto record = reinterpret_cast<const JalRangeCheckRecord<Fp>*>(records)[idx];
         
         VariableRangeChecker range_checker(range_checker_ptr, range_checker_max_bins);
-        
-        JalRangeCheck chip(&range_checker, timestamp_max_bits);
+
+        JalRangeCheck chip(range_checker, timestamp_max_bits);
         chip.fill_trace_row(row, record);
     } else {
         row.fill_zero(0, width);
