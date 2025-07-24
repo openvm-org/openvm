@@ -14,10 +14,10 @@ use stark_backend_gpu::{
 
 use super::cuda::hintstore_cuda::tracegen;
 use crate::{
+    get_empty_air_proving_ctx,
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
     },
-    testing::get_empty_air_proving_ctx,
 };
 
 #[derive(new)]

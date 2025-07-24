@@ -15,8 +15,8 @@ use stark_backend_gpu::{
 
 use super::cuda::mul_cuda::tracegen as mul_tracegen;
 use crate::{
+    get_empty_air_proving_ctx,
     primitives::{range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU},
-    testing::get_empty_air_proving_ctx,
     UInt2,
 };
 

@@ -22,11 +22,11 @@ use stark_backend_gpu::{
 };
 
 use crate::{
+    get_empty_air_proving_ctx,
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
         var_range::VariableRangeCheckerChipGPU,
     },
-    testing::get_empty_air_proving_ctx,
     UInt2,
 };
 

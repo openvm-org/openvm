@@ -14,7 +14,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{system::cuda, testing::get_empty_air_proving_ctx};
+use crate::{get_empty_air_proving_ctx, system::cuda};
 
 #[derive(new)]
 pub struct PhantomChipGPU;

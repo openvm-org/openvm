@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+#[cfg(feature = "metrics")]
+use openvm_circuit::metrics::VmMetrics;
 use openvm_circuit::{
     arch::{
         instructions::instruction::Instruction,
@@ -128,6 +130,8 @@ pub struct GpuChipTestBuilder {
     rng: StdRng,
     default_register: usize,
     default_pointer: usize,
+    #[cfg(feature = "metrics")]
+    metrics: VmMetrics,
 }
 
 impl Default for GpuChipTestBuilder {
@@ -164,6 +168,8 @@ impl GpuChipTestBuilder {
             rng: StdRng::seed_from_u64(0),
             default_register: 0,
             default_pointer: 0,
+            #[cfg(feature = "metrics")]
+            metrics: VmMetrics::default(),
         }
     }
 
@@ -225,6 +231,8 @@ impl GpuChipTestBuilder {
             streams: &mut self.streams,
             rng: &mut self.rng,
             ctx: arena,
+            #[cfg(feature = "metrics")]
+            metrics: &mut self.metrics,
         };
 
         executor
