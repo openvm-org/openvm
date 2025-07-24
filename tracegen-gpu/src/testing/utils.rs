@@ -22,10 +22,7 @@ use openvm_circuit_primitives::{
 use openvm_stark_backend::{
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_util::log2_strict_usize,
-    prover::{
-        hal::{MatrixDimensions, ProverBackend},
-        types::AirProvingContext,
-    },
+    prover::hal::MatrixDimensions,
 };
 use stark_backend_gpu::{
     base::DeviceMatrix, data_transporter::transport_device_matrix_to_host, types::F,
@@ -121,12 +118,4 @@ pub fn dummy_memory_helper(
     timestamp_max_bits: usize,
 ) -> SharedMemoryHelper<F> {
     SharedMemoryHelper::new(dummy_range_checker(bus), timestamp_max_bits)
-}
-
-pub fn get_empty_air_proving_ctx<PB: ProverBackend>() -> AirProvingContext<PB> {
-    AirProvingContext {
-        cached_mains: vec![],
-        common_main: None,
-        public_values: vec![],
-    }
 }

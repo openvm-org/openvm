@@ -13,9 +13,7 @@ use stark_backend_gpu::{
 };
 
 use super::cuda::loadstore_cuda;
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU, testing::get_empty_air_proving_ctx,
-};
+use crate::{get_empty_air_proving_ctx, primitives::var_range::VariableRangeCheckerChipGPU};
 
 #[derive(new)]
 pub struct Rv32LoadStoreChipGpu {

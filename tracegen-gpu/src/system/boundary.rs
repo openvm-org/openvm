@@ -18,12 +18,12 @@ use stark_backend_gpu::{
 };
 
 use crate::{
+    get_empty_air_proving_ctx,
     primitives::var_range::VariableRangeCheckerChipGPU,
     system::{
         cuda::boundary::{persistent_boundary_tracegen, volatile_boundary_tracegen},
         poseidon2::SharedBuffer,
     },
-    testing::get_empty_air_proving_ctx,
 };
 
 pub struct PersistentBoundary {

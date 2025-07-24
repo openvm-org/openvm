@@ -2,7 +2,11 @@ use std::marker::PhantomData;
 
 use derive_new::new;
 use openvm_stark_backend::{
-    prover::{cpu::CpuBackend, hal::MatrixDimensions, types::AirProvingContext},
+    prover::{
+        cpu::CpuBackend,
+        hal::{MatrixDimensions, ProverBackend},
+        types::AirProvingContext,
+    },
     Chip,
 };
 use stark_backend_gpu::{
@@ -15,6 +19,14 @@ use stark_backend_gpu::{
 pub struct UInt2 {
     pub x: u32,
     pub y: u32,
+}
+
+pub fn get_empty_air_proving_ctx<PB: ProverBackend>() -> AirProvingContext<PB> {
+    AirProvingContext {
+        cached_mains: vec![],
+        common_main: None,
+        public_values: vec![],
+    }
 }
 
 // Wraps a CPU chip for use with GpuBackend

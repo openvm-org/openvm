@@ -13,8 +13,8 @@ use stark_backend_gpu::{
 };
 
 use crate::{
-    extensions::rv32im::cuda::load_sign_extend_cuda,
-    primitives::var_range::VariableRangeCheckerChipGPU, testing::get_empty_air_proving_ctx,
+    extensions::rv32im::cuda::load_sign_extend_cuda, get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
 #[derive(new)]
