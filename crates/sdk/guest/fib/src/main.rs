@@ -4,7 +4,8 @@
 openvm::entry!(main);
 
 pub fn main() {
-    let n = core::hint::black_box(1 << 3);
+    // arbitrary n that results in more than 1 segment
+    let n = core::hint::black_box((1 << 5) + 4);
     let mut a: u32 = 0;
     let mut b: u32 = 1;
     for _ in 1..n {
