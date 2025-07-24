@@ -3,10 +3,19 @@ use std::{env, process::Command};
 fn main() {
     println!("cargo:rerun-if-changed=../backend/cuda/include");
     println!("cargo:rerun-if-changed=cuda");
-    println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-env-changed=CUDA_ARCH");
     println!("cargo:rerun-if-env-changed=CUDA_OPT_LEVEL");
     println!("cargo:rerun-if-changed=build.rs");
+    // The line below is intentionally removed.
+    // println!("cargo:rerun-if-changed=src");
+    // Add a recursive search for files either in 'cuda' directory or named 'cuda*.rs' within 'src'
+    if let Ok(paths) = glob::glob("src/**/cuda*") {
+        for path in paths.filter_map(Result::ok) {
+            if path.is_file() {
+                println!("cargo:rerun-if-changed={}", path.display());
+            }
+        }
+    }
 
     let cuda_arch = env::var("CUDA_ARCH").unwrap_or_else(|_| {
         let output = Command::new("nvidia-smi")

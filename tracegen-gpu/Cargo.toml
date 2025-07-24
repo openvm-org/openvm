@@ -48,6 +48,7 @@ num-bigint = "0.4"
 
 [build-dependencies]
 cc = { version = "1.0", features = ["parallel"] } # For CUDA compilation
+glob.workspace = true
 
 [dev-dependencies]
 test-case = { workspace = true }
