@@ -149,14 +149,13 @@ impl AssertLtSubAir {
         let mut bits_remaining = self.max_bits;
         // we range check the limbs of the lower_decomp so that we know each element
         // of lower_decomp has the correct number of bits
-        for limb in lower_decomp {
-            // the last limb might have fewer than `bus.range_max_bits` bits
-            let range_bits = bits_remaining.min(self.range_max_bits());
-            self.bus
-                .range_check(*limb, range_bits)
-                .eval(builder, count.clone());
-            bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
-        }
+        let limb = lower_decomp[0];
+        // the last limb might have fewer than `bus.range_max_bits` bits
+        let range_bits = bits_remaining.min(self.range_max_bits());
+        self.bus
+            .range_check(limb, range_bits)
+            .eval(builder, count.clone());
+        bits_remaining = bits_remaining.saturating_sub(self.range_max_bits());
     }
 }
 
