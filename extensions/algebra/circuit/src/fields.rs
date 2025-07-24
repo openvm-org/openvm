@@ -281,6 +281,7 @@ pub fn field_element_to_blocks<F: PrimeField<Repr = [u8; 32]>, const BLOCK_SIZE:
     field_element: &F,
     output: &mut [[u8; BLOCK_SIZE]],
 ) {
+    debug_assert!(output.len() * BLOCK_SIZE == 32);
     let bytes = field_element.to_repr();
     let mut byte_idx = 0;
 
