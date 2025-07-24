@@ -95,7 +95,7 @@ struct Rv32VecHeapAdapter {
             READ_SIZE,
             WRITE_SIZE> record
     ) {
-        const size_t limb_shift_bits = RV32_REGISTER_TOTAL_BITS - pointer_max_bits;
+        const size_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits;
 
         if (NUM_READS > 1) {
             bitwise_lookup.add_range(
