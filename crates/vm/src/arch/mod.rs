@@ -7,6 +7,9 @@ pub mod execution_mode;
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
+/// [RecordArena] trait definitions and implementations. Currently there are two concrete
+/// implementations: [MatrixRecordArena] and [DenseRecordArena].
+mod record_arena;
 /// Runtime execution and segmentation
 // TODO: rename this module
 pub mod segment;
@@ -27,6 +30,7 @@ pub use execution::*;
 pub use extensions::*;
 pub use integration_api::*;
 pub use openvm_instructions as instructions;
+pub use record_arena::*;
 pub use segment::*;
 pub use segmentation_strategy::*;
 pub use vm::*;
