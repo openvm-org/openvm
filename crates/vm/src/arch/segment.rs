@@ -11,7 +11,7 @@ use crate::{
             E1ExecutionCtx,
         },
         instructions::*,
-        InstructionExecutor,
+        Arena, InstructionExecutor,
     },
     system::{
         memory::online::{GuestMemory, TracingMemory},
@@ -137,6 +137,7 @@ where
         state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
+        RA: Arena,
         E: InstructionExecutor<F, RA>,
     {
         loop {
@@ -163,6 +164,7 @@ where
         state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
+        RA: Arena,
         E: InstructionExecutor<F, RA>,
     {
         let pc = state.pc;
@@ -180,51 +182,27 @@ where
         // Execute the instruction using the control implementation
         self.ctrl.execute_instruction(state, executor, pc_entry)?;
 
-        // #[cfg(feature = "bench-metrics")]
-        // {
-        //     self.update_instruction_metrics(pc, opcode, dsl_instr);
-        // }
+        #[cfg(feature = "metrics")]
+        {
+            crate::metrics::update_instruction_metrics(state, executor, pc_entry);
+        }
 
         Ok(())
     }
-
-    // #[cfg(feature = "bench-metrics")]
-    // #[allow(unused_variables)]
-    // pub fn update_instruction_metrics(
-    //     &mut self,
-    //     pc: u32,
-    //     opcode: VmOpcode,
-    //     dsl_instr: Option<String>,
-    // ) {
-    //     use crate::arch::InstructionExecutor;
-
-    // *prev_backtrace = trace.cloned();
-    //     let executor = self.chip_complex.inventory.get_executor(opcode).unwrap();
-    //     let opcode_name = executor.get_opcode_name(opcode.as_usize());
-    //     self.metrics.update_trace_cells(
-    //         &self.air_names,
-    //         self.chip_complex.current_trace_cells(),
-    //         opcode_name,
-    //         dsl_instr,
-    //     );
-
-    //     #[cfg(feature = "function-span")]
-    //     self.metrics.update_current_fn(pc);
-    // }
 }
 
 /// Macro for executing with a compile-time span name for better tracing performance
 #[macro_export]
 macro_rules! execute_spanned {
     ($name:literal, $executor:expr, $state:expr) => {{
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start_instret = $state.instret;
 
         let result = tracing::info_span!($name).in_scope(|| $executor.execute_from_state($state));
 
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
             let insns = $state.instret - start_instret;

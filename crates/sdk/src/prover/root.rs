@@ -73,7 +73,7 @@ impl RootVerifierLocalProver {
         Self::permute_pk(vm, &self.air_id_inv_perm);
         assert!(!vm.config().as_ref().continuation_enabled);
         let input = input.write();
-        let state = vm.executor().create_initial_state(&exe, input);
+        let state = vm.create_initial_state(&exe, input);
         vm.transport_init_memory_to_device(&state.memory);
         let PreflightExecutionOutput {
             system_records,
@@ -133,7 +133,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         // permutation is conceptually simpler to track.
         Self::permute_pk(vm, &self.air_id_inv_perm);
         assert!(!vm.config().as_ref().continuation_enabled);
-        let state = vm.executor().create_initial_state(&exe, input);
+        let state = vm.create_initial_state(&exe, input);
         vm.transport_init_memory_to_device(&state.memory);
 
         let trace_heights = &self.fixed_air_heights;

@@ -74,13 +74,13 @@ evm-verify = [
     "dep:alloy-sol-types",
     "dep:forge-fmt",
 ]
-bench-metrics = [
-    "openvm-circuit/bench-metrics",
-    "openvm-native-recursion/bench-metrics",
-    "openvm-native-compiler/bench-metrics",
+metrics = [
+    "openvm-circuit/metrics",
+    "openvm-native-recursion/metrics",
+    "openvm-native-compiler/metrics",
 ]
 # for guest profiling:
-profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
+perf-metrics = ["openvm-circuit/perf-metrics", "openvm-transpiler/function-span"]
 test-utils = ["openvm-circuit/test-utils"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)

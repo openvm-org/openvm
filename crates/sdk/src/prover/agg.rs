@@ -146,7 +146,7 @@ where
                 group = format!("internal.{internal_node_height}")
             )
             .in_scope(|| {
-                #[cfg(feature = "bench-metrics")]
+                #[cfg(feature = "metrics")]
                 {
                     metrics::counter!("fri.log_blowup")
                         .absolute(self.internal_prover.vm.engine.fri_params().log_blowup as u64);
@@ -218,7 +218,7 @@ where
                 group = format!("internal_wrapper.{wrapper_layers}")
             )
             .in_scope(|| {
-                #[cfg(feature = "bench-metrics")]
+                #[cfg(feature = "metrics")]
                 {
                     metrics::counter!("fri.log_blowup")
                         .absolute(internal_prover.vm.engine.fri_params().log_blowup as u64);
@@ -243,7 +243,7 @@ where
         root_input: RootVmVerifierInput<SC>,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
         let input = root_input.write();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::counter!("fri.log_blowup")
             .absolute(self.root_prover.fri_params().log_blowup as u64);
         SingleSegmentVmProver::prove(&mut self.root_prover, input, NATIVE_MAX_TRACE_HEIGHTS)
@@ -268,7 +268,7 @@ impl LeafProvingController {
         <NativeConfig as VmExecutionConfig<F>>::Executor:
             InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         {
             metrics::counter!("fri.log_blowup")
                 .absolute(prover.vm.engine.fri_params().log_blowup as u64);

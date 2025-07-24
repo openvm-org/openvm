@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
@@ -88,7 +88,7 @@ pub struct VmStateMut<'a, F, MEM, CTX> {
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
     pub ctx: &'a mut CTX,
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,
 }
 

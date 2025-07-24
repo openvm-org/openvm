@@ -172,7 +172,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             streams: &mut self.streams,
             rng: &mut self.rng,
             ctx: &mut harness.arena,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics: &mut Default::default(),
         };
         harness

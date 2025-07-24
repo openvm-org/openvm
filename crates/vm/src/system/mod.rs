@@ -100,8 +100,8 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// in the AIR ID order.
     ///
     /// The default implementation does nothing.
-    #[cfg(feature = "bench-metrics")]
-    fn update_trace_heights(&self, _heights: &mut [usize]) {}
+    #[cfg(feature = "metrics")]
+    fn finalize_trace_heights(&self, _heights: &mut [usize]) {}
 }
 
 /// Trait meant to be implemented on a SystemChipComplex.
@@ -470,8 +470,8 @@ where
             .collect()
     }
 
-    #[cfg(feature = "bench-metrics")]
-    fn update_trace_heights(&self, heights: &mut [usize]) {
+    #[cfg(feature = "metrics")]
+    fn finalize_trace_heights(&self, heights: &mut [usize]) {
         use openvm_stark_backend::ChipUsageGetter;
 
         use crate::system::memory::interface::MemoryInterface;

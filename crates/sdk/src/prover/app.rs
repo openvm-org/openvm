@@ -77,7 +77,7 @@ where
                 .unwrap_or(&"app_proof".to_string())
         )
         .in_scope(|| {
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.vm.engine.fri_params().log_blowup as u64);
             ContinuationVmProver::prove(&mut self.app_prover, input)
@@ -105,7 +105,7 @@ where
                 .unwrap_or(&"app_proof".to_string())
         )
         .in_scope(|| {
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.vm.engine.fri_params().log_blowup as u64);
             SingleSegmentVmProver::prove(&mut self.app_prover, input, trace_heights)

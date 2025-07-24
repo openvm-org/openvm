@@ -89,7 +89,7 @@ jobs:
             FEATURE_FLAGS="aggregation,${FEATURE_FLAGS}"
           fi
           if [[ "${{ github.event.inputs.flamegraphs }}" == "true" ]]; then
-            FEATURE_FLAGS="profiling,${FEATURE_FLAGS}"
+            FEATURE_FLAGS="perf-metrics,${FEATURE_FLAGS}"
           fi
 
           matrix=$(jq -c --argjson run_e2e $RUN_E2E --arg features "$FEATURE_FLAGS" '

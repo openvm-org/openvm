@@ -44,16 +44,16 @@ struct TerminatePreCompute {
 
 macro_rules! execute_with_metrics {
     ($span:literal, $program:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start_instret = $vm_state.instret;
 
         info_span!($span).in_scope(|| unsafe {
             execute_impl($program, $vm_state, $pre_compute_insts);
         });
 
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
             let insns = $vm_state.instret - start_instret;

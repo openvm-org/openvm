@@ -41,7 +41,7 @@ use super::{
     execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
     CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{
@@ -178,7 +178,7 @@ pub struct VmState<F> {
     pub memory: GuestMemory,
     pub input: Streams<F>,
     pub rng: StdRng,
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
 }
 
@@ -196,7 +196,7 @@ impl<F> VmState<F> {
             memory,
             input: input.into(),
             rng: StdRng::seed_from_u64(seed),
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
     }
@@ -270,7 +270,10 @@ where
         let seed = 0;
         #[allow(unused_mut)]
         let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
-        #[cfg(feature = "function-span")]
+        // Add backtrace information for either:
+        // - debugging
+        // - performance metrics
+        #[cfg(all(feature = "metrics", any(feature = "perf-metrics", debug_assertions)))]
         {
             state.metrics.fn_bounds = exe.fn_bounds.clone();
             state.metrics.debug_infos = exe.program.debug_infos();
@@ -297,7 +300,7 @@ where
     //     let handler = ProgramHandler::new(exe.program, &self.inventory)?;
     //     let mut instance =
     //         VmSegmentExecutor::<F, VC::Executor, _>::new(handler, E1ExecutionControl);
-    //     #[cfg(feature = "bench-metrics")]
+    //     #[cfg(feature = "metrics")]
     //     {
     //         instance.metrics = state.metrics;
     //         instance.set_fn_bounds(exe.fn_bounds.clone());
@@ -327,7 +330,7 @@ where
     //         memory: exec_state.memory,
     //         input: exec_state.streams,
     //         rng: exec_state.rng,
-    //         #[cfg(feature = "bench-metrics")]
+    //         #[cfg(feature = "metrics")]
     //         metrics: instance.metrics.partial_take(),
     //     };
 
@@ -352,7 +355,7 @@ where
             memory: state.memory,
             input: state.streams,
             rng: state.rng,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics: Default::default(),
         })
     }
@@ -528,7 +531,7 @@ where
         let ctx = TracegenCtx::new_with_capacity(
             &capacities,
             instret_end,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             state.metrics,
         );
 
@@ -582,7 +585,7 @@ where
             memory: memory.data,
             input: exec_state.streams,
             rng: exec_state.rng,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics: exec_state.ctx.metrics,
         };
         Ok(PreflightExecutionOutput {
@@ -590,6 +593,20 @@ where
             record_arenas,
             to_state,
         })
+    }
+
+    /// Same as [`VmExecutor::create_initial_state`] but sets more information for performance
+    /// metrics when feature "perf-metrics" is enabled.
+    pub fn create_initial_state(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        input: impl Into<Streams<Val<E::SC>>>,
+    ) -> VmState<Val<E::SC>> {
+        #[allow(unused_mut)]
+        let mut state = self.executor.create_initial_state(exe, input);
+        #[cfg(feature = "perf-metrics")]
+        state.metrics.set_pk_info(&self.pk);
+        state
     }
 
     /// This function mutates `self` but should only depend on internal state in the sense that:
@@ -603,7 +620,7 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let mut current_trace_heights =
             self.get_trace_heights_from_arenas(&system_records, &record_arenas);
         // main tracegen call:
@@ -663,7 +680,7 @@ where
                 });
             }
         }
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         self.finalize_metrics(&mut current_trace_heights);
 
         Ok(ctx)
@@ -928,7 +945,7 @@ where
             e2_ctx,
         )?;
         let mut proofs = Vec::with_capacity(segments.len());
-        let mut state = Some(vm.executor().create_initial_state(exe, input));
+        let mut state = Some(vm.create_initial_state(exe, input));
         for (seg_idx, segment) in segments.into_iter().enumerate() {
             let _span = info_span!("prove_segment", segment = seg_idx).entered();
             let Segment {
@@ -985,7 +1002,7 @@ where
         assert!(!vm.config().as_ref().continuation_enabled);
         let mut trace_heights = trace_heights.to_vec();
         trace_heights[PUBLIC_VALUES_AIR_ID] = vm.config().as_ref().num_public_values as u32;
-        let state = vm.executor().create_initial_state(exe, input);
+        let state = vm.create_initial_state(exe, input);
         let (proof, _) = vm.prove(exe, state, None, &trace_heights)?;
         Ok(proof)
     }
@@ -1222,23 +1239,23 @@ where
     }
 }
 
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 mod vm_metrics {
     use std::iter::zip;
 
     use metrics::counter;
 
     use super::*;
-    use crate::{arch::Arena, system::memory::adapter::AccessAdapterInventory};
+    use crate::metrics::get_dyn_trace_heights_from_arenas;
 
     impl<E, VB> VirtualMachine<E, VB>
     where
         E: StarkEngine,
         VB: VmBuilder<E>,
     {
-        /// Best effort calculation of the used trace heights per chip without padding to powers of
-        /// two. This is best effort because some periphery chips may not have record arenas
-        /// to instrument.
+        /// See [`metrics::get_trace_heights_from_arenas`](crate::metrics::get_trace_heights_from_arenas).
+        /// In addition, this function includes the constant trace heights and the used height of
+        /// the program trace.
         pub(crate) fn get_trace_heights_from_arenas(
             &self,
             system_records: &SystemRecords<Val<E::SC>>,
@@ -1246,19 +1263,14 @@ mod vm_metrics {
         ) -> Vec<usize> {
             let num_airs = self.num_airs();
             assert_eq!(num_airs, record_arenas.len());
-            // First, get used heights from record arenas
-            let mut heights: Vec<usize> = record_arenas
-                .iter()
-                .map(|arena| arena.current_trace_height())
-                .collect();
-            // Memory is special case, so extract the memory AIR's trace heights from the special
-            // arena
             let sys_config = self.config().as_ref();
             let num_sys_airs = sys_config.num_airs();
             let access_adapter_offset = sys_config.access_adapter_air_id_offset();
-            AccessAdapterInventory::<Val<E::SC>>::compute_heights_from_arena(
+            let mut heights = get_dyn_trace_heights_from_arenas::<Val<E::SC>, _>(
+                num_sys_airs,
+                access_adapter_offset,
                 &system_records.access_adapter_records,
-                &mut heights[access_adapter_offset..num_sys_airs],
+                record_arenas,
             );
             // If there are any constant trace heights, set them
             for (pk, height) in zip(&self.pk.per_air, &mut heights) {
@@ -1277,7 +1289,7 @@ mod vm_metrics {
         /// Update used trace heights after tracegen is done (primarily updating memory-related
         /// metrics) and then emit the final metrics.
         pub(crate) fn finalize_metrics(&self, heights: &mut [usize]) {
-            self.chip_complex.system.update_trace_heights(heights);
+            self.chip_complex.system.finalize_trace_heights(heights);
             let mut main_cells_used = 0usize;
             let mut total_cells_used = 0usize;
             for (pk, height) in zip(&self.pk.per_air, heights.iter()) {

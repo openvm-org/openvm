@@ -134,14 +134,10 @@ where
             tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
             match sys {
                 SysPhantom::DebugPanic => {
-                    #[cfg(feature = "bench-metrics")]
+                    #[cfg(feature = "metrics")]
                     {
                         let metrics = state.metrics;
-                        if let Some(info) = metrics.debug_infos.get(pc) {
-                            if let Some(trace) = info.trace.clone() {
-                                metrics.prev_backtrace = Some(trace);
-                            }
-                        }
+                        metrics.update_backtrace(pc);
                         if let Some(mut backtrace) = metrics.prev_backtrace.take() {
                             backtrace.resolve();
                             eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
@@ -151,14 +147,14 @@ where
                     }
                     return Err(ExecutionError::Fail { pc });
                 }
-                #[cfg(feature = "bench-metrics")]
+                #[cfg(feature = "metrics")]
                 SysPhantom::CtStart => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {
                         metrics.cycle_tracker.start(info.dsl_instruction.clone());
                     }
                 }
-                #[cfg(feature = "bench-metrics")]
+                #[cfg(feature = "metrics")]
                 SysPhantom::CtEnd => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {

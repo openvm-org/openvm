@@ -42,12 +42,12 @@ toml_edit = "0.22"
 include_dir = "0.7"
 
 [features]
-default = ["parallel", "jemalloc", "evm-verify", "bench-metrics"]
+default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
-bench-metrics = ["openvm-sdk/bench-metrics"]
+metrics = ["openvm-sdk/metrics"]
 # for guest profiling:
-profiling = ["openvm-sdk/profiling"]
+perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
 parallel = ["openvm-sdk/parallel"]

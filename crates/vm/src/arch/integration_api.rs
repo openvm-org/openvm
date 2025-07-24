@@ -104,7 +104,7 @@ pub trait Arena {
     /// corresponds to a single trace matrix, this function can extract the current number of used
     /// rows of the corresponding trace matrix. This is currently expected to work only for
     /// [MatrixRecordArena].
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     fn current_trace_height(&self) -> usize {
         0
     }
@@ -402,7 +402,7 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
         }
     }
 
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     fn current_trace_height(&self) -> usize {
         self.trace_offset / self.width
     }

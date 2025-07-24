@@ -32,12 +32,12 @@ pub mod inner {
 
         let advice = new_from_inner_multi_vk(&vk);
         cfg_if::cfg_if! {
-            if #[cfg(feature = "bench-metrics")] {
+            if #[cfg(feature = "metrics")] {
                 let start = std::time::Instant::now();
             }
         }
         let program = VerifierProgram::build_with_options(advice, &fri_params, compiler_options);
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("verify_program_compile_ms").set(start.elapsed().as_millis() as f64);
 
         let mut input_stream = Vec::new();

@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
     arch::{Arena, ExecutionError, InstructionExecutor, VmSegmentState, VmStateMut},
@@ -10,7 +10,7 @@ use crate::{
 pub struct TracegenCtx<RA> {
     pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     pub(crate) metrics: VmMetrics,
 }
 
@@ -22,17 +22,17 @@ impl<RA: Arena> TracegenCtx<RA> {
     pub fn new_with_capacity(
         capacities: &[(usize, usize)],
         instret_end: Option<u64>,
-        #[cfg(feature = "bench-metrics")] metrics: VmMetrics,
+        #[cfg(feature = "metrics")] metrics: VmMetrics,
     ) -> Self {
         let arenas = capacities
             .iter()
-            .map(|&(height, width)| RA::with_capacity(height, width))
+            .map(|&(height, main_width)| RA::with_capacity(height, main_width))
             .collect();
 
         Self {
             arenas,
             instret_end,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics,
         }
     }
@@ -117,7 +117,7 @@ impl<F> TracegenExecutionControl<F> {
             streams: &mut state.streams,
             rng: &mut state.rng,
             ctx: arena,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             metrics: &mut state.ctx.metrics,
         };
         executor.execute(state_mut, &pc_entry.insn)?;

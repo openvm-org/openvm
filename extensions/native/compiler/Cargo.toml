@@ -42,4 +42,4 @@ rand.workspace = true
 default = ["parallel", "halo2-compiler"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
 parallel = ["openvm-circuit/parallel"]
-bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
+metrics = ["dep:metrics", "openvm-circuit/metrics"]

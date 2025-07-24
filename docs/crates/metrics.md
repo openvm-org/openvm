@@ -2,7 +2,7 @@
 
 We use the [`metrics`](https://docs.rs/metrics/latest/metrics/) crate to collect metrics for the STARK prover. We refer to [reth docs](https://github.com/paradigmxyz/reth/blob/main/docs/design/metrics.md) for more guidelines on how to use metrics.
 
-Metrics will only be collected if the `bench-metrics` feature is enabled.
+Metrics will only be collected if the `metrics` feature is enabled.
 We describe the metrics that are collected for a single VM circuit proof, which corresponds to a single execution segment.
 
 To scope metrics from different proofs, we use the [`metrics_tracing_context`](https://docs.rs/metrics-tracing-context/latest/metrics_tracing_context/) crate to provide context-dependent labels. With the exception of the `segment` label, all other labels must be set by the caller.

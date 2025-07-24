@@ -128,7 +128,7 @@ where
     vm.load_program(cached_program_trace);
     let exe = committed_exe.exe;
 
-    let mut state = Some(vm.executor().create_initial_state(&exe, input));
+    let mut state = Some(vm.create_initial_state(&exe, input));
     let global_airs = vm.config().create_airs().unwrap().into_airs().collect_vec();
     let mut proofs = Vec::new();
     let mut exit_code = None;

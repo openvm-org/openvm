@@ -65,7 +65,7 @@ where
         rows.reverse();
         rows.swap(0, 1);
 
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         {
             self.current_height = rows.len();
         }

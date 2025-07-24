@@ -27,7 +27,7 @@ pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     final_state: Option<FinalState<CHUNK, F>>,
     overridden_height: Option<usize>,
     /// Used for metric collection purposes only
-    #[cfg(feature = "bench-metrics")]
+    #[cfg(feature = "metrics")]
     pub(crate) current_height: usize,
 }
 #[derive(Debug)]
@@ -55,7 +55,7 @@ impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
             },
             final_state: None,
             overridden_height: None,
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             current_height: 0,
         }
     }

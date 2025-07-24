@@ -46,9 +46,9 @@ toml.workspace = true
 [dev-dependencies]
 
 [features]
-default = ["parallel", "jemalloc", "bench-metrics"]
-bench-metrics = ["openvm-sdk/bench-metrics"]
-profiling = ["openvm-sdk/profiling"]
+default = ["parallel", "jemalloc", "metrics"]
+metrics = ["openvm-sdk/metrics"]
+perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 aggregation = []                                    # runs leaf aggregation benchmarks
 evm = ["openvm-sdk/evm-verify"]
 parallel = ["openvm-sdk/parallel"]
