@@ -92,6 +92,13 @@ impl Poseidon2PeripheryChipGPU {
             Self::Register1(chip) => chip.shared_buffer(),
         }
     }
+
+    pub fn sbox_registers(&self) -> usize {
+        match self {
+            Self::Register0(_) => 0,
+            Self::Register1(_) => 1,
+        }
+    }
 }
 
 impl<RA> Chip<RA, GpuBackend> for Poseidon2PeripheryChipGPU {

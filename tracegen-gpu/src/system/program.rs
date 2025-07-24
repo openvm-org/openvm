@@ -11,7 +11,10 @@ use openvm_stark_backend::{
     Chip,
 };
 use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, gpu_device::GpuDevice, prover_backend::GpuBackend,
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    gpu_device::GpuDevice,
+    prover_backend::GpuBackend,
     types::F,
 };
 
@@ -98,14 +101,28 @@ impl<RA> Chip<RA, GpuBackend> for ProgramChipGPU {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.trace.height();
-        assert!(self.filtered_exec_freqs.len() == height);
-        let buffer = self
-            .filtered_exec_freqs
+        assert!(
+            self.filtered_exec_freqs.len() <= height,
+            "filtered_exec_freqs len={} > cached trace height={}",
+            self.filtered_exec_freqs.len(),
+            height
+        );
+        let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity(height);
+
+        // Making sure to zero-out the untouched part of the buffer.
+        if self.filtered_exec_freqs.len() < height {
+            buffer
+                .fill_zero_suffix(self.filtered_exec_freqs.len())
+                .unwrap();
+        }
+
+        self.filtered_exec_freqs
             .iter()
             .map(|f| F::from_canonical_u32(*f))
             .collect::<Vec<_>>()
-            .to_device()
+            .copy_to(&mut buffer)
             .unwrap();
+
         let trace = DeviceMatrix::new(Arc::new(buffer), height, 1);
 
         AirProvingContext {

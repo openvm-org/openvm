@@ -3,16 +3,16 @@ use std::{mem::size_of, sync::Arc};
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::{
-        native_adapter::NativeAdapterRecord,
-        public_values::{PublicValuesAir, PublicValuesRecord},
+        native_adapter::{NativeAdapterCols, NativeAdapterRecord},
+        public_values::PublicValuesRecord,
     },
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
-use p3_air::BaseAir;
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
@@ -28,28 +28,28 @@ struct FullPublicValuesRecord {
 }
 
 pub struct PublicValuesChipGPU {
-    pub air: PublicValuesAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub public_values: Vec<F>,
     pub num_custom_pvs: usize,
     pub max_degree: u32,
+    // needed to compute the width of the trace
+    encoder: Encoder,
     pub timestamp_max_bits: u32,
 }
 
 impl PublicValuesChipGPU {
     pub fn new(
-        air: PublicValuesAir,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         num_custom_pvs: usize,
         max_degree: u32,
         timestamp_max_bits: u32,
     ) -> Self {
         Self {
-            air,
             range_checker,
             public_values: Vec::new(),
             num_custom_pvs,
             max_degree,
+            encoder: Encoder::new(num_custom_pvs, max_degree, true),
             timestamp_max_bits,
         }
     }
@@ -64,7 +64,7 @@ impl PublicValuesChipGPU {
     }
 
     pub fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
+        NativeAdapterCols::<u8, 2, 0>::width() + 3 + self.encoder.width()
     }
 }
 
@@ -156,9 +156,7 @@ mod tests {
             ),
             tester.dummy_memory_helper(),
         );
-
         let gpu_chip = PublicValuesChipGPU::new(
-            air.clone(),
             tester.range_checker(),
             num_custom_pvs,
             max_degree,

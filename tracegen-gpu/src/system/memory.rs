@@ -11,6 +11,7 @@ use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::types::AirProvingCo
 use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
 
 use crate::{
+    get_empty_air_proving_ctx,
     primitives::var_range::VariableRangeCheckerChipGPU,
     system::{
         access_adapters::AccessAdapterInventoryGPU, boundary::BoundaryChipGPU,
@@ -79,19 +80,24 @@ impl MemoryInventoryGPU {
         access_adapter_arena: DenseRecordArena,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
-        match touched_memory {
+        let is_persistent = match touched_memory {
             TouchedMemory::Persistent(partition) => {
                 assert!(self.persistent.is_some(), "TouchedMemory enum mismatch");
                 self.boundary.finalize_records(partition);
                 // TODO[INT-4453]: Finalize MerkleChipGPU
+                true
             }
             TouchedMemory::Volatile(partition) => {
                 assert!(self.persistent.is_none(), "TouchedMemory enum mismatch");
                 self.boundary.finalize_records(partition);
+                false
             }
-        }
+        };
         let mut ret = vec![self.boundary.generate_proving_ctx(())];
         // TODO[INT-4453]: Push MerkleChipGPU proving ctx if persistent
+        if is_persistent {
+            ret.push(get_empty_air_proving_ctx());
+        }
         ret.extend(
             self.access_adapters
                 .generate_air_proving_ctxs(&access_adapter_arena),

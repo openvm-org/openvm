@@ -1,45 +1,38 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, DenseRecordArena,
-    ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension, VmExecutionExtension,
+    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
     VmProverExtension,
 };
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, KeccakVmAir};
-use openvm_stark_backend::config::{StarkGenericConfig, Val};
-use p3_field::PrimeField32;
-use stark_backend_gpu::prover_backend::GpuBackend;
+use openvm_keccak256_circuit::{Keccak256, Keccak256Rv32Config, KeccakVmAir};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
 use crate::{
-    extensions::keccak256::Keccak256ChipGpu,
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    extensions::{keccak256::Keccak256ChipGpu, rv32im::Rv32ImGpuProverExt},
+    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    system::{
+        extensions::{get_inventory_range_checker, SystemGpuBuilder},
+        SystemChipInventoryGPU,
     },
 };
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Keccak256Gpu(Keccak256);
+pub struct Keccak256GpuProverExt;
 
 // This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
 // BitwiseOperationLookupChipGPU) are specific to GpuBackend.
-impl<SC> VmProverExtension<SC, DenseRecordArena, GpuBackend> for Keccak256Gpu
-where
-    SC: StarkGenericConfig,
-    Val<SC>: PrimeField32,
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
+    for Keccak256GpuProverExt
 {
     fn extend_prover(
         &self,
-        inventory: &mut ChipInventory<SC, DenseRecordArena, GpuBackend>,
+        _: &Keccak256,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
 
-        // TODO[arayi]: make this a util method of ChipInventory.
-        // Note, `VariableRangeCheckerChipGPU` always will always exist in the inventory.
-        let range_checker = inventory
-            .find_chip::<Arc<VariableRangeCheckerChipGPU>>()
-            .next()
-            .unwrap()
-            .clone();
+        let range_checker = get_inventory_range_checker(inventory);
         let bitwise_lu = {
             let existing_chip = inventory
                 .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
@@ -60,6 +53,7 @@ where
             range_checker.clone(),
             bitwise_lu.clone(),
             pointer_max_bits as u32,
+            timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(keccak);
 
@@ -67,19 +61,40 @@ where
     }
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Keccak256Gpu {
-    type Executor = Keccak256Executor;
+#[derive(Clone)]
+pub struct Keccak256Rv32GpuBuilder;
 
-    fn extend_execution(
+type E = GpuBabyBearPoseidon2Engine;
+
+impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
+    type VmConfig = Keccak256Rv32Config;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
-    ) -> Result<(), ExecutorInventoryError> {
-        self.0.extend_execution(inventory)
-    }
-}
-
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256Gpu {
-    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
-        self.0.extend_circuit(inventory)
+        config: &Keccak256Rv32Config,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Keccak256GpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        Ok(chip_complex)
     }
 }
