@@ -1,93 +1,61 @@
-use std::{slice::from_raw_parts, sync::Arc};
+use std::{mem::size_of, sync::Arc};
 
+use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_native_circuit::air::NativePoseidon2Air;
-use openvm_stark_backend::{
-    p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix, rap::get_air_name, AirRef,
-    ChipUsageGetter,
-};
-use p3_air::BaseAir;
+use openvm_native_circuit::columns::NativePoseidon2Cols;
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    data_transporter::transport_matrix_to_device,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
-    extensions::native::poseidon2_cuda, primitives::var_range::VariableRangeCheckerChipGPU,
-    DeviceChip,
+    extensions::native::poseidon2_cuda, get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
+#[derive(new)]
 pub struct NativePoseidon2ChipGpu<const SBOX_REGISTERS: usize> {
-    pub air: NativePoseidon2Air<F, SBOX_REGISTERS>,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub arena: DenseRecordArena,
+    pub timestamp_max_bits: usize,
 }
 
-impl<const SBOX_REGISTERS: usize> NativePoseidon2ChipGpu<SBOX_REGISTERS> {
-    pub fn new(
-        air: NativePoseidon2Air<F, SBOX_REGISTERS>,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-        arena: DenseRecordArena,
-    ) -> Self {
-        Self {
-            air,
-            range_checker,
-            arena,
-        }
-    }
-}
-
-impl<const SBOX_REGISTERS: usize> ChipUsageGetter for NativePoseidon2ChipGpu<SBOX_REGISTERS> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        let record_size = self.trace_width() * size_of::<F>();
-        let records_len = self.arena.allocated().len();
-        assert_eq!(records_len % record_size, 0);
-        records_len / record_size
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl<const SBOX_REGISTERS: usize> DeviceChip<SC, GpuBackend>
+impl<const SBOX_REGISTERS: usize> Chip<DenseRecordArena, GpuBackend>
     for NativePoseidon2ChipGpu<SBOX_REGISTERS>
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let num_records = self.current_trace_height();
-        let height = next_power_of_two_or_zero(num_records);
-        let width = self.trace_width();
-
-        let mut h_trace = vec![F::ZERO; height * width];
-        unsafe {
-            let bytes = self.arena.allocated();
-            assert_eq!(bytes.len() % size_of::<F>(), 0);
-            assert_eq!(bytes.as_ptr() as usize % std::mem::align_of::<F>(), 0);
-            let slice = from_raw_parts(bytes.as_ptr() as *const F, bytes.len() / size_of::<F>());
-            h_trace[..slice.len()].copy_from_slice(slice);
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
         }
 
-        let d_trace = transport_matrix_to_device(Arc::new(RowMajorMatrix::new(h_trace, width)));
+        // For Poseidon2, the records are already the trace rows
+        // Use the columns width directly
+        let width = NativePoseidon2Cols::<F, SBOX_REGISTERS>::width();
+
+        let record_size = width * size_of::<F>();
+        assert_eq!(records.len() % record_size, 0);
+
+        let height = records.len() / record_size;
+        let padded_height = next_power_of_two_or_zero(height);
+        let trace = DeviceMatrix::<F>::with_capacity(padded_height, width);
+
+        let d_records = records.to_device().unwrap();
+
         unsafe {
-            poseidon2_cuda::inplace_tracegen(
-                &d_trace,
-                num_records,
-                self.range_checker.count.as_ref(),
-                SBOX_REGISTERS,
+            poseidon2_cuda::tracegen(
+                trace.buffer(),
+                padded_height as u32,
+                width as u32,
+                &d_records,
+                height as u32,
+                &self.range_checker.count,
+                SBOX_REGISTERS as u32,
+                self.timestamp_max_bits as u32,
             )
-            .expect("Failed to generate trace");
+            .unwrap();
         }
-        d_trace
+
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 
@@ -95,79 +63,63 @@ impl<const SBOX_REGISTERS: usize> DeviceChip<SC, GpuBackend>
 mod tests {
     use std::{array::from_fn, cmp::min};
 
-    use openvm_circuit::{
-        arch::{testing::memory::gen_pointer, NewVmChipWrapper},
-        system::memory::SharedMemoryHelper,
-    };
+    use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
-        air::VerifyBatchBus,
-        chip::{NativePoseidon2RecordMut, NativePoseidon2Step},
-        new_native_poseidon2_chip, NativePoseidon2Chip,
+        air::{NativePoseidon2Air, VerifyBatchBus},
+        chip::{NativePoseidon2Filler, NativePoseidon2RecordMut, NativePoseidon2Step},
+        NativePoseidon2Chip,
     };
     use openvm_native_compiler::{conversion::AS, Poseidon2Opcode, VerifyBatchOpcode};
     use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
-    use openvm_stark_backend::{
-        p3_field::{Field, FieldAlgebra, PrimeField32},
-        verifier::VerificationError,
-    };
+    use openvm_stark_backend::p3_field::{Field, FieldAlgebra, PrimeField32};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::GpuChipTestBuilder;
+    use crate::testing::{GpuChipTestBuilder, GpuTestChipHarness};
 
     const MAX_INS_CAPACITY: usize = 128;
     const SBOX_REGISTERS: usize = 1;
     const CHUNK: usize = 8;
 
-    fn create_sparse_chip(
+    fn create_test_harness(
         tester: &GpuChipTestBuilder,
         config: Poseidon2Config<F>,
-    ) -> NativePoseidon2Chip<F, SBOX_REGISTERS> {
-        let mut chip = new_native_poseidon2_chip(
-            tester.system_port(),
-            config,
-            VerifyBatchBus::new(7),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
-
-    fn create_dense_chip(
-        air: NativePoseidon2Air<F, SBOX_REGISTERS>,
-        step: NativePoseidon2Step<F, SBOX_REGISTERS>,
-        mem_helper: SharedMemoryHelper<F>,
-    ) -> NewVmChipWrapper<
+    ) -> GpuTestChipHarness<
         F,
-        NativePoseidon2Air<F, SBOX_REGISTERS>,
         NativePoseidon2Step<F, SBOX_REGISTERS>,
-        DenseRecordArena,
+        NativePoseidon2Air<F, SBOX_REGISTERS>,
+        NativePoseidon2ChipGpu<SBOX_REGISTERS>,
+        NativePoseidon2Chip<F, SBOX_REGISTERS>,
     > {
-        let mut chip = NewVmChipWrapper::<
-            F,
-            NativePoseidon2Air<F, SBOX_REGISTERS>,
-            NativePoseidon2Step<F, SBOX_REGISTERS>,
-            DenseRecordArena,
-        >::new(air, step, mem_helper);
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+        let air = NativePoseidon2Air::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            VerifyBatchBus::new(7),
+            config,
+        );
+        let executor = NativePoseidon2Step::new(config);
+
+        let cpu_chip = NativePoseidon2Chip::new(
+            NativePoseidon2Filler::new(config),
+            tester.dummy_memory_helper(),
+        );
+
+        let gpu_chip =
+            NativePoseidon2ChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
     #[test_case(Poseidon2Opcode::PERM_POS2)]
     #[test_case(Poseidon2Opcode::COMP_POS2)]
     fn test_poseidon2_chip_gpu(opcode: Poseidon2Opcode) {
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker();
+        let mut tester = GpuChipTestBuilder::default();
 
-        let mut sparse_chip = create_sparse_chip(&tester, Poseidon2Config::default());
-        let mut dense_chip = create_dense_chip(
-            sparse_chip.air.clone(),
-            NativePoseidon2Step::new(Poseidon2Config::default()),
-            tester.cpu_memory_helper(),
-        );
+        let mut harness = create_test_harness(&tester, Poseidon2Config::default());
 
         for _ in 0..100 {
             let instruction = Instruction {
@@ -194,10 +146,10 @@ mod tests {
             ]
             .map(|elem| elem.as_canonical_u32() as usize);
 
-            tester.write(d, a, [F::from_canonical_usize(dst)]);
-            tester.write(d, b, [F::from_canonical_usize(lhs)]);
+            tester.write::<1>(d, a, [F::from_canonical_usize(dst)]);
+            tester.write::<1>(d, b, [F::from_canonical_usize(lhs)]);
             if opcode == Poseidon2Opcode::COMP_POS2 {
-                tester.write(d, c, [F::from_canonical_usize(rhs)]);
+                tester.write::<1>(d, c, [F::from_canonical_usize(rhs)]);
             }
 
             let data_left: [_; CHUNK] =
@@ -206,32 +158,34 @@ mod tests {
                 from_fn(|_| F::from_canonical_usize(rng.gen_range(1..=100)));
             match opcode {
                 Poseidon2Opcode::COMP_POS2 => {
-                    tester.write(e, lhs, data_left);
-                    tester.write(e, rhs, data_right);
+                    tester.write::<CHUNK>(e, lhs, data_left);
+                    tester.write::<CHUNK>(e, rhs, data_right);
                 }
                 Poseidon2Opcode::PERM_POS2 => {
-                    tester.write(e, lhs, data_left);
-                    tester.write(e, lhs + CHUNK, data_right);
+                    tester.write::<CHUNK>(e, lhs, data_left);
+                    tester.write::<CHUNK>(e, lhs + CHUNK, data_right);
                 }
             }
 
-            tester.execute(&mut dense_chip, &instruction);
+            tester.execute(
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &instruction,
+            );
         }
 
         type Record<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
-        dense_chip
-            .arena
+        harness
+            .dense_arena
             .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(&mut sparse_chip.arena);
-
-        let gpu_chip =
-            NativePoseidon2ChipGpu::new(dense_chip.air, tester.range_checker(), dense_chip.arena);
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 
     #[derive(Debug, Clone)]
@@ -333,18 +287,13 @@ mod tests {
     #[test]
     fn test_verify_batch() {
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default().with_variable_range_checker();
+        let mut tester = GpuChipTestBuilder::default();
         const ADDRESS_SPACE: usize = AS::Native as usize;
 
         let config = Poseidon2Config::default();
         let hasher = Poseidon2SubChip::<F, SBOX_REGISTERS>::new(config.constants);
 
-        let mut sparse_chip = create_sparse_chip(&tester, config);
-        let mut dense_chip = create_dense_chip(
-            sparse_chip.air.clone(),
-            NativePoseidon2Step::new(config),
-            tester.cpu_memory_helper(),
-        );
+        let mut harness = create_test_harness(&tester, config);
 
         let cases: [(Vec<Vec<usize>>, usize); 5] = [
             (vec![vec![3], vec![], vec![9, 2, 1, 13, 4], vec![16]], 1),
@@ -421,7 +370,8 @@ mod tests {
                 .inverse()
                 .as_canonical_u32() as usize;
             tester.execute(
-                &mut dense_chip,
+                &mut harness.executor,
+                &mut harness.dense_arena,
                 &Instruction::from_usize(
                     VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
                     [
@@ -438,18 +388,16 @@ mod tests {
         }
 
         type Record<'a> = NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS>;
-        dense_chip
-            .arena
+        harness
+            .dense_arena
             .get_record_seeker::<Record, _>()
-            .transfer_to_matrix_arena(&mut sparse_chip.arena);
-
-        let gpu_chip =
-            NativePoseidon2ChipGpu::new(dense_chip.air, tester.range_checker(), dense_chip.arena);
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

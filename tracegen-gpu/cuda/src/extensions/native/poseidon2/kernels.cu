@@ -236,7 +236,7 @@ __global__ void cukernel_native_poseidon2_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, trace_height);
     if (idx < num_records) {
-        RowSlice record(records + idx * num_records, 1);
+        RowSlice record(records + idx * trace_width, 1);
         for (uint32_t i = 0; i < trace_width; i++) {
             row[i] = record[i];
         }

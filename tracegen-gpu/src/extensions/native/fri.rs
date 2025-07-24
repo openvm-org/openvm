@@ -5,58 +5,29 @@ use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
     utils::next_power_of_two_or_zero,
 };
-use openvm_native_circuit::{FriReducedOpeningAir, FriReducedOpeningRecordMut};
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
+use openvm_native_circuit::{FriReducedOpeningRecordMut, OVERALL_WIDTH};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::copy::MemCopyH2D,
-    prover_backend::GpuBackend,
-    types::{F, SC},
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
 use crate::{
-    extensions::native::fri_cuda, primitives::var_range::VariableRangeCheckerChipGPU, DeviceChip,
+    extensions::native::fri_cuda, get_empty_air_proving_ctx,
+    primitives::var_range::VariableRangeCheckerChipGPU,
 };
 
 #[derive(new)]
 pub struct FriReducedOpeningChipGpu {
-    pub air: FriReducedOpeningAir,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub arena: DenseRecordArena,
+    pub timestamp_max_bits: usize,
 }
 
-impl ChipUsageGetter for FriReducedOpeningChipGpu {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-
-    fn current_trace_height(&self) -> usize {
-        // TODO[arayi]: This is incorrect and temporary,
-        // we probably need to get rid of `current_trace_height` or add a counter to `arena`
-        self.arena.allocated().len()
-    }
-
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-// This is the info needed by each row to do parallel tracegen
-#[repr(C)]
-#[derive(new)]
-pub struct RowInfo {
-    pub record_offset: u32,
-    pub local_idx: u32,
-}
-
-impl DeviceChip<SC, GpuBackend> for FriReducedOpeningChipGpu {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let records = self.arena.allocated();
+impl Chip<DenseRecordArena, GpuBackend> for FriReducedOpeningChipGpu {
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
 
         // TODO[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
         // **SAFETY**: `records` should be non-empty at this point
@@ -83,7 +54,8 @@ impl DeviceChip<SC, GpuBackend> for FriReducedOpeningChipGpu {
         let d_record_info = record_info.to_device().unwrap();
 
         let trace_height = next_power_of_two_or_zero(record_info.len());
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
+        let trace_width = OVERALL_WIDTH;
+        let trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
 
         unsafe {
             fri_cuda::tracegen(
@@ -93,62 +65,76 @@ impl DeviceChip<SC, GpuBackend> for FriReducedOpeningChipGpu {
                 record_info.len() as u32,
                 &d_record_info,
                 &self.range_checker.count,
+                self.timestamp_max_bits as u32,
             )
             .unwrap();
         }
 
-        trace
+        AirProvingContext::simple_no_pis(trace)
     }
+}
+
+// This is the info needed by each row to do parallel tracegen
+#[repr(C)]
+#[derive(new)]
+pub struct RowInfo {
+    pub record_offset: u32,
+    pub local_idx: u32,
 }
 
 #[cfg(test)]
 mod test {
     use std::array;
 
-    use openvm_circuit::arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
-        InstructionExecutor, MatrixRecordArena, NewVmChipWrapper,
-    };
-    use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
+    use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
-    use openvm_native_circuit::{FriReducedOpeningStep, EXT_DEG};
+    use openvm_native_circuit::{
+        FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningFiller,
+        FriReducedOpeningRecordMut, FriReducedOpeningStep, EXT_DEG,
+    };
     use openvm_native_compiler::{conversion::AS, FriOpcode};
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
+    use test_case::test_case;
 
     use super::*;
-    use crate::{extensions::native::write_native_array, testing::GpuChipTestBuilder};
+    use crate::{
+        extensions::native::write_native_array,
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    };
 
     const MAX_INS_CAPACITY: usize = 1024;
-    type DenseChip<F> =
-        NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, DenseRecordArena>;
-    type SparseChip<F> =
-        NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;
 
-    fn create_test_dense_chip(tester: &GpuChipTestBuilder) -> DenseChip<F> {
-        let mut chip = DenseChip::<F>::new(
-            FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            FriReducedOpeningStep::new(),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+    fn create_test_harness(
+        tester: &GpuChipTestBuilder,
+    ) -> GpuTestChipHarness<
+        F,
+        FriReducedOpeningStep,
+        FriReducedOpeningAir,
+        FriReducedOpeningChipGpu,
+        FriReducedOpeningChip<F>,
+    > {
+        let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
+        let executor = FriReducedOpeningStep;
+
+        let cpu_chip =
+            FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.dummy_memory_helper());
+        let gpu_chip =
+            FriReducedOpeningChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn create_test_sparse_chip(tester: &mut GpuChipTestBuilder) -> SparseChip<F> {
-        let mut chip = SparseChip::<F>::new(
-            FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            FriReducedOpeningStep::new(),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
-
-    fn set_and_execute<E: InstructionExecutor<F>>(
+    fn set_and_execute(
         tester: &mut GpuChipTestBuilder,
-        chip: &mut E,
+        harness: &mut GpuTestChipHarness<
+            F,
+            FriReducedOpeningStep,
+            FriReducedOpeningAir,
+            FriReducedOpeningChipGpu,
+            FriReducedOpeningChip<F>,
+        >,
         rng: &mut StdRng,
     ) {
         let len = rng.gen_range(1..=28);
@@ -172,13 +158,13 @@ mod test {
             if !is_init {
                 tester.streams.hint_space[0].push(a);
             } else {
-                tester.write_cell(AS::Native as usize, a_ptr + i, a);
+                tester.write::<1>(AS::Native as usize, a_ptr + i, [a]);
             }
-            tester.write(AS::Native as usize, b_ptr + i * EXT_DEG, b);
         }
 
         tester.execute(
-            chip,
+            &mut harness.executor,
+            &mut harness.dense_arena,
             &Instruction::from_usize(
                 FriOpcode::FRI_REDUCED_OPENING.global_opcode(),
                 [
@@ -194,38 +180,28 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_fri_tracegen() {
+    #[test_case(28)]
+    fn test_fri_tracegen(num_ops: usize) {
         let mut rng = create_seeded_rng();
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker()
-            .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
+        let mut tester = GpuChipTestBuilder::default();
 
-        // CPU execution
-        let mut dense_chip = create_test_dense_chip(&tester);
-        let num_ops = 28;
+        let mut harness = create_test_harness(&tester);
+
         for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_chip, &mut rng);
+            set_and_execute(&mut tester, &mut harness, &mut rng);
         }
 
-        let mut sparse_chip = create_test_sparse_chip(&mut tester);
-        dense_chip
-            .arena
+        // Transfer records to matrix arena for sparse chip
+        harness
+            .dense_arena
             .get_record_seeker::<FriReducedOpeningRecordMut<F>, _>()
-            .transfer_to_matrix_arena(&mut sparse_chip.arena);
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
-        // GPU tracegen
-        let gpu_chip = FriReducedOpeningChipGpu::new(
-            sparse_chip.air,
-            tester.range_checker(),
-            dense_chip.arena,
-        );
-
-        // `gpu_chip` does GPU tracegen, `sparse_chip` does CPU tracegen. Must check that they are the same
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
     }
 }

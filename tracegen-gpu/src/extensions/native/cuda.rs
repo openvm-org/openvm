@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
 
-use openvm_stark_backend::prover::hal::MatrixDimensions;
 use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
 pub mod castf_cuda {
     use super::*;
@@ -197,68 +197,38 @@ pub mod fri_cuda {
 }
 
 pub mod poseidon2_cuda {
-    use stark_backend_gpu::base::DeviceMatrix;
-
     use super::*;
 
     unsafe extern "C" {
-        fn _inplace_native_poseidon2_tracegen(
+        unsafe fn _native_poseidon2_tracegen(
             d_trace: *mut std::ffi::c_void,
-            height: usize,
-            width: usize,
-            num_records: usize,
+            height: u32,
+            width: u32,
+            d_records: *const u8,
+            rows_used: u32,
             d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            sbox_regs: usize,
+            range_checker_max_bins: u32,
+            sbox_regs: u32,
             timestamp_max_bits: u32,
         ) -> i32;
-
-        fn _native_poseidon2_tracegen(
-            d_trace: *mut std::ffi::c_void,
-            height: usize,
-            width: usize,
-            d_records: *const std::ffi::c_void,
-            num_records: usize,
-            d_range_checker: *mut u32,
-            range_checker_num_bins: u32,
-            sbox_regs: usize,
-            timestamp_max_bits: u32,
-        ) -> i32;
-    }
-
-    pub unsafe fn inplace_tracegen<T>(
-        d_trace: &DeviceMatrix<T>,
-        num_records: usize,
-        d_range_checker: &DeviceBuffer<T>,
-        sbox_regs: usize,
-        timestamp_max_bits: u32,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_inplace_native_poseidon2_tracegen(
-            d_trace.buffer().as_mut_raw_ptr(),
-            d_trace.height(),
-            d_trace.width(),
-            num_records,
-            d_range_checker.as_mut_ptr() as *mut u32,
-            d_range_checker.len() as u32,
-            sbox_regs,
-            timestamp_max_bits,
-        ))
     }
 
     pub unsafe fn tracegen<T>(
-        d_trace: &DeviceMatrix<T>,
-        d_records: &DeviceBuffer<T>,
-        num_records: usize,
+        d_trace: &DeviceBuffer<T>,
+        height: u32,
+        width: u32,
+        d_records: &DeviceBuffer<u8>,
+        rows_used: u32,
         d_range_checker: &DeviceBuffer<T>,
-        sbox_regs: usize,
+        sbox_regs: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_poseidon2_tracegen(
-            d_trace.buffer().as_mut_raw_ptr(),
-            d_trace.height(),
-            d_trace.width(),
-            d_records.as_raw_ptr(),
-            num_records,
+            d_trace.as_mut_raw_ptr(),
+            height,
+            width,
+            d_records.as_ptr(),
+            rows_used,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             sbox_regs,
