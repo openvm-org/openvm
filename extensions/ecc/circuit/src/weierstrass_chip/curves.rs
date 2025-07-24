@@ -170,8 +170,8 @@ fn ec_double_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
     // Final output
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
-    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output);
-    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output);
+    field_element_to_blocks_bls12_381_coordinate(&x3, &mut output[..BLOCKS / 2]);
+    field_element_to_blocks_bls12_381_coordinate(&y3, &mut output[BLOCKS / 2..]);
     output
 }
 
