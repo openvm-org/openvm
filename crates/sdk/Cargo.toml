@@ -42,7 +42,6 @@ derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
 eyre.workspace = true
-async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
@@ -96,4 +95,4 @@ path = "examples/sdk_evm.rs"
 required-features = ["evm-verify"]
 
 [package.metadata.cargo-shear]
-ignored = ["rand"]
+ignored = ["derive_more", "rand"]

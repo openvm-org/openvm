@@ -73,7 +73,7 @@ fn verify_native_max_trace_heights(
             .executor()
             .create_initial_state(&exe, leaf_input.write_to_stream());
         vm.transport_init_memory_to_device(&state.memory);
-        let out = vm.execute_preflight(exe, state, None, estimated_trace_heights)?;
+        let out = vm.execute_preflight(&exe, state, None, estimated_trace_heights)?;
         let actual_trace_heights = vm
             .generate_proving_ctx(out.system_records, out.record_arenas)?
             .per_air

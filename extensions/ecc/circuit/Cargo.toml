@@ -8,14 +8,12 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }

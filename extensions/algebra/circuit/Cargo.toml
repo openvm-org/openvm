@@ -38,3 +38,6 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = {workspace = true}
+
+[package.metadata.cargo-shear]
+ignored = ["derive_more"]

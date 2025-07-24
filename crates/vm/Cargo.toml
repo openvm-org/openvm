@@ -27,7 +27,6 @@ backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
-cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
