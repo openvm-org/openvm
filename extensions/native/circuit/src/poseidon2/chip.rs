@@ -20,11 +20,12 @@ use openvm_native_compiler::{
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip, Poseidon2SubCols};
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{Field, PrimeField32},
-    p3_maybe_rayon::prelude::{ParallelIterator, ParallelSlice},
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelSliceMut, *},
 };
 
 use crate::poseidon2::{
@@ -38,6 +39,9 @@ use crate::poseidon2::{
 #[derive(Clone)]
 pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
+    /// If true, `verify_batch` assumes the verification is always passed and skips poseidon2
+    /// computation during execution for performance.
+    optimistic: bool,
 }
 
 pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
@@ -49,7 +53,13 @@ pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
-        Self { subchip }
+        Self {
+            subchip,
+            optimistic: true,
+        }
+    }
+    pub fn set_optimistic(&mut self, optimistic: bool) {
+        self.optimistic = optimistic;
     }
 }
 
@@ -304,7 +314,9 @@ where
                 commit_register.as_canonical_u32(),
                 ltl_specific_cols.commit_pointer_read.as_mut(),
             );
-            let commit = tracing_read_native_helper(
+            // In E3, the proof is assumed to be valid. The verification during execution is
+            // skipped.
+            let commit: [F; CHUNK] = tracing_read_native_helper(
                 state.memory,
                 commit_pointer.as_canonical_u32(),
                 ltl_specific_cols.commit_read.as_mut(),
@@ -370,6 +382,7 @@ where
                     num_rows: total_num_row,
                 }))
                 .0;
+            allocated_rows[0].inner.export = F::from_canonical_u32(num_non_inside_rows as u32);
             let mut inside_row_idx = num_non_inside_rows;
             let mut non_inside_row_idx = 0;
 
@@ -385,13 +398,9 @@ where
                         .increment_timestamp_by(NUM_INITIAL_READS as u32);
                     let incorporate_start_timestamp = state.memory.timestamp;
                     let initial_opened_index = opened_index;
-
                     let mut row_pointer = 0;
                     let mut row_end = 0;
-
-                    let mut prev_rolling_hash: Option<[F; 2 * CHUNK]> = None;
                     let mut rolling_hash = [F::ZERO; 2 * CHUNK];
-
                     let mut is_first_in_segment = true;
 
                     loop {
@@ -451,9 +460,10 @@ where
                         if cells_idx == 0 {
                             break;
                         }
-                        let p2_input = rolling_hash;
-                        prev_rolling_hash = Some(rolling_hash);
-                        self.subchip.permute_mut(&mut rolling_hash);
+                        inside_cols.inner.inputs[..CHUNK].copy_from_slice(&rolling_hash[..CHUNK]);
+                        if !self.optimistic {
+                            self.subchip.permute_mut(&mut rolling_hash);
+                        }
                         if cells_idx < CHUNK {
                             state
                                 .memory
@@ -461,7 +471,7 @@ where
                         }
 
                         inside_row_idx += 1;
-                        inside_cols.inner.inputs = p2_input;
+                        // left
                         inside_cols.incorporate_row = F::ZERO;
                         inside_cols.incorporate_sibling = F::ZERO;
                         inside_cols.inside_row = F::ONE;
@@ -514,13 +524,14 @@ where
                     );
                     assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
 
-                    let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
-                    let (p2_input, new_root) = if log_height as u32 == initial_log_height_u32 {
-                        (prev_rolling_hash.unwrap(), hash)
-                    } else {
-                        compress(&self.subchip, root, hash)
-                    };
-                    root = new_root;
+                    if !self.optimistic {
+                        let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
+                        root = if log_height as u32 == initial_log_height_u32 {
+                            hash
+                        } else {
+                            compress(&self.subchip, root, hash).1
+                        };
+                    }
                     non_inside_row_idx += 1;
 
                     incorporate_cols.incorporate_row = F::ONE;
@@ -538,7 +549,6 @@ where
                     top_level_specific_cols.end_timestamp =
                         F::from_canonical_u32(final_height_read_timestamp + 1);
 
-                    incorporate_cols.inner.inputs = p2_input;
                     incorporate_cols.initial_opened_index =
                         F::from_canonical_usize(initial_opened_index);
                     top_level_specific_cols.final_opened_index =
@@ -570,16 +580,17 @@ where
                             .as_mut(),
                     );
                     let sibling = sibling_proof[proof_index];
-                    let (p2_input, new_root) = if sibling_is_on_right == F::ONE {
-                        compress(&self.subchip, sibling, root)
-                    } else {
-                        compress(&self.subchip, root, sibling)
-                    };
-                    root = new_root;
+                    if !self.optimistic {
+                        root = if sibling_is_on_right == F::ONE {
+                            compress(&self.subchip, sibling, root).1
+                        } else {
+                            compress(&self.subchip, root, sibling).1
+                        };
+                    }
 
                     non_inside_row_idx += 1;
 
-                    sibling_cols.inner.inputs = p2_input;
+                    sibling_cols.inner.inputs[..CHUNK].copy_from_slice(&sibling);
 
                     sibling_cols.incorporate_row = F::ZERO;
                     sibling_cols.incorporate_sibling = F::ONE;
@@ -613,6 +624,7 @@ where
             let ltl_trace_cols = &mut allocated_rows[non_inside_row_idx - 1];
             let ltl_trace_specific_cols: &mut TopLevelSpecificCols<F> =
                 ltl_trace_cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
+            ltl_trace_cols.inner.export = F::from_canonical_u32(total_num_row as u32);
             ltl_trace_cols.end_top_level = F::ONE;
             ltl_trace_specific_cols.pc = F::from_canonical_u32(*state.pc);
             ltl_trace_specific_cols.dim_register = dim_register;
@@ -630,7 +642,9 @@ where
                 ltl_specific_cols.index_base_pointer_read;
             ltl_trace_specific_cols.commit_pointer_read = ltl_specific_cols.commit_pointer_read;
             ltl_trace_specific_cols.commit_read = ltl_specific_cols.commit_read;
-            assert_eq!(commit, root);
+            if !self.optimistic {
+                assert_eq!(commit, root);
+            }
         } else {
             unreachable!()
         }
@@ -655,148 +669,300 @@ where
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> TraceFiller<F>
     for NativePoseidon2Filler<F, SBOX_REGISTERS>
 {
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        let inner_cols = {
-            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
-            &self.subchip.generate_trace(vec![cols.inner.inputs]).values
-        };
-        let inner_width = self.subchip.air.width();
-        row_slice[..inner_width].copy_from_slice(inner_cols);
-        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.borrow_mut();
-
-        // Simple poseidon2 row
-        if cols.simple.is_one() {
-            let simple_cols: &mut SimplePoseidonSpecificCols<F> =
-                cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
-            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
-            mem_fill_helper(
-                mem_helper,
-                start_timestamp_u32,
-                simple_cols.read_output_pointer.as_mut(),
-            );
-            mem_fill_helper(
-                mem_helper,
-                start_timestamp_u32 + 1,
-                simple_cols.read_input_pointer_1.as_mut(),
-            );
-            if simple_cols.is_compress.is_one() {
-                mem_fill_helper(
-                    mem_helper,
-                    start_timestamp_u32 + 2,
-                    simple_cols.read_input_pointer_2.as_mut(),
-                );
-            }
-            mem_fill_helper(
-                mem_helper,
-                start_timestamp_u32 + 3,
-                simple_cols.read_data_1.as_mut(),
-            );
-            mem_fill_helper(
-                mem_helper,
-                start_timestamp_u32 + 4,
-                simple_cols.read_data_2.as_mut(),
-            );
-            mem_fill_helper(
-                mem_helper,
-                start_timestamp_u32 + 5,
-                simple_cols.write_data_1.as_mut(),
-            );
-            if simple_cols.is_compress.is_zero() {
-                mem_fill_helper(
-                    mem_helper,
-                    start_timestamp_u32 + 6,
-                    simple_cols.write_data_2.as_mut(),
-                );
-            }
-        } else if cols.inside_row.is_one() {
-            let inside_row_specific_cols: &mut InsideRowSpecificCols<F> =
-                cols.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
-            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
-            for (i, cell) in inside_row_specific_cols.cells.iter_mut().enumerate() {
-                if i > 0 && cols.is_exhausted[i - 1].is_one() {
-                    break;
-                }
-                if cell.is_first_in_row.is_one() {
-                    mem_fill_helper(
-                        mem_helper,
-                        start_timestamp_u32 + 2 * i as u32,
-                        cell.read_row_pointer_and_length.as_mut(),
-                    );
-                }
-                mem_fill_helper(
-                    mem_helper,
-                    start_timestamp_u32 + 2 * i as u32 + 1,
-                    cell.read.as_mut(),
-                );
-            }
-        } else {
-            let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
-                cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
-            let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
-            if cols.end_top_level.is_one() {
-                let very_start_timestamp_u32 = cols.very_first_timestamp.as_canonical_u32();
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32,
-                    top_level_specific_cols.dim_base_pointer_read.as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32 + 1,
-                    top_level_specific_cols.opened_base_pointer_read.as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32 + 2,
-                    top_level_specific_cols.opened_length_read.as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32 + 3,
-                    top_level_specific_cols.index_base_pointer_read.as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32 + 4,
-                    top_level_specific_cols.commit_pointer_read.as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    very_start_timestamp_u32 + 5,
-                    top_level_specific_cols.commit_read.as_mut(),
-                );
-            }
-            if cols.incorporate_row.is_one() {
-                let end_timestamp = top_level_specific_cols.end_timestamp.as_canonical_u32();
-                mem_fill_helper(
-                    mem_helper,
-                    end_timestamp - 2,
-                    top_level_specific_cols
-                        .read_initial_height_or_sibling_is_on_right
-                        .as_mut(),
-                );
-                mem_fill_helper(
-                    mem_helper,
-                    end_timestamp - 1,
-                    top_level_specific_cols.read_final_height.as_mut(),
-                );
-            } else if cols.incorporate_sibling.is_one() {
-                mem_fill_helper(
-                    mem_helper,
-                    start_timestamp_u32 + NUM_INITIAL_READS as u32,
-                    top_level_specific_cols
-                        .read_initial_height_or_sibling_is_on_right
-                        .as_mut(),
-                );
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) where
+        F: Send + Sync + Clone,
+    {
+        // Split the trace rows by instruction
+        let width = trace.width();
+        let mut row_idx = 0;
+        let mut row_slice = trace.values.as_mut_slice();
+        let mut chunk_start = Vec::new();
+        while row_idx < rows_used {
+            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice[..width].borrow();
+            let (curr, rest) = if cols.simple.is_one() {
+                row_idx += 1;
+                row_slice.split_at_mut(width)
             } else {
-                unreachable!()
+                let num_non_inside_row = cols.inner.export.as_canonical_u32() as usize;
+                let start = (num_non_inside_row - 1) * width;
+                let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                    row_slice[start..(start + width)].borrow();
+                let total_num_row = cols.inner.export.as_canonical_u32() as usize;
+                row_idx += total_num_row;
+                row_slice.split_at_mut(total_num_row * width)
+            };
+            chunk_start.push(curr);
+            row_slice = rest;
+        }
+        chunk_start.into_par_iter().for_each(|chunk_slice| {
+            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = chunk_slice[..width].borrow();
+            if cols.simple.is_one() {
+                self.fill_simple_chunk(mem_helper, chunk_slice);
+            } else {
+                self.fill_verify_batch_chunk(mem_helper, chunk_slice);
             }
+        });
+        // Remaining rows are dummy rows.
+        let inner_width = self.subchip.air.width();
+        row_slice.par_chunks_exact_mut(width).for_each(|row_slice| {
+            row_slice[..inner_width].copy_from_slice(&self.empty_poseidon2_sub_cols);
+        });
+    }
+}
+
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX_REGISTERS> {
+    fn fill_simple_chunk(&self, mem_helper: &MemoryAuxColsFactory<F>, chunk_slice: &mut [F]) {
+        {
+            let inner_width = self.subchip.air.width();
+            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = chunk_slice.as_ref().borrow();
+            let inner_cols = &self.subchip.generate_trace(vec![cols.inner.inputs]).values;
+            chunk_slice[..inner_width].copy_from_slice(inner_cols);
+        }
+
+        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = chunk_slice.borrow_mut();
+        // Simple poseidon2 row
+        let simple_cols: &mut SimplePoseidonSpecificCols<F> =
+            cols.specific[..SimplePoseidonSpecificCols::<u8>::width()].borrow_mut();
+        let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+        mem_fill_helper(
+            mem_helper,
+            start_timestamp_u32,
+            simple_cols.read_output_pointer.as_mut(),
+        );
+        mem_fill_helper(
+            mem_helper,
+            start_timestamp_u32 + 1,
+            simple_cols.read_input_pointer_1.as_mut(),
+        );
+        if simple_cols.is_compress.is_one() {
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 2,
+                simple_cols.read_input_pointer_2.as_mut(),
+            );
+        }
+        mem_fill_helper(
+            mem_helper,
+            start_timestamp_u32 + 3,
+            simple_cols.read_data_1.as_mut(),
+        );
+        mem_fill_helper(
+            mem_helper,
+            start_timestamp_u32 + 4,
+            simple_cols.read_data_2.as_mut(),
+        );
+        mem_fill_helper(
+            mem_helper,
+            start_timestamp_u32 + 5,
+            simple_cols.write_data_1.as_mut(),
+        );
+        if simple_cols.is_compress.is_zero() {
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + 6,
+                simple_cols.write_data_2.as_mut(),
+            );
         }
     }
 
-    fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
-        let width = self.subchip.air.width();
-        row_slice[..width].copy_from_slice(&self.empty_poseidon2_sub_cols);
+    fn fill_verify_batch_chunk(&self, mem_helper: &MemoryAuxColsFactory<F>, chunk_slice: &mut [F]) {
+        let inner_width = self.subchip.air.width();
+        let width = NativePoseidon2Cols::<F, SBOX_REGISTERS>::width();
+        let num_non_inside_rows = {
+            let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = chunk_slice[..width].borrow();
+            cols.inner.export.as_canonical_u32() as usize
+        };
+        let total_num_rows = {
+            let start = (num_non_inside_rows - 1) * width;
+            let last_cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                chunk_slice[start..(start + width)].borrow();
+            // During execution, this field hasn't been filled with meaningful data. So we use this
+            // field to store the number of inside rows.
+            last_cols.inner.export.as_canonical_u32() as usize
+        };
+        let mut first_round = true;
+        let mut root = [F::ZERO; CHUNK];
+        let mut inside_idx = num_non_inside_rows;
+        let mut non_inside_idx = 0;
+        while inside_idx < total_num_rows || non_inside_idx < num_non_inside_rows {
+            debug_assert!(non_inside_idx < num_non_inside_rows);
+            let incorporate_sibling = {
+                let start = non_inside_idx * width;
+                let row_slice = &mut chunk_slice[start..(start + width)];
+                let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
+                cols.incorporate_sibling.is_one()
+            };
+            if !incorporate_sibling {
+                let mut prev_rolling_hash: [F; 2 * CHUNK];
+                let mut rolling_hash = [F::ZERO; 2 * CHUNK];
+                loop {
+                    let start = inside_idx * width;
+                    let row_slice = &mut chunk_slice[start..(start + width)];
+                    let mut input_len = 0;
+                    {
+                        let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                            row_slice.borrow_mut();
+                        let inside_row_specific_cols: &mut InsideRowSpecificCols<F> =
+                            cols.specific[..InsideRowSpecificCols::<u8>::width()].borrow_mut();
+                        let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+                        for (i, cell) in inside_row_specific_cols.cells.iter_mut().enumerate() {
+                            if i > 0 && cols.is_exhausted[i - 1].is_one() {
+                                break;
+                            }
+                            input_len += 1;
+                            if cell.is_first_in_row.is_one() {
+                                mem_fill_helper(
+                                    mem_helper,
+                                    start_timestamp_u32 + 2 * i as u32,
+                                    cell.read_row_pointer_and_length.as_mut(),
+                                );
+                            }
+                            mem_fill_helper(
+                                mem_helper,
+                                start_timestamp_u32 + 2 * i as u32 + 1,
+                                cell.read.as_mut(),
+                            );
+                        }
+                    }
+                    {
+                        let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                            row_slice.as_ref().borrow();
+                        rolling_hash[..input_len].copy_from_slice(&cols.inner.inputs[..input_len]);
+                    }
+                    prev_rolling_hash = rolling_hash;
+
+                    let inner_cols = &self.subchip.generate_trace(vec![rolling_hash]).values;
+                    row_slice[..inner_width].copy_from_slice(inner_cols);
+                    let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
+                    rolling_hash = *Self::poseidon2_output_from_trace(&cols.inner);
+                    inside_idx += 1;
+                    if cols.end_inside_row.is_one() {
+                        break;
+                    }
+                }
+
+                let start = non_inside_idx * width;
+                let row_slice = &mut chunk_slice[start..(start + width)];
+                let mut p2_input = [F::ZERO; 2 * CHUNK];
+                if first_round {
+                    p2_input.copy_from_slice(&prev_rolling_hash);
+                } else {
+                    p2_input[..CHUNK].copy_from_slice(&root);
+                    p2_input[CHUNK..].copy_from_slice(&rolling_hash[..CHUNK]);
+                }
+
+                first_round = false;
+                let inner_cols = &self.subchip.generate_trace(vec![p2_input]).values;
+                row_slice[..inner_width].copy_from_slice(inner_cols);
+                let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.borrow_mut();
+                Self::fill_timestamp_for_top_level(mem_helper, cols);
+                root.copy_from_slice(&Self::poseidon2_output_from_trace(&cols.inner)[..CHUNK]);
+                non_inside_idx += 1;
+            }
+
+            if non_inside_idx < num_non_inside_rows {
+                let start = non_inside_idx * width;
+                let row_slice = &mut chunk_slice[start..(start + width)];
+                let p2_input = {
+                    let cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.borrow_mut();
+                    Self::fill_timestamp_for_top_level(mem_helper, cols);
+                    let sibling = &cols.inner.inputs[..CHUNK];
+                    let top_level_specific_cols: &TopLevelSpecificCols<F> =
+                        cols.specific[..TopLevelSpecificCols::<F>::width()].borrow();
+                    let sibling_is_on_right = top_level_specific_cols.sibling_is_on_right.is_one();
+                    let mut p2_input = [F::ZERO; 2 * CHUNK];
+                    if sibling_is_on_right {
+                        p2_input[..CHUNK].copy_from_slice(sibling);
+                        p2_input[CHUNK..].copy_from_slice(&root);
+                    } else {
+                        p2_input[..CHUNK].copy_from_slice(&root);
+                        p2_input[CHUNK..].copy_from_slice(sibling);
+                    };
+                    p2_input
+                };
+                let inner_cols = &self.subchip.generate_trace(vec![p2_input]).values;
+                row_slice[..inner_width].copy_from_slice(inner_cols);
+                let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> = row_slice.as_ref().borrow();
+                root.copy_from_slice(&Self::poseidon2_output_from_trace(&cols.inner)[..CHUNK]);
+                non_inside_idx += 1;
+            }
+        }
+    }
+    fn fill_timestamp_for_top_level(
+        mem_helper: &MemoryAuxColsFactory<F>,
+        cols: &mut NativePoseidon2Cols<F, SBOX_REGISTERS>,
+    ) {
+        let top_level_specific_cols: &mut TopLevelSpecificCols<F> =
+            cols.specific[..TopLevelSpecificCols::<u8>::width()].borrow_mut();
+        let start_timestamp_u32 = cols.start_timestamp.as_canonical_u32();
+        if cols.end_top_level.is_one() {
+            let very_start_timestamp_u32 = cols.very_first_timestamp.as_canonical_u32();
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32,
+                top_level_specific_cols.dim_base_pointer_read.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32 + 1,
+                top_level_specific_cols.opened_base_pointer_read.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32 + 2,
+                top_level_specific_cols.opened_length_read.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32 + 3,
+                top_level_specific_cols.index_base_pointer_read.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32 + 4,
+                top_level_specific_cols.commit_pointer_read.as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                very_start_timestamp_u32 + 5,
+                top_level_specific_cols.commit_read.as_mut(),
+            );
+        }
+        if cols.incorporate_row.is_one() {
+            let end_timestamp = top_level_specific_cols.end_timestamp.as_canonical_u32();
+            mem_fill_helper(
+                mem_helper,
+                end_timestamp - 2,
+                top_level_specific_cols
+                    .read_initial_height_or_sibling_is_on_right
+                    .as_mut(),
+            );
+            mem_fill_helper(
+                mem_helper,
+                end_timestamp - 1,
+                top_level_specific_cols.read_final_height.as_mut(),
+            );
+        } else if cols.incorporate_sibling.is_one() {
+            mem_fill_helper(
+                mem_helper,
+                start_timestamp_u32 + NUM_INITIAL_READS as u32,
+                top_level_specific_cols
+                    .read_initial_height_or_sibling_is_on_right
+                    .as_mut(),
+            );
+        } else {
+            unreachable!()
+        }
+    }
+
+    #[inline(always)]
+    fn poseidon2_output_from_trace(inner: &Poseidon2SubCols<F, SBOX_REGISTERS>) -> &[F; 2 * CHUNK] {
+        &inner.ending_full_rounds.last().unwrap().post
     }
 }
 
