@@ -29,8 +29,8 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode,
+    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode, NATIVE_AS,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -366,8 +366,6 @@ where
         } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_REGISTER_AS);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
@@ -381,7 +379,6 @@ where
             &mut record.rs1_aux_record.prev_timestamp,
         ));
 
-        record.mem_as = e.as_canonical_u32() as u8;
         record.imm = c.as_canonical_u32() as u16;
         record.imm_sign = g.is_one();
         let imm_extended = record.imm as u32 + record.imm_sign as u32 * 0xffff0000;
@@ -397,33 +394,39 @@ where
             self.pointer_max_bits
         );
 
-        let read_data = match local_opcode {
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => tracing_read(
-                memory,
-                e.as_canonical_u32(),
-                ptr_val,
-                &mut record.read_data_aux.prev_timestamp,
-            ),
-            STOREW | STOREH | STOREB => tracing_read(
-                memory,
-                RV32_REGISTER_AS,
-                a.as_canonical_u32(),
-                &mut record.read_data_aux.prev_timestamp,
-            ),
-        };
-
-        // We need to keep values of some cells to keep them unchanged when writing to those cells
-        let prev_data = match local_opcode {
+        // prev_data: We need to keep values of some cells to keep them unchanged when writing to
+        // those cells
+        let (read_data, prev_data) = match local_opcode {
+            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
+                record.mem_as = RV32_MEMORY_AS as u8;
+                let read_data = tracing_read(
+                    memory,
+                    RV32_MEMORY_AS,
+                    ptr_val,
+                    &mut record.read_data_aux.prev_timestamp,
+                );
+                let prev_data = memory_read(memory.data(), RV32_REGISTER_AS, a.as_canonical_u32())
+                    .map(u32::from);
+                (read_data, prev_data)
+            }
             STOREW | STOREH | STOREB => {
-                if e.as_canonical_u32() == 4 {
+                let e = e.as_canonical_u32();
+                debug_assert_ne!(e, RV32_IMM_AS);
+                debug_assert_ne!(e, RV32_REGISTER_AS);
+                record.mem_as = e as u8;
+                let read_data = tracing_read(
+                    memory,
+                    RV32_REGISTER_AS,
+                    a.as_canonical_u32(),
+                    &mut record.read_data_aux.prev_timestamp,
+                );
+                let prev_data = if e == NATIVE_AS {
                     memory_read_native(memory.data(), ptr_val).map(|x: F| x.as_canonical_u32())
                 } else {
-                    memory_read(memory.data(), e.as_canonical_u32(), ptr_val).map(u32::from)
-                }
-            }
-            LOADW | LOADB | LOADH | LOADBU | LOADHU => {
-                memory_read(memory.data(), d.as_canonical_u32(), a.as_canonical_u32())
-                    .map(u32::from)
+                    memory_read(memory.data(), e, ptr_val).map(u32::from)
+                };
+                (read_data, prev_data)
             }
         };
 
@@ -448,8 +451,8 @@ where
         } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_IMM_AS);
-        debug_assert!(e.as_canonical_u32() != RV32_REGISTER_AS);
+        debug_assert_ne!(e.as_canonical_u32(), RV32_IMM_AS);
+        debug_assert_ne!(e.as_canonical_u32(), RV32_REGISTER_AS);
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),

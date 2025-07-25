@@ -41,6 +41,7 @@ pub struct VmOpcode(usize);
 
 impl VmOpcode {
     /// Returns the corresponding `local_opcode_idx`
+    #[inline(always)]
     pub const fn local_opcode_idx(&self, offset: usize) -> usize {
         self.as_usize() - offset
     }
