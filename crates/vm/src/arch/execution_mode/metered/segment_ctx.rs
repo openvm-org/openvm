@@ -50,8 +50,8 @@ impl SegmentationCtx {
         interactions: Vec<usize>,
         segmentation_limits: SegmentationLimits,
     ) -> Self {
-        debug_assert_eq!(air_names.len(), widths.len());
-        debug_assert_eq!(air_names.len(), interactions.len());
+        assert_eq!(air_names.len(), widths.len());
+        assert_eq!(air_names.len(), interactions.len());
 
         Self {
             segments: Vec::new(),
@@ -67,8 +67,8 @@ impl SegmentationCtx {
         widths: Vec<usize>,
         interactions: Vec<usize>,
     ) -> Self {
-        debug_assert_eq!(air_names.len(), widths.len());
-        debug_assert_eq!(air_names.len(), interactions.len());
+        assert_eq!(air_names.len(), widths.len());
+        assert_eq!(air_names.len(), interactions.len());
 
         Self {
             segments: Vec::new(),
@@ -96,14 +96,14 @@ impl SegmentationCtx {
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
-        // SAFETY: Length equality is asserted above, so indices are guaranteed to be in bounds
-        unsafe {
-            trace_heights
-                .iter()
-                .zip(self.widths.get_unchecked(..trace_heights.len()))
-                .map(|(&height, &width)| height as usize * width)
-                .sum()
-        }
+        // SAFETY: Length equality is asserted during initialization
+        let widths_slice = unsafe { self.widths.get_unchecked(..trace_heights.len()) };
+
+        trace_heights
+            .iter()
+            .zip(widths_slice)
+            .map(|(&height, &width)| height as usize * width)
+            .sum()
     }
 
     /// Calculate the total interactions based on trace heights and interaction counts
@@ -111,15 +111,15 @@ impl SegmentationCtx {
     fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.interactions.len());
 
-        // SAFETY: Length equality is asserted above, so indices are guaranteed to be in bounds
-        unsafe {
-            trace_heights
-                .iter()
-                .zip(self.interactions.get_unchecked(..trace_heights.len()))
-                // We add 1 for the zero messages from the padding rows
-                .map(|(&height, &interactions)| (height + 1) as usize * interactions)
-                .sum()
-        }
+        // SAFETY: Length equality is asserted during initialization
+        let interactions_slice = unsafe { self.interactions.get_unchecked(..trace_heights.len()) };
+
+        trace_heights
+            .iter()
+            .zip(interactions_slice)
+            // We add 1 for the zero messages from the padding rows
+            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
+            .sum()
     }
 
     #[inline(always)]
@@ -143,25 +143,24 @@ impl SegmentationCtx {
             return false;
         }
 
-        // SAFETY: Length equality is asserted above, so all array accesses are in bounds
-        unsafe {
-            for i in 0..trace_heights.len() {
-                let height = *trace_heights.get_unchecked(i);
-                let is_constant = *is_trace_height_constant.get_unchecked(i);
-
-                // Only segment if the height is not constant and exceeds the maximum height
-                if !is_constant && height > self.segmentation_limits.max_trace_height {
-                    tracing::info!(
-                        "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
-                        self.segments.len(),
-                        instret,
-                        i,
-                        self.air_names.get_unchecked(i),
-                        height,
-                        self.segmentation_limits.max_trace_height
-                    );
-                    return true;
-                }
+        for (i, (height, is_constant)) in trace_heights
+            .iter()
+            .zip(is_trace_height_constant.iter())
+            .enumerate()
+        {
+            // Only segment if the height is not constant and exceeds the maximum height
+            if !is_constant && *height > self.segmentation_limits.max_trace_height {
+                let air_name = &self.air_names[i];
+                tracing::info!(
+                    "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
+                    self.segments.len(),
+                    instret,
+                    i,
+                    air_name,
+                    height,
+                    self.segmentation_limits.max_trace_height
+                );
+                return true;
             }
         }
 

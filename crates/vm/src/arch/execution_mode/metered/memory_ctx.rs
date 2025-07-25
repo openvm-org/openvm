@@ -23,7 +23,9 @@ impl BitSet {
 
         debug_assert!(word_index < self.words.len(), "BitSet index out of bounds");
 
-        // SAFETY: word_index is bounds checked by debug_assert above
+        // SAFETY: word_index is derived from a memory address that is bounds-checked
+        //         during memory access. The bitset is sized to accommodate all valid
+        //         memory addresses, so word_index is always within bounds.
         let word = unsafe { self.words.get_unchecked_mut(word_index) };
         let was_set = (*word & mask) != 0;
         *word |= mask;
@@ -193,7 +195,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         for page_id in start_page_id..end_page_id {
             if self.page_indices.insert(page_id as usize) {
                 self.page_access_count += 1;
-                // SAFETY: address_space is bounds checked by debug_assert above
+                // SAFETY: address_space passed is usually a hardcoded constant or derived from an
+                // Instruction where it is bounds checked before passing
                 unsafe {
                     *self
                         .addr_space_access_count
@@ -223,7 +226,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     ) {
         debug_assert!((address_space as usize) < self.as_byte_alignment_bits.len());
 
-        // SAFETY: address_space is bounds checked by debug_assert above
+        // SAFETY: address_space passed is usually a hardcoded constant or derived from an
+        // Instruction where it is bounds checked before passing
         let align_bits = unsafe {
             *self
                 .as_byte_alignment_bits
@@ -239,7 +243,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
             let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
             debug_assert!(adapter_idx < trace_heights.len());
-            // SAFETY: adapter_idx is bounds checked by debug_assert above
+            // SAFETY: trace_heights is initialized taking access adapters into account
             unsafe {
                 *trace_heights.get_unchecked_mut(adapter_idx) +=
                     num << (size_bits - adapter_bits + 1);
@@ -254,7 +258,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
         // On page fault, assume we add all leaves in a page
         let leaves = (self.page_access_count << PAGE_BITS) as u32;
-        // SAFETY: boundary_idx is bounds checked by debug_assert above
+        // SAFETY: boundary_idx is a compile time constant within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
         }
@@ -264,15 +268,14 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             debug_assert!(trace_heights.len() >= 2);
 
             let poseidon2_idx = trace_heights.len() - 2;
-            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds by
-            // debug_assert above
+            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds
             unsafe {
                 *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
             }
 
             let merkle_height = self.memory_dimensions.overall_height();
             let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
-            // SAFETY: poseidon2_idx and merkle_tree_idx are bounds checked by debug_asserts above
+            // SAFETY: merkle_tree_idx is guaranteed to be in bounds
             unsafe {
                 *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * 2;
                 *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * 2;
