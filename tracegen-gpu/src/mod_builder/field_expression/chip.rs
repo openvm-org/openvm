@@ -39,6 +39,8 @@ impl FieldExpressionChipGPU {
         adapter_blocks: usize,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<LIMB_BITS>>,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
     ) -> Self {
         let num_inputs = air.num_inputs() as u32;
         let num_vars = air.num_vars() as u32;
@@ -176,6 +178,8 @@ impl FieldExpressionChipGPU {
             barrett_mu_buf,
             range_checker,
             bitwise_lookup,
+            pointer_max_bits,
+            timestamp_max_bits,
         }
     }
 
@@ -449,7 +453,9 @@ impl FieldExpressionChipGPU {
                 padded_height,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
-                self.air.expr.canonical_limb_bits() as u32,
+                LIMB_BITS as u32,
+                self.pointer_max_bits,
+                self.timestamp_max_bits,
             )
             .unwrap();
         }

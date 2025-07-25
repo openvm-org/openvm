@@ -1,99 +1,79 @@
 use std::sync::Arc;
 
 use derive_new::new;
-use openvm_circuit::arch::{AdapterCoreLayout, DenseRecordArena, RecordSeeker, VmAirWrapper};
-use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionMetadata};
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterRecord, Rv32VecHeapAdapterStep,
+use openvm_algebra_circuit::fp2_chip::fp2_muldiv_expr;
+use openvm_algebra_transpiler::Fp2Opcode;
+use openvm_circuit::arch::{AdapterCoreLayout, DenseRecordArena, RecordSeeker};
+use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_mod_circuit_builder::{
+    ExprBuilderConfig, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
-};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use stark_backend_gpu::{cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend};
 
 use crate::{
-    mod_builder::field_expression::{constants::LIMB_BITS, FieldExpressionChipGPU},
+    extensions::algebra::AlgebraRecord,
+    get_empty_air_proving_ctx,
+    mod_builder::field_expression::FieldExpressionChipGPU,
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
     },
-    DeviceChip,
 };
 
-type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
-    Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    FieldExpressionCoreAir,
->;
-
 #[derive(new)]
-pub struct Fp2MulDivChipGpu<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    pub air: Fp2Air<BLOCKS, BLOCK_SIZE>,
+pub struct Fp2MulDivChipGpu<const BLOCKS: usize, const BLOCK_SIZE: usize> {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
-    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<LIMB_BITS>>,
-    pub arena: Option<&'a DenseRecordArena>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub config: ExprBuilderConfig,
+    pub offset: usize,
+    pub pointer_max_bits: u32,
+    pub timestamp_max_bits: u32,
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Fp2MulDivChipGpu<'_, BLOCKS, BLOCK_SIZE> {
-    fn get_record_size(&self) -> usize {
-        let total_input_limbs =
-            self.air.core.expr.builder.num_input * self.air.core.expr.canonical_num_limbs();
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
+    for Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>
+{
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        let range_bus = self.range_checker.cpu_chip.as_ref().unwrap().bus();
+        let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(self.config.clone(), range_bus);
+
+        let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
-        RecordSeeker::<
+        let record_size = RecordSeeker::<
             DenseRecordArena,
-            (
-                &mut Rv32VecHeapAdapterRecord<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-                openvm_mod_circuit_builder::FieldExpressionCoreRecordMut<'_>,
-            ),
+            AlgebraRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
-        >::get_aligned_record_size(&layout)
-    }
-}
+        >::get_aligned_record_size(&layout);
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> ChipUsageGetter
-    for Fp2MulDivChipGpu<'_, BLOCKS, BLOCK_SIZE>
-{
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
+        }
+        debug_assert_eq!(records.len() % record_size, 0);
 
-    fn current_trace_height(&self) -> usize {
-        let record_size = self.get_record_size();
-        let buf = &self.arena.unwrap().allocated();
-        let total = buf.len();
+        let num_records = records.len() / record_size;
 
-        assert_eq!(total % record_size, 0);
-        total / record_size
-    }
+        let local_opcode_idx = vec![
+            Fp2Opcode::MUL as usize,
+            Fp2Opcode::DIV as usize,
+            Fp2Opcode::SETUP_MULDIV as usize,
+        ];
+        let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DeviceChip<SC, GpuBackend>
-    for Fp2MulDivChipGpu<'_, BLOCKS, BLOCK_SIZE>
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let buf = &self.arena.unwrap().allocated();
-        let d_records = buf.to_device().unwrap();
-
-        let record_size = self.get_record_size();
-        let num_records = buf.len() / record_size;
+        let air = FieldExpressionCoreAir::new(expr, self.offset, local_opcode_idx, opcode_flag_idx);
 
         let adapter_width =
-            <Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE> as BaseAir<F>>::width(
-                &self.air.adapter,
-            );
-        let core_chip = FieldExpressionChipGPU::new(
-            self.air.core.clone(),
+            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+
+        let d_records = records.to_device().unwrap();
+
+        let field_expr_chip = FieldExpressionChipGPU::new(
+            air,
             d_records,
             num_records,
             record_size,
@@ -101,271 +81,265 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DeviceChip<SC, GpuBackend>
             BLOCKS,
             self.range_checker.clone(),
             self.bitwise_lookup.clone(),
+            self.pointer_max_bits,
+            self.timestamp_max_bits,
         );
 
-        core_chip.generate_field_trace()
+        let d_trace = field_expr_chip.generate_field_trace();
+
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use openvm_algebra_circuit::FieldExprVecHeapStep;
-    use openvm_algebra_transpiler::Fp2Opcode;
-    use openvm_circuit::arch::{
-        testing::BITWISE_OP_LOOKUP_BUS, DenseRecordArena, MatrixRecordArena, NewVmChipWrapper,
+    use num_bigint::BigUint;
+    use num_traits::{One, Zero};
+    use openvm_algebra_circuit::fp2_chip::{
+        get_fp2_muldiv_air, get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Step,
     };
+    use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_circuit_primitives::{
-        bigint::utils::secp256k1_coord_prime,
-        bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+        bigint::utils::secp256k1_coord_prime, bitwise_op_lookup::BitwiseOperationLookupChip,
+        var_range::VariableRangeCheckerChip,
     };
-    use openvm_instructions::{
-        instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode, VmOpcode,
-    };
+    use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
     use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig};
-    use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
-    use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-    use rand::Rng;
-    use stark_backend_gpu::prelude::F;
+    use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+    use openvm_stark_backend::p3_field::FieldAlgebra;
+    use openvm_stark_sdk::utils::create_seeded_rng;
+    use rand::{rngs::StdRng, Rng};
 
     use super::*;
-    use crate::testing::GpuChipTestBuilder;
+    use crate::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
+    };
 
-    // Reuse BLOCKS = 2, BLOCK_SIZE = NUM_LIMBS for Fp2 (two field elements)
-    const NUM_LIMBS: usize = 32;
     const LIMB_BITS: usize = 8;
-    const MAX_INS_CAPACITY: usize = 512;
+    const MAX_INS_CAPACITY: usize = 128;
 
-    type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-        FieldExprVecHeapStep<2, BLOCKS, BLOCK_SIZE>;
-
-    // Helper to build dense chip using tmp fp2 chip
-    fn create_dense_fp2_muldiv_chip(
+    fn create_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
         tester: &GpuChipTestBuilder,
-        modulus: &num_bigint::BigUint,
+        config: ExprBuilderConfig,
         offset: usize,
-        bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> NewVmChipWrapper<F, Fp2Air<2, NUM_LIMBS>, Fp2Step<2, NUM_LIMBS>, DenseRecordArena> {
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        };
-        // build a temporary sparse chip to pull air & step
-        let tmp_chip = openvm_algebra_circuit::fp2_chip::Fp2MulDivChip::<F, 2, NUM_LIMBS>::new(
+    ) -> GpuTestChipHarness<
+        F,
+        Fp2Step<BLOCKS, BLOCK_SIZE>,
+        Fp2Air<BLOCKS, BLOCK_SIZE>,
+        Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>,
+        Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+    > {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let range_bus = default_var_range_checker_bus();
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        let air = get_fp2_muldiv_air(
             tester.execution_bridge(),
             tester.memory_bridge(),
-            tester.cpu_memory_helper(),
+            config.clone(),
+            range_bus,
+            bitwise_bus,
             tester.address_bits(),
-            config,
             offset,
-            bitwise_chip.clone(),
-            tester.cpu_range_checker(),
         );
-        let mut dense_chip = NewVmChipWrapper::<F, _, _, DenseRecordArena>::new(
-            tmp_chip.0.air,
-            tmp_chip.0.step,
-            tester.cpu_memory_helper(),
-        );
-        dense_chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        dense_chip
-    }
+        let executor =
+            get_fp2_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
 
-    fn create_sparse_fp2_muldiv_chip(
-        tester: &GpuChipTestBuilder,
-        modulus: &num_bigint::BigUint,
-        offset: usize,
-        bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> NewVmChipWrapper<F, Fp2Air<2, NUM_LIMBS>, Fp2Step<2, NUM_LIMBS>, MatrixRecordArena<F>>
-    {
-        let config = ExprBuilderConfig {
-            modulus: modulus.clone(),
-            num_limbs: NUM_LIMBS,
-            limb_bits: LIMB_BITS,
-        };
-        let chip = openvm_algebra_circuit::fp2_chip::Fp2MulDivChip::<F, 2, NUM_LIMBS>::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            tester.cpu_memory_helper(),
+        let cpu_chip = get_fp2_muldiv_chip(
+            config.clone(),
+            tester.dummy_memory_helper(),
+            dummy_range_checker_chip,
+            dummy_bitwise_chip,
             tester.address_bits(),
-            config,
-            offset,
-            bitwise_chip.clone(),
-            tester.cpu_range_checker(),
         );
-        let mut wrapped_chip = chip.0;
-        wrapped_chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        wrapped_chip
-    }
-
-    #[test]
-    fn test_fp2_muldiv_tracegen_mod_builder() {
-        let modulus = secp256k1_coord_prime();
-        let offset = Fp2Opcode::CLASS_OFFSET;
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker()
-            .with_bitwise_op_lookup(BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS));
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let shared_bitwise = SharedBitwiseOperationLookupChip::new(bitwise_bus);
-
-        // Build dense CPU chip to generate records
-        let mut dense_chip =
-            create_dense_fp2_muldiv_chip(&tester, &modulus, offset, shared_bitwise.clone());
-        // Build sparse CPU chip for expected trace
-        let mut sparse_chip =
-            create_sparse_fp2_muldiv_chip(&tester, &modulus, offset, shared_bitwise.clone());
-        // GPU chip wrapper (arena set later)
-        let mut gpu_chip = Fp2MulDivChipGpu::new(
-            dense_chip.air.clone(),
+        let gpu_chip = Fp2MulDivChipGpu::new(
             tester.range_checker(),
             tester.bitwise_op_lookup(),
-            None,
+            config,
+            offset,
+            tester.address_bits() as u32,
+            tester.timestamp_max_bits() as u32,
         );
 
-        let mut rng = create_seeded_rng();
-        for i in 0..50 {
-            let is_setup = i == 0;
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+    }
 
-            let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
-                (
-                    modulus.clone(),
-                    num_bigint::BigUint::from(0u32),
-                    num_bigint::BigUint::from(0u32),
-                    num_bigint::BigUint::from(0u32),
-                    Fp2Opcode::SETUP_MULDIV as usize,
-                )
-            } else {
-                // Generate random Fp2 elements (c0, c1)
-                let a_c0_digits: Vec<_> = (0..NUM_LIMBS)
-                    .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                    .collect();
-                let mut a_c0 = num_bigint::BigUint::new(a_c0_digits);
-                let a_c1_digits: Vec<_> = (0..NUM_LIMBS)
-                    .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                    .collect();
-                let mut a_c1 = num_bigint::BigUint::new(a_c1_digits);
+    fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
+        tester: &mut GpuChipTestBuilder,
+        harness: &mut GpuTestChipHarness<
+            F,
+            Fp2Step<BLOCKS, BLOCK_SIZE>,
+            Fp2Air<BLOCKS, BLOCK_SIZE>,
+            Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>,
+            Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+        >,
+        rng: &mut StdRng,
+        modulus: &BigUint,
+        is_setup: bool,
+        offset: usize,
+    ) {
+        let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
+            (
+                modulus.clone(),
+                BigUint::zero(),
+                BigUint::zero(),
+                BigUint::zero(),
+                Fp2Opcode::SETUP_MULDIV as usize,
+            )
+        } else {
+            let a_c0_digits: Vec<_> = (0..NUM_LIMBS)
+                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+                .collect();
+            let mut a_c0 = BigUint::new(a_c0_digits);
+            a_c0 %= modulus;
 
-                let b_c0_digits: Vec<_> = (0..NUM_LIMBS)
-                    .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                    .collect();
-                let mut b_c0 = num_bigint::BigUint::new(b_c0_digits);
-                let b_c1_digits: Vec<_> = (0..NUM_LIMBS)
-                    .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                    .collect();
-                let mut b_c1 = num_bigint::BigUint::new(b_c1_digits);
+            let a_c1_digits: Vec<_> = (0..NUM_LIMBS)
+                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+                .collect();
+            let mut a_c1 = BigUint::new(a_c1_digits);
+            a_c1 %= modulus;
 
-                let op = rng.gen_range(0..2);
-                a_c0 %= &modulus;
-                a_c1 %= &modulus;
-                b_c0 %= &modulus;
-                b_c1 %= &modulus;
+            let b_c0_digits: Vec<_> = (0..NUM_LIMBS)
+                .map(|_| rng.gen_range(1..(1 << LIMB_BITS)))
+                .collect();
+            let mut b_c0 = BigUint::new(b_c0_digits);
+            b_c0 %= modulus;
+            if b_c0 == BigUint::zero() {
+                b_c0 = BigUint::one();
+            }
 
-                // For DIV operation, make sure b is not zero (both components can't be zero)
-                if op == 1
-                    && b_c0 == num_bigint::BigUint::from(0u32)
-                    && b_c1 == num_bigint::BigUint::from(0u32)
-                {
-                    b_c0 = num_bigint::BigUint::from(1u32);
-                }
+            let b_c1_digits: Vec<_> = (0..NUM_LIMBS)
+                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+                .collect();
+            let mut b_c1 = BigUint::new(b_c1_digits);
+            b_c1 %= modulus;
 
-                let op_local = if op == 0 {
-                    Fp2Opcode::MUL as usize
-                } else {
-                    Fp2Opcode::DIV as usize
-                };
-                (a_c0, a_c1, b_c0, b_c1, op_local)
+            let op = rng.gen_range(0..2);
+            let op = match op {
+                0 => Fp2Opcode::MUL as usize,
+                1 => Fp2Opcode::DIV as usize,
+                _ => panic!(),
             };
+            (a_c0, a_c1, b_c0, b_c1, op)
+        };
 
-            let opcode = offset + op_local;
+        let ptr_as = 1;
+        let data_as = 2;
 
-            // Convert to limbs - Fp2 elements are stored as [c0, c1] for each operand
-            let a_c0_limbs: [BabyBear; NUM_LIMBS] =
-                biguint_to_limbs(a_c0, LIMB_BITS).map(BabyBear::from_canonical_u32);
-            let a_c1_limbs: [BabyBear; NUM_LIMBS] =
-                biguint_to_limbs(a_c1, LIMB_BITS).map(BabyBear::from_canonical_u32);
-            let b_c0_limbs: [BabyBear; NUM_LIMBS] =
-                biguint_to_limbs(b_c0, LIMB_BITS).map(BabyBear::from_canonical_u32);
-            let b_c1_limbs: [BabyBear; NUM_LIMBS] =
-                biguint_to_limbs(b_c1, LIMB_BITS).map(BabyBear::from_canonical_u32);
+        let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rs2_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
 
-            let ptr_as = 1;
-            let data_as = 2;
+        let a_base_addr = 0u32;
+        let b_base_addr = 128u32;
+        let result_base_addr = 256u32;
 
-            // Three pointers for registers: rs1 (operand a), rs2 (operand b), rd (result)
-            let rs1_ptr = 0;
-            let rs2_ptr = 3 * openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
-            let rd_ptr = 6 * openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs1_ptr,
+            a_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        );
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs2_ptr,
+            b_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        );
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rd_ptr,
+            result_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        );
 
-            // Memory addresses for Fp2 elements (each Fp2 has 2 field elements)
-            // Using increment of 128 to match CPU test's rv32_write_heap_default
-            let a_base_addr = 0u32;
-            let b_base_addr = 128u32;
-            let result_base_addr = 256u32;
+        let a_c0_limbs = biguint_to_limbs::<NUM_LIMBS>(a_c0, LIMB_BITS).map(F::from_canonical_u32);
+        let a_c1_limbs = biguint_to_limbs::<NUM_LIMBS>(a_c1, LIMB_BITS).map(F::from_canonical_u32);
+        let b_c0_limbs = biguint_to_limbs::<NUM_LIMBS>(b_c0, LIMB_BITS).map(F::from_canonical_u32);
+        let b_c1_limbs = biguint_to_limbs::<NUM_LIMBS>(b_c1, LIMB_BITS).map(F::from_canonical_u32);
 
-            // Write pointers to registers
-            tester.write(
-                ptr_as,
-                rs1_ptr,
-                a_base_addr.to_le_bytes().map(BabyBear::from_canonical_u8),
+        tester.write(data_as, a_base_addr as usize, a_c0_limbs);
+        tester.write(
+            data_as,
+            (a_base_addr + NUM_LIMBS as u32) as usize,
+            a_c1_limbs,
+        );
+        tester.write(data_as, b_base_addr as usize, b_c0_limbs);
+        tester.write(
+            data_as,
+            (b_base_addr + NUM_LIMBS as u32) as usize,
+            b_c1_limbs,
+        );
+
+        let instruction = Instruction::from_isize(
+            VmOpcode::from_usize(offset + op_local),
+            rd_ptr as isize,
+            rs1_ptr as isize,
+            rs2_ptr as isize,
+            ptr_as as isize,
+            data_as as isize,
+        );
+        tester.execute(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &instruction,
+        );
+    }
+
+    fn run_test_with_config<
+        const BLOCKS: usize,
+        const BLOCK_SIZE: usize,
+        const NUM_LIMBS: usize,
+    >(
+        modulus: BigUint,
+        num_ops: usize,
+    ) {
+        let mut rng = create_seeded_rng();
+
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+        let offset = Fp2Opcode::CLASS_OFFSET;
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS,
+            limb_bits: LIMB_BITS,
+        };
+
+        let mut harness = create_test_harness::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
+
+        for i in 0..num_ops {
+            set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS>(
+                &mut tester,
+                &mut harness,
+                &mut rng,
+                &modulus,
+                i == 0,
+                offset,
             );
-            tester.write(
-                ptr_as,
-                rs2_ptr,
-                b_base_addr.to_le_bytes().map(BabyBear::from_canonical_u8),
-            );
-            tester.write(
-                ptr_as,
-                rd_ptr,
-                result_base_addr
-                    .to_le_bytes()
-                    .map(BabyBear::from_canonical_u8),
-            );
-
-            // Write operand data - Fp2 elements stored as consecutive field elements
-            tester.write(data_as, a_base_addr as usize, a_c0_limbs);
-            tester.write(
-                data_as,
-                (a_base_addr + NUM_LIMBS as u32) as usize,
-                a_c1_limbs,
-            );
-            tester.write(data_as, b_base_addr as usize, b_c0_limbs);
-            tester.write(
-                data_as,
-                (b_base_addr + NUM_LIMBS as u32) as usize,
-                b_c1_limbs,
-            );
-
-            let instruction = Instruction::from_isize(
-                VmOpcode::from_usize(opcode),
-                rd_ptr as isize,
-                rs1_ptr as isize,
-                rs2_ptr as isize,
-                ptr_as as isize,
-                data_as as isize,
-            );
-            tester.execute(&mut dense_chip, &instruction);
         }
 
-        // Transfer records from dense arena to sparse chip matrix arena
-        type Record<'a> = (
-            &'a mut Rv32VecHeapAdapterRecord<2, 2, 2, NUM_LIMBS, NUM_LIMBS>,
-            openvm_mod_circuit_builder::FieldExpressionCoreRecordMut<'a>,
-        );
-        dense_chip
-            .arena
-            .get_record_seeker::<Record<'_>, _>()
+        harness
+            .dense_arena
+            .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, _>()
             .transfer_to_matrix_arena(
-                &mut sparse_chip.arena,
-                dense_chip.step.0.get_record_layout::<F>(),
+                &mut harness.matrix_arena,
+                harness.executor.get_record_layout::<F>(),
             );
-
-        // Assign arena to gpu chip
-        gpu_chip.arena = Some(&dense_chip.arena);
 
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_chip)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
+    }
+
+    #[test]
+    fn test_fp2_muldiv_gpu() {
+        run_test_with_config::<2, 32, 32>(secp256k1_coord_prime(), 50);
     }
 }

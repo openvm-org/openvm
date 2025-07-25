@@ -12,7 +12,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::testing::cuda::program_testing;
+use crate::{get_empty_air_proving_ctx, testing::cuda::program_testing};
 
 pub struct DeviceProgramTester(ProgramTester<F>);
 
@@ -50,11 +50,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
         let width = self.0.trace_width();
 
         if height == 0 {
-            return AirProvingContext {
-                cached_mains: vec![],
-                common_main: None,
-                public_values: vec![],
-            };
+            return get_empty_air_proving_ctx();
         }
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
 

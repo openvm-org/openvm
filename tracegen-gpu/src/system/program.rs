@@ -1,7 +1,10 @@
 use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
-use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    program::{Program, DEFAULT_PC_STEP},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
     prover::{
@@ -70,7 +73,7 @@ impl ProgramChipGPU {
                 &records,
                 num_records,
                 program.pc_base,
-                program.step,
+                DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),
             )
             .expect("Failed to generate cached trace");
@@ -280,8 +283,7 @@ mod tests {
                 0,
             )),
         ];
-        let program =
-            Program::new_without_debug_infos_with_option(&instructions, DEFAULT_PC_STEP, 0);
+        let program = Program::new_without_debug_infos_with_option(&instructions, 0);
         test_cached_committed_trace_data(program);
     }
 }
