@@ -18,7 +18,9 @@ use crate::{
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
-        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK},
+        memory::{
+            merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK, POINTER_MAX_BITS,
+        },
         SystemChipComplex,
     },
 };
@@ -155,7 +157,7 @@ impl Default for MemoryConfig {
         let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
         addr_space_sizes[ADDR_SPACE_OFFSET as usize..=NATIVE_AS as usize].fill(1 << 29);
         addr_space_sizes[PUBLIC_VALUES_AS as usize] = DEFAULT_MAX_NUM_PUBLIC_VALUES;
-        Self::new(3, addr_space_sizes, 29, 29, 17, 32)
+        Self::new(3, addr_space_sizes, POINTER_MAX_BITS, 29, 17, 32)
     }
 }
 
@@ -164,7 +166,7 @@ impl MemoryConfig {
     pub fn aggregation() -> Self {
         let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
         addr_space_sizes[NATIVE_AS as usize] = 1 << 29;
-        Self::new(3, addr_space_sizes, 29, 29, 17, 8)
+        Self::new(3, addr_space_sizes, POINTER_MAX_BITS, 29, 17, 8)
     }
 }
 
