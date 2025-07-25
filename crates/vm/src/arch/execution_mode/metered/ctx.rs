@@ -1,3 +1,5 @@
+use std::num::NonZero;
+
 use getset::WithSetters;
 use openvm_instructions::riscv::{
     RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
@@ -110,6 +112,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         ctx
     }
 
+    #[inline(always)]
     fn add_register_merkle_heights(&mut self) {
         if self.continuations_enabled {
             self.memory_ctx.update_boundary_merkle_heights(
@@ -159,15 +162,19 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.add_register_merkle_heights();
     }
 
+    #[inline(always)]
     pub fn check_and_segment(&mut self, instret: u64) {
-        // Avoid checking segment too often.
-        if instret
-            < self
-                .instret_last_segment_check
-                .saturating_add(self.segment_check_insns)
-        {
+        let threshold = self
+            .instret_last_segment_check
+            .wrapping_add(self.segment_check_insns);
+        debug_assert!(
+            threshold >= self.instret_last_segment_check,
+            "overflow in segment check threshold calculation"
+        );
+        if instret < threshold {
             return;
         }
+
         self.memory_ctx
             .lazy_update_boundary_heights(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
@@ -205,6 +212,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
+        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
         debug_assert!(
             size.is_power_of_two(),
             "size must be a power of 2, got {}",
@@ -212,7 +220,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
         );
 
         // Handle access adapter updates
-        let size_bits = size.ilog2();
+        let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
         self.memory_ctx
             .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
 
@@ -247,6 +255,15 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
 impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
-        self.trace_heights[chip_idx] += height_delta;
+        debug_assert!(
+            chip_idx < self.trace_heights.len(),
+            "chip_idx out of bounds"
+        );
+        unsafe {
+            *self.trace_heights.get_unchecked_mut(chip_idx) = self
+                .trace_heights
+                .get_unchecked(chip_idx)
+                .wrapping_add(height_delta);
+        }
     }
 }

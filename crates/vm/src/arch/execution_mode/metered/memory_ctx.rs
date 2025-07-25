@@ -17,12 +17,15 @@ impl BitSet {
 
     #[inline(always)]
     pub fn insert(&mut self, index: usize) -> bool {
-        let word_index = index / 64;
-        let bit_index = index % 64;
+        let word_index = index >> 6;
+        let bit_index = index & 63;
         let mask = 1u64 << bit_index;
 
-        let was_set = (self.words[word_index] & mask) != 0;
-        self.words[word_index] |= mask;
+        debug_assert!(word_index < self.words.len(), "BitSet index out of bounds");
+
+        let word = unsafe { self.words.get_unchecked_mut(word_index) };
+        let was_set = (*word & mask) != 0;
+        *word |= mask;
         !was_set
     }
 
@@ -30,39 +33,53 @@ impl BitSet {
     #[inline(always)]
     pub fn insert_range(&mut self, start: usize, end: usize) -> usize {
         debug_assert!(start < end);
+        debug_assert!(end <= self.words.len() * 64, "BitSet range out of bounds");
+
         let mut ret = 0;
-        let start_word_index = start / u64::BITS as usize;
-        let end_word_index = (end - 1) / u64::BITS as usize;
-        let start_bit = start as u32 % u64::BITS;
+        let start_word_index = start >> 6;
+        let end_word_index = (end - 1) >> 6;
+        let start_bit = (start & 63) as u32;
+
         if start_word_index == end_word_index {
-            let end_bit = (end - 1) as u32 % u64::BITS + 1;
+            let end_bit = ((end - 1) & 63) as u32 + 1;
             let mask_bits = end_bit - start_bit;
-            let mask = (u64::MAX >> (u64::BITS - mask_bits)) << start_bit;
-            ret += mask_bits - (self.words[start_word_index] & mask).count_ones();
-            self.words[start_word_index] |= mask;
+            let mask = (u64::MAX >> (64 - mask_bits)) << start_bit;
+            let word = unsafe { self.words.get_unchecked_mut(start_word_index) };
+            ret += mask_bits - (*word & mask).count_ones();
+            *word |= mask;
         } else {
-            let end_bit = end as u32 % u64::BITS;
-            let mask_bits = u64::BITS - start_bit;
+            let end_bit = (end & 63) as u32;
+            let mask_bits = 64 - start_bit;
             let mask = u64::MAX << start_bit;
-            ret += mask_bits - (self.words[start_word_index] & mask).count_ones();
-            self.words[start_word_index] |= mask;
+            let start_word = unsafe { self.words.get_unchecked_mut(start_word_index) };
+            ret += mask_bits - (*start_word & mask).count_ones();
+            *start_word |= mask;
+
             let mask_bits = end_bit;
-            let (mask, _) = u64::MAX.overflowing_shr(u64::BITS - end_bit);
-            ret += mask_bits - (self.words[end_word_index] & mask).count_ones();
-            self.words[end_word_index] |= mask;
+            let mask = if end_bit == 0 {
+                0
+            } else {
+                u64::MAX >> (64 - end_bit)
+            };
+            let end_word = unsafe { self.words.get_unchecked_mut(end_word_index) };
+            ret += mask_bits - (*end_word & mask).count_ones();
+            *end_word |= mask;
         }
+
         if start_word_index + 1 < end_word_index {
             for i in (start_word_index + 1)..end_word_index {
-                ret += self.words[i].count_zeros();
-                self.words[i] = u64::MAX;
+                let word = unsafe { self.words.get_unchecked_mut(i) };
+                ret += word.count_zeros();
+                *word = u64::MAX;
             }
         }
         ret as usize
     }
 
+    #[inline(always)]
     pub fn clear(&mut self) {
-        for item in self.words.iter_mut() {
-            *item = 0;
+        unsafe {
+            std::ptr::write_bytes(self.words.as_mut_ptr(), 0, self.words.len());
         }
     }
 }
@@ -132,6 +149,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
         }
     }
+
     #[inline(always)]
     pub fn clear(&mut self) {
         self.page_indices.clear();
@@ -147,6 +165,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         ptr: u32,
         size: u32,
     ) {
+        debug_assert!((address_space as usize) < self.addr_space_access_count.len());
+
         let num_blocks = (size + self.chunk - 1) >> self.chunk_bits;
         let start_chunk_id = ptr >> self.chunk_bits;
         let start_block_id = if self.chunk == 1 {
@@ -159,10 +179,15 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_block_id = start_block_id + num_blocks;
         let start_page_id = start_block_id >> PAGE_BITS;
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
+
         for page_id in start_page_id..end_page_id {
             if self.page_indices.insert(page_id as usize) {
                 self.page_access_count += 1;
-                self.addr_space_access_count[address_space as usize] += 1;
+                unsafe {
+                    *self
+                        .addr_space_access_count
+                        .get_unchecked_mut(address_space as usize) += 1;
+                }
             }
         }
     }
@@ -185,38 +210,61 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         size_bits: u32,
         num: u32,
     ) {
-        let align_bits = self.as_byte_alignment_bits[address_space as usize];
+        debug_assert!((address_space as usize) < self.as_byte_alignment_bits.len());
+
+        let align_bits = unsafe {
+            *self
+                .as_byte_alignment_bits
+                .get_unchecked(address_space as usize)
+        };
         debug_assert!(
             align_bits as u32 <= size_bits,
             "align_bits ({}) must be <= size_bits ({})",
             align_bits,
             size_bits
         );
+
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
             let adapter_idx = self.adapter_offset + adapter_bits as usize - 1;
-            trace_heights[adapter_idx] += num << (size_bits - adapter_bits + 1);
+            debug_assert!(adapter_idx < trace_heights.len());
+            unsafe {
+                *trace_heights.get_unchecked_mut(adapter_idx) +=
+                    num << (size_bits - adapter_bits + 1);
+            }
         }
     }
 
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
+        debug_assert!(self.boundary_idx < trace_heights.len());
+
         // On page fault, assume we add all leaves in a page
         let leaves = (self.page_access_count << PAGE_BITS) as u32;
-        trace_heights[self.boundary_idx] += leaves;
+        unsafe {
+            *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
+        }
 
         if let Some(merkle_tree_idx) = self.merkle_tree_index {
+            debug_assert!(merkle_tree_idx < trace_heights.len());
+            debug_assert!(trace_heights.len() >= 2);
+
             let poseidon2_idx = trace_heights.len() - 2;
-            trace_heights[poseidon2_idx] += leaves * 2;
+            unsafe {
+                *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
+            }
 
             let merkle_height = self.memory_dimensions.overall_height();
             let nodes = (((1 << PAGE_BITS) - 1) + (merkle_height - PAGE_BITS)) as u32;
-            trace_heights[poseidon2_idx] += nodes * 2;
-            trace_heights[merkle_tree_idx] += nodes * 2;
+            unsafe {
+                *trace_heights.get_unchecked_mut(poseidon2_idx) += nodes * 2;
+                *trace_heights.get_unchecked_mut(merkle_tree_idx) += nodes * 2;
+            }
         }
         self.page_access_count = 0;
+
         for address_space in 0..self.addr_space_access_count.len() {
-            let x = self.addr_space_access_count[address_space];
+            let x = unsafe { *self.addr_space_access_count.get_unchecked(address_space) };
             if x > 0 {
                 // After finalize, we'll need to read it in chunk-sized units for the merkle chip
                 self.update_adapter_heights_batch(
@@ -225,7 +273,11 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
                     self.chunk_bits,
                     (x << PAGE_BITS) as u32,
                 );
-                self.addr_space_access_count[address_space] = 0;
+                unsafe {
+                    *self
+                        .addr_space_access_count
+                        .get_unchecked_mut(address_space) = 0;
+                }
             }
         }
     }
