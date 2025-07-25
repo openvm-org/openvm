@@ -11,7 +11,10 @@ use openvm_stark_backend::{
 use tracing::instrument;
 
 use crate::{
-    arch::{DenseRecordArena, MemoryConfig, RecordArena, ADDR_SPACE_OFFSET},
+    arch::{
+        AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
+        RecordArena, ADDR_SPACE_OFFSET,
+    },
     system::{
         memory::{
             adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
@@ -133,9 +136,10 @@ pub trait LinearMemory {
 /// `unsafe` API.
 #[derive(Debug, Clone)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
+    /// Underlying memory data.
     pub mem: Vec<M>,
-    /// byte size of cells per address space
-    pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
+    /// Host configuration for each address space.
+    pub config: Vec<AddressSpaceHostConfig>,
 }
 
 impl Default for AddressMap {
@@ -145,20 +149,17 @@ impl Default for AddressMap {
 }
 
 impl<M: LinearMemory> AddressMap<M> {
-    /// `mem_size` is the number of **cells** in each address space. It is required that
-    /// `mem_size[0] = 0`.
-    pub fn new(mem_size: Vec<usize>) -> Self {
-        // TMP: hardcoding for now
-        let mut cell_size = vec![1; 4];
-        cell_size.resize(mem_size.len(), 4);
-        let mem = zip_eq(&cell_size, &mem_size)
-            .map(|(cell_size, mem_size)| M::new(mem_size.checked_mul(*cell_size).unwrap()))
+    pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
+        assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
+        let mem = config
+            .iter()
+            .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        Self { mem, cell_size }
+        Self { mem, config }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
-        Self::new(mem_config.addr_space_sizes.clone())
+        Self::new(mem_config.addr_spaces.clone())
     }
 
     #[inline(always)]
@@ -171,24 +172,23 @@ impl<M: LinearMemory> AddressMap<M> {
         &mut self.mem
     }
 
-    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
-        debug_assert_ne!(addr_space, 0);
-        // TODO: fix this
-        unsafe {
-            if self.cell_size[addr_space as usize] == 1 {
-                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
-            } else {
-                debug_assert_eq!(self.cell_size[addr_space as usize], 4);
-                self.get::<F>((addr_space, ptr))
-            }
-        }
+    /// # Safety
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        let layout = &self.config.get_unchecked(addr_space as usize).layout;
+        let start = ptr as usize * layout.size();
+        let bytes = self.get_u8_slice(addr_space as usize, start, layout.size());
+        layout.to_field(bytes)
     }
 
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         // SAFETY:
         // - alignment is automatic since we multiply by `size_of::<T>()`
         self.mem
@@ -206,7 +206,10 @@ impl<M: LinearMemory> AddressMap<M> {
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);
         // SAFETY:
@@ -249,8 +252,8 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
-        let mut vec = Self::new(mem_size);
+    pub fn from_sparse(config: Vec<AddressSpaceHostConfig>, sparse_map: SparseMemoryImage) -> Self {
+        let mut vec = Self::new(config);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
@@ -292,7 +295,10 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         // SAFETY:
         // - `T` should be "plain old data"
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
@@ -315,7 +321,10 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory

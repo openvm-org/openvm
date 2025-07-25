@@ -2,7 +2,10 @@ use std::{fs::File, io::Write, path::Path};
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::NATIVE_AS;
+use openvm_instructions::{
+    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    NATIVE_AS,
+};
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -134,15 +137,33 @@ pub trait InitFileGenerator {
     }
 }
 
+/// Each address space in guest memory may be configured with a different type `T` to represent a
+/// memory cell in the address space. On host, the address space will be mapped to linear host
+/// memory in bytes. The type `T` must be plain old data (POD) and be safely transmutable from a
+/// fixed size array of bytes. Moreover, each type `T` must be convertable to a field element `F`.
+///
+/// We currently implement this trait on the enum [MemoryCellType], which includes all cell types
+/// that we expect to be used in the VM context.
+pub trait AddressSpaceHostLayout {
+    /// Size in bytes of the memory cell type.
+    fn size(&self) -> usize;
+
+    /// # Safety
+    /// - This function must only be called when `value` is guaranteed to be of size `self.size()`.
+    /// - Alignment of `value` must be a multiple of the alignment of `F`.
+    /// - The field type `F` must be plain old data.
+    unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F;
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, new)]
 pub struct MemoryConfig {
     /// The maximum height of the address space. This means the trie has `addr_space_height` layers
     /// for searching the address space. The allowed address spaces are those in the range `[1,
     /// 1 + 2^addr_space_height)` where it starts from 1 to not allow address space 0 in memory.
     pub addr_space_height: usize,
-    /// The number of cells in each address space. It is expected that the size of the list is
-    /// `1 << addr_space_height + 1` and the first element is 0, which means no address space.
-    pub addr_space_sizes: Vec<usize>,
+    /// It is expected that the size of the list is `1 << addr_space_height + 1` and the first
+    /// element is 0, which means no address space.
+    pub addr_spaces: Vec<AddressSpaceHostConfig>,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
     pub timestamp_max_bits: usize,
@@ -154,19 +175,38 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
-        addr_space_sizes[ADDR_SPACE_OFFSET as usize..=NATIVE_AS as usize].fill(1 << 29);
-        addr_space_sizes[PUBLIC_VALUES_AS as usize] = DEFAULT_MAX_NUM_PUBLIC_VALUES;
-        Self::new(3, addr_space_sizes, POINTER_MAX_BITS, 29, 17, 32)
+        // All except address spaces 0..4 default to native 32-bit field.
+        // By default only address spaces 1..=4 have non-empty cell counts.
+        let mut addr_spaces = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::native32());
+            (1 << 3) + ADDR_SPACE_OFFSET as usize
+        ];
+        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        const MAX_CELLS: usize = 1 << 29;
+        addr_spaces[RV32_REGISTER_AS as usize] =
+            AddressSpaceHostConfig::new(MAX_CELLS, MemoryCellType::U8);
+        addr_spaces[RV32_MEMORY_AS as usize] =
+            AddressSpaceHostConfig::new(MAX_CELLS, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] =
+            AddressSpaceHostConfig::new(DEFAULT_MAX_NUM_PUBLIC_VALUES, MemoryCellType::U8);
+        addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
     }
 }
 
 impl MemoryConfig {
     /// Config for aggregation usage with only native address space.
     pub fn aggregation() -> Self {
-        let mut addr_space_sizes = vec![0; (1 << 3) + ADDR_SPACE_OFFSET as usize];
-        addr_space_sizes[NATIVE_AS as usize] = 1 << 29;
-        Self::new(3, addr_space_sizes, POINTER_MAX_BITS, 29, 17, 8)
+        let mut addr_spaces = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::native32());
+            (1 << 3) + ADDR_SPACE_OFFSET as usize
+        ];
+        for config in addr_spaces.iter_mut().take(NATIVE_AS as usize) {
+            config.layout = MemoryCellType::U8;
+        }
+        addr_spaces[RV32_IMM_AS as usize].layout = MemoryCellType::Null;
+        addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
+        Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
     }
 }
 
@@ -214,7 +254,7 @@ impl SystemConfig {
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
-        memory_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = num_public_values;
+        memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
             continuation_enabled: false,
@@ -245,7 +285,7 @@ impl SystemConfig {
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
         self.num_public_values = num_public_values;
-        self.memory_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = num_public_values;
+        self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self
     }
 
@@ -318,3 +358,59 @@ impl AsMut<SystemConfig> for SystemConfig {
 
 // Default implementation uses no init file
 impl InitFileGenerator for SystemConfig {}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
+pub struct AddressSpaceHostConfig {
+    /// The number of cells in each address space.
+    pub num_cells: usize,
+    pub layout: MemoryCellType,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum MemoryCellType {
+    Null,
+    U8,
+    U16,
+    /// Represented in little-endian format.
+    U32,
+    Native {
+        size: u8,
+    },
+}
+
+impl MemoryCellType {
+    pub fn native32() -> Self {
+        Self::Native {
+            size: size_of::<u32>() as u8,
+        }
+    }
+}
+
+impl AddressSpaceHostLayout for MemoryCellType {
+    fn size(&self) -> usize {
+        match self {
+            Self::Null => 0,
+            Self::U8 => size_of::<u8>(),
+            Self::U16 => size_of::<u16>(),
+            Self::U32 => size_of::<u32>(),
+            Self::Native { size } => *size as usize,
+        }
+    }
+
+    /// # Safety
+    /// - This function must only be called when `value` is guaranteed to be of size `self.size()`.
+    /// - Alignment of `value` must be a multiple of the alignment of `F`.
+    /// - The field type `F` must be plain old data.
+    ///
+    /// # Panics
+    /// If the value is of integer type and overflows the field.
+    unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F {
+        match self {
+            Null => unreachable!(),
+            Self::U8 => F::from_canonical_u8(*value.get_unchecked(0)),
+            Self::U16 => F::from_canonical_u16(core::ptr::read(value.as_ptr() as *const u16)),
+            Self::U32 => F::from_canonical_u32(core::ptr::read(value.as_ptr() as *const u32)),
+            Self::Native { .. } => core::ptr::read(value.as_ptr() as *const F),
+        }
+    }
+}
