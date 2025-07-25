@@ -1,95 +1,75 @@
 use std::{mem::size_of, sync::Arc};
 
-use openvm_algebra_circuit::modular_chip::{ModularIsEqualAir, ModularIsEqualRecord};
+use derive_new::new;
+use num_bigint::BigUint;
+use openvm_algebra_circuit::modular_chip::ModularIsEqualRecord;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
+use openvm_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use openvm_rv32_adapters::Rv32IsEqualModAdapterRecord;
-use openvm_stark_backend::{rap::get_air_name, AirRef, ChipUsageGetter};
-use p3_air::BaseAir;
+use openvm_rv32_adapters::{Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord};
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend, types::SC,
+    base::DeviceMatrix, cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend,
 };
 
 use crate::{
-    extensions::algebra::cuda::is_eq_cuda::tracegen,
+    extensions::algebra::cuda::is_eq_cuda::tracegen as modular_is_eq_tracegen,
+    get_empty_air_proving_ctx,
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
     },
-    DeviceChip,
 };
 
+#[derive(new)]
 pub struct ModularIsEqualChipGpu<
     const NUM_LANES: usize,
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
 > {
-    air: ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    range_checker: Arc<VariableRangeCheckerChipGPU>,
-    bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
-    arena: DenseRecordArena,
+    pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub modulus: BigUint,
+    pub pointer_max_bits: u32,
+    pub timestamp_max_bits: u32,
 }
 
 impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
-    ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
-{
-    pub fn new(
-        air: ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        range_checker: Arc<VariableRangeCheckerChipGPU>,
-        bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
-        arena: DenseRecordArena,
-    ) -> Self {
-        Self {
-            air,
-            range_checker,
-            bitwise_lookup,
-            arena,
-        }
-    }
-}
-
-impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize> ChipUsageGetter
+    Chip<DenseRecordArena, GpuBackend>
     for ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        const LIMB_BITS: usize = 8;
 
-    fn current_trace_height(&self) -> usize {
         let record_size = size_of::<(
             Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualRecord<TOTAL_LIMBS>,
         )>();
-        let records_len = self.arena.allocated().len();
-        assert_eq!(records_len % record_size, 0);
-        records_len / record_size
-    }
 
-    fn trace_width(&self) -> usize {
-        BaseAir::<F>::width(&self.air)
-    }
-}
-
-impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
-    DeviceChip<SC, GpuBackend> for ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_trace(&self) -> DeviceMatrix<F> {
-        let d_records = self.arena.allocated().to_device().unwrap();
-        let trace_height = next_power_of_two_or_zero(self.current_trace_height());
-        let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
-
-        let mut mod_bytes = [0u8; TOTAL_LIMBS];
-        for (i, &limb) in self.air.core.modulus_limbs.iter().enumerate() {
-            mod_bytes[i] = limb as u8;
+        let records = arena.allocated();
+        if records.is_empty() {
+            return get_empty_air_proving_ctx::<GpuBackend>();
         }
-        let d_modulus = mod_bytes.as_slice().to_device().unwrap();
+        debug_assert_eq!(records.len() % record_size, 0);
+
+        let trace_width = Rv32IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
+            + openvm_algebra_circuit::modular_chip::ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width(
+            );
+        let trace_height = next_power_of_two_or_zero(records.len() / record_size);
+
+        let modulus_vec = big_uint_to_limbs(&self.modulus, LIMB_BITS);
+        assert!(modulus_vec.len() <= TOTAL_LIMBS);
+        let mut modulus_limbs = vec![0u8; TOTAL_LIMBS];
+        for (i, &limb) in modulus_vec.iter().enumerate() {
+            modulus_limbs[i] = limb as u8;
+        }
+
+        let d_records = records.to_device().unwrap();
+        let d_modulus = modulus_limbs.to_device().unwrap();
+        let d_trace = DeviceMatrix::<F>::with_capacity(trace_height, trace_width);
 
         unsafe {
-            tracegen(
-                trace.buffer(),
+            modular_is_eq_tracegen(
+                d_trace.buffer(),
                 trace_height,
                 &d_records,
                 &d_modulus,
@@ -98,268 +78,283 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
                 LANE_SIZE,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
+                self.pointer_max_bits,
+                self.timestamp_max_bits,
             )
             .unwrap();
         }
 
-        trace
+        AirProvingContext::simple_no_pis(d_trace)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigUint;
+    use num_traits::Zero;
     use openvm_algebra_circuit::modular_chip::{
-        ModularIsEqualAir, ModularIsEqualCoreAir, VmModularIsEqualStep,
+        ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
+        VmModularIsEqualStep,
     };
     use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-    use openvm_circuit::arch::{
-        testing::{memory::gen_pointer, BITWISE_OP_LOOKUP_BUS},
-        DenseRecordArena, EmptyAdapterCoreLayout, MatrixRecordArena, NewVmChipWrapper,
-        VmAirWrapper,
-    };
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_circuit_primitives::{
         bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime},
-        bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+        bitwise_op_lookup::BitwiseOperationLookupChip,
     };
-    use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS};
+    use openvm_instructions::{
+        instruction::Instruction,
+        riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+        LocalOpcode, VmOpcode,
+    };
+    use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
+    use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
     use openvm_rv32_adapters::{
-        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterRecord, Rv32IsEqualModeAdapterStep,
+        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
     };
     use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
-    use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
+    use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::{rngs::StdRng, Rng};
 
     use super::*;
-    use crate::testing::GpuChipTestBuilder;
+    use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
-    const NUM_LANES: usize = 1;
-    const LANE_SIZE: usize = 32;
-    const TOTAL_LIMBS: usize = 32;
-    const MAX_INS_CAPACITY: usize = 512;
-    const OPCODE_OFFSET: usize = 17;
+    const LIMB_BITS: usize = 8;
+    const MAX_INS_CAPACITY: usize = 128;
+    const WRITE_LIMBS: usize = RV32_REGISTER_NUM_LIMBS;
 
-    type DenseChip = NewVmChipWrapper<
-        F,
-        ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        DenseRecordArena,
-    >;
-
-    type SparseChip = NewVmChipWrapper<
-        F,
-        ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        MatrixRecordArena<F>,
-    >;
-
-    fn create_dense_chip(
+    fn create_test_harness<
+        const NUM_LANES: usize,
+        const LANE_SIZE: usize,
+        const TOTAL_LIMBS: usize,
+    >(
         tester: &GpuChipTestBuilder,
-        modulus: &num_bigint::BigUint,
-        modulus_limbs: [u8; TOTAL_LIMBS],
-        bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> DenseChip {
-        let mut chip = NewVmChipWrapper::<_, _, _, DenseRecordArena>::new(
-            VmAirWrapper::new(
-                Rv32IsEqualModAdapterAir::<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    tester.execution_bridge(),
-                    tester.memory_bridge(),
-                    bitwise_chip.bus(),
-                    tester.address_bits(),
-                ),
-                ModularIsEqualCoreAir::<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
-                    modulus.clone(),
-                    bitwise_chip.bus(),
-                    OPCODE_OFFSET,
-                ),
-            ),
-            VmModularIsEqualStep::new(
-                Rv32IsEqualModeAdapterStep::<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    tester.address_bits(),
-                    bitwise_chip.clone(),
-                ),
-                modulus_limbs,
-                OPCODE_OFFSET,
-                bitwise_chip.clone(),
-            ),
-            tester.cpu_memory_helper(),
+        modulus: BigUint,
+        offset: usize,
+    ) -> GpuTestChipHarness<
+        F,
+        VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    > {
+        // getting bus from tester since `gpu_chip` and `air` must use the same bus
+        let bitwise_bus = default_bitwise_lookup_bus();
+        // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+        let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+            bitwise_bus,
+        ));
+
+        // Convert modulus to limbs for CPU chip
+        let modulus_vec = big_uint_to_limbs(&modulus, LIMB_BITS);
+        assert!(modulus_vec.len() <= TOTAL_LIMBS);
+        let mut modulus_limbs = [0u8; TOTAL_LIMBS];
+        for (i, &limb) in modulus_vec.iter().enumerate() {
+            modulus_limbs[i] = limb as u8;
+        }
+
+        let adapter_air = Rv32IsEqualModAdapterAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
+            tester.address_bits(),
         );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
+        let core_air = ModularIsEqualCoreAir::<TOTAL_LIMBS, WRITE_LIMBS, LIMB_BITS>::new(
+            modulus.clone(),
+            bitwise_bus,
+            offset,
+        );
+        let air = ModularIsEqualAir::new(adapter_air, core_air);
+
+        let adapter_step = Rv32IsEqualModAdapterStep::new(tester.address_bits());
+        let executor = VmModularIsEqualStep::new(adapter_step, offset, modulus_limbs);
+
+        let adapter_filler =
+            Rv32IsEqualModAdapterFiller::new(tester.address_bits(), dummy_bitwise_chip.clone());
+        let core_filler = ModularIsEqualFiller::<_, TOTAL_LIMBS, WRITE_LIMBS, LIMB_BITS>::new(
+            adapter_filler,
+            offset,
+            modulus_limbs,
+            dummy_bitwise_chip,
+        );
+        let cpu_chip = ModularIsEqualChip::new(core_filler, tester.dummy_memory_helper());
+
+        let gpu_chip = ModularIsEqualChipGpu::new(
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
+            modulus,
+            tester.address_bits() as u32,
+            tester.timestamp_max_bits() as u32,
+        );
+
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
     }
 
-    fn create_sparse_chip(
-        tester: &GpuChipTestBuilder,
-        modulus: &num_bigint::BigUint,
-        modulus_limbs: [u8; TOTAL_LIMBS],
-        bitwise_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> SparseChip {
-        let mut chip = NewVmChipWrapper::<_, _, _, MatrixRecordArena<F>>::new(
-            VmAirWrapper::new(
-                Rv32IsEqualModAdapterAir::<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    tester.execution_bridge(),
-                    tester.memory_bridge(),
-                    bitwise_chip.bus(),
-                    tester.address_bits(),
-                ),
-                ModularIsEqualCoreAir::<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>::new(
-                    modulus.clone(),
-                    bitwise_chip.bus(),
-                    OPCODE_OFFSET,
-                ),
-            ),
-            VmModularIsEqualStep::new(
-                Rv32IsEqualModeAdapterStep::<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                    tester.address_bits(),
-                    bitwise_chip.clone(),
-                ),
-                modulus_limbs,
-                OPCODE_OFFSET,
-                bitwise_chip.clone(),
-            ),
-            tester.cpu_memory_helper(),
-        );
-        chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-        chip
-    }
-
-    fn set_and_execute(
+    fn set_and_execute_is_eq<
+        const NUM_LANES: usize,
+        const LANE_SIZE: usize,
+        const TOTAL_LIMBS: usize,
+    >(
         tester: &mut GpuChipTestBuilder,
-        chip: &mut DenseChip,
+        harness: &mut GpuTestChipHarness<
+            F,
+            VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        >,
         rng: &mut StdRng,
-        modulus_limbs: [F; TOTAL_LIMBS],
+        modulus: &BigUint,
         is_setup: bool,
-        b: Option<[F; TOTAL_LIMBS]>,
-        c: Option<[F; TOTAL_LIMBS]>,
+        offset: usize,
     ) {
-        let a_ptr: u32 = gen_pointer(rng, 4) as u32;
-        let b_ptr: u32 = gen_pointer(rng, 4) as u32;
-        let c_ptr: u32 = gen_pointer(rng, 4) as u32;
+        let ptr_as = RV32_REGISTER_AS as usize;
+        let mem_as = RV32_MEMORY_AS as usize;
 
-        let (b_data, c_data, opcode) = if is_setup {
-            (
-                modulus_limbs,
-                [F::ZERO; TOTAL_LIMBS],
-                Rv32ModularArithmeticOpcode::SETUP_ISEQ,
-            )
+        let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+        let rs2_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+
+        // Memory addresses for operands
+        let b_base_addr = 0u32;
+        let c_base_addr = 128u32;
+
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs1_ptr,
+            b_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        );
+        tester.write::<RV32_REGISTER_NUM_LIMBS>(
+            ptr_as,
+            rs2_ptr,
+            c_base_addr.to_le_bytes().map(F::from_canonical_u8),
+        );
+
+        let (b, c) = if is_setup {
+            (modulus.clone(), BigUint::zero())
         } else {
-            let b_data =
-                b.unwrap_or_else(|| std::array::from_fn(|_| F::from_canonical_u8(rng.gen::<u8>())));
-            let c_data = c.unwrap_or_else(|| {
-                if rng.gen_bool(0.5) {
-                    b_data
-                } else {
-                    std::array::from_fn(|_| F::from_canonical_u8(rng.gen::<u8>()))
-                }
-            });
-            (b_data, c_data, Rv32ModularArithmeticOpcode::IS_EQ)
+            let b_digits: Vec<_> = (0..TOTAL_LIMBS)
+                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+                .collect();
+            let mut b = BigUint::new(b_digits);
+            b %= modulus;
+
+            let c = if rng.gen_bool(0.5) {
+                b.clone()
+            } else {
+                let c_digits: Vec<_> = (0..TOTAL_LIMBS)
+                    .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
+                    .collect();
+                let mut c = BigUint::new(c_digits);
+                c %= modulus;
+                c
+            };
+
+            (b, c)
         };
 
-        tester.write(2, b_ptr as usize, b_data);
-        tester.write(2, c_ptr as usize, c_data);
-        tester.write::<4>(
-            1,
-            b_ptr as usize,
-            b_ptr.to_le_bytes().map(F::from_canonical_u8),
-        );
-        tester.write::<4>(
-            1,
-            c_ptr as usize,
-            c_ptr.to_le_bytes().map(F::from_canonical_u8),
-        );
+        let b_limbs =
+            biguint_to_limbs::<TOTAL_LIMBS>(b.clone(), LIMB_BITS).map(F::from_canonical_u32);
+        let c_limbs =
+            biguint_to_limbs::<TOTAL_LIMBS>(c.clone(), LIMB_BITS).map(F::from_canonical_u32);
 
-        let instruction = Instruction::new(
-            openvm_instructions::VmOpcode::from_usize(opcode as usize + OPCODE_OFFSET),
-            F::from_canonical_u32(a_ptr),
-            F::from_canonical_u32(b_ptr),
-            F::from_canonical_u32(c_ptr),
-            F::from_canonical_u32(1),
-            F::from_canonical_u32(2),
-            F::ZERO,
-            F::ZERO,
-        );
-
-        tester.execute(chip, &instruction);
-    }
-
-    #[test]
-    fn test_modular_is_equal_tracegen() {
-        let mut rng = create_seeded_rng();
-        let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-        let mut tester = GpuChipTestBuilder::default()
-            .with_variable_range_checker()
-            .with_bitwise_op_lookup(bitwise_bus);
-
-        let modulus = secp256k1_coord_prime();
-        let limbs = big_uint_to_limbs(&modulus, 8);
-        let modulus_limbs: [u8; TOTAL_LIMBS] = {
-            let mut arr = [0u8; TOTAL_LIMBS];
-            for (i, &val) in limbs.iter().enumerate() {
-                if i < TOTAL_LIMBS {
-                    arr[i] = val as u8;
-                }
-            }
-            arr
-        };
-        let modulus_limbs_f = modulus_limbs.map(F::from_canonical_u8);
-
-        let cpu_bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-        let mut dense_cpu =
-            create_dense_chip(&tester, &modulus, modulus_limbs, cpu_bitwise_chip.clone());
-
-        for i in 0..100 {
-            set_and_execute(
-                &mut tester,
-                &mut dense_cpu,
-                &mut rng,
-                modulus_limbs_f,
-                i == 0,
-                None,
-                None,
+        for i in (0..TOTAL_LIMBS).step_by(RV32_REGISTER_NUM_LIMBS) {
+            tester.write::<RV32_REGISTER_NUM_LIMBS>(
+                mem_as,
+                b_base_addr as usize + i,
+                b_limbs[i..i + RV32_REGISTER_NUM_LIMBS].try_into().unwrap(),
+            );
+            tester.write::<RV32_REGISTER_NUM_LIMBS>(
+                mem_as,
+                c_base_addr as usize + i,
+                c_limbs[i..i + RV32_REGISTER_NUM_LIMBS].try_into().unwrap(),
             );
         }
 
-        let mut b = modulus_limbs_f;
-        b[0] -= F::ONE;
-        set_and_execute(
-            &mut tester,
-            &mut dense_cpu,
-            &mut rng,
-            modulus_limbs_f,
-            false,
-            Some(b),
-            Some(b),
+        let op_local = if is_setup {
+            Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize
+        } else {
+            Rv32ModularArithmeticOpcode::IS_EQ as usize
+        };
+
+        let instruction = Instruction::from_isize(
+            VmOpcode::from_usize(offset + op_local),
+            rd_ptr as isize,
+            rs1_ptr as isize,
+            rs2_ptr as isize,
+            ptr_as as isize,
+            mem_as as isize,
         );
 
-        let mut sparse_cpu =
-            create_sparse_chip(&tester, &modulus, modulus_limbs, cpu_bitwise_chip.clone());
+        tester.execute(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &instruction,
+        );
+    }
 
-        type Record<'a> = (
+    fn run_test_with_config<
+        const NUM_LANES: usize,
+        const LANE_SIZE: usize,
+        const TOTAL_LIMBS: usize,
+    >(
+        modulus: BigUint,
+        num_ops: usize,
+    ) {
+        let mut rng = create_seeded_rng();
+
+        let mut tester =
+            GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+        let offset = Rv32ModularArithmeticOpcode::CLASS_OFFSET;
+        let mut harness = create_test_harness::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>(
+            &tester,
+            modulus.clone(),
+            offset,
+        );
+
+        for i in 0..num_ops {
+            set_and_execute_is_eq::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>(
+                &mut tester,
+                &mut harness,
+                &mut rng,
+                &modulus,
+                i == 0,
+                offset,
+            );
+        }
+
+        type Record<'a, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize> = (
             &'a mut Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             &'a mut ModularIsEqualRecord<TOTAL_LIMBS>,
         );
-        dense_cpu
-            .arena
-            .get_record_seeker::<Record, _>()
+        harness
+            .dense_arena
+            .get_record_seeker::<Record<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>, _>()
             .transfer_to_matrix_arena(
-                &mut sparse_cpu.arena,
+                &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<
                     F,
-                    Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+                    Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
                 >::new(),
             );
 
-        let gpu_chip = ModularIsEqualChipGpu::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-            dense_cpu.air.clone(),
-            tester.range_checker(),
-            tester.bitwise_op_lookup(),
-            dense_cpu.arena,
-        );
-
         tester
             .build()
-            .load_and_compare(gpu_chip, sparse_cpu)
+            .load_gpu_harness(harness)
             .finalize()
-            .simple_test_with_expected_error(VerificationError::ChallengePhaseError);
+            .simple_test()
+            .unwrap();
+    }
+
+    #[test]
+    fn test_modular_is_eq_gpu_1x32() {
+        run_test_with_config::<1, 32, 32>(secp256k1_coord_prime(), 50);
+    }
+
+    #[test]
+    fn test_modular_is_eq_gpu_3x16() {
+        run_test_with_config::<3, 16, 48>(BLS12_381_MODULUS.clone(), 50);
     }
 }

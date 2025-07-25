@@ -102,4 +102,6 @@ pub struct FieldExpressionChipGPU {
     pub barrett_mu_buf: DeviceBuffer<u8>,
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<LIMB_BITS>>,
+    pub pointer_max_bits: u32,
+    pub timestamp_max_bits: u32,
 }

@@ -21,6 +21,7 @@ pub mod is_eq_cuda {
             range_bins: usize,
             d_bitwise_lut: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
@@ -35,6 +36,7 @@ pub mod is_eq_cuda {
         lane_size: usize,
         d_range_ctr: &DeviceBuffer<T>,
         d_bitwise_lut: &DeviceBuffer<T>,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
@@ -53,6 +55,7 @@ pub mod is_eq_cuda {
             d_range_ctr.len(),
             d_bitwise_lut.as_ptr() as *const u32,
             RV32_CELL_BITS,
+            pointer_max_bits,
             timestamp_max_bits,
         );
         CudaError::from_result(err)
