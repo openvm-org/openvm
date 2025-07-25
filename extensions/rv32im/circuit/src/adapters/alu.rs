@@ -287,7 +287,6 @@ impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
         // We must assign in reverse
-        // TODO[jpw]: is there a way to not hardcode?
         const TIMESTAMP_DELTA: u32 = 2;
         let mut timestamp = record.from_timestamp + TIMESTAMP_DELTA;
 

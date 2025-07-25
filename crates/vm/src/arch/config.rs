@@ -144,7 +144,7 @@ pub trait InitFileGenerator {
 /// Each address space in guest memory may be configured with a different type `T` to represent a
 /// memory cell in the address space. On host, the address space will be mapped to linear host
 /// memory in bytes. The type `T` must be plain old data (POD) and be safely transmutable from a
-/// fixed size array of bytes. Moreover, each type `T` must be convertable to a field element `F`.
+/// fixed size array of bytes. Moreover, each type `T` must be convertible to a field element `F`.
 ///
 /// We currently implement this trait on the enum [MemoryCellType], which includes all cell types
 /// that we expect to be used in the VM context.
