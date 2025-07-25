@@ -406,7 +406,7 @@ impl MemoryCellType {
 impl AddressSpaceHostLayout for MemoryCellType {
     fn size(&self) -> usize {
         match self {
-            Self::Null => 0,
+            Self::Null => 1, // to avoid divide by zero
             Self::U8 => size_of::<u8>(),
             Self::U16 => size_of::<u16>(),
             Self::U32 => size_of::<u32>(),
