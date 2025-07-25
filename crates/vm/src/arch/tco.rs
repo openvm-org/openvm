@@ -1,6 +1,8 @@
 use core::arch::global_asm;
+
 use openvm_stark_backend::p3_field::PrimeField32;
-use super::{execution_mode::E1ExecutionCtx, VmSegmentState, execution::PreComputeInstruction};
+
+use super::{execution::PreComputeInstruction, execution_mode::E1ExecutionCtx, VmSegmentState};
 use crate::system::memory::online::GuestMemory;
 
 #[no_mangle]
@@ -11,35 +13,49 @@ extern "C-unwind" fn tco_execute_one_instruction(
     vm_state_ptr: *mut u8,
 ) {
     unsafe {
-        let handler: unsafe fn(&[u8], &mut VmSegmentState<p3_baby_bear::BabyBear, GuestMemory, super::execution_mode::e1::E1Ctx>) = 
-            std::mem::transmute(handler_ptr);
+        let handler: unsafe fn(
+            &[u8],
+            &mut VmSegmentState<
+                p3_baby_bear::BabyBear,
+                GuestMemory,
+                super::execution_mode::e1::E1Ctx,
+            >,
+        ) = std::mem::transmute(handler_ptr);
         let pre_compute = std::slice::from_raw_parts(pre_compute_ptr, pre_compute_len);
-        let vm_state = &mut *(vm_state_ptr as *mut VmSegmentState<p3_baby_bear::BabyBear, GuestMemory, super::execution_mode::e1::E1Ctx>);
-        
+        let vm_state = &mut *(vm_state_ptr
+            as *mut VmSegmentState<
+                p3_baby_bear::BabyBear,
+                GuestMemory,
+                super::execution_mode::e1::E1Ctx,
+            >);
+
         handler(pre_compute, vm_state);
     }
 }
 
 macro_rules! tco_stub {
     ($asm_name:ident) => {
-        global_asm!(
-            concat!(
-                ".text\n",
-                ".globl ", stringify!($asm_name), "\n",
-                ".type  ", stringify!($asm_name), ",@function\n",
-                stringify!($asm_name), ":\n",
-                "  .cfi_startproc\n",
-                "  push rbp\n",
-                "  .cfi_def_cfa_offset 16\n",
-                "  .cfi_offset rbp, -16\n",
-                "  mov rbp, rsp\n",
-                "  .cfi_def_cfa_register rbp\n",
-                "  call tco_execute_one_instruction\n",
-                "  pop rbp\n",
-                "  ret\n",
-                "  .cfi_endproc\n",
-            ),
-        );
+        global_asm!(concat!(
+            ".text\n",
+            ".globl ",
+            stringify!($asm_name),
+            "\n",
+            ".type  ",
+            stringify!($asm_name),
+            ",@function\n",
+            stringify!($asm_name),
+            ":\n",
+            "  .cfi_startproc\n",
+            "  push rbp\n",
+            "  .cfi_def_cfa_offset 16\n",
+            "  .cfi_offset rbp, -16\n",
+            "  mov rbp, rsp\n",
+            "  .cfi_def_cfa_register rbp\n",
+            "  call tco_execute_one_instruction\n",
+            "  pop rbp\n",
+            "  ret\n",
+            "  .cfi_endproc\n",
+        ),);
     };
 }
 
