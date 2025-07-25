@@ -174,7 +174,7 @@ impl<SC: StarkGenericConfig> SystemAirInventory<SC> {
             execution_bus,
             program_bus,
             range_bus,
-            config.memory_config.clk_max_bits,
+            config.memory_config.timestamp_max_bits,
         );
         assert_eq!(
             config.continuation_enabled,
@@ -299,7 +299,7 @@ impl<SC: StarkGenericConfig> VmCircuitConfig<SC> for SystemConfig {
             None
         };
         let memory_bridge =
-            MemoryBridge::new(memory_bus, self.memory_config.clk_max_bits, range_bus);
+            MemoryBridge::new(memory_bus, self.memory_config.timestamp_max_bits, range_bus);
         let system_port = SystemPort {
             execution_bus,
             program_bus,
@@ -367,7 +367,7 @@ where
         let program_chip = ProgramChip::unloaded();
         let connector_chip = VmConnectorChip::<Val<SC>>::new(
             range_checker.clone(),
-            config.memory_config.clk_max_bits,
+            config.memory_config.timestamp_max_bits,
         );
         let memory_bus = mem_inventory.bridge.memory_bus();
         let memory_controller = match &mem_inventory.interface {

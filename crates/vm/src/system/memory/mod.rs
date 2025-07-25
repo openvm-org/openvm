@@ -120,7 +120,7 @@ impl<SC: StarkGenericConfig> MemoryAirInventory<SC> {
             MemoryInterfaceAirs::Volatile { boundary }
         };
         // Memory access adapters
-        let lt_air = IsLtSubAir::new(range_bus, mem_config.clk_max_bits);
+        let lt_air = IsLtSubAir::new(range_bus, mem_config.timestamp_max_bits);
         let maan = mem_config.max_access_adapter_n;
         assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
         let access_adapters: Vec<AirRef<SC>> = [

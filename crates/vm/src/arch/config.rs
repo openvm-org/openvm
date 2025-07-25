@@ -143,7 +143,7 @@ pub struct MemoryConfig {
     pub addr_space_sizes: Vec<usize>,
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
-    pub clk_max_bits: usize,
+    pub timestamp_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
     /// Maximum N AccessAdapter AIR to support.
@@ -209,7 +209,7 @@ impl SystemConfig {
         num_public_values: usize,
     ) -> Self {
         assert!(
-            memory_config.clk_max_bits <= 29,
+            memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
         memory_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = num_public_values;

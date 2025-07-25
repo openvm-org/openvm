@@ -583,7 +583,7 @@ where
     }
 
     pub fn timestamp_max_bits(&self) -> usize {
-        self.airs.config().memory_config.clk_max_bits
+        self.airs.config().memory_config.timestamp_max_bits
     }
 }
 

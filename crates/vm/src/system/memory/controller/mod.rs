@@ -158,7 +158,7 @@ impl<F: PrimeField32> MemoryController<F> {
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
-                mem_config.clk_max_bits,
+                mem_config.timestamp_max_bits,
                 mem_config.max_access_adapter_n,
             ),
             range_checker,
@@ -200,7 +200,7 @@ impl<F: PrimeField32> MemoryController<F> {
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
-                mem_config.clk_max_bits,
+                mem_config.timestamp_max_bits,
                 mem_config.max_access_adapter_n,
             ),
             range_checker,
@@ -247,7 +247,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn memory_bridge(&self) -> MemoryBridge {
         MemoryBridge::new(
             self.memory_bus,
-            self.mem_config.clk_max_bits,
+            self.mem_config.timestamp_max_bits,
             self.range_checker_bus,
         )
     }
@@ -256,7 +256,7 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_bus = self.range_checker.bus();
         SharedMemoryHelper {
             range_checker: self.range_checker.clone(),
-            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.timestamp_max_bits),
             _marker: Default::default(),
         }
     }
