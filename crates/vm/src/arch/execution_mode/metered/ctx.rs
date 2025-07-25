@@ -2,7 +2,7 @@ use std::num::NonZero;
 
 use getset::WithSetters;
 use openvm_instructions::riscv::{
-    RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
+    RV32_IMM_AS, RV32_MEMORY_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
 };
 
 use super::{
@@ -221,9 +221,14 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
 
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
-        let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-        self.memory_ctx
-            .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
+        if address_space == RV32_MEMORY_AS {
+            let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
+            self.memory_ctx.update_adapter_heights(
+                &mut self.trace_heights,
+                address_space,
+                size_bits,
+            );
+        }
 
         // Handle merkle tree updates
         if address_space != RV32_REGISTER_AS {
