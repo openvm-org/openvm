@@ -44,7 +44,6 @@ impl<const CHUNK: usize, F> MemoryMerkleChip<CHUNK, F>
 where
     F: PrimeField32,
 {
-    // TODO: switch to using records
     pub fn generate_proving_ctx<SC>(&mut self) -> AirProvingContext<CpuBackend<SC>>
     where
         SC: StarkGenericConfig,
@@ -54,7 +53,6 @@ where
             self.final_state.is_some(),
             "Merkle chip must finalize before trace generation"
         );
-        // TODO[jpw]: figure this out later, probably memory just shouldn't use Chip trait
         let FinalState {
             mut rows,
             init_root,

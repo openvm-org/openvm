@@ -23,7 +23,6 @@ pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 #[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
-    // TODO[jpw]: should this be in Ctrl?
     pub is_trace_height_constant: Vec<bool>,
 
     pub memory_ctx: MemoryCtx<PAGE_BITS>,

@@ -383,6 +383,8 @@ pub struct AddressSpaceHostConfig {
     pub layout: MemoryCellType,
 }
 
+pub(crate) const MAX_CELL_BYTE_SIZE: usize = 8;
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCellType {
     Null,
@@ -390,6 +392,7 @@ pub enum MemoryCellType {
     U16,
     /// Represented in little-endian format.
     U32,
+    /// `size` is the size in bytes of the native field type. This should not exceed 8.
     Native {
         size: u8,
     },

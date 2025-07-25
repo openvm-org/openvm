@@ -45,3 +45,13 @@ pub fn transmute_u32_to_field<F: PrimeField32>(value: &u32) -> F {
     // as a single u32 internally
     unsafe { *(value as *const u32 as *const F) }
 }
+
+/// # Safety
+/// The type `T` should be plain old data so there is no worry about [Drop] behavior in the
+/// transmutation.
+#[inline(always)]
+pub unsafe fn slice_as_bytes<T>(slice: &[T]) -> &[u8] {
+    let len = size_of_val(slice);
+    // SAFETY: length and alignment are correct.
+    unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, len) }
+}

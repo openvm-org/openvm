@@ -35,11 +35,10 @@ impl<F: PrimeField32> MemoryTester<F> {
         }
     }
 
-    // TODO: change interface by implementing GuestMemory trait after everything works
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {
         let memory = &mut self.memory;
         let t = memory.timestamp();
-        // TODO: hack
+        // TODO: this could be improved if we added a TracingMemory::get_f function
         let (t_prev, data) = if addr_space <= 3 {
             let (t_prev, data) = unsafe { memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
             (t_prev, data.map(F::from_canonical_u8))
@@ -60,11 +59,10 @@ impl<F: PrimeField32> MemoryTester<F> {
         data
     }
 
-    // TODO: see read
     pub fn write<const N: usize>(&mut self, addr_space: usize, ptr: usize, data: [F; N]) {
         let memory = &mut self.memory;
         let t = memory.timestamp();
-        // TODO: hack
+        // TODO: this could be improved if we added a TracingMemory::write_f function
         let (t_prev, data_prev) = if addr_space <= 3 {
             let (t_prev, data_prev) = unsafe {
                 memory.write::<u8, N, 4>(
