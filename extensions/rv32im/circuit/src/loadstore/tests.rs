@@ -7,7 +7,7 @@ use openvm_circuit::{
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -230,6 +230,7 @@ fn run_negative_loadstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
     if [STOREW, STOREB, STOREH].contains(&opcode) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }

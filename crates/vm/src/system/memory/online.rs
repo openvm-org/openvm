@@ -218,7 +218,7 @@ impl<M: LinearMemory> AddressMap<M> {
         mem.get_aligned_slice(start, len)
     }
 
-    /// Reads the slice at **byte** adddresses `start..start + len` from address space `addr_space`
+    /// Reads the slice at **byte** addresses `start..start + len` from address space `addr_space`
     /// linear memory. Panics or segfaults if `start..start + len` is out of bounds
     ///
     /// # Safety
