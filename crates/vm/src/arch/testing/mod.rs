@@ -336,6 +336,7 @@ impl VmChipTestBuilder<BabyBear> {
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::persistent(mem_config)
     }
