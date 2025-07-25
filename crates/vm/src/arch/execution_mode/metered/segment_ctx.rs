@@ -30,6 +30,23 @@ impl Default for SegmentationLimits {
     }
 }
 
+impl SegmentationLimits {
+    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
+        self.max_trace_height = max_trace_height;
+        self
+    }
+
+    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
+        self.max_cells = max_cells;
+        self
+    }
+
+    pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
+        self.max_interactions = max_interactions;
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -40,7 +57,26 @@ pub struct SegmentationCtx {
 }
 
 impl SegmentationCtx {
-    pub fn new(air_names: Vec<String>, widths: Vec<usize>, interactions: Vec<usize>) -> Self {
+    pub fn new(
+        air_names: Vec<String>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
+        segmentation_limits: SegmentationLimits,
+    ) -> Self {
+        Self {
+            segments: Vec::new(),
+            air_names,
+            widths,
+            interactions,
+            segmentation_limits,
+        }
+    }
+
+    pub fn new_with_default_segmentation_limits(
+        air_names: Vec<String>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
+    ) -> Self {
         Self {
             segments: Vec::new(),
             air_names,

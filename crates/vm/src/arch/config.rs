@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write, path::Path, sync::Arc};
+use std::{fs::File, io::Write, path::Path};
 
 use derive_new::new;
 use openvm_instructions::NATIVE_AS;
@@ -10,14 +10,11 @@ use openvm_stark_backend::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{
-    segmentation_strategy::{DefaultSegmentationStrategy, SegmentationStrategy},
-    AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID,
-};
+use super::{AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID};
 use crate::{
     arch::{
-        AirInventory, AirInventoryError, Arena, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError,
+        execution_mode::metered::segment_ctx::SegmentationLimits, AirInventory, AirInventoryError,
+        Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
         memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, CHUNK},
@@ -195,15 +192,11 @@ pub struct SystemConfig {
     /// Whether to collect detailed profiling metrics.
     /// **Warning**: this slows down the runtime.
     pub profiling: bool,
-    /// Segmentation strategy
+    /// Segmentation limits
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
-    #[serde(skip, default = "get_default_segmentation_strategy")]
-    pub segmentation_strategy: Arc<dyn SegmentationStrategy>,
-}
-
-pub fn get_default_segmentation_strategy() -> Arc<DefaultSegmentationStrategy> {
-    Arc::new(DefaultSegmentationStrategy::default())
+    #[serde(skip, default = "SegmentationLimits::default")]
+    pub segmentation_limits: SegmentationLimits,
 }
 
 impl SystemConfig {
@@ -212,7 +205,6 @@ impl SystemConfig {
         mut memory_config: MemoryConfig,
         num_public_values: usize,
     ) -> Self {
-        let segmentation_strategy = get_default_segmentation_strategy();
         assert!(
             memory_config.clk_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
@@ -223,8 +215,8 @@ impl SystemConfig {
             continuation_enabled: false,
             memory_config,
             num_public_values,
-            segmentation_strategy,
             profiling: false,
+            segmentation_limits: SegmentationLimits::default(),
         }
     }
 
@@ -258,14 +250,12 @@ impl SystemConfig {
     }
 
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
-        self.segmentation_strategy = Arc::new(
-            DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_len),
-        );
+        self.segmentation_limits.max_trace_height = max_segment_len as u32;
         self
     }
 
-    pub fn set_segmentation_strategy(&mut self, strategy: Arc<dyn SegmentationStrategy>) {
-        self.segmentation_strategy = strategy;
+    pub fn set_segmentation_limits(&mut self, limits: SegmentationLimits) {
+        self.segmentation_limits = limits;
     }
 
     pub fn with_profiling(mut self) -> Self {

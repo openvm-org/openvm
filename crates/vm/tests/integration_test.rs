@@ -7,13 +7,12 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        execution_mode::e1::E1Ctx,
+        execution_mode::{e1::E1Ctx, metered::segment_ctx::SegmentationLimits},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
-        DefaultSegmentationStrategy, PreflightExecutionOutput, RowMajorMatrixArena,
-        SingleSegmentVmProver, VirtualMachine, VmCircuitConfig, VmLocalProver,
-        PUBLIC_VALUES_AIR_ID,
+        PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
+        VmCircuitConfig, VmLocalProver, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
     utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -891,9 +890,9 @@ fn test_single_segment_executor_no_segmentation() {
     setup_tracing();
 
     let mut config = test_native_config();
-    config.system.set_segmentation_strategy(Arc::new(
-        DefaultSegmentationStrategy::new_with_max_segment_len(1),
-    ));
+    config
+        .system
+        .set_segmentation_limits(SegmentationLimits::default().with_max_trace_height(1));
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config).unwrap();

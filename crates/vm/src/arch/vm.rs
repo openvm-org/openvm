@@ -249,7 +249,6 @@ where
             .map(|&x| log2_strict_usize(x as usize) as u8)
             .collect();
 
-        let seg_strategy = &system_config.segmentation_strategy;
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
             system_config.has_public_values_chip(),
@@ -259,9 +258,8 @@ where
             air_names.to_vec(),
             widths.to_vec(),
             interactions.to_vec(),
+            system_config.segmentation_limits,
         )
-        .with_max_trace_height(seg_strategy.max_trace_height() as u32)
-        .with_max_cells(seg_strategy.max_cells())
     }
 
     pub fn create_initial_state(&self, exe: &VmExe<F>, input: impl Into<Streams<F>>) -> VmState<F> {

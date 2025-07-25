@@ -1,12 +1,12 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, verify_single, DefaultSegmentationStrategy, InsExecutorE1,
-    InsExecutorE2, InstructionExecutor, MatrixRecordArena, SystemConfig, VmBuilder, VmConfig,
-    VmExecutionConfig,
+    execution_mode::metered::segment_ctx::SegmentationLimits, instructions::exe::VmExe,
+    verify_single, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
+    SystemConfig, VmBuilder, VmConfig, VmExecutionConfig,
 };
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -86,9 +86,9 @@ impl BenchmarkCli {
 
         app_vm_config.as_mut().profiling = self.profiling;
         if let Some(max_segment_length) = self.max_segment_length {
-            app_vm_config.as_mut().set_segmentation_strategy(Arc::new(
-                DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
-            ));
+            app_vm_config.as_mut().set_segmentation_limits(
+                SegmentationLimits::default().with_max_trace_height(max_segment_length as u32),
+            );
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(

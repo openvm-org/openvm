@@ -13,8 +13,6 @@ mod record_arena;
 /// Runtime execution and segmentation
 // TODO: rename this module
 pub mod segment;
-/// Strategy for determining when to segment VM execution
-pub mod segmentation_strategy;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
@@ -32,5 +30,4 @@ pub use integration_api::*;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;
 pub use segment::*;
-pub use segmentation_strategy::*;
 pub use vm::*;

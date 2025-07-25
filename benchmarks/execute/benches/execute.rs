@@ -245,13 +245,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
 
-            let segmentation_strategy = &vm_config.as_ref().segmentation_strategy;
-
             let (ctx, executor_idx_to_air_idx) = metering_setup();
-            let ctx = ctx
-                .clone()
-                .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
-                .with_max_cells(segmentation_strategy.max_cells());
             let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
 
             (interpreter, vec![], ctx, executor_idx_to_air_idx)
