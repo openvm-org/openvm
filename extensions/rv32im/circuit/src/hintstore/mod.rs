@@ -602,7 +602,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
         let fn_ptr = match local_opcode {
@@ -627,7 +627,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -711,7 +711,7 @@ impl Rv32HintStoreStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut HintStorePreCompute,
-    ) -> Result<Rv32HintStoreOpcode, ExecutionError> {
+    ) -> Result<Rv32HintStoreOpcode, StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -722,7 +722,7 @@ impl Rv32HintStoreStep {
             ..
         } = inst;
         if d.as_canonical_u32() != RV32_REGISTER_AS || e.as_canonical_u32() != RV32_MEMORY_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = {
             HintStorePreCompute {

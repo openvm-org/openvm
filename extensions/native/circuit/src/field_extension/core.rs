@@ -6,13 +6,7 @@ use std::{
 
 use itertools::izip;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -258,7 +252,7 @@ impl<A> FieldExtensionCoreStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldExtensionPreCompute,
-    ) -> Result<u8, ExecutionError> {
+    ) -> Result<u8, StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -280,10 +274,10 @@ impl<A> FieldExtensionCoreStep<A> {
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         if e != AS::Native as u32 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = FieldExtensionPreCompute { a, b, c };
@@ -307,7 +301,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut FieldExtensionPreCompute = data.borrow_mut();
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -340,7 +334,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<FieldExtensionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

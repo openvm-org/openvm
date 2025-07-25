@@ -372,7 +372,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_e1(inst, pre_compute)?;
         let fn_ptr = match local_opcode {
@@ -399,7 +399,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -456,7 +456,7 @@ impl<A, const LIMB_BITS: usize> MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BI
         &self,
         inst: &Instruction<F>,
         data: &mut MulHPreCompute,
-    ) -> Result<MulHOpcode, ExecutionError> {
+    ) -> Result<MulHOpcode, StaticProgramError> {
         *data = MulHPreCompute {
             a: inst.a.as_canonical_u32() as u8,
             b: inst.b.as_canonical_u32() as u8,

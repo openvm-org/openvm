@@ -327,7 +327,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
         let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
         let fn_ptr = match (is_loadb, enabled) {
@@ -355,7 +355,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -450,7 +450,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadSignExtendPreCompute,
-    ) -> Result<(bool, bool), ExecutionError> {
+    ) -> Result<(bool, bool), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -465,7 +465,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
 
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

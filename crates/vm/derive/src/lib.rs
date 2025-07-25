@@ -167,7 +167,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         self.0.pre_compute_e1(pc, inst, data)
@@ -240,7 +240,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         match self {
@@ -295,7 +295,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         self.0.pre_compute_e2(chip_idx, pc, inst, data)
@@ -369,7 +369,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         match self {

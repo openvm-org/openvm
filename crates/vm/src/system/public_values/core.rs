@@ -25,7 +25,7 @@ use crate::{
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
         BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
         InsExecutorE1, InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena,
-        TraceFiller, VmCoreAir, VmSegmentState, VmStateMut,
+        StaticProgramError, TraceFiller, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::{
         memory::{
@@ -267,7 +267,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -298,7 +298,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {

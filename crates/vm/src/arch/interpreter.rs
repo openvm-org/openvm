@@ -18,8 +18,8 @@ use crate::{
         create_memory_image,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         ExecuteFunc, ExecutionError, ExecutorInventory, ExecutorInventoryError, ExitCode,
-        InsExecutorE1, InsExecutorE2, PreComputeInstruction, Streams, SystemConfig,
-        VmExecutionConfig, VmSegmentState,
+        InsExecutorE1, InsExecutorE2, PreComputeInstruction, StaticProgramError, Streams,
+        SystemConfig, VmExecutionConfig, VmSegmentState,
     },
     system::memory::online::GuestMemory,
 };
@@ -385,7 +385,8 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
             } else {
                 PreComputeInstruction {
                     handler: |_, vm_state| {
-                        vm_state.exit_code = Err(ExecutionError::InvalidInstruction(vm_state.pc));
+                        vm_state.exit_code =
+                            Err(StaticProgramError::InvalidInstruction(vm_state.pc).into());
                     },
                     pre_compute: buf,
                 }
@@ -441,7 +442,8 @@ fn get_e2_pre_compute_instructions<
             } else {
                 PreComputeInstruction {
                     handler: |_, vm_state| {
-                        vm_state.exit_code = Err(ExecutionError::InvalidInstruction(vm_state.pc));
+                        vm_state.exit_code =
+                            Err(StaticProgramError::InvalidInstruction(vm_state.pc).into());
                     },
                     pre_compute: buf,
                 }

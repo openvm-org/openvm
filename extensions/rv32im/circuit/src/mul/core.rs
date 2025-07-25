@@ -273,7 +273,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -298,7 +298,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -352,13 +352,13 @@ impl<A, const LIMB_BITS: usize> MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut MultiPreCompute,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         assert_eq!(
             MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = MultiPreCompute {

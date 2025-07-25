@@ -1,12 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord,
-        TraceFiller, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::{
         memory::{
             offline_checker::MemoryBaseAuxCols,
@@ -855,7 +850,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         pos2_data: &mut Pos2PreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -867,7 +862,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         } = inst;
 
         if opcode != PERM_POS2.global_opcode() && opcode != COMP_POS2.global_opcode() {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
@@ -877,10 +872,10 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         if e != AS::Native as u32 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *pos2_data = Pos2PreCompute {
@@ -899,7 +894,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         pc: u32,
         inst: &Instruction<F>,
         verify_batch_data: &mut VerifyBatchPreCompute<'a, F, SBOX_REGISTERS>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -913,7 +908,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
         } = inst;
 
         if opcode != VERIFY_BATCH.global_opcode() {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
@@ -962,7 +957,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
@@ -1002,7 +997,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE2<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();

@@ -453,7 +453,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
@@ -485,7 +485,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -552,7 +552,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftPreCompute,
-    ) -> Result<(bool, ShiftOpcode), ExecutionError> {
+    ) -> Result<(bool, ShiftOpcode), StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = inst;
@@ -561,7 +561,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS
             || !(e_u32 == RV32_IMM_AS || e_u32 == RV32_REGISTER_AS)
         {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let is_imm = e_u32 == RV32_IMM_AS;
         let c_u32 = c.as_canonical_u32();

@@ -479,7 +479,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
-    ) -> Result<bool, ExecutionError> {
+    ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -500,14 +500,14 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
         if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         if !matches!(
             local_opcode,
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         ) {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
@@ -538,7 +538,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -568,7 +568,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
             data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;

@@ -4,15 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice,
-        instructions::LocalOpcode,
-        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, E2PreCompute,
-        EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, RecordArena, TraceFiller, VmAdapterInterface, VmCoreAir,
-        VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -20,7 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, NativeLoadStoreOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -230,7 +222,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut NativeLoadStorePreCompute<F>,
-    ) -> Result<NativeLoadStoreOpcode, ExecutionError> {
+    ) -> Result<NativeLoadStoreOpcode, StaticProgramError> {
         let &Instruction {
             opcode,
             a,
@@ -249,7 +241,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
         let e = e.as_canonical_u32();
 
         if d != AS::Native as u32 || e != AS::Native as u32 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *data = NativeLoadStorePreCompute { a, b, c };
@@ -273,7 +265,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut NativeLoadStorePreCompute<F> = data.borrow_mut();
 
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -304,7 +296,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<NativeLoadStorePreCompute<F>> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

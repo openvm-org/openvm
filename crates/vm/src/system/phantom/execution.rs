@@ -11,7 +11,7 @@ use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
-        PhantomSubExecutor, Streams, VmSegmentState,
+        PhantomSubExecutor, StaticProgramError, Streams, VmSegmentState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
@@ -45,7 +45,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -177,7 +177,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {

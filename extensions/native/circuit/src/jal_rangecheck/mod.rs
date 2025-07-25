@@ -4,12 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, E2PreCompute, EmptyMultiRowLayout, ExecuteFunc, ExecutionBridge,
-        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
-        PcIncOrSet, RecordArena, TraceFiller, VmChipWrapper, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryWriteAuxCols, MemoryWriteAuxRecord},
@@ -315,11 +310,11 @@ impl JalRangeCheckStep {
         pc: u32,
         inst: &Instruction<F>,
         jal_data: &mut JalPreCompute<F>,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction { opcode, a, b, .. } = inst;
 
         if opcode != NativeJalOpcode::JAL.global_opcode() {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
@@ -335,20 +330,20 @@ impl JalRangeCheckStep {
         pc: u32,
         inst: &Instruction<F>,
         range_check_data: &mut RangeCheckPreCompute,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction {
             opcode, a, b, c, ..
         } = inst;
 
         if opcode != NativeRangeCheckOpcode::RANGE_CHECK.global_opcode() {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let a = a.as_canonical_u32();
         let b = b.as_canonical_u32();
         let c = c.as_canonical_u32();
         if b > 16 || c > 14 {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         *range_check_data = RangeCheckPreCompute {
@@ -378,7 +373,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
@@ -414,7 +409,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let &Instruction { opcode, .. } = inst;
 
         let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();

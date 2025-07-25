@@ -263,7 +263,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = if is_bne {
@@ -289,7 +289,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -346,7 +346,7 @@ impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchEqualPreCompute,
-    ) -> Result<bool, ExecutionError> {
+    ) -> Result<bool, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let &Instruction {
             opcode, a, b, c, d, ..
@@ -359,7 +359,7 @@ impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
             c as isize
         };
         if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqualPreCompute {
             imm,

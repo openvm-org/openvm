@@ -6,13 +6,7 @@ use std::{
 
 use itertools::zip_eq;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
-        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
-        MultiRowLayout, MultiRowMetadata, RecordArena, SizedRecord, TraceFiller, VmChipWrapper,
-        VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::{
         memory::{
             offline_checker::{
@@ -1107,7 +1101,7 @@ impl FriReducedOpeningStep {
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut FriReducedOpeningPreCompute,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction {
             a,
             b,
@@ -1156,7 +1150,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
 
         self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -1182,7 +1176,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 

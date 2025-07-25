@@ -342,7 +342,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = if enabled {
@@ -368,7 +368,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -430,10 +430,10 @@ impl<A> Rv32JalrStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut JalrPreCompute,
-    ) -> Result<bool, ExecutionError> {
+    ) -> Result<bool, StaticProgramError> {
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = JalrPreCompute {
             imm_extended,

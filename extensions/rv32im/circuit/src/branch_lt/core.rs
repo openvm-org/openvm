@@ -380,7 +380,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut BranchLePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = match local_opcode {
@@ -407,7 +407,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -468,7 +468,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchLePreCompute,
-    ) -> Result<BranchLessThanOpcode, ExecutionError> {
+    ) -> Result<BranchLessThanOpcode, StaticProgramError> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
@@ -480,7 +480,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             c as isize
         };
         if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchLePreCompute {
             imm,

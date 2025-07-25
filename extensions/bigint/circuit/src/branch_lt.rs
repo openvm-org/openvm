@@ -45,7 +45,7 @@ impl<F: PrimeField32> InsExecutorE1<F> for Rv32BranchLessThan256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -72,7 +72,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Rv32BranchLessThan256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -132,7 +132,7 @@ impl Rv32BranchLessThan256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchLtPreCompute,
-    ) -> Result<BranchLessThanOpcode, ExecutionError> {
+    ) -> Result<BranchLessThanOpcode, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -150,7 +150,7 @@ impl Rv32BranchLessThan256Step {
         };
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchLtPreCompute {
             imm,

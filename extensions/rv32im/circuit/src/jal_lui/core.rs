@@ -261,7 +261,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
         let fn_ptr = match (is_jal, enabled) {
@@ -288,7 +288,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -372,7 +372,7 @@ impl<A> Rv32JalLuiStep<A> {
         &self,
         inst: &Instruction<F>,
         data: &mut JalLuiPreCompute,
-    ) -> Result<(bool, bool), ExecutionError> {
+    ) -> Result<(bool, bool), StaticProgramError> {
         let local_opcode = Rv32JalLuiOpcode::from_usize(
             inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
         );

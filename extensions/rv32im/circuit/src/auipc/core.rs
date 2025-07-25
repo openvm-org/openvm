@@ -312,7 +312,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
         Ok(|pre_compute, vm_state| {
@@ -350,7 +350,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -375,10 +375,10 @@ impl<A> Rv32AuipcStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut AuiPcPreCompute,
-    ) -> Result<(), ExecutionError> {
+    ) -> Result<(), StaticProgramError> {
         let Instruction { a, c: imm, d, .. } = inst;
         if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let imm = imm.as_canonical_u32();
         let data: &mut AuiPcPreCompute = data.borrow_mut();

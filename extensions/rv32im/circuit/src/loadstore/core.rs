@@ -397,7 +397,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -440,7 +440,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -561,7 +561,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadStorePreCompute,
-    ) -> Result<(Rv32LoadStoreOpcode, bool, bool), ExecutionError> {
+    ) -> Result<(Rv32LoadStoreOpcode, bool, bool), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -577,7 +577,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
 
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
-            return Err(ExecutionError::InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
@@ -587,7 +587,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
             LOADW | LOADBU | LOADHU => {}
             STOREW | STOREH | STOREB => {
                 if !enabled {
-                    return Err(ExecutionError::InvalidInstruction(pc));
+                    return Err(StaticProgramError::InvalidInstruction(pc));
                 }
             }
             _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
