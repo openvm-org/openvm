@@ -412,7 +412,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
         if config.native.is_none() && config.castf.is_none() {
             // There should be no need to write to native address space if Native extension and
             // CastF extension are not enabled.
-            system.config.memory_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+            system.config.memory_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         }
         Self {
             system,

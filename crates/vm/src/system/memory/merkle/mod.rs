@@ -5,7 +5,7 @@ use openvm_stark_backend::{
 };
 
 use super::{controller::dimensions::MemoryDimensions, online::LinearMemory, MemoryImage};
-use crate::system::memory::online::PAGE_SIZE;
+use crate::{arch::AddressSpaceHostLayout, system::memory::online::PAGE_SIZE};
 
 mod air;
 mod columns;
@@ -73,7 +73,7 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
         .into_par_iter()
         .map(move |as_idx| {
             let space_mem = memory.mem[as_idx].as_slice();
-            let cell_size = memory.cell_size[as_idx];
+            let cell_size = memory.config[as_idx].layout.size();
             debug_assert_eq!(PAGE_SIZE % (cell_size * N), 0);
 
             let num_nonzero_pages = space_mem

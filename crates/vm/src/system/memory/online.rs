@@ -1,7 +1,7 @@
 use std::{array::from_fn, fmt::Debug, slice::from_raw_parts};
 
 use getset::Getters;
-use itertools::{izip, zip_eq};
+use itertools::zip_eq;
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
@@ -12,8 +12,7 @@ use tracing::instrument;
 
 use crate::{
     arch::{
-        AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
-        RecordArena, ADDR_SPACE_OFFSET,
+        AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, RecordArena,
     },
     system::{
         memory::{
@@ -279,6 +278,7 @@ impl GuestMemory {
     pub fn new(addr: AddressMap) -> Self {
         Self { memory: addr }
     }
+
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -295,10 +295,7 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.config[addr_space as usize].layout.size()
-        );
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - `T` should be "plain old data"
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
@@ -321,10 +318,7 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(
-            size_of::<T>(),
-            self.config[addr_space as usize].layout.size()
-        );
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
@@ -346,7 +340,7 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
@@ -359,6 +353,14 @@ impl GuestMemory {
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
+    }
+
+    #[inline(always)]
+    fn debug_assert_cell_type<T>(&self, addr_space: u32) {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.config[addr_space as usize].layout.size()
+        );
     }
 }
 
@@ -407,39 +409,27 @@ impl TracingMemory {
         access_adapter_arena_size_bound: usize,
     ) -> Self {
         let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
-        Self::from_image(
-            image,
-            mem_config,
-            initial_block_size,
-            access_adapter_arena_size_bound,
-        )
+        Self::from_image(image, initial_block_size, access_adapter_arena_size_bound)
     }
 
     /// Constructor from pre-existing memory image.
     pub fn from_image(
         image: GuestMemory,
-        mem_config: &MemoryConfig,
         initial_block_size: usize,
         access_adapter_arena_size_bound: usize,
     ) -> Self {
-        let num_addr_sp = ADDR_SPACE_OFFSET as usize + (1 << mem_config.addr_space_height);
-        let mut min_block_size = vec![1; num_addr_sp];
-        // TMP: hardcoding for now
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        min_block_size[3] = 4;
-
-        let meta = izip!(
-            image.memory.get_memory(),
-            &image.memory.cell_size,
-            &min_block_size
-        )
-        .map(|(mem, cell_size, min_block_size)| {
-            let num_cells = mem.size() / cell_size;
-            let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
-            PagedVec::new(total_metadata_len, PAGE_SIZE)
-        })
-        .collect::<Vec<_>>();
+        let (meta, min_block_size): (Vec<_>, Vec<_>) =
+            zip_eq(image.memory.get_memory(), &image.memory.config)
+                .map(|(mem, addr_sp)| {
+                    let num_cells = mem.size() / addr_sp.layout.size();
+                    let min_block_size = addr_sp.min_block_size;
+                    let total_metadata_len = num_cells.div_ceil(min_block_size);
+                    (
+                        PagedVec::new(total_metadata_len, PAGE_SIZE),
+                        min_block_size as u32,
+                    )
+                })
+                .unzip();
         let access_adapter_records =
             DenseRecordArena::with_byte_capacity(access_adapter_arena_size_bound);
         Self {

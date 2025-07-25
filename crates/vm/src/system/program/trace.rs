@@ -103,10 +103,8 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
         let memory_dimensions = memory_config.memory_dimensions();
         let app_program_commit: &[Val<SC>; CHUNK] = self.commitment.as_ref();
         let mem_config = memory_config;
-        let memory_image = AddressMap::from_sparse(
-            mem_config.addr_space_sizes.clone(),
-            self.exe.init_memory.clone(),
-        );
+        let memory_image =
+            AddressMap::from_sparse(mem_config.addr_spaces.clone(), self.exe.init_memory.clone());
         let init_memory_commit =
             MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
         Com::<SC>::from(compute_exe_commit(

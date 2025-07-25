@@ -53,20 +53,20 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
         max_access_adapter_n: usize,
     ) -> Self {
         let rc = range_checker;
         let mb = memory_bus;
-        let cmb = clk_max_bits;
+        let tmb = timestamp_max_bits;
         let maan = max_access_adapter_n;
         assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
         let chips: Vec<_> = [
-            Self::create_access_adapter_chip::<2>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<4>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<8>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<16>(rc.clone(), mb, cmb, maan),
-            Self::create_access_adapter_chip::<32>(rc.clone(), mb, cmb, maan),
+            Self::create_access_adapter_chip::<2>(rc.clone(), mb, tmb, maan),
+            Self::create_access_adapter_chip::<4>(rc.clone(), mb, tmb, maan),
+            Self::create_access_adapter_chip::<8>(rc.clone(), mb, tmb, maan),
+            Self::create_access_adapter_chip::<16>(rc.clone(), mb, tmb, maan),
+            Self::create_access_adapter_chip::<32>(rc.clone(), mb, tmb, maan),
         ]
         .into_iter()
         .flatten()
@@ -246,7 +246,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     fn create_access_adapter_chip<const N: usize>(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
         max_access_adapter_n: usize,
     ) -> Option<GenericAccessAdapterChip<F>>
     where
@@ -256,7 +256,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             Some(GenericAccessAdapterChip::new::<N>(
                 range_checker,
                 memory_bus,
-                clk_max_bits,
+                timestamp_max_bits,
             ))
         } else {
             None

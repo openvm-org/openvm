@@ -137,9 +137,9 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_checker_bus = range_checker.bus();
         assert!(mem_config.pointer_max_bits <= F::bits() - 2);
         assert!(mem_config
-            .addr_space_sizes
+            .addr_spaces
             .iter()
-            .all(|&x| x <= (1 << mem_config.pointer_max_bits)));
+            .all(|&space| space.num_cells <= (1 << mem_config.pointer_max_bits)));
         assert!(mem_config.addr_space_height < F::bits() - 2);
         let addr_space_max_bits = log2_ceil_usize(
             (ADDR_SPACE_OFFSET + 2u32.pow(mem_config.addr_space_height as u32)) as usize,

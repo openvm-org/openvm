@@ -221,8 +221,10 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             .par_iter()
             .map(|&((addr_space, ptr), ts_values)| {
                 let TimestampedValues { timestamp, values } = ts_values;
-                let init_values =
-                    array::from_fn(|i| initial_memory.get_f::<F>(addr_space, ptr + i as u32));
+                // SAFETY: addr_space from `final_memory` are all in bounds
+                let init_values = array::from_fn(|i| unsafe {
+                    initial_memory.get_f::<F>(addr_space, ptr + i as u32)
+                });
                 let initial_hash = hasher.hash(&init_values);
                 let final_hash = hasher.hash(&values);
                 FinalTouchedLabel {

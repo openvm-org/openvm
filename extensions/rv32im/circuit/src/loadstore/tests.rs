@@ -180,7 +180,7 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     if [STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
     let mut harness = create_test_chip(&mut tester);
@@ -231,7 +231,7 @@ fn run_negative_loadstore_test(
     let mut rng = create_seeded_rng();
     let mut mem_config = MemoryConfig::default();
     if [STOREW, STOREB, STOREH].contains(&opcode) {
-        mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
     let mut harness = create_test_chip(&mut tester);

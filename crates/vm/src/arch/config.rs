@@ -110,6 +110,10 @@ where
 
 pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
+/// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
+/// alignment of 2 because the instructions are implemented by doing an access of block size 4.
+const DEFAULT_U8_BLOCK_SIZE: usize = 4;
+const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
@@ -175,36 +179,44 @@ pub struct MemoryConfig {
 
 impl Default for MemoryConfig {
     fn default() -> Self {
-        // All except address spaces 0..4 default to native 32-bit field.
-        // By default only address spaces 1..=4 have non-empty cell counts.
-        let mut addr_spaces = vec![
-            AddressSpaceHostConfig::new(0, MemoryCellType::native32());
-            (1 << 3) + ADDR_SPACE_OFFSET as usize
-        ];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        let mut addr_spaces =
+            Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         const MAX_CELLS: usize = 1 << 29;
-        addr_spaces[RV32_REGISTER_AS as usize] =
-            AddressSpaceHostConfig::new(MAX_CELLS, MemoryCellType::U8);
-        addr_spaces[RV32_MEMORY_AS as usize] =
-            AddressSpaceHostConfig::new(MAX_CELLS, MemoryCellType::U8);
-        addr_spaces[PUBLIC_VALUES_AS as usize] =
-            AddressSpaceHostConfig::new(DEFAULT_MAX_NUM_PUBLIC_VALUES, MemoryCellType::U8);
+        addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
+        addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
+        addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[NATIVE_AS as usize].num_cells = MAX_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 32)
     }
 }
 
 impl MemoryConfig {
+    pub fn empty_address_space_configs(num_addr_spaces: usize) -> Vec<AddressSpaceHostConfig> {
+        // All except address spaces 0..4 default to native 32-bit field.
+        // By default only address spaces 1..=4 have non-empty cell counts.
+        let mut addr_spaces = vec![
+            AddressSpaceHostConfig::new(
+                0,
+                DEFAULT_NATIVE_BLOCK_SIZE,
+                MemoryCellType::native32()
+            );
+            num_addr_spaces
+        ];
+        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
+        addr_spaces[RV32_REGISTER_AS as usize] =
+            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        addr_spaces[RV32_MEMORY_AS as usize] =
+            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] =
+            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+
+        addr_spaces
+    }
+
     /// Config for aggregation usage with only native address space.
     pub fn aggregation() -> Self {
-        let mut addr_spaces = vec![
-            AddressSpaceHostConfig::new(0, MemoryCellType::native32());
-            (1 << 3) + ADDR_SPACE_OFFSET as usize
-        ];
-        for config in addr_spaces.iter_mut().take(NATIVE_AS as usize) {
-            config.layout = MemoryCellType::U8;
-        }
-        addr_spaces[RV32_IMM_AS as usize].layout = MemoryCellType::Null;
+        let mut addr_spaces =
+            Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
         addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
     }
@@ -363,10 +375,15 @@ impl InitFileGenerator for SystemConfig {}
 pub struct AddressSpaceHostConfig {
     /// The number of cells in each address space.
     pub num_cells: usize,
+    /// Minimum block size for memory accesses supported. This is a property of the address space
+    /// that is determined by the ISA.
+    ///
+    /// **Note**: Block size is in terms of memory cells.
+    pub min_block_size: usize,
     pub layout: MemoryCellType,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCellType {
     Null,
     U8,
@@ -406,7 +423,7 @@ impl AddressSpaceHostLayout for MemoryCellType {
     /// If the value is of integer type and overflows the field.
     unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F {
         match self {
-            Null => unreachable!(),
+            Self::Null => unreachable!(),
             Self::U8 => F::from_canonical_u8(*value.get_unchecked(0)),
             Self::U16 => F::from_canonical_u16(core::ptr::read(value.as_ptr() as *const u16)),
             Self::U32 => F::from_canonical_u32(core::ptr::read(value.as_ptr() as *const u32)),

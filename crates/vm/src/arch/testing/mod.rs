@@ -336,7 +336,7 @@ impl VmChipTestBuilder<BabyBear> {
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
-        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::persistent(mem_config)
     }
 
@@ -411,7 +411,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::volatile(mem_config)
     }
 }

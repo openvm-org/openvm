@@ -140,8 +140,8 @@ pub mod test_utils {
 
     pub fn test_native_config() -> NativeConfig {
         let mut system = test_system_config();
-        system.memory_config.addr_space_sizes[RV32_REGISTER_AS as usize] = 0;
-        system.memory_config.addr_space_sizes[RV32_MEMORY_AS as usize] = 0;
+        system.memory_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 0;
+        system.memory_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 0;
         NativeConfig {
             system,
             native: Default::default(),

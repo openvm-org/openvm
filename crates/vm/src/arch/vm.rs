@@ -237,16 +237,11 @@ where
         interactions: &[usize],
     ) -> MeteredCtx {
         let system_config = self.config.as_ref();
-        let num_addr_sp = 1 + (1 << system_config.memory_config.addr_space_height);
-        let mut min_block_size = vec![1; num_addr_sp];
-        // TMP: hardcoding for now
-        // TODO[jpw]: move to mem_config
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        min_block_size[3] = 4;
-        let as_byte_alignment_bits = min_block_size
+        let as_byte_alignment_bits = system_config
+            .memory_config
+            .addr_spaces
             .iter()
-            .map(|&x| log2_strict_usize(x as usize) as u8)
+            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
             .collect();
 
         MeteredCtx::new(
@@ -543,7 +538,6 @@ where
         );
         let memory = TracingMemory::from_image(
             state.memory,
-            &system_config.memory_config,
             system_config.initial_block_size(),
             access_adapter_arena_size_bound,
         );
@@ -1201,7 +1195,7 @@ pub(super) fn create_memory_image(
     init_memory: SparseMemoryImage,
 ) -> GuestMemory {
     GuestMemory::new(AddressMap::from_sparse(
-        memory_config.addr_space_sizes.clone(),
+        memory_config.addr_spaces.clone(),
         init_memory,
     ))
 }
