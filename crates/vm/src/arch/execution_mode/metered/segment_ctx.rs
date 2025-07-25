@@ -96,6 +96,7 @@ impl SegmentationCtx {
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
+        // SAFETY: Length equality is asserted above, so indices are guaranteed to be in bounds
         unsafe {
             trace_heights
                 .iter()
@@ -110,6 +111,7 @@ impl SegmentationCtx {
     fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.interactions.len());
 
+        // SAFETY: Length equality is asserted above, so indices are guaranteed to be in bounds
         unsafe {
             trace_heights
                 .iter()
@@ -141,6 +143,7 @@ impl SegmentationCtx {
             return false;
         }
 
+        // SAFETY: Length equality is asserted above, so all array accesses are in bounds
         unsafe {
             for i in 0..trace_heights.len() {
                 let height = *trace_heights.get_unchecked(i);

@@ -220,6 +220,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
         );
 
         // Handle access adapter updates
+        // SAFETY: size is checked to be > 0 and power of 2 by debug_assert above
         let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
         self.memory_ctx
             .update_adapter_heights(&mut self.trace_heights, address_space, size_bits);
@@ -259,6 +260,7 @@ impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
             chip_idx < self.trace_heights.len(),
             "chip_idx out of bounds"
         );
+        // SAFETY: chip_idx bounds are checked by debug_assert above
         unsafe {
             *self.trace_heights.get_unchecked_mut(chip_idx) = self
                 .trace_heights
