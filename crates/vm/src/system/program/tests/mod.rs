@@ -288,7 +288,7 @@ fn test_program_with_undefined_instructions() {
         )),
     ];
 
-    let program = Program::new_without_debug_infos_with_option(&instructions, DEFAULT_PC_STEP, 0);
+    let program = Program::new_without_debug_infos_with_option(&instructions, 0);
 
     interaction_test(program, vec![0, 2, 5]);
 }

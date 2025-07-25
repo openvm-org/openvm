@@ -1,4 +1,8 @@
-use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_stark_backend::{
     config::StarkGenericConfig,
     p3_field::Field,
@@ -55,7 +59,6 @@ pub struct ProgramHandler<F, E> {
     pc_handler: Vec<PcEntry<F>>,
     execution_frequencies: Vec<u32>,
     pc_base: u32,
-    step: u32,
 }
 
 impl<F: Field, E> ProgramHandler<F, E> {
@@ -107,15 +110,13 @@ impl<F: Field, E> ProgramHandler<F, E> {
             executors,
             pc_handler,
             pc_base: program.pc_base,
-            step: program.step,
         })
     }
 
     #[inline(always)]
     fn get_pc_index(&self, pc: u32) -> usize {
-        let step = self.step;
         let pc_base = self.pc_base;
-        ((pc - pc_base) / step) as usize
+        ((pc - pc_base) / DEFAULT_PC_STEP) as usize
     }
 
     /// Returns `(executor, pc_entry, pc_idx)`.
@@ -127,7 +128,6 @@ impl<F: Field, E> ProgramHandler<F, E> {
             .get(pc_idx)
             .ok_or_else(|| ExecutionError::PcOutOfBounds {
                 pc,
-                step: self.step,
                 pc_base: self.pc_base,
                 program_len: self.pc_handler.len(),
             })?;
