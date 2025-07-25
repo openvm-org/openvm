@@ -272,7 +272,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn address_bits(&self) -> usize {
-        self.memory.controller.mem_config.pointer_max_bits
+        self.memory.controller.memory_config().pointer_max_bits
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {
@@ -487,7 +487,7 @@ where
             }
             let mem_inventory = MemoryAirInventory::new(
                 memory_controller.memory_bridge(),
-                &memory_controller.mem_config,
+                memory_controller.memory_config(),
                 range_checker.bus(),
                 is_persistent.then_some((
                     PermutationCheckBus::new(MEMORY_MERKLE_BUS),

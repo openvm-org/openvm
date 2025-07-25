@@ -75,8 +75,6 @@ pub type Equipartition<F, const N: usize> = BTreeMap<(u32, u32), [F; N]>;
 pub struct MemoryController<F: Field> {
     pub memory_bus: MemoryBus,
     pub interface_chip: MemoryInterface<F>,
-    #[getset(get = "pub")]
-    pub(crate) mem_config: MemoryConfig,
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
@@ -146,7 +144,6 @@ impl<F: PrimeField32> MemoryController<F> {
         );
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
             interface_chip: MemoryInterface::Volatile {
                 boundary_chip: VolatileBoundaryChip::new(
                     memory_bus,
@@ -158,8 +155,7 @@ impl<F: PrimeField32> MemoryController<F> {
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
-                mem_config.timestamp_max_bits,
-                mem_config.max_access_adapter_n,
+                mem_config,
             ),
             range_checker,
             range_checker_bus,
@@ -195,18 +191,20 @@ impl<F: PrimeField32> MemoryController<F> {
         };
         Self {
             memory_bus,
-            mem_config: mem_config.clone(),
             interface_chip,
             access_adapter_inventory: AccessAdapterInventory::new(
                 range_checker.clone(),
                 memory_bus,
-                mem_config.timestamp_max_bits,
-                mem_config.max_access_adapter_n,
+                mem_config,
             ),
             range_checker,
             range_checker_bus,
             hasher_chip: Some(hasher_chip),
         }
+    }
+
+    pub fn memory_config(&self) -> &MemoryConfig {
+        &self.access_adapter_inventory.memory_config
     }
 
     pub(crate) fn set_override_trace_heights(&mut self, overridden_heights: &[u32]) {
@@ -247,7 +245,7 @@ impl<F: PrimeField32> MemoryController<F> {
     pub fn memory_bridge(&self) -> MemoryBridge {
         MemoryBridge::new(
             self.memory_bus,
-            self.mem_config.timestamp_max_bits,
+            self.memory_config().timestamp_max_bits,
             self.range_checker_bus,
         )
     }
@@ -256,7 +254,10 @@ impl<F: PrimeField32> MemoryController<F> {
         let range_bus = self.range_checker.bus();
         SharedMemoryHelper {
             range_checker: self.range_checker.clone(),
-            timestamp_lt_air: AssertLtSubAir::new(range_bus, self.mem_config.timestamp_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(
+                range_bus,
+                self.memory_config().timestamp_max_bits,
+            ),
             _marker: Default::default(),
         }
     }

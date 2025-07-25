@@ -13,7 +13,6 @@ use openvm_circuit_primitives::{
     is_less_than::IsLtSubAir, utils::next_power_of_two_or_zero,
     var_range::SharedVariableRangeCheckerChip, TraceSubRowGenerator,
 };
-use openvm_instructions::NATIVE_AS;
 use openvm_stark_backend::{
     config::{Domain, StarkGenericConfig},
     p3_air::BaseAir,
@@ -25,7 +24,10 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    arch::{CustomBorrow, DenseRecordArena, SizedRecord},
+    arch::{
+        AddressSpaceHostConfig, AddressSpaceHostLayout, CustomBorrow, DenseRecordArena,
+        MemoryCellType, MemoryConfig, SizedRecord,
+    },
     system::memory::{
         adapter::records::{
             arena_size_bound, AccessLayout, AccessRecordHeader, AccessRecordMut,
@@ -44,6 +46,7 @@ mod tests;
 
 #[derive(Setters)]
 pub struct AccessAdapterInventory<F> {
+    pub(super) memory_config: MemoryConfig,
     chips: Vec<GenericAccessAdapterChip<F>>,
     #[getset(set = "pub")]
     arena: DenseRecordArena,
@@ -53,13 +56,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
-        timestamp_max_bits: usize,
-        max_access_adapter_n: usize,
+        memory_config: MemoryConfig,
     ) -> Self {
         let rc = range_checker;
         let mb = memory_bus;
-        let tmb = timestamp_max_bits;
-        let maan = max_access_adapter_n;
+        let tmb = memory_config.timestamp_max_bits;
+        let maan = memory_config.max_access_adapter_n;
         assert!(matches!(maan, 2 | 4 | 8 | 16 | 32));
         let chips: Vec<_> = [
             Self::create_access_adapter_chip::<2>(rc.clone(), mb, tmb, maan),
@@ -72,6 +74,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         .flatten()
         .collect();
         Self {
+            memory_config,
             chips,
             arena: DenseRecordArena::with_byte_capacity(0),
         }
@@ -196,6 +199,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             &mut traces[i].values[trace_ptrs[i]..trace_ptrs[i] + widths[i]];
                         trace_ptrs[i] += widths[i];
                         self.chips[i].fill_trace_row(
+                            &self.memory_config.addr_spaces,
                             row_slice,
                             false,
                             MemoryAddress::new(
@@ -223,6 +227,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
                             &mut traces[i].values[trace_ptrs[i]..trace_ptrs[i] + widths[i]];
                         trace_ptrs[i] += widths[i];
                         self.chips[i].fill_trace_row(
+                            &self.memory_config.addr_spaces,
                             row_slice,
                             true,
                             MemoryAddress::new(
@@ -270,8 +275,10 @@ pub(crate) trait GenericAccessAdapterChipTrait<F> {
     fn set_override_trace_height(&mut self, overridden_height: usize);
     fn overridden_trace_height(&self) -> Option<usize>;
 
+    #[allow(clippy::too_many_arguments)]
     fn fill_trace_row(
         &self,
+        addr_spaces: &[AddressSpaceHostConfig],
         row: &mut [F],
         is_split: bool,
         address: MemoryAddress<u32, u32>,
@@ -348,6 +355,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
 
     fn fill_trace_row(
         &self,
+        addr_spaces: &[AddressSpaceHostConfig],
         row: &mut [F],
         is_split: bool,
         address: MemoryAddress<u32, u32>,
@@ -364,18 +372,26 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             F::from_canonical_u32(address.address_space),
             F::from_canonical_u32(address.pointer),
         );
-        // TODO: normal way
-        if address.address_space < NATIVE_AS {
-            for (dst, src) in row.values.iter_mut().zip(values.iter()) {
-                *dst = F::from_canonical_u8(*src);
-            }
-        } else {
-            unsafe {
-                copy_nonoverlapping(
-                    values.as_ptr(),
-                    row.values.as_mut_ptr() as *mut u8,
-                    N * size_of::<F>(),
-                );
+        let addr_space_layout = addr_spaces[address.address_space as usize].layout;
+        // SAFETY: values will be a slice of of the cell type
+        unsafe {
+            match addr_space_layout {
+                MemoryCellType::Native { .. } => {
+                    copy_nonoverlapping(
+                        values.as_ptr(),
+                        row.values.as_mut_ptr() as *mut u8,
+                        N * size_of::<F>(),
+                    );
+                }
+                _ => {
+                    for (dst, src) in row
+                        .values
+                        .iter_mut()
+                        .zip(values.chunks_exact(addr_space_layout.size()))
+                    {
+                        *dst = addr_space_layout.to_field(src);
+                    }
+                }
             }
         }
         row.left_timestamp = F::from_canonical_u32(left_timestamp);
