@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_instructions::{instruction::Instruction, NATIVE_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
@@ -411,6 +411,9 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
+        // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
+        // removed when tests are updated.
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::volatile(mem_config)
     }
