@@ -28,10 +28,9 @@ pub type Result<T> = std::result::Result<T, ExecutionError>;
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}")]
     Fail { pc: u32 },
-    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
     PcOutOfBounds {
         pc: u32,
-        step: u32,
         pc_base: u32,
         program_len: usize,
     },

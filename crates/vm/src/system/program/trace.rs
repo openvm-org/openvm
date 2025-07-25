@@ -3,7 +3,11 @@ use std::{borrow::BorrowMut, sync::Arc};
 use derivative::Derivative;
 use itertools::Itertools;
 use openvm_circuit::arch::hasher::poseidon2::Poseidon2Hasher;
-use openvm_instructions::{exe::VmExe, program::Program, LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    exe::VmExe,
+    program::{Program, DEFAULT_PC_STEP},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_stark_backend::{
     config::{Com, PcsProverData, StarkGenericConfig, Val},
     p3_commit::Pcs,
@@ -169,7 +173,7 @@ pub(crate) fn generate_cached_trace<F: Field>(program: &Program<F>) -> RowMajorM
     let padding = padding_instruction();
     while !instructions.len().is_power_of_two() {
         instructions.push((
-            program.pc_base + instructions.len() as u32 * program.step,
+            program.pc_base + instructions.len() as u32 * DEFAULT_PC_STEP,
             padding.clone(),
         ));
     }

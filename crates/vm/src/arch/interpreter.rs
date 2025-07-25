@@ -7,7 +7,10 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
+    exe::VmExe,
+    instruction::Instruction,
+    program::{Program, DEFAULT_PC_STEP},
+    LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
@@ -233,13 +236,11 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
 }
 
 fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
-    let step = program.step;
     let pc_base = program.pc_base;
-    let pc_index = ((pc - pc_base) / step) as usize;
+    let pc_index = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
     if !(0..program.len()).contains(&pc_index) {
         return Err(ExecutionError::PcOutOfBounds {
             pc,
-            step,
             pc_base,
             program_len: program.len(),
         });
@@ -365,7 +366,7 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
-                let pc = program.pc_base + i as u32 * program.step;
+                let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,
@@ -415,7 +416,7 @@ fn get_e2_pre_compute_instructions<
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
-                let pc = program.pc_base + i as u32 * program.step;
+                let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,

@@ -28,7 +28,6 @@ pub struct Program<F> {
         deserialize_with = "deserialize_instructions_and_debug_infos"
     )]
     pub instructions_and_debug_infos: Vec<Option<(Instruction<F>, Option<DebugInfo>)>>,
-    pub step: u32,
     pub pc_base: u32,
 }
 
@@ -36,36 +35,28 @@ pub struct Program<F> {
 pub struct ProgramDebugInfo {
     inner: Arc<Vec<Option<DebugInfo>>>,
     pc_base: u32,
-    step: u32,
 }
 
 impl<F: Field> Program<F> {
-    pub fn new_empty(step: u32, pc_base: u32) -> Self {
+    pub fn new_empty(pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: vec![],
-            step,
             pc_base,
         }
     }
 
-    pub fn new_without_debug_infos(
-        instructions: &[Instruction<F>],
-        step: u32,
-        pc_base: u32,
-    ) -> Self {
+    pub fn new_without_debug_infos(instructions: &[Instruction<F>], pc_base: u32) -> Self {
         Self {
             instructions_and_debug_infos: instructions
                 .iter()
                 .map(|instruction| Some((instruction.clone(), None)))
                 .collect(),
-            step,
             pc_base,
         }
     }
 
     pub fn new_without_debug_infos_with_option(
         instructions: &[Option<Instruction<F>>],
-        step: u32,
         pc_base: u32,
     ) -> Self {
         Self {
@@ -73,7 +64,6 @@ impl<F: Field> Program<F> {
                 .iter()
                 .map(|instruction| instruction.clone().map(|instruction| (instruction, None)))
                 .collect(),
-            step,
             pc_base,
         }
     }
@@ -90,7 +80,6 @@ impl<F: Field> Program<F> {
                 .zip_eq(debug_infos.iter())
                 .map(|(instruction, debug_info)| Some((instruction.clone(), debug_info.clone())))
                 .collect(),
-            step: DEFAULT_PC_STEP,
             pc_base: 0,
         }
     }
@@ -107,7 +96,7 @@ impl<F: Field> Program<F> {
     }
 
     pub fn from_instructions(instructions: &[Instruction<F>]) -> Self {
-        Self::new_without_debug_infos(instructions, DEFAULT_PC_STEP, 0)
+        Self::new_without_debug_infos(instructions, 0)
     }
 
     pub fn len(&self) -> usize {
@@ -138,7 +127,7 @@ impl<F: Field> Program<F> {
             .flat_map(|(index, option)| {
                 option.clone().map(|(instruction, debug_info)| {
                     (
-                        self.pc_base + (self.step * (index as u32)),
+                        self.pc_base + (DEFAULT_PC_STEP * (index as u32)),
                         instruction,
                         debug_info,
                     )
@@ -186,7 +175,6 @@ impl<F> Program<F> {
         ProgramDebugInfo {
             inner: Arc::new(debug_infos),
             pc_base: self.pc_base,
-            step: self.step,
         }
     }
 }
@@ -218,9 +206,8 @@ impl ProgramDebugInfo {
     /// ## Panics
     /// If `pc` is out of bounds.
     pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
-        let step = self.step;
         let pc_base = self.pc_base;
-        let pc_idx = ((pc - pc_base) / step) as usize;
+        let pc_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
         &self.inner[pc_idx]
     }
 }
@@ -295,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_program_serde() {
-        let mut program = Program::<F>::new_empty(4, 0);
+        let mut program = Program::<F>::new_empty(0);
         program.instructions_and_debug_infos.push(Some((
             Instruction::from_isize(VmOpcode::from_usize(113), 1, 2, 3, 4, 5),
             None,
