@@ -45,7 +45,8 @@ impl BitSet {
             let end_bit = ((end - 1) & 63) as u32 + 1;
             let mask_bits = end_bit - start_bit;
             let mask = (u64::MAX >> (64 - mask_bits)) << start_bit;
-            // SAFETY: start_word_index is derived from start which is bounds checked by debug_assert above
+            // SAFETY: start_word_index is derived from start which is bounds checked by
+            // debug_assert above
             let word = unsafe { self.words.get_unchecked_mut(start_word_index) };
             ret += mask_bits - (*word & mask).count_ones();
             *word |= mask;
@@ -53,7 +54,8 @@ impl BitSet {
             let end_bit = (end & 63) as u32;
             let mask_bits = 64 - start_bit;
             let mask = u64::MAX << start_bit;
-            // SAFETY: start_word_index is derived from start which is bounds checked by debug_assert above
+            // SAFETY: start_word_index is derived from start which is bounds checked by
+            // debug_assert above
             let start_word = unsafe { self.words.get_unchecked_mut(start_word_index) };
             ret += mask_bits - (*start_word & mask).count_ones();
             *start_word |= mask;
@@ -64,7 +66,8 @@ impl BitSet {
             } else {
                 u64::MAX >> (64 - end_bit)
             };
-            // SAFETY: end_word_index is derived from end which is bounds checked by debug_assert above
+            // SAFETY: end_word_index is derived from end which is bounds checked by debug_assert
+            // above
             let end_word = unsafe { self.words.get_unchecked_mut(end_word_index) };
             ret += mask_bits - (*end_word & mask).count_ones();
             *end_word |= mask;
@@ -72,7 +75,8 @@ impl BitSet {
 
         if start_word_index + 1 < end_word_index {
             for i in (start_word_index + 1)..end_word_index {
-                // SAFETY: i is between start_word_index and end_word_index which are bounds checked above
+                // SAFETY: i is between start_word_index and end_word_index which are bounds checked
+                // above
                 let word = unsafe { self.words.get_unchecked_mut(i) };
                 ret += word.count_zeros();
                 *word = u64::MAX;
@@ -260,7 +264,8 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             debug_assert!(trace_heights.len() >= 2);
 
             let poseidon2_idx = trace_heights.len() - 2;
-            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds by debug_assert above
+            // SAFETY: poseidon2_idx is trace_heights.len() - 2, guaranteed to be in bounds by
+            // debug_assert above
             unsafe {
                 *trace_heights.get_unchecked_mut(poseidon2_idx) += leaves * 2;
             }
