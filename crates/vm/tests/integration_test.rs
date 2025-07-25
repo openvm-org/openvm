@@ -7,7 +7,10 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        execution_mode::{e1::E1Ctx, metered::segment_ctx::SegmentationLimits},
+        execution_mode::{
+            e1::E1Ctx,
+            metered::{ctx::DEFAULT_SEGMENT_CHECK_INSNS, segment_ctx::SegmentationLimits},
+        },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
@@ -896,7 +899,7 @@ fn test_single_segment_executor_no_segmentation() {
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config).unwrap();
-    let instructions: Vec<_> = (0..1000)
+    let instructions: Vec<_> = (0..2 * DEFAULT_SEGMENT_CHECK_INSNS)
         .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
         .chain(std::iter::once(Instruction::from_isize(
             TERMINATE.global_opcode(),

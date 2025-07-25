@@ -101,8 +101,8 @@ mod tests {
             sdk.transpile(elf, vm_config.transpiler())?
         };
 
-        // app_exe publishes 35th and 36th fibonacci numbers.
-        let pvs: Vec<u8> = [9227465, 14930352, 0, 0, 0, 0, 0, 0u32]
+        // app_exe publishes 31st and 32nd fibonacci numbers.
+        let pvs: Vec<u8> = [1346269, 2178309, 0, 0, 0, 0, 0, 0u32]
             .iter()
             .flat_map(|x| x.to_le_bytes())
             .collect();

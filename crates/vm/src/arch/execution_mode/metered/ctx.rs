@@ -18,7 +18,7 @@ use crate::{
 };
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
-const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 #[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
