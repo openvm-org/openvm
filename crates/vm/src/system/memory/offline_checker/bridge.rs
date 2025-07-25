@@ -20,7 +20,7 @@ use crate::system::memory::{
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will
 /// be decomposed into) for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
-/// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
+/// Warning: This requires that (timestamp_max_bits + decomp - 1) / decomp = AUX_LEN
 ///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
 pub const AUX_LEN: usize = 2;
 
@@ -35,11 +35,11 @@ impl MemoryBridge {
     /// Create a new [MemoryBridge] with the provided offline_checker.
     pub fn new(
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
         range_bus: VariableRangeCheckerBus,
     ) -> Self {
         Self {
-            offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, range_bus),
+            offline_checker: MemoryOfflineChecker::new(memory_bus, timestamp_max_bits, range_bus),
         }
     }
 
@@ -274,10 +274,14 @@ struct MemoryOfflineChecker {
 }
 
 impl MemoryOfflineChecker {
-    fn new(memory_bus: MemoryBus, clk_max_bits: usize, range_bus: VariableRangeCheckerBus) -> Self {
+    fn new(
+        memory_bus: MemoryBus,
+        timestamp_max_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+    ) -> Self {
         Self {
             memory_bus,
-            timestamp_lt_air: AssertLtSubAir::new(range_bus, clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, timestamp_max_bits),
         }
     }
 

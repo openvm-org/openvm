@@ -295,11 +295,11 @@ impl<F: Clone + Send + Sync> GenericAccessAdapterChip<F> {
     fn new<const N: usize>(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
     ) -> Self {
         let rc = range_checker;
         let mb = memory_bus;
-        let cmb = clk_max_bits;
+        let cmb = timestamp_max_bits;
         match N {
             2 => GenericAccessAdapterChip::N2(AccessAdapterChip::new(rc, mb, cmb)),
             4 => GenericAccessAdapterChip::N4(AccessAdapterChip::new(rc, mb, cmb)),
@@ -322,9 +322,9 @@ impl<F: Clone + Send + Sync, const N: usize> AccessAdapterChip<F, N> {
     pub fn new(
         range_checker: SharedVariableRangeCheckerChip,
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
     ) -> Self {
-        let lt_air = IsLtSubAir::new(range_checker.bus(), clk_max_bits);
+        let lt_air = IsLtSubAir::new(range_checker.bus(), timestamp_max_bits);
         Self {
             air: AccessAdapterAir::<N> { memory_bus, lt_air },
             range_checker,

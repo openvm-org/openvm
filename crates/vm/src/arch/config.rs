@@ -169,7 +169,7 @@ pub struct MemoryConfig {
     /// element is 0, which means no address space.
     pub addr_spaces: Vec<AddressSpaceHostConfig>,
     pub pointer_max_bits: usize,
-    /// All timestamps must be in the range `[0, 2^clk_max_bits)`. Maximum allowed: 29.
+    /// All timestamps must be in the range `[0, 2^timestamp_max_bits)`. Maximum allowed: 29.
     pub timestamp_max_bits: usize,
     /// Limb size used by the range checker
     pub decomp: usize,
