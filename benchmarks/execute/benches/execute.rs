@@ -248,7 +248,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             let (ctx, executor_idx_to_air_idx) = metering_setup();
             let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
 
-            (interpreter, vec![], ctx, executor_idx_to_air_idx)
+            (interpreter, vec![], ctx.clone(), executor_idx_to_air_idx)
         })
         .bench_values(|(interpreter, input, ctx, executor_idx_to_air_idx)| {
             interpreter
