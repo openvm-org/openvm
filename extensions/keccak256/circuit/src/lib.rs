@@ -17,14 +17,7 @@ mod extension;
 mod tests;
 pub use air::KeccakVmAir;
 pub use extension::*;
-use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        E2PreCompute, ExecuteFunc, ExecutionBridge, ExecutionError, InsExecutorE1, InsExecutorE2,
-        Result, VmChipWrapper, VmSegmentState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -99,7 +92,7 @@ impl<F: PrimeField32> InsExecutorE1<F> for KeccakVmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -120,7 +113,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for KeccakVmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -195,7 +188,7 @@ impl KeccakVmStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut KeccakPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction {
             opcode,
             a,

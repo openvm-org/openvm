@@ -5,13 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
-        VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory, POINTER_MAX_BITS,
@@ -300,7 +294,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -403,7 +397,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -446,7 +440,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -567,7 +561,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadStorePreCompute,
-    ) -> Result<(Rv32LoadStoreOpcode, bool, bool)> {
+    ) -> Result<(Rv32LoadStoreOpcode, bool, bool), ExecutionError> {
         let Instruction {
             opcode,
             a,

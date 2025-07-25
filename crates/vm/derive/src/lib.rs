@@ -57,7 +57,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
-                    ) -> ::openvm_circuit::arch::Result<()> {
+                    ) -> Result<(), ::openvm_circuit::arch::ExecutionError> {
                         self.0.execute(state, instruction)
                     }
 
@@ -109,7 +109,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<#field_ty_generic>,
-                    ) -> ::openvm_circuit::arch::Result<()> {
+                    ) -> Result<(), ::openvm_circuit::arch::ExecutionError> {
                         match self {
                             #(#execute_arms,)*
                         }
@@ -167,7 +167,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         self.0.pre_compute_e1(pc, inst, data)
@@ -240,7 +240,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         match self {
@@ -295,7 +295,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         self.0.pre_compute_e2(chip_idx, pc, inst, data)
@@ -369,7 +369,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         data: &mut [u8],
-                    ) -> ::openvm_circuit::arch::execution::Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>>
+                    ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::ExecutionError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         match self {

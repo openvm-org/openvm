@@ -1,13 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ImmInstruction, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller, VmAdapterInterface,
-        VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -193,7 +187,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -267,7 +261,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
         let fn_ptr = match (is_jal, enabled) {
@@ -294,7 +288,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -378,7 +372,7 @@ impl<A> Rv32JalLuiStep<A> {
         &self,
         inst: &Instruction<F>,
         data: &mut JalLuiPreCompute,
-    ) -> Result<(bool, bool)> {
+    ) -> Result<(bool, bool), ExecutionError> {
         let local_opcode = Rv32JalLuiOpcode::from_usize(
             inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
         );

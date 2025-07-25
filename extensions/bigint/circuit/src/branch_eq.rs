@@ -1,13 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchEqual256Opcode;
-use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2, VmSegmentState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -48,7 +42,7 @@ impl<F: PrimeField32> InsExecutorE1<F> for Rv32BranchEqual256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -73,7 +67,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Rv32BranchEqual256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -132,7 +126,7 @@ impl Rv32BranchEqual256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchEqPreCompute,
-    ) -> openvm_circuit::arch::Result<BranchEqualOpcode> {
+    ) -> Result<BranchEqualOpcode, ExecutionError> {
         let Instruction {
             opcode,
             a,

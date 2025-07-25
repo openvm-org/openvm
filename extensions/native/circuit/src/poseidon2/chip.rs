@@ -152,7 +152,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> openvm_circuit::arch::Result<()> {
+    ) -> Result<(), ExecutionError> {
         let arena = state.ctx;
         let init_timestamp_u32 = state.memory.timestamp;
         if instruction.opcode == PERM_POS2.global_opcode()

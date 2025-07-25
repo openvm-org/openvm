@@ -4,13 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -201,7 +195,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         debug_assert_eq!(
@@ -279,7 +273,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -304,7 +298,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -358,7 +352,7 @@ impl<A, const LIMB_BITS: usize> MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut MultiPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         assert_eq!(
             MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL

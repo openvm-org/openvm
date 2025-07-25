@@ -1,13 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ImmInstruction,
-        InsExecutorE1, InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -184,7 +178,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
@@ -269,7 +263,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = if is_bne {
@@ -295,7 +289,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -352,7 +346,7 @@ impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchEqualPreCompute,
-    ) -> Result<bool> {
+    ) -> Result<bool, ExecutionError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let &Instruction {
             opcode, a, b, c, d, ..

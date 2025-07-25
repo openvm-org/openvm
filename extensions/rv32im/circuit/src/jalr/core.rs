@@ -4,13 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, RecordArena, Result, SignedImmInstruction, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -242,7 +236,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, g, .. } = *instruction;
 
         debug_assert_eq!(
@@ -348,7 +342,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = if enabled {
@@ -374,7 +368,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -436,7 +430,7 @@ impl<A> Rv32JalrStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut JalrPreCompute,
-    ) -> Result<bool> {
+    ) -> Result<bool, ExecutionError> {
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
         if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(ExecutionError::InvalidInstruction(pc));

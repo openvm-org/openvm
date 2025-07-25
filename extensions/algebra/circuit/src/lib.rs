@@ -7,18 +7,16 @@ use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
-    arch::{
-        execution::ExecuteFunc,
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        DynArray, E2PreCompute, ExecutionError, InsExecutorE1, InsExecutorE2, Result,
-        VmSegmentState,
-    },
+    arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+};
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, FieldExpr, FieldExpressionStep,
 };
@@ -117,7 +115,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut FieldExpressionPreCompute<'a>,
-    ) -> Result<Option<Operation>> {
+    ) -> Result<Option<Operation>, ExecutionError> {
         let Instruction {
             opcode,
             a,
@@ -213,7 +211,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -310,7 +308,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {

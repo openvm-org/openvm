@@ -1,13 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ImmInstruction,
-        InsExecutorE1, InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -241,7 +235,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -386,7 +380,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut BranchLePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
         let fn_ptr = match local_opcode {
@@ -413,7 +407,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -474,7 +468,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchLePreCompute,
-    ) -> Result<BranchLessThanOpcode> {
+    ) -> Result<BranchLessThanOpcode, ExecutionError> {
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;

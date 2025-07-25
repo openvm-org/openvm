@@ -1,13 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
-        ExecutionError, ExecutionState, InsExecutorE1, InsExecutorE2, InstructionExecutor,
-        MultiRowLayout, MultiRowMetadata, RecordArena, Result, SizedRecord, TraceFiller,
-        VmChipWrapper, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
@@ -381,7 +375,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode, a, b, d, e, ..
         } = instruction;
@@ -608,7 +602,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
         let fn_ptr = match local_opcode {
@@ -633,7 +627,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -717,7 +711,7 @@ impl Rv32HintStoreStep {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut HintStorePreCompute,
-    ) -> Result<Rv32HintStoreOpcode> {
+    ) -> Result<Rv32HintStoreOpcode, ExecutionError> {
         let &Instruction {
             opcode,
             a,

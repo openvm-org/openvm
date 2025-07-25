@@ -48,7 +48,7 @@ impl<F: PrimeField32> InsExecutorE1<F> for Rv32Shift256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -74,7 +74,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Rv32Shift256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -130,7 +130,7 @@ impl Rv32Shift256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftPreCompute,
-    ) -> openvm_circuit::arch::Result<ShiftOpcode> {
+    ) -> Result<ShiftOpcode, ExecutionError> {
         let Instruction {
             opcode,
             a,

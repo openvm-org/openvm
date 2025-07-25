@@ -4,13 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, ImmInstruction,
-        InsExecutorE1, InsExecutorE2, InstructionExecutor, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -235,7 +229,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -318,7 +312,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
         Ok(|pre_compute, vm_state| {
@@ -356,7 +350,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -381,7 +375,7 @@ impl<A> Rv32AuipcStep<A> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut AuiPcPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { a, c: imm, d, .. } = inst;
         if d.as_canonical_u32() != RV32_REGISTER_AS {
             return Err(ExecutionError::InvalidInstruction(pc));

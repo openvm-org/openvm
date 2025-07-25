@@ -22,8 +22,6 @@ use crate::{
     },
 };
 
-pub type Result<T> = std::result::Result<T, ExecutionError>;
-
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}")]
@@ -100,7 +98,7 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()>;
+    ) -> Result<(), ExecutionError>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
@@ -130,7 +128,7 @@ pub trait InsExecutorE1<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx;
 }
@@ -144,7 +142,7 @@ pub trait InsExecutorE2<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx;
 }

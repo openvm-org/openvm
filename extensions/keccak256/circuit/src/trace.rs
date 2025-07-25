@@ -5,10 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        get_record_from_slice, CustomBorrow, InstructionExecutor, MultiRowLayout, MultiRowMetadata,
-        RecordArena, Result, SizedRecord, TraceFiller, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         online::TracingMemory,
@@ -141,7 +138,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,

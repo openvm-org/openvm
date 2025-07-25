@@ -4,13 +4,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -327,7 +321,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = ShiftOpcode::from_usize(opcode.local_opcode_idx(self.offset));
@@ -459,7 +453,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
@@ -491,7 +485,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError> {
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -558,7 +552,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftPreCompute,
-    ) -> Result<(bool, ShiftOpcode)> {
+    ) -> Result<(bool, ShiftOpcode), ExecutionError> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = inst;

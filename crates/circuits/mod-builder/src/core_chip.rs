@@ -8,12 +8,7 @@ use itertools::Itertools;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_circuit::{
-    arch::{
-        get_record_from_slice, AdapterAirContext, AdapterCoreLayout, AdapterCoreMetadata,
-        AdapterTraceFiller, AdapterTraceStep, CustomBorrow, DynAdapterInterface, DynArray,
-        InstructionExecutor, MinimalInstruction, RecordArena, Result, SizedRecord, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmStateMut,
-    },
+    arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
@@ -395,7 +390,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
 
         A::start(*state.pc, state.memory, &mut adapter_record);

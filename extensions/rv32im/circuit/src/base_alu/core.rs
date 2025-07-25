@@ -5,13 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena, Result, TraceFiller,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         online::{GuestMemory, TracingMemory},
         MemoryAuxColsFactory,
@@ -227,7 +221,7 @@ where
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-    ) -> Result<()> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset));
@@ -325,7 +319,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -410,7 +404,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -446,7 +440,7 @@ impl<A, const LIMB_BITS: usize> BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BaseAluPreCompute,
-    ) -> Result<bool> {
+    ) -> Result<bool, ExecutionError> {
         let Instruction { a, b, c, d, e, .. } = inst;
         let e_u32 = e.as_canonical_u32();
         if (d.as_canonical_u32() != RV32_REGISTER_AS)

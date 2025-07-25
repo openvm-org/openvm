@@ -9,14 +9,7 @@ use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use openvm_algebra_circuit::fields::{get_field_type, FieldType};
 use openvm_circuit::{
-    arch::{
-        execution::ExecuteFunc,
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
-        DynArray, E2PreCompute, ExecutionBridge,
-        ExecutionError::{self, InvalidInstruction},
-        InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
-    },
+    arch::*,
     system::memory::{
         offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
     },
@@ -29,7 +22,9 @@ use openvm_circuit_primitives::{
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_CELL_BITS,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
@@ -164,7 +159,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
         pc: u32,
         inst: &Instruction<F>,
         data: &mut EcAddNePreCompute<'a>,
-    ) -> Result<bool> {
+    ) -> Result<bool, ExecutionError> {
         let Instruction {
             opcode,
             a,
@@ -182,7 +177,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
         if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(ExecutionError::InvalidInstruction(pc));
         }
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
@@ -232,7 +227,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -297,7 +292,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {

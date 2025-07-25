@@ -2,6 +2,7 @@ mod config;
 /// Instruction execution traits and types.
 /// Execution bus and interface.
 pub mod execution;
+/// Execution context types for different execution modes.
 pub mod execution_mode;
 /// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
@@ -27,6 +28,7 @@ pub mod testing;
 
 pub use config::*;
 pub use execution::*;
+pub use execution_mode::{E1ExecutionCtx, E2ExecutionCtx};
 pub use extensions::*;
 pub use integration_api::*;
 pub use openvm_instructions as instructions;

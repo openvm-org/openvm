@@ -15,7 +15,7 @@ use openvm_circuit::{
         instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         DynArray, E2PreCompute, ExecutionBridge,
         ExecutionError::{self, InvalidInstruction},
-        InsExecutorE1, InsExecutorE2, Result, VmSegmentState,
+        InsExecutorE1, InsExecutorE2, VmSegmentState,
     },
     system::memory::{
         offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
@@ -175,7 +175,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleStep<BLOCKS, BLOC
         pc: u32,
         inst: &Instruction<F>,
         data: &mut EcDoublePreCompute<'a>,
-    ) -> Result<bool> {
+    ) -> Result<bool, ExecutionError> {
         let Instruction {
             opcode, a, b, d, e, ..
         } = inst;
@@ -236,7 +236,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -285,7 +285,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, ExecutionError>
     where
         Ctx: E2ExecutionCtx,
     {
