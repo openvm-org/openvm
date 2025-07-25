@@ -54,6 +54,7 @@ extern "C-unwind" {
     );
 }
 
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn execute_instruction_with_tco<F: PrimeField32, Ctx: E1ExecutionCtx>(
     inst: &PreComputeInstruction<F, Ctx>,
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
