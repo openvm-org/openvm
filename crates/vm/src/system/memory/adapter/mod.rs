@@ -373,7 +373,7 @@ impl<F, const N: usize> GenericAccessAdapterChipTrait<F> for AccessAdapterChip<F
             F::from_canonical_u32(address.pointer),
         );
         let addr_space_layout = addr_spaces[address.address_space as usize].layout;
-        // SAFETY: values will be a slice of of the cell type
+        // SAFETY: values will be a slice of the cell type
         unsafe {
             match addr_space_layout {
                 MemoryCellType::Native { .. } => {
