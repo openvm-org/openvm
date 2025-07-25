@@ -223,7 +223,14 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
         }
         let pc_index = get_pc_index(program, vm_state.pc).unwrap();
         let inst = &fn_ptrs[pc_index];
-        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            super::tco::execute_instruction_with_tco(inst, vm_state)
+        };
+        #[cfg(not(target_arch = "x86_64"))]
+        unsafe {
+            (inst.handler)(inst.pre_compute, vm_state)
+        };
     }
     if vm_state
         .exit_code

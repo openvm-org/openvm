@@ -20,6 +20,8 @@ pub mod vm;
 pub mod hasher;
 /// Interpreter for VM execution
 pub mod interpreter;
+#[cfg(target_arch = "x86_64")]
+pub mod tco;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
