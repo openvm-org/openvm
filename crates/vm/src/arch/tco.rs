@@ -1,18 +1,7 @@
-#![cfg(target_arch = "x86_64")]
 use core::arch::global_asm;
 use openvm_stark_backend::p3_field::PrimeField32;
 use super::{execution_mode::E1ExecutionCtx, VmSegmentState, execution::PreComputeInstruction};
 use crate::system::memory::online::GuestMemory;
-
-type ErasedExecuteFunc = extern "C-unwind" fn(*const u8, *mut u8);
-
-unsafe fn execute_one_instruction_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
-    handler: unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, Ctx>),
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
-) {
-    handler(pre_compute, vm_state);
-}
 
 #[no_mangle]
 extern "C-unwind" fn tco_execute_one_instruction(
