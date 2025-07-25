@@ -676,6 +676,9 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     fn size(layout: &FriReducedOpeningLayout) -> usize {
         let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
         total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        if !layout.metadata.is_init {
+            total_len += layout.metadata.length * size_of::<F>();
+        }
         total_len += size_of::<FriReducedOpeningCommonRecord<F>>();
         total_len
     }
