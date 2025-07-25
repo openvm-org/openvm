@@ -1,6 +1,7 @@
 use std::{fs::File, io::Write, path::Path};
 
 use derive_new::new;
+use getset::{Setters, WithSetters};
 use openvm_instructions::NATIVE_AS;
 use openvm_poseidon2_air::Poseidon2Config;
 use openvm_stark_backend::{
@@ -169,9 +170,10 @@ impl MemoryConfig {
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
 /// are managed by the architecture, including configuration for continuations support.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Setters, WithSetters)]
 pub struct SystemConfig {
     /// The maximum constraint degree any chip is allowed to use.
+    #[getset(set_with = "pub")]
     pub max_constraint_degree: usize,
     /// True if the VM is in continuation mode. In this mode, an execution could be segmented and
     /// each segment is proved by a proof. Each proof commits the before and after state of the
@@ -196,6 +198,7 @@ pub struct SystemConfig {
     /// This field is skipped in serde as it's only used in execution and
     /// not needed after any serialize/deserialize.
     #[serde(skip, default = "SegmentationLimits::default")]
+    #[getset(set = "pub")]
     pub segmentation_limits: SegmentationLimits,
 }
 
@@ -228,11 +231,6 @@ impl SystemConfig {
         )
     }
 
-    pub fn with_max_constraint_degree(mut self, max_constraint_degree: usize) -> Self {
-        self.max_constraint_degree = max_constraint_degree;
-        self
-    }
-
     pub fn with_continuations(mut self) -> Self {
         self.continuation_enabled = true;
         self
@@ -252,10 +250,6 @@ impl SystemConfig {
     pub fn with_max_segment_len(mut self, max_segment_len: usize) -> Self {
         self.segmentation_limits.max_trace_height = max_segment_len as u32;
         self
-    }
-
-    pub fn set_segmentation_limits(&mut self, limits: SegmentationLimits) {
-        self.segmentation_limits = limits;
     }
 
     pub fn with_profiling(mut self) -> Self {

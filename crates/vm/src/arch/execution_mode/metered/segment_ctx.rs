@@ -1,3 +1,4 @@
+use getset::WithSetters;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
@@ -13,10 +14,13 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, WithSetters)]
 pub struct SegmentationLimits {
+    #[getset(set_with = "pub")]
     pub max_trace_height: u32,
+    #[getset(set_with = "pub")]
     pub max_cells: usize,
+    #[getset(set_with = "pub")]
     pub max_interactions: usize,
 }
 
@@ -27,23 +31,6 @@ impl Default for SegmentationLimits {
             max_cells: DEFAULT_MAX_CELLS,
             max_interactions: DEFAULT_MAX_INTERACTIONS,
         }
-    }
-}
-
-impl SegmentationLimits {
-    pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
-        self.max_trace_height = max_trace_height;
-        self
-    }
-
-    pub fn with_max_cells(mut self, max_cells: usize) -> Self {
-        self.max_cells = max_cells;
-        self
-    }
-
-    pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
-        self.max_interactions = max_interactions;
-        self
     }
 }
 
