@@ -170,19 +170,9 @@ impl<F: PrimeField32> AdapterTraceStep<F> for AluNativeAdapterStep {
         let &Instruction { b, c, e, f, .. } = instruction;
 
         record.b = b;
-        let rs1 = tracing_read_or_imm_native(
-            memory,
-            e.as_canonical_u32(),
-            b,
-            &mut record.reads_aux[0].prev_timestamp,
-        );
+        let rs1 = tracing_read_or_imm_native(memory, e, b, &mut record.reads_aux[0].prev_timestamp);
         record.c = c;
-        let rs2 = tracing_read_or_imm_native(
-            memory,
-            f.as_canonical_u32(),
-            c,
-            &mut record.reads_aux[1].prev_timestamp,
-        );
+        let rs2 = tracing_read_or_imm_native(memory, f, c, &mut record.reads_aux[1].prev_timestamp);
         [rs1, rs2]
     }
 

@@ -165,19 +165,9 @@ where
         let &Instruction { a, b, d, e, .. } = instruction;
 
         record.ptrs[0] = a;
-        let rs1 = tracing_read_or_imm_native(
-            memory,
-            d.as_canonical_u32(),
-            a,
-            &mut record.reads_aux[0].prev_timestamp,
-        );
+        let rs1 = tracing_read_or_imm_native(memory, d, a, &mut record.reads_aux[0].prev_timestamp);
         record.ptrs[1] = b;
-        let rs2 = tracing_read_or_imm_native(
-            memory,
-            e.as_canonical_u32(),
-            b,
-            &mut record.reads_aux[1].prev_timestamp,
-        );
+        let rs2 = tracing_read_or_imm_native(memory, e, b, &mut record.reads_aux[1].prev_timestamp);
         [rs1, rs2]
     }
 

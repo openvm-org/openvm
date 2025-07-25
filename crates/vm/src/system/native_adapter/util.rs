@@ -121,6 +121,7 @@ where
 }
 
 /// Reads register value at `ptr` from memory and records the previous timestamp.
+/// Reads are only done from address space [NATIVE_AS].
 #[inline(always)]
 pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory,
@@ -136,6 +137,7 @@ where
 }
 
 /// Writes `ptr, vals` into memory and records the previous timestamp and data.
+/// Writes are only done to address space [NATIVE_AS].
 #[inline(always)]
 pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory,
@@ -171,7 +173,7 @@ pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
 #[inline(always)]
 pub fn tracing_read_or_imm_native<F>(
     memory: &mut TracingMemory,
-    addr_space: u32,
+    addr_space: F,
     ptr_or_imm: F,
     prev_timestamp: &mut u32,
 ) -> F
@@ -179,12 +181,12 @@ where
     F: PrimeField32,
 {
     debug_assert!(
-        addr_space == RV32_IMM_AS || addr_space == NATIVE_AS,
+        addr_space == F::ZERO || addr_space == F::from_canonical_u32(NATIVE_AS),
         "addr_space={} is not valid",
         addr_space
     );
 
-    if addr_space == RV32_IMM_AS {
+    if addr_space == F::ZERO {
         *prev_timestamp = u32::MAX;
         memory.increment_timestamp();
         ptr_or_imm

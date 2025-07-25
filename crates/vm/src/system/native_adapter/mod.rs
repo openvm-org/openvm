@@ -218,7 +218,7 @@ where
                 let addr_space = if i == 0 { e } else { f };
                 reads[i][0] = tracing_read_or_imm_native(
                     memory,
-                    addr_space.as_canonical_u32(),
+                    addr_space,
                     *ptr_or_imm,
                     &mut read_aux.prev_timestamp,
                 );
