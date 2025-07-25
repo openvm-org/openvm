@@ -208,30 +208,30 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
-        debug_assert!(
-            address_space != RV32_IMM_AS,
-            "address space must not be immediate"
-        );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
-        debug_assert!(
-            size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
-        );
-
-        // Handle access adapter updates
-        // SAFETY: size passed is always a non-zero power of 2
-        if address_space == RV32_MEMORY_AS {
-            let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
-            self.memory_ctx.update_adapter_heights(
-                &mut self.trace_heights,
-                address_space,
-                size_bits,
-            );
-        }
-
-        // Handle merkle tree updates
         if address_space != RV32_REGISTER_AS {
+            debug_assert!(
+                address_space != RV32_IMM_AS,
+                "address space must not be immediate"
+            );
+            debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+            debug_assert!(
+                size.is_power_of_two(),
+                "size must be a power of 2, got {}",
+                size
+            );
+
+            // Handle access adapter updates
+            if address_space == RV32_MEMORY_AS {
+                // SAFETY: size passed is always a non-zero power of 2
+                let size_bits = unsafe { NonZero::new_unchecked(size).ilog2() };
+                self.memory_ctx.update_adapter_heights(
+                    &mut self.trace_heights,
+                    address_space,
+                    size_bits,
+                );
+            }
+
+            // Handle merkle tree updates
             self.memory_ctx
                 .update_boundary_merkle_heights(address_space, ptr, size);
         }
