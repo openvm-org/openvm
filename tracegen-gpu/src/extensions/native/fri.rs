@@ -29,8 +29,8 @@ impl Chip<DenseRecordArena, GpuBackend> for FriReducedOpeningChipGpu {
             return get_empty_air_proving_ctx::<GpuBackend>();
         }
 
-        // TODO[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
-        // **SAFETY**: `records` should be non-empty at this point
+        // TODO[arayi]: Temporary hack to get mut access to `records`, should have `self` or `&mut
+        // self` as a parameter **SAFETY**: `records` should be non-empty at this point
         let records =
             unsafe { std::slice::from_raw_parts_mut(records.as_ptr() as *mut u8, records.len()) };
 

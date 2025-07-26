@@ -47,8 +47,8 @@ pub(crate) fn generate_traces_from_records(
     if records.is_empty() {
         return [const { None }; NUM_ADAPTERS];
     }
-    // TODO: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a parameter
-    // **SAFETY**: `records` should be non-empty at this point
+    // TODO: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a
+    // parameter **SAFETY**: `records` should be non-empty at this point
     let records =
         unsafe { std::slice::from_raw_parts_mut(records.as_ptr() as *mut u8, records.len()) };
 

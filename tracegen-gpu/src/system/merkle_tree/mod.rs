@@ -17,13 +17,17 @@ use cuda::merkle_tree::*;
 const DIGEST_WIDTH: usize = 8;
 type H = [F; DIGEST_WIDTH];
 
-/// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered binary tree.
+/// A Merkle subtree stored in a single flat buffer, combining a vertical path and a heap-ordered
+/// binary tree.
 ///
 /// Memory layout:
-/// - The first `path_len` elements form a vertical path (one node per level), used when the actual size is smaller than the max size.
-/// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size` leaves and `2 * size - 1` total nodes.
+/// - The first `path_len` elements form a vertical path (one node per level), used when the actual
+///   size is smaller than the max size.
+/// - The remaining elements store the subtree nodes in heap-order (breadth-first), with `size`
+///   leaves and `2 * size - 1` total nodes.
 ///
-/// The call of filling the buffer is done async on the new stream. Option<CudaEvent> is used to wait for the completion.
+/// The call of filling the buffer is done async on the new stream. Option<CudaEvent> is used to
+/// wait for the completion.
 pub struct MemoryMerkleSubTree {
     pub stream: Arc<CudaStream>,
     pub event: Option<CudaEvent>,
@@ -115,8 +119,9 @@ impl MemoryMerkleSubTree {
 /// Layout:
 /// - The memory is split across multiple `MemoryMerkleSubTree` instances, one per address space.
 /// - The top-level tree is formed by hashing all subtree roots into a single buffer (`top_roots`).
-/// - - top_roots layout: [root, hash(root_addr_space_1, root_addr_space_2), hash(root_addr_space_3), hash(root_addr_space_4)]
-/// - - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
+///     - top_roots layout: \[root, hash(root_addr_space_1, root_addr_space_2),
+///       hash(root_addr_space_3), hash(root_addr_space_4), ...\]
+///     - if we have > 4 address spaces, top_roots will be extended with the next hash, etc.
 ///
 /// Execution:
 /// - Subtrees are built asynchronously on individual CUDA streams.
