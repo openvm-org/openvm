@@ -1,4 +1,3 @@
-#include "constants.h"
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "rv32_adapters/heap.cuh"
@@ -63,6 +62,7 @@ __global__ void alu256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -71,7 +71,7 @@ __global__ void alu256_tracegen(
         auto rec = reinterpret_cast<BaseAlu256Record *>(d_records)[idx];
 
         Rv32HeapAdapterStep256 adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -95,6 +95,7 @@ extern "C" int _alu256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -102,7 +103,7 @@ extern "C" int _alu256_tracegen(
     assert(width == sizeof(BaseAlu256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(BaseAlu256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     alu256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -112,6 +113,7 @@ extern "C" int _alu256_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
@@ -140,6 +142,7 @@ __global__ void branch_equal256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -148,7 +151,7 @@ __global__ void branch_equal256_tracegen(
         auto rec = reinterpret_cast<BranchEqual256Record *>(d_records)[idx];
 
         Rv32HeapBranchAdapter256 adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -172,6 +175,7 @@ extern "C" int _branch_equal256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -179,7 +183,7 @@ extern "C" int _branch_equal256_tracegen(
     assert(width == sizeof(BranchEqual256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(BranchEqual256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     branch_equal256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -189,6 +193,7 @@ extern "C" int _branch_equal256_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
@@ -213,6 +218,7 @@ __global__ void less_than256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -221,7 +227,7 @@ __global__ void less_than256_tracegen(
         auto rec = reinterpret_cast<LessThan256Record *>(d_records)[idx];
 
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -245,6 +251,7 @@ extern "C" int _less_than256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -252,7 +259,7 @@ extern "C" int _less_than256_tracegen(
     assert(width == sizeof(LessThan256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(LessThan256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     less_than256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -262,6 +269,7 @@ extern "C" int _less_than256_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
@@ -286,6 +294,7 @@ __global__ void branch_less_than256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -294,7 +303,7 @@ __global__ void branch_less_than256_tracegen(
         auto rec = reinterpret_cast<BranchLessThan256Record *>(d_records)[idx];
 
         Rv32HeapBranchAdapter256 adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -318,6 +327,7 @@ extern "C" int _branch_less_than256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -325,7 +335,7 @@ extern "C" int _branch_less_than256_tracegen(
     assert(width == sizeof(BranchLessThan256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(BranchLessThan256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     branch_less_than256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -335,6 +345,7 @@ extern "C" int _branch_less_than256_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
@@ -359,6 +370,7 @@ __global__ void shift256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -367,7 +379,7 @@ __global__ void shift256_tracegen(
         auto rec = reinterpret_cast<Shift256Record *>(d_records)[idx];
 
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -394,6 +406,7 @@ extern "C" int _shift256_tracegen(
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
     size_t bitwise_num_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -401,7 +414,7 @@ extern "C" int _shift256_tracegen(
     assert(width == sizeof(Shift256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(Shift256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     shift256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -411,6 +424,7 @@ extern "C" int _shift256_tracegen(
         range_checker_bins,
         d_bitwise_lookup_ptr,
         bitwise_num_bits,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
@@ -437,6 +451,7 @@ __global__ void multiplication256_tracegen(
     size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -445,7 +460,7 @@ __global__ void multiplication256_tracegen(
         auto rec = reinterpret_cast<Multiplication256Record *>(d_records)[idx];
 
         Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
-            32,
+            pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
@@ -474,6 +489,7 @@ extern "C" int _multiplication256_tracegen(
     size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
@@ -481,7 +497,7 @@ extern "C" int _multiplication256_tracegen(
     assert(width == sizeof(Multiplication256Cols<uint8_t>));
     size_t num_records = record_len / sizeof(Multiplication256Record);
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     multiplication256_tracegen<<<grid, block>>>(
         d_trace,
         height,
@@ -493,6 +509,7 @@ extern "C" int _multiplication256_tracegen(
         bitwise_num_bits,
         d_range_tuple_ptr,
         range_tuple_sizes,
+        pointer_max_bits,
         timestamp_max_bits
     );
     return cudaGetLastError();
