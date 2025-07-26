@@ -33,6 +33,7 @@ impl BitSet {
     }
 
     /// Set all bits within [start, end) to 1, return the number of flipped bits.
+    /// Assumes start < end and end <= self.words.len() * 64.
     #[inline(always)]
     pub fn insert_range(&mut self, start: usize, end: usize) -> usize {
         debug_assert!(start < end);
@@ -47,8 +48,8 @@ impl BitSet {
             let end_bit = ((end - 1) & 63) as u32 + 1;
             let mask_bits = end_bit - start_bit;
             let mask = (u64::MAX >> (64 - mask_bits)) << start_bit;
-            // SAFETY: start_word_index is derived from start which is bounds checked by
-            // debug_assert above
+            // SAFETY: Caller ensures start < end and end <= self.words.len() * 64,
+            // so start_word_index < self.words.len()
             let word = unsafe { self.words.get_unchecked_mut(start_word_index) };
             ret += mask_bits - (*word & mask).count_ones();
             *word |= mask;
@@ -56,8 +57,8 @@ impl BitSet {
             let end_bit = (end & 63) as u32;
             let mask_bits = 64 - start_bit;
             let mask = u64::MAX << start_bit;
-            // SAFETY: start_word_index is derived from start which is bounds checked by
-            // debug_assert above
+            // SAFETY: Caller ensures start < end and end <= self.words.len() * 64,
+            // so start_word_index < self.words.len()
             let start_word = unsafe { self.words.get_unchecked_mut(start_word_index) };
             ret += mask_bits - (*start_word & mask).count_ones();
             *start_word |= mask;
@@ -68,8 +69,8 @@ impl BitSet {
             } else {
                 u64::MAX >> (64 - end_bit)
             };
-            // SAFETY: end_word_index is derived from end which is bounds checked by debug_assert
-            // above
+            // SAFETY: Caller ensures end <= self.words.len() * 64, so
+            // end_word_index < self.words.len()
             let end_word = unsafe { self.words.get_unchecked_mut(end_word_index) };
             ret += mask_bits - (*end_word & mask).count_ones();
             *end_word |= mask;
@@ -77,8 +78,8 @@ impl BitSet {
 
         if start_word_index + 1 < end_word_index {
             for i in (start_word_index + 1)..end_word_index {
-                // SAFETY: i is between start_word_index and end_word_index which are bounds checked
-                // above
+                // SAFETY: Caller ensures proper start and end, so i is within bounds
+                // of self.words.len()
                 let word = unsafe { self.words.get_unchecked_mut(i) };
                 ret += word.count_zeros();
                 *word = u64::MAX;
