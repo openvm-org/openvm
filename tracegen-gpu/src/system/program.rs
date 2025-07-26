@@ -118,7 +118,6 @@ impl<RA> Chip<RA, GpuBackend> for ProgramChipGPU {
                 .fill_zero_suffix(self.filtered_exec_freqs.len())
                 .unwrap();
         }
-
         self.filtered_exec_freqs
             .iter()
             .map(|f| F::from_canonical_u32(*f))

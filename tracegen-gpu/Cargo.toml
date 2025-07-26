@@ -16,12 +16,10 @@ derive-new = { workspace = true }
 stark-backend-gpu = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-halo2curves-axiom = { workspace = true }
 num-traits = { workspace = true }
 
 # openvm
 openvm-circuit = { workspace = true }
-openvm-circuit-derive = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-native-circuit = { workspace = true }
@@ -29,7 +27,6 @@ openvm-native-compiler = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
-openvm-rv32im-guest = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
@@ -38,7 +35,7 @@ openvm-ecc-transpiler = { workspace = true }
 openvm-keccak256-circuit = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
-openvm-pairing-guest = { workspace = true, features = ["bls12_381"] }
+# openvm-pairing-guest = { workspace = true, features = ["bls12_381"] }
 
 # p3
 p3-air = { workspace = true }
@@ -59,8 +56,6 @@ glob = { workspace = true }
 test-case = { workspace = true }
 itertools = { version = "0.14.0", default-features = false, features = ["use_std"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-toolchain-tests = { workspace = true }
-openvm-transpiler = { workspace = true }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-keccak256-transpiler = { workspace = true }
@@ -73,3 +68,6 @@ default = ["metrics"]
 metrics = ["openvm-circuit/metrics"]
 test-utils = ["openvm-circuit/test-utils"]
 touchemall = ["stark-backend-gpu/touchemall"]
+
+[package.metadata.cargo-shear]
+ignored = ["derive_more"]

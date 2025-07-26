@@ -1,70 +1,59 @@
-use std::sync::Arc;
-
 use openvm_circuit::arch::{
-    AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, DenseRecordArena,
-    ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension, VmExecutionExtension,
-    VmProverExtension,
+    ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
 };
 use openvm_native_circuit::{
-    air::NativePoseidon2Air, CastFAir, CastFCoreAir, CastFStep, FieldArithmeticAir,
-    FieldArithmeticCoreAir, FieldArithmeticStep, FieldExtensionAir, FieldExtensionCoreAir,
-    FieldExtensionStep, FriReducedOpeningAir, JalRangeCheckAir, NativeBranchEqAir,
-    NativeLoadStoreAir, NativeLoadStoreCoreAir,
+    air::NativePoseidon2Air, FieldArithmeticAir, FieldExtensionAir, FriReducedOpeningAir,
+    JalRangeCheckAir, Native, NativeBranchEqAir, NativeLoadStoreAir,
 };
-use openvm_poseidon2_air::Poseidon2Config;
-use openvm_stark_backend::config::StarkGenericConfig;
+use openvm_native_compiler::BLOCK_LOAD_STORE_SIZE;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::PrimeField32;
-use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
+use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::F};
 
 use crate::{
     extensions::native::{
-        CastFChipGpu, FieldArithmeticChipGpu, FieldExtensionChipGpu, FriReducedOpeningChipGpu,
-        JalRangeCheckGpu, NativeBranchEqChipGpu, NativeLoadStoreChipGpu, NativePoseidon2ChipGpu,
+        FieldArithmeticChipGpu, FieldExtensionChipGpu, FriReducedOpeningChipGpu, JalRangeCheckGpu,
+        NativeBranchEqChipGpu, NativeLoadStoreChipGpu, NativePoseidon2ChipGpu,
     },
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-        var_range::VariableRangeCheckerChipGPU,
-    },
+    system::extensions::get_inventory_range_checker,
 };
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct NativeGpu;
+pub struct NativeGpuProverExt;
 
-impl VmProverExtension<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend> for NativeGpu {
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU) are specific to GpuBackend.
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Native>
+    for NativeGpuProverExt
+{
     fn extend_prover(
         &self,
+        _: &Native,
         inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
     ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
-        let range_checker = inventory
-            .find_chip::<Arc<VariableRangeCheckerChipGPU>>()
-            .next()
-            .unwrap()
-            .clone();
+        let range_checker = get_inventory_range_checker(inventory);
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        // These calls to next_air are not strictly necessary to construct the chips, but provide a
+        // safeguard to ensure that chip construction matches the circuit definition
+        inventory.next_air::<NativeLoadStoreAir<1>>()?;
+        let load_store =
+            NativeLoadStoreChipGpu::<1>::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(load_store);
+
+        inventory.next_air::<NativeLoadStoreAir<BLOCK_LOAD_STORE_SIZE>>()?;
+        let block_load_store = NativeLoadStoreChipGpu::<BLOCK_LOAD_STORE_SIZE>::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+        );
+        inventory.add_executor_chip(block_load_store);
 
         inventory.next_air::<NativeBranchEqAir>()?;
         let branch_eq = NativeBranchEqChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(branch_eq);
 
-        inventory.next_air::<CastFAir>()?;
-        let castf = CastFChipGpu::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(castf);
+        inventory.next_air::<JalRangeCheckAir>()?;
+        let jal_rangecheck = JalRangeCheckGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(jal_rangecheck);
 
         inventory.next_air::<FieldArithmeticAir>()?;
         let field_arithmetic =
@@ -79,23 +68,35 @@ impl VmProverExtension<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend> fo
         let fri = FriReducedOpeningChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(fri);
 
-        inventory.next_air::<JalRangeCheckAir>()?;
-        let jal_rangecheck = JalRangeCheckGpu::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(jal_rangecheck);
-
-        inventory.next_air::<NativeLoadStoreAir<1>>()?;
-        let load_store =
-            NativeLoadStoreChipGpu::<1>::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(load_store);
-
-        inventory.next_air::<NativeLoadStoreAir<4>>()?;
-        let block_load_store =
-            NativeLoadStoreChipGpu::<4>::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(block_load_store);
-
         inventory.next_air::<NativePoseidon2Air<F, 1>>()?;
         let poseidon2 = NativePoseidon2ChipGpu::<1>::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(poseidon2);
+
+        Ok(())
+    }
+}
+
+use openvm_native_circuit::{CastFAir, CastFExtension};
+
+use crate::extensions::native::CastFChipGpu;
+
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU) are specific to GpuBackend.
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, CastFExtension>
+    for NativeGpuProverExt
+{
+    fn extend_prover(
+        &self,
+        _: &CastFExtension,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+    ) -> Result<(), ChipInventoryError> {
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+
+        let range_checker = get_inventory_range_checker(inventory);
+
+        inventory.next_air::<CastFAir>()?;
+        let castf = CastFChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(castf);
 
         Ok(())
     }
