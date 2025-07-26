@@ -269,6 +269,7 @@ fn create_alu_test_harness(tester: &GpuChipTestBuilder) -> BaseAluHarness {
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -313,6 +314,7 @@ fn create_branch_equal_test_harness(tester: &GpuChipTestBuilder) -> BranchEqualH
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -356,6 +358,7 @@ fn create_less_than_test_harness(tester: &GpuChipTestBuilder) -> LessThanHarness
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -399,6 +402,7 @@ fn create_branch_less_than_test_harness(tester: &GpuChipTestBuilder) -> BranchLe
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -445,6 +449,7 @@ fn create_shift_test_harness(tester: &GpuChipTestBuilder) -> Shift256Harness {
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -499,6 +504,7 @@ fn create_multiplication_test_harness(tester: &GpuChipTestBuilder) -> Multiplica
         tester.bitwise_op_lookup(),
         tester.range_tuple_checker(),
         tester.timestamp_max_bits(),
+        tester.address_bits(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

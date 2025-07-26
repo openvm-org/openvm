@@ -31,6 +31,9 @@ use crate::{
 };
 
 pub mod cuda;
+pub mod extension;
+
+pub use extension::{BigIntGpuProverExt, Int256Rv32GpuBuilder};
 
 #[cfg(test)]
 mod tests;
@@ -49,6 +52,7 @@ pub type BaseAlu256CoreRecord = BaseAluCoreRecord<INT256_NUM_LIMBS>;
 pub struct BaseAlu256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -76,6 +80,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();
@@ -98,6 +103,7 @@ pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
 pub struct BranchEqual256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -126,6 +132,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();
@@ -150,6 +157,7 @@ pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_
 pub struct LessThan256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -177,6 +185,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();
@@ -200,6 +209,7 @@ pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS
 pub struct BranchLessThan256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -228,6 +238,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();
@@ -252,6 +263,7 @@ pub type Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
 pub struct Shift256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -279,6 +291,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();
@@ -304,6 +317,7 @@ pub struct Multiplication256ChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV32_CELL_BITS>>,
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<2>>,
+    pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
@@ -339,6 +353,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
                 RV32_CELL_BITS,
                 &self.range_tuple_checker.count,
                 d_sizes,
+                self.pointer_max_bits as u32,
                 self.timestamp_max_bits as u32,
             )
             .unwrap();

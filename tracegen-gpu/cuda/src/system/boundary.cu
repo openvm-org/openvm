@@ -89,7 +89,7 @@ __global__ void cukernel_volatile_boundary_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    BoundaryRecord<VOLATILE_CHUNK> const* records,
+    BoundaryRecord<VOLATILE_CHUNK> const *records,
     size_t num_records,
     uint32_t *range_checker,
     size_t range_checker_num_bins,
@@ -213,7 +213,7 @@ extern "C" int _volatile_boundary_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint32_t const* d_raw_records,
+    uint32_t const *d_raw_records,
     size_t num_records,
     uint32_t *d_range_checker,
     size_t range_checker_num_bins,
@@ -221,8 +221,7 @@ extern "C" int _volatile_boundary_tracegen(
     size_t ptr_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height, 512);
-    auto d_records =
-        reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> const*>(d_raw_records);
+    auto d_records = reinterpret_cast<BoundaryRecord<VOLATILE_CHUNK> const *>(d_raw_records);
     cukernel_volatile_boundary_tracegen<<<grid, block>>>(
         d_trace,
         height,

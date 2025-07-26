@@ -18,10 +18,12 @@ pub mod alu256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -29,6 +31,7 @@ pub mod alu256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -42,6 +45,7 @@ pub mod alu256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }
@@ -61,10 +65,12 @@ pub mod beq256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -72,6 +78,7 @@ pub mod beq256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -85,6 +92,7 @@ pub mod beq256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }
@@ -104,10 +112,12 @@ pub mod lt256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -115,6 +125,7 @@ pub mod lt256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -128,6 +139,7 @@ pub mod lt256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }
@@ -147,10 +159,12 @@ pub mod blt256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -158,6 +172,7 @@ pub mod blt256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -171,6 +186,7 @@ pub mod blt256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }
@@ -190,10 +206,12 @@ pub mod shift256 {
             range_checker_bins: usize,
             d_bitwise_lookup: *const u32,
             bitwise_num_bits: usize,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen<T>(
         d_trace: &DeviceBuffer<T>,
         height: usize,
@@ -201,6 +219,7 @@ pub mod shift256 {
         d_range_checker: &DeviceBuffer<T>,
         d_bitwise_lookup: &DeviceBuffer<T>,
         bitwise_num_bits: usize,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -214,6 +233,7 @@ pub mod shift256 {
             d_range_checker.len(),
             d_bitwise_lookup.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }
@@ -235,6 +255,7 @@ pub mod mul256 {
             bitwise_num_bits: usize,
             d_range_tuple: *const u32,
             range_tuple_sizes: UInt2,
+            pointer_max_bits: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
@@ -249,6 +270,7 @@ pub mod mul256 {
         bitwise_num_bits: usize,
         d_range_tuple: &DeviceBuffer<T>,
         range_tuple_sizes: UInt2,
+        pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         assert!(height.is_power_of_two() || height == 0);
@@ -264,6 +286,7 @@ pub mod mul256 {
             bitwise_num_bits,
             d_range_tuple.as_mut_ptr() as *mut u32,
             range_tuple_sizes,
+            pointer_max_bits,
             timestamp_max_bits,
         ))
     }

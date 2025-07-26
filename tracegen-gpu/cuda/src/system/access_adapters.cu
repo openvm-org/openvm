@@ -32,25 +32,23 @@ struct AccessAdapterRecordHeader {
     uint32_t type_size;
 };
 
-template <size_t N>
-struct Cols {
-    template <typename T>
-    using type = AccessAdapterCols<T, N>;
+template <size_t N> struct Cols {
+    template <typename T> using type = AccessAdapterCols<T, N>;
 };
 
 template <size_t N>
 __device__ void _fill_trace_row(
-    Fp* d_trace,
+    Fp *d_trace,
     uint32_t row_idx,
     bool is_split,
     uint32_t address_space,
     uint32_t pointer,
-    uint8_t const* data,
+    uint8_t const *data,
     uint32_t left_timestamp,
     uint32_t right_timestamp,
     uint32_t type_size,
     uint32_t unpadded_trace_height,
-    uint32_t* d_range_checker,
+    uint32_t *d_range_checker,
     size_t range_checker_bins
 ) {
     uint32_t const padded_height = next_power_of_two_or_zero(unpadded_trace_height);
@@ -67,28 +65,34 @@ __device__ void _fill_trace_row(
     if (type_size == 1) {
         COL_WRITE_ARRAY(row, typename Cols<N>::template type, values, data);
     } else if (type_size == 4) {
-        COL_WRITE_ARRAY(row, typename Cols<N>::template type, values, reinterpret_cast<Fp const*>(data));
+        COL_WRITE_ARRAY(
+            row, typename Cols<N>::template type, values, reinterpret_cast<Fp const *>(data)
+        );
     } else {
         assert(false);
     }
     COL_WRITE_VALUE(row, typename Cols<N>::template type, left_timestamp, left_timestamp);
     COL_WRITE_VALUE(row, typename Cols<N>::template type, right_timestamp, right_timestamp);
-    COL_WRITE_VALUE(row, typename Cols<N>::template type, is_right_larger, right_timestamp > left_timestamp);
+    COL_WRITE_VALUE(
+        row, typename Cols<N>::template type, is_right_larger, right_timestamp > left_timestamp
+    );
     VariableRangeChecker range_checker(d_range_checker, range_checker_bins);
     Fp *out = &row[COL_INDEX(typename Cols<N>::template type, is_right_larger)];
     Fp *decomp = &row[COL_INDEX(typename Cols<N>::template type, lt_aux)];
 
     // TODO: replace 29 with `timestamp_max_bits` that we send here?
     IsLessThan::generate_subrow(
-        range_checker, 29, left_timestamp, right_timestamp, AUX_LEN, RowSlice(decomp, padded_height), out
+        range_checker,
+        29,
+        left_timestamp,
+        right_timestamp,
+        AUX_LEN,
+        RowSlice(decomp, padded_height),
+        out
     );
 }
 
-template <typename... Args>
-__device__ void fill_trace_row(
-    size_t const n,
-    Args&&... args
-) {
+template <typename... Args> __device__ void fill_trace_row(size_t const n, Args &&...args) {
     switch (n) {
     case 2:
         _fill_trace_row<2>(args...);
@@ -110,7 +114,7 @@ __device__ void fill_trace_row(
     }
 }
 
-__device__ void assert_widths(size_t const* const widths, size_t n) {
+__device__ void assert_widths(size_t const *const widths, size_t n) {
     for (size_t i = 0; i < n; ++i) {
         switch (i) {
         case 0:
@@ -141,8 +145,8 @@ __global__ void access_adapters_tracegen(
     size_t const *d_widths,
     size_t num_records,
     uint8_t const *d_records,
-    uint32_t* d_record_offsets,
-    uint32_t* d_range_checker,
+    uint32_t *d_record_offsets,
+    uint32_t *d_range_checker,
     size_t range_checker_bins
 ) {
     uint32_t const idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -156,16 +160,17 @@ __global__ void access_adapters_tracegen(
 #endif
 
     uint32_t record_offset = d_record_offsets[idx * (num_adapters + 1)];
-    uint32_t* const row_ids = d_record_offsets + idx * (num_adapters + 1) + 1;
+    uint32_t *const row_ids = d_record_offsets + idx * (num_adapters + 1) + 1;
 
     d_records += record_offset;
-    AccessAdapterRecordHeader const* header = reinterpret_cast<AccessAdapterRecordHeader const*>(d_records);
+    AccessAdapterRecordHeader const *header =
+        reinterpret_cast<AccessAdapterRecordHeader const *>(d_records);
     d_records += sizeof(AccessAdapterRecordHeader);
     size_t const num_timestamps = header->block_size / header->lowest_block_size;
-    uint32_t const* timestamps = reinterpret_cast<uint32_t const*>(d_records);
+    uint32_t const *timestamps = reinterpret_cast<uint32_t const *>(d_records);
     d_records += sizeof(uint32_t) * num_timestamps;
     size_t const data_len = header->block_size * header->type_size;
-    uint8_t const* data = d_records;
+    uint8_t const *data = d_records;
 
     uint32_t const timestamp = header->timestamp_and_mask & ~MERGE_AND_NOT_SPLIT_FLAG;
     size_t const log_min_block_size = __ffs(header->lowest_block_size) - 1;
@@ -183,8 +188,12 @@ __global__ void access_adapters_tracegen(
                     header->address_space,
                     header->pointer + j * (2 << i),
                     data + j * 2 * seg_len,
-                    *std::max_element(timestamps + 2 * j * ts_len, timestamps + (2 * j + 1) * ts_len),
-                    *std::max_element(timestamps + (2 * j + 1) * ts_len, timestamps + (2 * j + 2) * ts_len),
+                    *std::max_element(
+                        timestamps + 2 * j * ts_len, timestamps + (2 * j + 1) * ts_len
+                    ),
+                    *std::max_element(
+                        timestamps + (2 * j + 1) * ts_len, timestamps + (2 * j + 2) * ts_len
+                    ),
                     header->type_size,
                     d_unpadded_heights[i],
                     d_range_checker,
@@ -223,8 +232,8 @@ extern "C" int _access_adapters_tracegen(
     size_t const *d_widths,
     size_t num_records,
     uint8_t const *d_records,
-    uint32_t* d_record_offsets,
-    uint32_t* d_range_checker,
+    uint32_t *d_record_offsets,
+    uint32_t *d_range_checker,
     uint32_t range_checker_bins
 ) {
     auto [grid, block] = kernel_launch_params(num_records, 512);
