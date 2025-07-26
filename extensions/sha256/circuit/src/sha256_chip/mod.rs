@@ -1,16 +1,11 @@
 //! Sha256 hasher. Handles full sha256 hashing with padding.
 //! variable length inputs read from VM memory.
-use std::{
-    array,
-    cmp::{max, min},
-    sync::{Arc, Mutex},
-};
 
-use openvm_circuit::arch::{
-    ExecutionBridge, ExecutionError, ExecutionState, InstructionExecutor, SystemPort,
-};
+use std::borrow::{Borrow, BorrowMut};
+
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
+    bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder, AlignedBytesBorrow,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -18,11 +13,11 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32im_circuit::adapters::read_rv32_register;
-use openvm_sha256_air::{Sha256Air, SHA256_BLOCK_BITS};
+use openvm_sha256_air::{
+    get_sha256_num_blocks, Sha256FillerHelper, SHA256_BLOCK_BITS, SHA256_ROWS_PER_BLOCK,
+};
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
-use openvm_stark_backend::{interaction::BusIndex, p3_field::PrimeField32};
-use serde::{Deserialize, Serialize};
+use openvm_stark_backend::p3_field::PrimeField32;
 use sha2::{Digest, Sha256};
 
 mod air;
@@ -31,7 +26,7 @@ mod trace;
 
 pub use air::*;
 pub use columns::*;
-use openvm_circuit::system::memory::{MemoryController, OfflineMemory, RecordId};
+pub use trace::*;
 
 #[cfg(test)]
 mod tests;
@@ -47,65 +42,155 @@ const SHA256_WRITE_SIZE: usize = 32;
 pub const SHA256_BLOCK_CELLS: usize = SHA256_BLOCK_BITS / RV32_CELL_BITS;
 /// Number of rows we will do a read on for each SHA256 block
 pub const SHA256_NUM_READ_ROWS: usize = SHA256_BLOCK_CELLS / SHA256_READ_SIZE;
-pub struct Sha256VmChip<F: PrimeField32> {
-    pub air: Sha256VmAir,
-    /// IO and memory data necessary for each opcode call
-    pub records: Vec<Sha256Record<F>>,
-    pub offline_memory: Arc<Mutex<OfflineMemory<F>>>,
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
+/// Maximum message length that this chip supports in bytes
+pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 
-    offset: usize,
+pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
+
+#[derive(derive_new::new, Clone)]
+pub struct Sha256VmStep {
+    pub offset: usize,
+    pub pointer_max_bits: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct Sha256Record<F> {
-    pub from_state: ExecutionState<F>,
-    pub dst_read: RecordId,
-    pub src_read: RecordId,
-    pub len_read: RecordId,
-    pub input_records: Vec<[RecordId; SHA256_NUM_READ_ROWS]>,
-    pub input_message: Vec<[[u8; SHA256_READ_SIZE]; SHA256_NUM_READ_ROWS]>,
-    pub digest_write: RecordId,
+pub struct Sha256VmFiller {
+    pub inner: Sha256FillerHelper,
+    pub padding_encoder: Encoder,
+    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pub pointer_max_bits: usize,
 }
 
-impl<F: PrimeField32> Sha256VmChip<F> {
+impl Sha256VmFiller {
     pub fn new(
-        SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        }: SystemPort,
-        address_bits: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-        self_bus_idx: BusIndex,
-        offset: usize,
-        offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        pointer_max_bits: usize,
     ) -> Self {
         Self {
-            air: Sha256VmAir::new(
-                ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                address_bits,
-                Sha256Air::new(bitwise_lookup_chip.bus(), self_bus_idx),
-                Encoder::new(PaddingFlags::COUNT, 2, false),
-            ),
+            inner: Sha256FillerHelper::new(),
+            padding_encoder: Encoder::new(PaddingFlags::COUNT, 2, false),
             bitwise_lookup_chip,
-            records: Vec::new(),
-            offset,
-            offline_memory,
+            pointer_max_bits,
         }
     }
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let &Instruction {
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct ShaPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
+    fn pre_compute_size(&self) -> usize {
+        size_of::<ShaPreCompute>()
+    }
+
+    fn pre_compute_e1<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        let data: &mut ShaPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl::<_, _>)
+    }
+}
+impl<F: PrimeField32> InsExecutorE2<F> for Sha256VmStep {
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<ShaPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<ShaPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _>)
+    }
+}
+
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
+    pre_compute: &ShaPreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) -> u32 {
+    let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
+    let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let len = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let dst_u32 = u32::from_le_bytes(dst);
+    let src_u32 = u32::from_le_bytes(src);
+    let len_u32 = u32::from_le_bytes(len);
+
+    let (output, height) = if IS_E1 {
+        // SAFETY: RV32_MEMORY_AS is memory address space of type u8
+        let message = vm_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
+        let output = sha256_solve(message);
+        (output, 0)
+    } else {
+        let num_blocks = get_sha256_num_blocks(len_u32);
+        let mut message = Vec::with_capacity(len_u32 as usize);
+        for block_idx in 0..num_blocks as usize {
+            // Reads happen on the first 4 rows of each block
+            for row in 0..SHA256_NUM_READ_ROWS {
+                let read_idx = block_idx * SHA256_NUM_READ_ROWS + row;
+                let row_input: [u8; SHA256_READ_SIZE] = vm_state.vm_read(
+                    RV32_MEMORY_AS,
+                    src_u32 + (read_idx * SHA256_READ_SIZE) as u32,
+                );
+                message.extend_from_slice(&row_input);
+            }
+        }
+        let output = sha256_solve(&message[..len_u32 as usize]);
+        let height = num_blocks * SHA256_ROWS_PER_BLOCK as u32;
+        (output, height)
+    };
+    vm_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+
+    height
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &ShaPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
+}
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<ShaPreCompute> = pre_compute.borrow();
+    let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, vm_state);
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, height);
+}
+
+impl Sha256VmStep {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut ShaPreCompute,
+    ) -> Result<(), StaticProgramError> {
+        let Instruction {
             opcode,
             a,
             b,
@@ -113,87 +198,18 @@ impl<F: PrimeField32> InstructionExecutor<F> for Sha256VmChip<F> {
             d,
             e,
             ..
-        } = instruction;
-        let local_opcode = opcode.local_opcode_idx(self.offset);
-        debug_assert_eq!(local_opcode, Rv32Sha256Opcode::SHA256.local_usize());
-        debug_assert_eq!(d, F::from_canonical_u32(RV32_REGISTER_AS));
-        debug_assert_eq!(e, F::from_canonical_u32(RV32_MEMORY_AS));
-
-        debug_assert_eq!(from_state.timestamp, memory.timestamp());
-
-        let (dst_read, dst) = read_rv32_register(memory, d, a);
-        let (src_read, src) = read_rv32_register(memory, d, b);
-        let (len_read, len) = read_rv32_register(memory, d, c);
-
-        #[cfg(debug_assertions)]
-        {
-            assert!(dst < (1 << self.air.ptr_max_bits));
-            assert!(src < (1 << self.air.ptr_max_bits));
-            assert!(len < (1 << self.air.ptr_max_bits));
+        } = inst;
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
-
-        // need to pad with one 1 bit, 64 bits for the message length and then pad until the length
-        // is divisible by [SHA256_BLOCK_BITS]
-        let num_blocks = ((len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
-
-        // we will read [num_blocks] * [SHA256_BLOCK_CELLS] cells but only [len] cells will be used
-        debug_assert!(
-            src as usize + num_blocks * SHA256_BLOCK_CELLS <= (1 << self.air.ptr_max_bits)
-        );
-        let mut hasher = Sha256::new();
-        let mut input_records = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
-        let mut input_message = Vec::with_capacity(num_blocks * SHA256_NUM_READ_ROWS);
-        let mut read_ptr = src;
-        for _ in 0..num_blocks {
-            let block_reads_records = array::from_fn(|i| {
-                memory.read(
-                    e,
-                    F::from_canonical_u32(read_ptr + (i * SHA256_READ_SIZE) as u32),
-                )
-            });
-            let block_reads_bytes = array::from_fn(|i| {
-                // we add to the hasher only the bytes that are part of the message
-                let num_reads = min(
-                    SHA256_READ_SIZE,
-                    (max(read_ptr, src + len) - read_ptr) as usize,
-                );
-                let row_input = block_reads_records[i]
-                    .1
-                    .map(|x| x.as_canonical_u32().try_into().unwrap());
-                hasher.update(&row_input[..num_reads]);
-                read_ptr += SHA256_READ_SIZE as u32;
-                row_input
-            });
-            input_records.push(block_reads_records.map(|x| x.0));
-            input_message.push(block_reads_bytes);
-        }
-
-        let mut digest = [0u8; SHA256_WRITE_SIZE];
-        digest.copy_from_slice(hasher.finalize().as_ref());
-        let (digest_write, _) = memory.write(
-            e,
-            F::from_canonical_u32(dst),
-            digest.map(|b| F::from_canonical_u8(b)),
-        );
-
-        self.records.push(Sha256Record {
-            from_state: from_state.map(F::from_canonical_u32),
-            dst_read,
-            src_read,
-            len_read,
-            input_records,
-            input_message,
-            digest_write,
-        });
-
-        Ok(ExecutionState {
-            pc: from_state.pc + DEFAULT_PC_STEP,
-            timestamp: memory.timestamp(),
-        })
-    }
-
-    fn get_opcode_name(&self, _: usize) -> String {
-        "SHA256".to_string()
+        *data = ShaPreCompute {
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
+        };
+        assert_eq!(&Rv32Sha256Opcode::SHA256.global_opcode(), opcode);
+        Ok(())
     }
 }
 

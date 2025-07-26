@@ -6,7 +6,7 @@ use openvm::platform::memory::MEM_SIZE;
 use openvm_build::GuestOptions;
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
-    config::{AggConfig, AppConfig, SdkVmConfig},
+    config::{AggConfig, AppConfig, SdkVmConfig, SdkVmCpuBuilder},
     DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
@@ -105,8 +105,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let verifier = sdk.generate_halo2_verifier_solidity(&halo2_params_reader, &agg_pk)?;
 
     // 10. Generate an EVM proof
+    let builder = SdkVmCpuBuilder;
     let proof = sdk.generate_evm_proof(
         &halo2_params_reader,
+        builder,
         app_pk,
         app_committed_exe,
         agg_pk,

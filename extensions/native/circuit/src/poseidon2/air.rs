@@ -7,10 +7,13 @@ use openvm_circuit::{
 use openvm_circuit_primitives::utils::not;
 use openvm_instructions::LocalOpcode;
 use openvm_native_compiler::{
+    conversion::AS,
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
     VerifyBatchOpcode::VERIFY_BATCH,
 };
-use openvm_poseidon2_air::{Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS};
+use openvm_poseidon2_air::{
+    Poseidon2Config, Poseidon2SubAir, BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS,
+};
 use openvm_stark_backend::{
     air_builders::sub::SubAirBuilder,
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
@@ -20,15 +23,13 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use crate::{
+use crate::poseidon2::{
     chip::{NUM_INITIAL_READS, NUM_SIMPLE_ACCESSES},
-    poseidon2::{
-        columns::{
-            InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
-            TopLevelSpecificCols,
-        },
-        CHUNK,
+    columns::{
+        InsideRowSpecificCols, NativePoseidon2Cols, SimplePoseidonSpecificCols,
+        TopLevelSpecificCols,
     },
+    CHUNK,
 };
 
 #[derive(Clone, Debug)]
@@ -38,6 +39,23 @@ pub struct NativePoseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
     pub internal_bus: VerifyBatchBus,
     pub(crate) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub(crate) address_space: F,
+}
+
+impl<F: Field, const SBOX_REGISTERS: usize> NativePoseidon2Air<F, SBOX_REGISTERS> {
+    pub fn new(
+        execution_bridge: ExecutionBridge,
+        memory_bridge: MemoryBridge,
+        verify_batch_bus: VerifyBatchBus,
+        poseidon2_config: Poseidon2Config<F>,
+    ) -> Self {
+        NativePoseidon2Air {
+            execution_bridge,
+            memory_bridge,
+            internal_bus: verify_batch_bus,
+            subair: Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            address_space: F::from_canonical_u32(AS::Native as u32),
+        }
+    }
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for NativePoseidon2Air<F, SBOX_REGISTERS> {

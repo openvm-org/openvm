@@ -3,36 +3,32 @@ use std::{borrow::Borrow, path::PathBuf, sync::Arc};
 use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
-    arch::{
-        hasher::poseidon2::vm_poseidon2_hasher, ContinuationVmProof, ExecutionError,
-        GenerationError, SingleSegmentVmExecutor, SystemConfig, VmConfig, VmExecutor,
-    },
-    system::{memory::tree::public_values::UserPublicValuesProof, program::trace::VmCommittedExe},
+    self,
+    arch::{ContinuationVmProof, ExecutionError, VirtualMachineError},
+    system::program::trace::VmCommittedExe,
+    utils::test_system_config_with_continuations,
 };
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
     leaf::types::{LeafVmVerifierInput, UserPublicValuesRootProof},
 };
-use openvm_native_circuit::{Native, NativeConfig};
+use openvm_native_circuit::{execute_program_with_config, NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
-use openvm_native_recursion::types::InnerConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
 use openvm_sdk::{
     codec::{Decode, Encode},
-    config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
+    config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
     keygen::AppProvingKey,
     Sdk, StdIn,
 };
-use openvm_stark_backend::{keygen::types::LinearConstraint, p3_matrix::Matrix};
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
-    engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{p3_field::FieldAlgebra, Chip},
+    openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::transpiler::Transpiler;
@@ -65,7 +61,6 @@ use {
 };
 
 type SC = BabyBearPoseidon2Config;
-type C = InnerConfig;
 type F = BabyBear;
 
 const NUM_PUB_VALUES: usize = 16;
@@ -91,47 +86,37 @@ fn verify_evm_halo2_proof_with_fallback(
     Ok(gas_cost)
 }
 
-fn run_leaf_verifier<VC: VmConfig<F>>(
-    leaf_vm: &SingleSegmentVmExecutor<F, VC>,
+fn run_leaf_verifier(
+    leaf_vm_config: &NativeConfig,
     leaf_committed_exe: Arc<VmCommittedExe<SC>>,
     verifier_input: LeafVmVerifierInput<SC>,
-) -> Result<Vec<F>, ExecutionError>
-where
-    VC::Executor: Chip<SC>,
-    VC::Periphery: Chip<SC>,
-{
-    let exe_result = leaf_vm.execute_and_compute_heights(
-        leaf_committed_exe.exe.clone(),
+) -> Result<Vec<F>, VirtualMachineError> {
+    assert!(leaf_vm_config.system.has_public_values_chip());
+    let (output, _vm) = execute_program_with_config::<BabyBearPoseidon2Engine, _>(
+        leaf_committed_exe.exe.program.clone(),
         verifier_input.write_to_stream(),
+        NativeCpuBuilder,
+        leaf_vm_config.clone(),
     )?;
-    let runtime_pvs: Vec<_> = exe_result
-        .public_values
-        .iter()
-        .map(|v| v.unwrap())
-        .collect();
-    Ok(runtime_pvs)
+    Ok(output.system_records.public_values)
 }
 
 fn app_committed_exe_for_test(app_log_blowup: usize) -> Arc<VmCommittedExe<SC>> {
-    let program = {
-        let n = 200;
-        let mut builder = Builder::<C>::default();
-        let a: Felt<F> = builder.eval(F::ZERO);
-        let b: Felt<F> = builder.eval(F::ONE);
-        let c: Felt<F> = builder.uninit();
-        builder.range(0, n).for_each(|_, builder| {
-            builder.assign(&c, a + b);
-            builder.assign(&a, b);
-            builder.assign(&b, c);
-        });
-        builder.halt();
-        builder.compile_isa()
-    };
-    Sdk::new()
-        .commit_app_exe(
-            FriParameters::new_for_testing(app_log_blowup),
-            program.into(),
+    let sdk = Sdk::new();
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest/fib");
+    let vm_config = app_vm_config_for_test();
+    let elf = sdk
+        .build(
+            Default::default(),
+            &vm_config,
+            pkg_dir,
+            &Default::default(),
+            None,
         )
+        .unwrap();
+    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
+    sdk.commit_app_exe(FriParameters::new_for_testing(app_log_blowup), exe)
         .unwrap()
 }
 
@@ -162,16 +147,22 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
     }
 }
 
-fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
+fn app_vm_config_for_test() -> SdkVmConfig {
+    let config = test_system_config_with_continuations()
+        .with_max_segment_len(200)
+        .with_public_values(NUM_PUB_VALUES);
+    SdkVmConfig::builder()
+        .system(SdkSystemConfig { config })
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .build()
+}
+
+fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
     AppConfig {
         app_fri_params: FriParameters::new_for_testing(app_log_blowup).into(),
-        app_vm_config: NativeConfig::new(
-            SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-            Native,
-        ),
+        app_vm_config: app_vm_config_for_test(),
         leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP).into(),
         compiler_options: CompilerOptions {
             enable_cycle_tracker: true,
@@ -181,40 +172,38 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<NativeConfig> {
 }
 
 #[test]
-fn test_public_values_and_leaf_verification() {
-    let app_log_blowup = 3;
+fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
+    setup_tracing();
+    let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = AppProvingKey::keygen(app_config);
+    let app_pk = Arc::new(AppProvingKey::keygen(app_config)?);
     let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
+    let pc_start = app_committed_exe.exe.pc_start;
 
     let agg_stark_config = agg_stark_config_for_test();
     let leaf_vm_config = agg_stark_config.leaf_vm_config();
-    let leaf_vm = SingleSegmentVmExecutor::new(leaf_vm_config);
     let leaf_committed_exe = app_pk.leaf_committed_exe.clone();
 
-    let app_engine = BabyBearPoseidon2Engine::new(app_pk.app_vm_pk.fri_params);
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
-    let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
-        .unwrap();
-    assert!(app_vm_result.per_segment.len() > 2);
+    let sdk = Sdk::new();
+    let mut app_proof = sdk.generate_app_proof(
+        SdkVmCpuBuilder,
+        app_pk,
+        app_committed_exe.clone(),
+        StdIn::default(),
+    )?;
 
-    let mut app_vm_seg_proofs: Vec<_> = app_vm_result
-        .per_segment
-        .into_iter()
-        .map(|proof_input| app_engine.prove(&app_pk.app_vm_pk.vm_pk, proof_input))
-        .collect();
-    let app_last_proof = app_vm_seg_proofs.pop().unwrap();
+    assert!(app_proof.per_segment.len() > 2);
+    let app_last_proof = app_proof.per_segment.pop().unwrap();
 
     let expected_app_commit: [F; DIGEST_SIZE] = app_committed_exe.get_program_commit().into();
 
     // Verify all segments except the last one.
     let (first_seg_final_pc, first_seg_final_mem_root) = {
         let runtime_pvs = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
-                proofs: app_vm_seg_proofs.clone(),
+                proofs: app_proof.per_segment.clone(),
                 public_values_root_proof: None,
             },
         )
@@ -224,25 +213,23 @@ fn test_public_values_and_leaf_verification() {
 
         assert_eq!(leaf_vm_pvs.app_commit, expected_app_commit);
         assert_eq!(leaf_vm_pvs.connector.is_terminate, F::ZERO);
-        assert_eq!(leaf_vm_pvs.connector.initial_pc, F::ZERO);
+        assert_eq!(
+            leaf_vm_pvs.connector.initial_pc,
+            F::from_canonical_u32(pc_start)
+        );
         (
             leaf_vm_pvs.connector.final_pc,
             leaf_vm_pvs.memory.final_root,
         )
     };
 
-    let pv_proof = UserPublicValuesProof::compute(
-        app_vm.config.system.memory_config.memory_dimensions(),
-        NUM_PUB_VALUES,
-        &vm_poseidon2_hasher(),
-        app_vm_result.final_memory.as_ref().unwrap(),
-    );
+    let pv_proof = app_proof.user_public_values;
     let pv_root_proof = UserPublicValuesRootProof::extract(&pv_proof);
 
     // Verify the last segment with the correct public values root proof.
     {
         let runtime_pvs = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -268,7 +255,7 @@ fn test_public_values_and_leaf_verification() {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
         wrong_pv_root_proof.public_values_commit[0] += F::ONE;
         let execution_result = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -276,7 +263,10 @@ fn test_public_values_and_leaf_verification() {
             },
         );
         assert!(
-            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            matches!(
+                execution_result,
+                Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
+            ),
             "Expected failure: the public value root proof has a wrong pv commit: {:?}",
             execution_result
         );
@@ -287,7 +277,7 @@ fn test_public_values_and_leaf_verification() {
         let mut wrong_pv_root_proof = pv_root_proof.clone();
         wrong_pv_root_proof.sibling_hashes[0][0] += F::ONE;
         let execution_result = run_leaf_verifier(
-            &leaf_vm,
+            &leaf_vm_config,
             leaf_committed_exe.clone(),
             LeafVmVerifierInput {
                 proofs: vec![app_last_proof.clone()],
@@ -295,15 +285,20 @@ fn test_public_values_and_leaf_verification() {
             },
         );
         assert!(
-            matches!(execution_result, Err(ExecutionError::Fail { .. })),
+            matches!(
+                execution_result,
+                Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
+            ),
             "Expected failure: the public value root proof has a wrong path proof: {:?}",
             execution_result
         );
     }
+    Ok(())
 }
 
 #[cfg(feature = "evm-verify")]
 #[test]
+#[ignore = "slow"]
 fn test_static_verifier_custom_pv_handler() {
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
     pub struct CustomPvHandler {
@@ -386,6 +381,7 @@ fn test_static_verifier_custom_pv_handler() {
     let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
+            SdkVmCpuBuilder,
             Arc::new(app_pk),
             app_committed_exe,
             agg_pk,
@@ -403,33 +399,8 @@ fn test_static_verifier_custom_pv_handler() {
 #[cfg(feature = "evm-verify")]
 #[test]
 fn test_e2e_proof_generation_and_verification_with_pvs() {
-    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest/fib");
-
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
-
+    let vm_config = app_vm_config_for_test();
     let sdk = Sdk::new();
-    let elf = sdk
-        .build(
-            Default::default(),
-            &vm_config,
-            pkg_dir,
-            &Default::default(),
-            None,
-        )
-        .unwrap();
-    let exe = sdk.transpile(elf, vm_config.transpiler()).unwrap();
 
     let app_log_blowup = 1;
     let app_fri_params = FriParameters::new_for_testing(app_log_blowup);
@@ -438,10 +409,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
         AppConfig::new_with_leaf_fri_params(app_fri_params, vm_config, leaf_fri_params);
     app_config.compiler_options.enable_cycle_tracker = true;
 
-    let app_committed_exe = sdk
-        .commit_app_exe(app_fri_params, exe)
-        .expect("failed to commit exe");
-
+    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
     let app_pk = sdk.app_keygen(app_config).unwrap();
 
     let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
@@ -460,6 +428,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
     let evm_proof = sdk
         .generate_evm_proof(
             &params_reader,
+            SdkVmCpuBuilder,
             Arc::new(app_pk),
             app_committed_exe,
             agg_pk,
@@ -475,25 +444,11 @@ fn test_e2e_proof_generation_and_verification_with_pvs() {
 #[test]
 fn test_sdk_guest_build_and_transpile() {
     let sdk = Sdk::new();
-    let guest_opts = GuestOptions::default()
-        // .with_features(vec!["zkvm"])
-        // .with_options(vec!["--release"]);
-        ;
+    let guest_opts = GuestOptions::default();
     let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
     pkg_dir.push("guest/fib");
 
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
+    let vm_config = app_vm_config_for_test();
 
     let one = sdk
         .build(
@@ -526,35 +481,18 @@ fn test_sdk_guest_build_and_transpile() {
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new();
-    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    pkg_dir.push("guest/fib");
-
-    let vm_config = SdkVmConfig::builder()
-        .system(SdkSystemConfig {
-            config: SystemConfig::default()
-                .with_max_segment_len(200)
-                .with_continuations()
-                .with_public_values(NUM_PUB_VALUES),
-        })
-        .rv32i(Default::default())
-        .rv32m(Default::default())
-        .io(Default::default())
-        .native(Default::default())
-        .build();
-    let elf = sdk.build(
-        Default::default(),
-        &vm_config,
-        pkg_dir,
-        &Default::default(),
-        None,
-    )?;
+    let vm_config = app_vm_config_for_test();
     assert!(vm_config.system.config.continuation_enabled);
-    let exe = sdk.transpile(elf, vm_config.transpiler())?;
     let fri_params = FriParameters::standard_fast();
     let app_config = AppConfig::new(fri_params, vm_config);
-    let committed_exe = sdk.commit_app_exe(fri_params, exe)?;
+    let committed_exe = app_committed_exe_for_test(fri_params.log_blowup);
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-    let app_proof = sdk.generate_app_proof(app_pk.clone(), committed_exe, StdIn::default())?;
+    let app_proof = sdk.generate_app_proof(
+        SdkVmCpuBuilder,
+        app_pk.clone(),
+        committed_exe,
+        StdIn::default(),
+    )?;
     let mut app_proof_bytes = Vec::new();
     app_proof.encode(&mut app_proof_bytes)?;
     let decoded_app_proof = ContinuationVmProof::decode(&mut &app_proof_bytes[..])?;
@@ -566,60 +504,4 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // Test the decoding by verifying the decoded proof
     sdk.verify_app_proof(&app_pk.get_app_vk(), &decoded_app_proof)?;
     Ok(())
-}
-
-#[test]
-fn test_segmentation_retry() {
-    setup_tracing();
-    let app_log_blowup = 3;
-    let app_config = small_test_app_config(app_log_blowup);
-    let app_pk = AppProvingKey::keygen(app_config);
-    let app_committed_exe = app_committed_exe_for_test(app_log_blowup);
-
-    let app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
-    let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
-        .unwrap();
-    assert!(app_vm_result.per_segment.len() > 2);
-
-    let total_height: usize = app_vm_result.per_segment[0]
-        .per_air
-        .iter()
-        .map(|(_, input)| {
-            let main = input.raw.common_main.as_ref();
-            main.map(|mat| mat.height()).unwrap_or(0)
-        })
-        .sum();
-
-    // Re-run with a threshold that will be violated.
-    let mut app_vm = VmExecutor::new(app_pk.app_vm_pk.vm_config.clone());
-    let num_airs = app_pk.app_vm_pk.vm_pk.per_air.len();
-    app_vm.set_trace_height_constraints(vec![LinearConstraint {
-        coefficients: vec![1; num_airs],
-        threshold: total_height as u32 - 1,
-    }]);
-    let app_vm_result =
-        app_vm.execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![]);
-    assert!(matches!(
-        app_vm_result,
-        Err(GenerationError::TraceHeightsLimitExceeded)
-    ));
-
-    // Try lowering segmentation threshold.
-    let config = VmConfig::<BabyBear>::system_mut(&mut app_vm.config);
-    config.set_segmentation_strategy(config.segmentation_strategy.stricter_strategy());
-    let app_vm_result = app_vm
-        .execute_and_generate_with_cached_program(app_committed_exe.clone(), vec![])
-        .unwrap();
-
-    // New max height should indeed by smaller.
-    let new_total_height: usize = app_vm_result.per_segment[0]
-        .per_air
-        .iter()
-        .map(|(_, input)| {
-            let main = input.raw.common_main.as_ref();
-            main.map(|mat| mat.height()).unwrap_or(0)
-        })
-        .sum();
-    assert!(new_total_height < total_height);
 }

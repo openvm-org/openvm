@@ -6,3 +6,5 @@ pub use weierstrass_extension::*;
 
 mod config;
 pub use config::*;
+
+pub struct EccCpuProverExt;

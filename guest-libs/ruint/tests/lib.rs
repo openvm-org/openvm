@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use openvm_bigint_circuit::Int256Rv32Config;
+    use openvm_bigint_circuit::{Int256Rv32Config, Int256Rv32CpuBuilder};
     use openvm_bigint_transpiler::Int256TranspilerExtension;
     use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
@@ -30,7 +30,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Int256TranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Int256Rv32CpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

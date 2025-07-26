@@ -1,3 +1,4 @@
+use getset::CopyGetters;
 use openvm_circuit_primitives::{
     assert_less_than::{AssertLessThanIo, AssertLtSubAir},
     is_zero::{IsZeroIo, IsZeroSubAir},
@@ -19,9 +20,9 @@ use crate::system::memory::{
 
 /// AUX_LEN is the number of auxiliary columns (aka the number of limbs that the input numbers will
 /// be decomposed into) for the `AssertLtSubAir` in the `MemoryOfflineChecker`.
-/// Warning: This requires that (clk_max_bits + decomp - 1) / decomp = AUX_LEN
+/// Warning: This requires that (timestamp_max_bits + decomp - 1) / decomp = AUX_LEN
 ///         in MemoryOfflineChecker (or whenever AssertLtSubAir is used)
-pub(crate) const AUX_LEN: usize = 2;
+pub const AUX_LEN: usize = 2;
 
 /// The [MemoryBridge] is used within AIR evaluation functions to constrain logical memory
 /// operations (read/write). It adds all necessary constraints and interactions.
@@ -34,12 +35,20 @@ impl MemoryBridge {
     /// Create a new [MemoryBridge] with the provided offline_checker.
     pub fn new(
         memory_bus: MemoryBus,
-        clk_max_bits: usize,
+        timestamp_max_bits: usize,
         range_bus: VariableRangeCheckerBus,
     ) -> Self {
         Self {
-            offline_checker: MemoryOfflineChecker::new(memory_bus, clk_max_bits, range_bus),
+            offline_checker: MemoryOfflineChecker::new(memory_bus, timestamp_max_bits, range_bus),
         }
+    }
+
+    pub fn memory_bus(&self) -> MemoryBus {
+        self.offline_checker.memory_bus
+    }
+
+    pub fn range_bus(&self) -> VariableRangeCheckerBus {
+        self.offline_checker.timestamp_lt_air.bus
     }
 
     /// Prepare a logical memory read operation.
@@ -256,17 +265,23 @@ impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, CopyGetters)]
 struct MemoryOfflineChecker {
+    #[get_copy = "pub"]
     memory_bus: MemoryBus,
+    #[get_copy = "pub"]
     timestamp_lt_air: AssertLtSubAir,
 }
 
 impl MemoryOfflineChecker {
-    fn new(memory_bus: MemoryBus, clk_max_bits: usize, range_bus: VariableRangeCheckerBus) -> Self {
+    fn new(
+        memory_bus: MemoryBus,
+        timestamp_max_bits: usize,
+        range_bus: VariableRangeCheckerBus,
+    ) -> Self {
         Self {
             memory_bus,
-            timestamp_lt_air: AssertLtSubAir::new(range_bus, clk_max_bits),
+            timestamp_lt_air: AssertLtSubAir::new(range_bus, timestamp_max_bits),
         }
     }
 

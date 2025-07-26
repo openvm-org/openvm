@@ -4,7 +4,10 @@ use eyre::Result;
 use itertools::Itertools;
 
 use crate::{
-    aggregate::{AggregateMetrics, CELLS_USED_LABEL, CYCLES_LABEL, PROOF_TIME_LABEL},
+    aggregate::{
+        AggregateMetrics, EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL, INSNS_LABEL,
+        MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
+    },
     types::MdTableCell,
 };
 
@@ -37,7 +40,7 @@ pub struct SingleSummaryMetrics {
     /// Parallel proof time is approximated as the max of proof times within a group
     pub par_proof_time_ms: MdTableCell,
     pub cells_used: MdTableCell,
-    pub cycles: MdTableCell,
+    pub insns: MdTableCell,
 }
 
 impl GithubSummary {
@@ -52,8 +55,14 @@ impl GithubSummary {
             .zip_eq(md_paths.iter())
             .zip_eq(names)
             .map(|(((aggregated, prev_aggregated), md_path), name)| {
-                let md_filename = md_path.file_name().unwrap().to_str().unwrap();
-                let mut row = aggregated.get_summary_row(md_filename).unwrap();
+                let md_filename = md_path
+                    .file_name()
+                    .expect("Path should have a filename")
+                    .to_str()
+                    .expect("Filename should be valid UTF-8");
+                let mut row = aggregated.get_summary_row(md_filename).unwrap_or_else(|| {
+                    panic!("Failed to get summary row for file '{}'", md_filename)
+                });
                 if let Some(prev_aggregated) = prev_aggregated {
                     // md_filename doesn't matter
                     if let Some(prev_row) = prev_aggregated.get_summary_row(md_filename) {
@@ -136,14 +145,14 @@ impl SingleSummaryMetrics {
         write!(
             writer,
             "{} | {} | {} |",
-            self.proof_time_ms, self.cycles, self.cells_used,
+            self.proof_time_ms, self.insns, self.cells_used,
         )?;
         Ok(())
     }
 
     pub fn set_diff(&mut self, prev: &Self) {
         self.cells_used.diff = Some(self.cells_used.val - prev.cells_used.val);
-        self.cycles.diff = Some(self.cycles.val - prev.cycles.val);
+        self.insns.diff = Some(self.insns.val - prev.insns.val);
         self.proof_time_ms.diff = Some(self.proof_time_ms.val - prev.proof_time_ms.val);
     }
 }
@@ -152,16 +161,64 @@ impl AggregateMetrics {
     pub fn get_single_summary(&self, name: &str) -> Option<SingleSummaryMetrics> {
         let stats = self.by_group.get(name)?;
         // Any group must have proof_time, but may not have cells_used or cycles (e.g., halo2)
-        let proof_time_ms = stats.get(PROOF_TIME_LABEL)?.sum;
-        let par_proof_time_ms = stats.get(PROOF_TIME_LABEL)?.max;
+        let proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
+            proof_stats.sum
+        } else {
+            // Note: execute_metered is outside any segment scope, so it should have sum = max = avg
+            let execute_metered = stats
+                .get(EXECUTE_METERED_TIME_LABEL)
+                .map(|s| s.sum.val)
+                .unwrap_or(0.0);
+            let execute_e3 = stats
+                .get(EXECUTE_E3_TIME_LABEL)
+                .map(|s| s.sum.val)
+                .unwrap_or(0.0);
+            // If total_proof_time_ms is not available, compute it from components
+            let trace_gen = stats
+                .get(TRACE_GEN_TIME_LABEL)
+                .map(|s| s.sum.val)
+                .unwrap_or(0.0);
+            let stark_prove = stats
+                .get(PROVE_EXCL_TRACE_TIME_LABEL)
+                .map(|s| s.sum.val)
+                .unwrap_or(0.0);
+            println!(
+                "{} {} {} {}",
+                execute_metered, execute_e3, trace_gen, stark_prove
+            );
+            MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
+        };
+        println!("{}", self.total_proof_time.val);
+        let par_proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
+            proof_stats.max
+        } else {
+            // Use the same computation for max
+            let execute_metered = stats
+                .get(EXECUTE_METERED_TIME_LABEL)
+                .map(|s| s.max.val)
+                .unwrap_or(0.0);
+            let execute_e3 = stats
+                .get(EXECUTE_E3_TIME_LABEL)
+                .map(|s| s.max.val)
+                .unwrap_or(0.0);
+            let trace_gen = stats
+                .get(TRACE_GEN_TIME_LABEL)
+                .map(|s| s.max.val)
+                .unwrap_or(0.0);
+            let stark_prove = stats
+                .get(PROVE_EXCL_TRACE_TIME_LABEL)
+                .map(|s| s.max.val)
+                .unwrap_or(0.0);
+            MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
+        };
         let cells_used = stats
-            .get(CELLS_USED_LABEL)
+            .get(MAIN_CELLS_USED_LABEL)
             .map(|s| s.sum)
             .unwrap_or_default();
-        let cycles = stats.get(CYCLES_LABEL).map(|s| s.sum).unwrap_or_default();
+        let insns = stats.get(INSNS_LABEL).map(|s| s.sum).unwrap_or_default();
         Some(SingleSummaryMetrics {
             cells_used,
-            cycles,
+            insns,
             proof_time_ms,
             par_proof_time_ms,
         })

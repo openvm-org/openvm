@@ -6,7 +6,7 @@ use eyre::Result;
 use openvm_sdk::fs::write_evm_proof_to_file;
 use openvm_sdk::{
     commit::AppExecutionCommit,
-    config::{AggregationTreeConfig, SdkVmConfig},
+    config::{AggregationTreeConfig, SdkVmConfig, SdkVmCpuBuilder},
     fs::{
         read_agg_stark_pk_from_file, read_app_pk_from_file, read_exe_from_file,
         write_app_proof_to_file, write_to_file_json,
@@ -115,6 +115,7 @@ enum ProveSubCommand {
 
 impl ProveCmd {
     pub fn run(&self) -> Result<()> {
+        let vm_builder = SdkVmCpuBuilder;
         match &self.command {
             ProveSubCommand::App {
                 app_pk,
@@ -127,8 +128,12 @@ impl ProveCmd {
                 let (committed_exe, target_name) =
                     load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
 
-                let app_proof =
-                    sdk.generate_app_proof(app_pk, committed_exe, read_to_stdin(&run_args.input)?)?;
+                let app_proof = sdk.generate_app_proof(
+                    vm_builder,
+                    app_pk,
+                    committed_exe,
+                    read_to_stdin(&run_args.input)?,
+                )?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -161,6 +166,7 @@ impl ProveCmd {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
                 let stark_proof = sdk.generate_e2e_stark_proof(
+                    vm_builder,
                     app_pk,
                     committed_exe,
                     agg_stark_pk,
@@ -206,6 +212,7 @@ impl ProveCmd {
                 let params_reader = CacheHalo2ParamsReader::new(default_params_dir());
                 let evm_proof = sdk.generate_evm_proof(
                     &params_reader,
+                    vm_builder,
                     app_pk,
                     committed_exe,
                     agg_pk,

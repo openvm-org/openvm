@@ -8,13 +8,15 @@
 //! internal leaves of a Merkle tree but **not** as the leaf hash because `compress` does not
 //! add any padding.
 
-use openvm_poseidon2_air::Poseidon2Config;
+use std::sync::Arc;
+
+use openvm_circuit_primitives::Chip;
+use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    interaction::BusIndex,
-    p3_field::PrimeField32,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    interaction::{BusIndex, LookupBus},
+    p3_field::{Field, PrimeField32},
+    AirRef, ChipUsageGetter,
 };
 
 #[cfg(test)]
@@ -24,14 +26,19 @@ pub mod air;
 mod chip;
 pub use chip::*;
 
-use crate::arch::hasher::{Hasher, HasherChip};
+use crate::{
+    arch::hasher::{Hasher, HasherChip},
+    system::poseidon2::air::Poseidon2PeripheryAir,
+};
 pub mod columns;
 pub mod trace;
 
 pub const PERIPHERY_POSEIDON2_WIDTH: usize = 16;
 pub const PERIPHERY_POSEIDON2_CHUNK_SIZE: usize = 8;
 
-pub enum Poseidon2PeripheryChip<F: PrimeField32> {
+#[derive(Chip)]
+#[chip(where = "F: Field")]
+pub enum Poseidon2PeripheryChip<F: Field> {
     Register0(Poseidon2PeripheryBaseChip<F, 0>),
     Register1(Poseidon2PeripheryBaseChip<F, 1>),
 }
@@ -49,22 +56,21 @@ impl<F: PrimeField32> Poseidon2PeripheryChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Poseidon2PeripheryChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.air(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.air(),
-        }
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        match self {
-            Poseidon2PeripheryChip::Register0(chip) => chip.generate_air_proof_input(),
-            Poseidon2PeripheryChip::Register1(chip) => chip.generate_air_proof_input(),
-        }
+pub fn new_poseidon2_periphery_air<SC: StarkGenericConfig>(
+    poseidon2_config: Poseidon2Config<Val<SC>>,
+    direct_bus: LookupBus,
+    max_constraint_degree: usize,
+) -> AirRef<SC> {
+    if max_constraint_degree >= 7 {
+        Arc::new(Poseidon2PeripheryAir::<Val<SC>, 0>::new(
+            Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            direct_bus,
+        ))
+    } else {
+        Arc::new(Poseidon2PeripheryAir::<Val<SC>, 1>::new(
+            Arc::new(Poseidon2SubAir::new(poseidon2_config.constants.into())),
+            direct_bus,
+        ))
     }
 }
 
@@ -106,7 +112,7 @@ impl<F: PrimeField32> Hasher<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2Per
 
 impl<F: PrimeField32> HasherChip<PERIPHERY_POSEIDON2_CHUNK_SIZE, F> for Poseidon2PeripheryChip<F> {
     fn compress_and_record(
-        &mut self,
+        &self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {

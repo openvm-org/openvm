@@ -2,7 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -25,6 +25,6 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let file_data = include_bytes!("../../../guest/bincode/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("bincode", config, exe, stdin)
+        args.bench_from_exe("bincode", Rv32ImCpuBuilder, config, exe, stdin)
     })
 }

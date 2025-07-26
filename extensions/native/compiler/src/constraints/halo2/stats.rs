@@ -14,7 +14,7 @@ impl Halo2Stats {
     }
 }
 
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 mod emit {
     use metrics::counter;
 

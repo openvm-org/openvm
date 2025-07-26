@@ -1,5 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
-
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, VmOpcode,
@@ -8,29 +7,28 @@ use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
     p3_field::FieldAlgebra,
 };
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::Streams;
-use crate::system::{memory::MemoryController, program::ProgramBus};
-
-pub type Result<T> = std::result::Result<T, ExecutionError>;
+use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
+use crate::{
+    arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
+    system::{
+        memory::online::{GuestMemory, TracingMemory},
+        program::ProgramBus,
+    },
+};
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}")]
     Fail { pc: u32 },
-    #[error("pc {pc} not found for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
-    PcNotFound {
-        pc: u32,
-        step: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
-    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base} and step = {step}")]
+    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
     PcOutOfBounds {
         pc: u32,
-        step: u32,
         pc_base: u32,
         program_len: usize,
     },
@@ -66,51 +64,94 @@ pub enum ExecutionError {
     DidNotTerminate,
     #[error("program exit code {0}")]
     FailedWithExitCode(u32),
+    #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
+    TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("inventory error: {0}")]
+    Inventory(#[from] ExecutorInventoryError),
+    #[error("static program error: {0}")]
+    Static(#[from] StaticProgramError),
 }
 
-pub trait InstructionExecutor<F> {
+/// Errors in the program that can be statically analyzed before runtime.
+#[derive(Error, Debug)]
+pub enum StaticProgramError {
+    #[error("invalid instruction at pc {0}")]
+    InvalidInstruction(u32),
+    #[error("Too many executors")]
+    TooManyExecutors,
+    #[error("Executor not found for opcode {opcode}")]
+    ExecutorNotFound { opcode: VmOpcode },
+}
+
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional host state `CTX`.
+/// The host state is execution context specific.
+#[derive(derive_new::new)]
+pub struct VmStateMut<'a, F, MEM, CTX> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub streams: &'a mut Streams<F>,
+    pub rng: &'a mut StdRng,
+    pub ctx: &'a mut CTX,
+    #[cfg(feature = "metrics")]
+    pub metrics: &'a mut VmMetrics,
+}
+
+// TODO[jpw]: Can we avoid Clone by making executors stateless?
+pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>>;
+    ) -> Result<(), ExecutionError>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
     /// if it is a supported opcode by the present executor.
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for RefCell<C> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(memory, instruction, prev_state)
-    }
+pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, CTX>);
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
+pub struct PreComputeInstruction<'a, F, CTX> {
+    pub handler: ExecuteFunc<F, CTX>,
+    pub pre_compute: &'a [u8],
 }
 
-impl<F, C: InstructionExecutor<F>> InstructionExecutor<F> for Rc<RefCell<C>> {
-    fn execute(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        prev_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>> {
-        self.borrow_mut().execute(memory, instruction, prev_state)
-    }
+#[derive(Clone, AlignedBytesBorrow)]
+#[repr(C)]
+pub struct E2PreCompute<DATA> {
+    pub chip_idx: u32,
+    pub data: DATA,
+}
 
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        self.borrow().get_opcode_name(opcode)
-    }
+/// Trait for E1 execution
+pub trait InsExecutorE1<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e1<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E1ExecutionCtx;
+}
+
+pub trait InsExecutorE2<F> {
+    fn e2_pre_compute_size(&self) -> usize;
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx;
 }
 
 #[repr(C)]
@@ -322,14 +363,16 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 ///
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
-pub trait PhantomSubExecutor<F>: Send {
+#[allow(clippy::too_many_arguments)]
+pub trait PhantomSubExecutor<F>: Send + Sync {
     fn phantom_execute(
-        &mut self,
-        memory: &MemoryController<F>,
+        &self,
+        memory: &GuestMemory,
         streams: &mut Streams<F>,
+        rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
-        a: F,
-        b: F,
+        a: u32,
+        b: u32,
         c_upper: u16,
     ) -> eyre::Result<()>;
 }

@@ -2,7 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::{
@@ -12,7 +12,6 @@ use openvm_sdk::{
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
-    collect_airs_and_inputs,
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     dummy_airs::fib_air::chip::FibonacciChip,
     engine::StarkFriEngine,
@@ -37,8 +36,11 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         // run_test tries to setup tracing, but it will be ignored since run_with_metric_collection
         // already sets it.
-        let (fib_air, fib_input) = collect_airs_and_inputs!(fib_chip);
-        let vdata = engine.run_test(fib_air, fib_input).unwrap();
+        let (fib_air, fib_ctx) = (
+            vec![fib_chip.air()],
+            vec![fib_chip.generate_proving_ctx(())],
+        );
+        let vdata = engine.run_test(fib_air, fib_ctx).unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.
         let app_fri_params =
             FriParameters::standard_with_100_bits_conjectured_security(leaf_log_blowup);
@@ -60,9 +62,16 @@ fn main() -> Result<()> {
         let app_pk = sdk.app_keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;
-        let prover = AppProver::<_, BabyBearPoseidon2Engine>::new(app_pk.app_vm_pk, committed_exe)
-            .with_program_name("verify_fibair");
-        let proof = prover.generate_app_proof_without_continuations(input_stream.into());
+        let mut prover = AppProver::<BabyBearPoseidon2Engine, _>::new(
+            NativeCpuBuilder,
+            app_pk.app_vm_pk,
+            committed_exe,
+        )?
+        .with_program_name("verify_fibair");
+        let proof = prover.generate_app_proof_without_continuations(
+            input_stream.into(),
+            NATIVE_MAX_TRACE_HEIGHTS,
+        )?;
         sdk.verify_app_proof_without_continuations(&app_vk, &proof)?;
         Ok(())
     })?;

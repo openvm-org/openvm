@@ -1,14 +1,18 @@
 use std::{
     array,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{
+        atomic::{AtomicBool, AtomicU32},
+        Arc,
+    },
 };
 
+use dashmap::DashMap;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
     interaction::{BusIndex, LookupBus},
-    p3_field::PrimeField32,
+    p3_field::{Field, PrimeField32},
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::FxBuildHasher;
 
 use super::{
     air::Poseidon2PeripheryAir, PERIPHERY_POSEIDON2_CHUNK_SIZE, PERIPHERY_POSEIDON2_WIDTH,
@@ -16,10 +20,11 @@ use super::{
 use crate::arch::hasher::{Hasher, HasherChip};
 
 #[derive(Debug)]
-pub struct Poseidon2PeripheryBaseChip<F: PrimeField32, const SBOX_REGISTERS: usize> {
+pub struct Poseidon2PeripheryBaseChip<F: Field, const SBOX_REGISTERS: usize> {
     pub air: Arc<Poseidon2PeripheryAir<F, SBOX_REGISTERS>>,
     pub subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
-    pub records: FxHashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32>,
+    pub records: DashMap<[F; PERIPHERY_POSEIDON2_WIDTH], AtomicU32, FxBuildHasher>,
+    pub nonempty: AtomicBool,
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F, SBOX_REGISTERS> {
@@ -31,7 +36,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Poseidon2PeripheryBaseChip<F,
                 LookupBus::new(bus_idx),
             )),
             subchip,
-            records: FxHashMap::default(),
+            records: DashMap::default(),
+            nonempty: AtomicBool::new(false),
         }
     }
 }
@@ -63,7 +69,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
     ///
     /// No interactions with other chips.
     fn compress_and_record(
-        &mut self,
+        &self,
         lhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
         rhs: &[F; PERIPHERY_POSEIDON2_CHUNK_SIZE],
     ) -> [F; PERIPHERY_POSEIDON2_CHUNK_SIZE] {
@@ -73,6 +79,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> HasherChip<PERIPHERY_POSEIDON
 
         let count = self.records.entry(input).or_insert(AtomicU32::new(0));
         count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.nonempty
+            .store(true, std::sync::atomic::Ordering::Relaxed);
 
         let output = self.subchip.permute(input);
         array::from_fn(|i| output[i])

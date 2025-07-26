@@ -2,7 +2,10 @@ use std::{array, borrow::Borrow, cmp::min};
 
 use openvm_circuit::{
     arch::ExecutionBridge,
-    system::memory::{offline_checker::MemoryBridge, MemoryAddress},
+    system::{
+        memory::{offline_checker::MemoryBridge, MemoryAddress},
+        SystemPort,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::not, SubAir,
@@ -17,7 +20,7 @@ use openvm_sha256_air::{
 };
 use openvm_sha256_transpiler::Rv32Sha256Opcode;
 use openvm_stark_backend::{
-    interaction::InteractionBuilder,
+    interaction::{BusIndex, InteractionBuilder},
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
@@ -31,7 +34,7 @@ use super::{
 
 /// Sha256VmAir does all constraints related to message padding and
 /// the Sha256Air subair constrains the actual hash
-#[derive(Clone, Debug, derive_new::new)]
+#[derive(Clone, Debug)]
 pub struct Sha256VmAir {
     pub execution_bridge: ExecutionBridge,
     pub memory_bridge: MemoryBridge,
@@ -42,6 +45,28 @@ pub struct Sha256VmAir {
     pub ptr_max_bits: usize,
     pub(super) sha256_subair: Sha256Air,
     pub(super) padding_encoder: Encoder,
+}
+
+impl Sha256VmAir {
+    pub fn new(
+        SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        }: SystemPort,
+        bitwise_lookup_bus: BitwiseOperationLookupBus,
+        ptr_max_bits: usize,
+        self_bus_idx: BusIndex,
+    ) -> Self {
+        Self {
+            execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
+            memory_bridge,
+            bitwise_lookup_bus,
+            ptr_max_bits,
+            sha256_subair: Sha256Air::new(bitwise_lookup_bus, self_bus_idx),
+            padding_encoder: Encoder::new(PaddingFlags::COUNT, 2, false),
+        }
+    }
 }
 
 impl<F: Field> BaseAirWithPublicValues<F> for Sha256VmAir {}

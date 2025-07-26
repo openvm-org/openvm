@@ -73,6 +73,49 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
     TokenStream::from(methods)
 }
 
+/// `S` is the type the derive macro is being called on
+/// Implements Borrow<S> and BorrowMut<S> for [u8]
+/// [u8] has to have (checked via `debug_assert!`s)
+/// - at least size_of(S) length
+/// - at least align_of(S) alignment
+#[proc_macro_derive(AlignedBytesBorrow)]
+pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let name = &ast.ident;
+
+    // Get impl generics, type generics, where clause
+    // Note, need to add the new type generic to the `impl_generics`
+    let (impl_generics, type_generics, where_clause) = ast.generics.split_for_impl();
+
+    let methods = quote! {
+        impl #impl_generics core::borrow::Borrow<#name #type_generics> for [u8]
+        where
+            #where_clause
+        {
+            fn borrow(&self) -> &#name #type_generics {
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
+                unsafe { &*(self.as_ptr() as *const #name #type_generics) }
+            }
+        }
+
+        impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [u8]
+        where
+            #where_clause
+        {
+            fn borrow_mut(&mut self) -> &mut #name #type_generics {
+                use core::mem::{align_of, size_of_val};
+                debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
+                debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
+                unsafe { &mut *(self.as_mut_ptr() as *mut #name #type_generics) }
+            }
+        }
+    };
+
+    TokenStream::from(methods)
+}
+
 #[proc_macro_derive(Chip, attributes(chip))]
 pub fn chip_derive(input: TokenStream) -> TokenStream {
     // Parse the attributes from the struct or enum
@@ -86,9 +129,10 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
         Data::Struct(inner) => {
             let generics = &ast.generics;
             let mut new_generics = generics.clone();
+            new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { SC: openvm_stark_backend::config::StarkGenericConfig });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Check if the struct has only one unnamed field
@@ -105,17 +149,11 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<SC> });
+                .push(syn::parse_quote! { #inner_ty: openvm_stark_backend::Chip<R, PB> });
             quote! {
-                impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> openvm_stark_backend::AirRef<SC> {
-                        self.0.air()
-                    }
-                    fn generate_air_proof_input(self) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
-                        self.0.generate_air_proof_input()
-                    }
-                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
-                        self.0.generate_air_proof_input_with_id(air_id)
+                impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
+                        self.0.generate_proving_ctx(records)
                     }
                 }
             }.into()
@@ -134,34 +172,32 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
 
-            let (air_arms, generate_air_proof_input_arms, generate_air_proof_input_with_id_arms): (Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (generate_proving_ctx_arms, where_predicates): (Vec<_>, Vec<_>) =
+                variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
-                let air_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::air(x)
+                let generate_proving_ctx_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<R, PB>>::generate_proving_ctx(x, records)
                 };
-                let generate_air_proof_input_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input(x)
-                };
-                let generate_air_proof_input_with_id_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as openvm_stark_backend::Chip<SC>>::generate_air_proof_input_with_id(x, air_id)
-                };
-                (air_arm, generate_air_proof_input_arm, generate_air_proof_input_with_id_arm)
-            }));
+                let where_predicate =
+                    syn::parse_quote! { #field_ty: openvm_stark_backend::Chip<R, PB> };
+                (generate_proving_ctx_arm, where_predicate)
+            }).collect();
 
-            // Attach an extra generic SC: StarkGenericConfig to the impl_generics
+            // Attach extra generics R and PB to the impl_generics
             let generics = &ast.generics;
             let mut new_generics = generics.clone();
+            new_generics.params.push(syn::parse_quote! { R });
             new_generics
                 .params
-                .push(syn::parse_quote! { SC: openvm_stark_backend::config::StarkGenericConfig });
+                .push(syn::parse_quote! { PB: openvm_stark_backend::prover::hal::ProverBackend });
             let (impl_generics, _, _) = new_generics.split_for_impl();
 
             // Implement Chip whenever the inner type implements Chip
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause.predicates.push(syn::parse_quote! { openvm_stark_backend::config::Domain<SC>: openvm_stark_backend::p3_commit::PolynomialSpace<Val = F>
-            });
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
             let attributes = ast.attrs.iter().find(|&attr| attr.path().is_ident("chip"));
             if let Some(attr) = attributes {
                 let mut fail_flag = false;
@@ -195,20 +231,10 @@ pub fn chip_derive(input: TokenStream) -> TokenStream {
             }
 
             quote! {
-                impl #impl_generics openvm_stark_backend::Chip<SC> for #name #ty_generics #where_clause {
-                    fn air(&self) -> openvm_stark_backend::AirRef<SC> {
+                impl #impl_generics openvm_stark_backend::Chip<R, PB> for #name #ty_generics #where_clause {
+                    fn generate_proving_ctx(&self, records: R) -> openvm_stark_backend::prover::types::AirProvingContext<PB> {
                         match self {
-                            #(#air_arms,)*
-                        }
-                    }
-                    fn generate_air_proof_input(self) -> openvm_stark_backend::prover::types::AirProofInput<SC> {
-                        match self {
-                            #(#generate_air_proof_input_arms,)*
-                        }
-                    }
-                    fn generate_air_proof_input_with_id(self, air_id: usize) -> (usize, openvm_stark_backend::prover::types::AirProofInput<SC>) {
-                        match self {
-                            #(#generate_air_proof_input_with_id_arms,)*
+                            #(#generate_proving_ctx_arms,)*
                         }
                     }
                 }

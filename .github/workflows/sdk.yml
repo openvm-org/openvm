@@ -26,6 +26,7 @@ jobs:
     runs-on:
       - runs-on=${{ github.run_id }}
       - family=m7a.24xlarge
+      - image=ubuntu24-full-x64
       - disk=large
       - extras=s3-cache
 
@@ -97,4 +98,10 @@ jobs:
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
-          cargo nextest run --cargo-profile=fast --test-threads=2 --features parallel,evm-verify
+          cargo nextest run --cargo-profile=fast --features parallel,evm-verify
+
+      - name: Run ignored tests
+        working-directory: crates/sdk
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          cargo nextest run --cargo-profile=fast --features parallel,evm-verify --ignored test_static_verifier_custom_pv_handler

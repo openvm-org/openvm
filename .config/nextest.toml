@@ -1,0 +1,13 @@
+# Nextest configuration for OpenVM project
+
+# Define test groups with different weights
+[[profile.default.overrides]]
+# Match all tests with "persistent" in their name
+filter = 'test(~persistent)'
+# Give these tests 5x the default weight because they use more memory
+threads-required = 16
+
+# custom profile for heavy tests
+[profile.heavy]
+# Run fewer tests in parallel for heavy workloads
+test-threads = 2

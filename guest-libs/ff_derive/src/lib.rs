@@ -1,4 +1,5 @@
 #![recursion_limit = "1024"]
+#![allow(clippy::manual_repeat_n)]
 
 extern crate proc_macro;
 extern crate proc_macro2;

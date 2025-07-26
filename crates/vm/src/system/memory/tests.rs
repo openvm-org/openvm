@@ -15,7 +15,7 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     Chip,
 };
@@ -228,7 +228,7 @@ fn test_memory_controller() {
     let mut airs = memory_controller.airs();
     let mut air_proof_inputs = memory_controller.generate_air_proof_inputs();
     airs.push(memory_requester_air);
-    air_proof_inputs.push(AirProofInput::simple_no_pis(memory_requester_trace));
+    air_proof_inputs.push(AirProvingContext::simple_no_pis(memory_requester_trace));
     airs.push(range_checker.air());
     air_proof_inputs.push(range_checker.generate_air_proof_input());
 
@@ -278,7 +278,7 @@ fn test_memory_controller_persistent() {
         range_checker.air(),
     ]);
     air_proof_inputs.extend([
-        AirProofInput::simple_no_pis(memory_requester_trace),
+        AirProvingContext::simple_no_pis(memory_requester_trace),
         poseidon_chip.generate_air_proof_input(),
         range_checker.generate_air_proof_input(),
     ]);
@@ -292,34 +292,35 @@ fn make_random_accesses<F: PrimeField32>(
 ) -> Vec<RecordId> {
     (0..1024)
         .map(|_| {
-            let address_space = F::from_canonical_u32(*[1, 2].choose(&mut rng).unwrap());
+            let address_space = F::from_canonical_u32(*[4, 5].choose(&mut rng).unwrap());
 
             match rng.gen_range(0..5) {
                 0 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
                     let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-                    let (record_id, _) = memory_controller.write(address_space, pointer, [data]);
+                    let (record_id, _) = memory_controller.write(address_space, pointer, &[data]);
                     record_id
                 }
                 1 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 1));
-                    let (record_id, _) = memory_controller.read::<1>(address_space, pointer);
+                    let (record_id, _) = memory_controller.read::<F, 1>(address_space, pointer);
                     record_id
                 }
                 2 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
-                    let (record_id, _) = memory_controller.read::<4>(address_space, pointer);
+                    let (record_id, _) = memory_controller.read::<F, 4>(address_space, pointer);
                     record_id
                 }
                 3 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, 4));
                     let data = array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..1 << 30)));
-                    let (record_id, _) = memory_controller.write::<4>(address_space, pointer, data);
+                    let (record_id, _) =
+                        memory_controller.write::<F, 4>(address_space, pointer, &data);
                     record_id
                 }
                 4 => {
                     let pointer = F::from_canonical_usize(gen_pointer(rng, MAX));
-                    let (record_id, _) = memory_controller.read::<MAX>(address_space, pointer);
+                    let (record_id, _) = memory_controller.read::<F, MAX>(address_space, pointer);
                     record_id
                 }
                 _ => unreachable!(),

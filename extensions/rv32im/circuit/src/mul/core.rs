@@ -3,13 +3,24 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, MinimalInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
+use openvm_circuit_primitives::{
+    range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip},
+    AlignedBytesBorrow,
+};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -17,8 +28,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -29,7 +38,7 @@ pub struct MultiplicationCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: us
     pub is_valid: T,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct MultiplicationCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub bus: RangeTupleCheckerBus<2>,
     pub offset: usize,
@@ -109,14 +118,34 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct MultiplicationCoreChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    pub air: MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+}
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct MultiplicationFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
-impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS> {
-    pub fn new(range_tuple_chip: SharedRangeTupleCheckerChip<2>, offset: usize) -> Self {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
+    MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
+{
+    pub fn new(
+        adapter: A,
+        range_tuple_chip: SharedRangeTupleCheckerChip<2>,
+        offset: usize,
+    ) -> Self {
         // The RangeTupleChecker is used to range check (a[i], carry[i]) pairs where 0 <= i
         // < NUM_LIMBS. a[i] must have LIMB_BITS bits and carry[i] is the sum of i + 1 bytes
         // (with LIMB_BITS bits).
@@ -132,102 +161,234 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> MultiplicationCoreChip<NUM_
         );
 
         Self {
-            air: MultiplicationCoreAir {
-                bus: *range_tuple_chip.bus(),
-                offset,
-            },
+            adapter,
+            offset,
             range_tuple_chip,
         }
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(bound = "T: Serialize + DeserializeOwned")]
-pub struct MultiplicationCoreRecord<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub c: [T; NUM_LIMBS],
-}
-
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    VmCoreChip<F, I> for MultiplicationCoreChip<NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
 where
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: From<[[F; NUM_LIMBS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceStep<
+            F,
+            ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
+            WriteData: From<[[u8; NUM_LIMBS]; 1]>,
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
+    >,
 {
-    type Record = MultiplicationCoreRecord<F, NUM_LIMBS, LIMB_BITS>;
-    type Air = MultiplicationCoreAir<NUM_LIMBS, LIMB_BITS>;
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!("{:?}", MulOpcode::from_usize(opcode - self.offset))
+    }
 
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
+    fn execute(
+        &mut self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
-        assert_eq!(
-            MulOpcode::from_usize(opcode.local_opcode_idx(self.air.offset)),
+
+        debug_assert_eq!(
+            MulOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
             MulOpcode::MUL
         );
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let b = data[0].map(|x| x.as_canonical_u32());
-        let c = data[1].map(|y| y.as_canonical_u32());
-        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&b, &c);
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record)
+            .into();
+
+        let (a, _) = run_mul::<NUM_LIMBS, LIMB_BITS>(&rs1, &rs2);
+
+        core_record.b = rs1;
+        core_record.c = rs2;
+
+        self.adapter
+            .write(state.memory, instruction, [a].into(), &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+}
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for MultiplicationFiller<A, NUM_LIMBS, LIMB_BITS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        let record: &MultiplicationCoreRecord<NUM_LIMBS, LIMB_BITS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+
+        let core_row: &mut MultiplicationCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
+
+        let (a, carry) = run_mul::<NUM_LIMBS, LIMB_BITS>(&record.b, &record.c);
 
         for (a, carry) in a.iter().zip(carry.iter()) {
-            self.range_tuple_chip.add_count(&[*a, *carry]);
+            self.range_tuple_chip.add_count(&[*a as u32, *carry]);
         }
 
-        let output = AdapterRuntimeContext::without_pc([a.map(F::from_canonical_u32)]);
-        let record = MultiplicationCoreRecord {
-            a: a.map(F::from_canonical_u32),
-            b: data[0],
-            c: data[1],
+        // write in reverse order
+        core_row.is_valid = F::ONE;
+        core_row.c = record.c.map(F::from_canonical_u8);
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = a.map(F::from_canonical_u8);
+    }
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MultiPreCompute {
+    a: u8,
+    b: u8,
+    c: u8,
+}
+
+impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
+    for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn pre_compute_size(&self) -> usize {
+        size_of::<MultiPreCompute>()
+    }
+    fn pre_compute_e1<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        let pre_compute: &mut MultiPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, pre_compute)?;
+        Ok(execute_e1_impl)
+    }
+}
+
+impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
+    for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<MultiPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<MultiPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        Ok(execute_e2_impl)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &MultiPreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let rs1 = u32::from_le_bytes(rs1);
+    let rs2 = u32::from_le_bytes(rs2);
+    let rd = rs1.wrapping_mul(rs2);
+    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &MultiPreCompute = pre_compute.borrow();
+    execute_e12_impl(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<MultiPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl(&pre_compute.data, vm_state);
+}
+
+impl<A, const LIMB_BITS: usize> MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut MultiPreCompute,
+    ) -> Result<(), StaticProgramError> {
+        assert_eq!(
+            MulOpcode::from_usize(inst.opcode.local_opcode_idx(self.offset)),
+            MulOpcode::MUL
+        );
+        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+
+        *data = MultiPreCompute {
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+            c: inst.c.as_canonical_u32() as u8,
         };
-
-        Ok((output, record))
-    }
-
-    fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", MulOpcode::from_usize(opcode - self.air.offset))
-    }
-
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut MultiplicationCoreCols<_, NUM_LIMBS, LIMB_BITS> =
-            row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.c = record.c;
-        row_slice.is_valid = F::ONE;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
+        Ok(())
     }
 }
 
 // returns mul, carry
+#[inline(always)]
 pub(super) fn run_mul<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    x: &[u32; NUM_LIMBS],
-    y: &[u32; NUM_LIMBS],
-) -> ([u32; NUM_LIMBS], [u32; NUM_LIMBS]) {
-    let mut result = [0; NUM_LIMBS];
-    let mut carry = [0; NUM_LIMBS];
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> ([u8; NUM_LIMBS], [u32; NUM_LIMBS]) {
+    let mut result = [0u8; NUM_LIMBS];
+    let mut carry = [0u32; NUM_LIMBS];
     for i in 0..NUM_LIMBS {
+        let mut res = 0u32;
         if i > 0 {
-            result[i] = carry[i - 1];
+            res = carry[i - 1];
         }
         for j in 0..=i {
-            result[i] += x[j] * y[i - j];
+            res += (x[j] as u32) * (y[i - j] as u32);
         }
-        carry[i] = result[i] >> LIMB_BITS;
-        result[i] %= 1 << LIMB_BITS;
+        carry[i] = res >> LIMB_BITS;
+        res %= 1u32 << LIMB_BITS;
+        result[i] = res as u8;
     }
     (result, carry)
 }

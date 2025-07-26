@@ -5,21 +5,97 @@ use eyre::Result;
 use num_bigint::BigUint;
 use openvm_algebra_circuit::{Fp2Extension, ModularExtension};
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::{instructions::exe::VmExe, SystemConfig};
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, SystemConfig},
+    system::program::trace::VmCommittedExe,
+};
+use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_ecc_circuit::{WeierstrassExtension, P256_CONFIG, SECP256K1_CONFIG};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_pairing_circuit::{PairingCurve, PairingExtension};
 use openvm_pairing_guest::{
     bls12_381::BLS12_381_COMPLEX_STRUCT_NAME, bn254::BN254_COMPLEX_STRUCT_NAME,
 };
 use openvm_sdk::{
-    commit::commit_app_exe, config::SdkVmConfig, prover::EvmHalo2Prover,
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe,
+    config::{SdkVmConfig, SdkVmCpuBuilder},
+    keygen::AppProvingKey,
+    prover::{
+        vm::{new_local_prover, types::VmProvingKey},
+        EvmHalo2Prover,
+    },
+    DefaultStaticVerifierPvHandler, Sdk, StdIn, SC,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
 };
 use openvm_transpiler::FromElf;
+
+fn verify_native_max_trace_heights(
+    sdk: &Sdk,
+    app_pk: Arc<AppProvingKey<SdkVmConfig>>,
+    app_committed_exe: Arc<VmCommittedExe<SC>>,
+    leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
+    num_children_leaf: usize,
+) -> Result<()> {
+    let app_proof = sdk.generate_app_proof(
+        SdkVmCpuBuilder,
+        app_pk.clone(),
+        app_committed_exe.clone(),
+        StdIn::default(),
+    )?;
+    let leaf_inputs =
+        LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
+    let mut leaf_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
+        NativeCpuBuilder,
+        &leaf_vm_pk,
+        &app_pk.leaf_committed_exe,
+    )?;
+    let executor_idx_to_air_idx = leaf_prover.vm.executor_idx_to_air_idx();
+
+    for leaf_input in leaf_inputs {
+        let exe = leaf_prover.exe().clone();
+        let vm = &mut leaf_prover.vm;
+        let metered_ctx = vm.build_metered_ctx();
+        let segments = vm.executor().execute_metered(
+            app_pk.leaf_committed_exe.exe.clone(),
+            leaf_input.write_to_stream(),
+            &executor_idx_to_air_idx,
+            metered_ctx,
+        )?;
+        assert_eq!(segments.len(), 1);
+        let estimated_trace_heights = &segments[0].trace_heights;
+        println!("estimated_trace_heights: {:?}", estimated_trace_heights);
+
+        // Tracegen without proving since leaf proofs take a while
+        let state = vm
+            .executor()
+            .create_initial_state(&exe, leaf_input.write_to_stream());
+        vm.transport_init_memory_to_device(&state.memory);
+        let out = vm.execute_preflight(&exe, state, None, estimated_trace_heights)?;
+        let actual_trace_heights = vm
+            .generate_proving_ctx(out.system_records, out.record_arenas)?
+            .per_air
+            .into_iter()
+            .map(|(_, air_ctx)| air_ctx.main_trace_height())
+            .collect::<Vec<usize>>();
+        println!("actual_trace_heights: {:?}", actual_trace_heights);
+
+        actual_trace_heights
+            .iter()
+            .zip(NATIVE_MAX_TRACE_HEIGHTS)
+            .for_each(|(&actual, &expected)| {
+                assert!(
+                    actual <= (expected as usize),
+                    "Actual trace height {} exceeds expected height {}",
+                    actual,
+                    expected
+                );
+            });
+    }
+    Ok(())
+}
 
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
@@ -88,17 +164,28 @@ fn main() -> Result<()> {
         &DefaultStaticVerifierPvHandler,
     )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        let mut prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
+    // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
+    verify_native_max_trace_heights(
+        &sdk,
+        app_pk.clone(),
+        app_committed_exe.clone(),
+        full_agg_pk.agg_stark_pk.leaf_vm_pk.clone(),
+        args.agg_tree_config.num_children_leaf,
+    )?;
+
+    run_with_metric_collection("OUTPUT_PATH", || {
+        let mut prover = EvmHalo2Prover::<BabyBearPoseidon2Engine, _, _>::new(
             &halo2_params_reader,
+            SdkVmCpuBuilder,
+            NativeCpuBuilder,
             app_pk,
             app_committed_exe,
             full_agg_pk,
             args.agg_tree_config,
-        );
+        )?;
         prover.set_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        let _proof = prover.generate_proof_for_evm(stdin);
-        Ok(())
-    })
+        prover.generate_proof_for_evm(stdin)
+    })?;
+    Ok(())
 }

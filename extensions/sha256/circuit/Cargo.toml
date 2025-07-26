@@ -9,7 +9,6 @@ description = "OpenVM circuit extension for sha256"
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
-openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }

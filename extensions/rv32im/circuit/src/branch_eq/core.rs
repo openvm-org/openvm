@@ -1,15 +1,17 @@
-use std::{
-    array,
-    borrow::{Borrow, BorrowMut},
-};
+use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, ImmInstruction, Result, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::utils::not;
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_circuit_primitives_derive::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
+};
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -17,8 +19,6 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use strum::IntoEnumIterator;
 
 #[repr(C)]
@@ -37,7 +37,7 @@ pub struct BranchEqualCoreCols<T, const NUM_LIMBS: usize> {
     pub diff_inv_marker: [T; NUM_LIMBS],
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, derive_new::new)]
 pub struct BranchEqualCoreAir<const NUM_LIMBS: usize> {
     offset: usize,
     pc_step: u32,
@@ -135,117 +135,272 @@ where
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BranchEqualCoreRecord<T, const NUM_LIMBS: usize> {
-    #[serde(with = "BigArray")]
-    pub a: [T; NUM_LIMBS],
-    #[serde(with = "BigArray")]
-    pub b: [T; NUM_LIMBS],
-    pub cmp_result: T,
-    pub imm: T,
-    pub diff_inv_val: T,
-    pub diff_idx: usize,
-    pub opcode: BranchEqualOpcode,
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
+    pub a: [u8; NUM_LIMBS],
+    pub b: [u8; NUM_LIMBS],
+    pub imm: u32,
+    pub local_opcode: u8,
 }
 
-#[derive(Debug)]
-pub struct BranchEqualCoreChip<const NUM_LIMBS: usize> {
-    pub air: BranchEqualCoreAir<NUM_LIMBS>,
+#[derive(Clone, Copy, derive_new::new)]
+pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
+    adapter: A,
+    pub offset: usize,
+    pub pc_step: u32,
 }
 
-impl<const NUM_LIMBS: usize> BranchEqualCoreChip<NUM_LIMBS> {
-    pub fn new(offset: usize, pc_step: u32) -> Self {
-        Self {
-            air: BranchEqualCoreAir { offset, pc_step },
-        }
-    }
+#[derive(Clone, Copy, derive_new::new)]
+pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
+    adapter: A,
+    pub offset: usize,
+    pub pc_step: u32,
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_LIMBS: usize> VmCoreChip<F, I>
-    for BranchEqualCoreChip<NUM_LIMBS>
+impl<F, A, RA, const NUM_LIMBS: usize> InstructionExecutor<F, RA> for BranchEqualStep<A, NUM_LIMBS>
 where
-    I::Reads: Into<[[F; NUM_LIMBS]; 2]>,
-    I::Writes: Default,
+    F: PrimeField32,
+    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut BranchEqualCoreRecord<NUM_LIMBS>,
+        ),
+    >,
 {
-    type Record = BranchEqualCoreRecord<F, NUM_LIMBS>;
-    type Air = BranchEqualCoreAir<NUM_LIMBS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, c: imm, .. } = *instruction;
-        let branch_eq_opcode =
-            BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.air.offset));
-
-        let data: [[F; NUM_LIMBS]; 2] = reads.into();
-        let x = data[0].map(|x| x.as_canonical_u32());
-        let y = data[1].map(|y| y.as_canonical_u32());
-        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(branch_eq_opcode, &x, &y);
-
-        let output = AdapterRuntimeContext {
-            to_pc: cmp_result.then_some((F::from_canonical_u32(from_pc) + imm).as_canonical_u32()),
-            writes: Default::default(),
-        };
-        let record = BranchEqualCoreRecord {
-            opcode: branch_eq_opcode,
-            a: data[0],
-            b: data[1],
-            cmp_result: F::from_bool(cmp_result),
-            imm,
-            diff_idx,
-            diff_inv_val,
-        };
-
-        Ok((output, record))
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!(
-            "{:?}",
-            BranchEqualOpcode::from_usize(opcode - self.air.offset)
-        )
+        format!("{:?}", BranchEqualOpcode::from_usize(opcode - self.offset))
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let row_slice: &mut BranchEqualCoreCols<_, NUM_LIMBS> = row_slice.borrow_mut();
-        row_slice.a = record.a;
-        row_slice.b = record.b;
-        row_slice.cmp_result = record.cmp_result;
-        row_slice.imm = record.imm;
-        row_slice.opcode_beq_flag = F::from_bool(record.opcode == BranchEqualOpcode::BEQ);
-        row_slice.opcode_bne_flag = F::from_bool(record.opcode == BranchEqualOpcode::BNE);
-        row_slice.diff_inv_marker = array::from_fn(|i| {
-            if i == record.diff_idx {
-                record.diff_inv_val
-            } else {
-                F::ZERO
-            }
-        });
+    fn execute(
+        &mut self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let &Instruction { opcode, c: imm, .. } = instruction;
+
+        let branch_eq_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        let [rs1, rs2] = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record)
+            .into();
+
+        core_record.a = rs1;
+        core_record.b = rs2;
+        core_record.imm = imm.as_canonical_u32();
+        core_record.local_opcode = branch_eq_opcode as u8;
+
+        if fast_run_eq(branch_eq_opcode, &rs1, &rs2) {
+            *state.pc = (F::from_canonical_u32(*state.pc) + imm).as_canonical_u32();
+        } else {
+            *state.pc = state.pc.wrapping_add(self.pc_step);
+        }
+
+        Ok(())
+    }
+}
+
+impl<F, A, const NUM_LIMBS: usize> TraceFiller<F> for BranchEqualFiller<A, NUM_LIMBS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &BranchEqualCoreRecord<NUM_LIMBS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut BranchEqualCoreCols<F, NUM_LIMBS> = core_row.borrow_mut();
+
+        let (cmp_result, diff_idx, diff_inv_val) = run_eq::<F, NUM_LIMBS>(
+            record.local_opcode == BranchEqualOpcode::BEQ as u8,
+            &record.a,
+            &record.b,
+        );
+        core_row.diff_inv_marker = [F::ZERO; NUM_LIMBS];
+        core_row.diff_inv_marker[diff_idx] = diff_inv_val;
+
+        core_row.opcode_bne_flag =
+            F::from_bool(record.local_opcode == BranchEqualOpcode::BNE as u8);
+        core_row.opcode_beq_flag =
+            F::from_bool(record.local_opcode == BranchEqualOpcode::BEQ as u8);
+
+        core_row.imm = F::from_canonical_u32(record.imm);
+        core_row.cmp_result = F::from_bool(cmp_result);
+
+        core_row.b = record.b.map(F::from_canonical_u8);
+        core_row.a = record.a.map(F::from_canonical_u8);
+    }
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct BranchEqualPreCompute {
+    imm: isize,
+    a: u8,
+    b: u8,
+}
+
+impl<F, A, const NUM_LIMBS: usize> InsExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<BranchEqualPreCompute>()
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+        let data: &mut BranchEqualPreCompute = data.borrow_mut();
+        let is_bne = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = if is_bne {
+            execute_e1_impl::<_, _, true>
+        } else {
+            execute_e1_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, A, const NUM_LIMBS: usize> InsExecutorE2<F> for BranchEqualStep<A, NUM_LIMBS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<BranchEqualPreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let fn_ptr = if is_bne {
+            execute_e2_impl::<_, _, true>
+        } else {
+            execute_e2_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+    pre_compute: &BranchEqualPreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    if (rs1 == rs2) ^ IS_NE {
+        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+    } else {
+        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    }
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &BranchEqualPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, IS_NE>(pre_compute, vm_state);
+}
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_NE: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<BranchEqualPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state);
+}
+
+impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
+    /// Return `is_bne`, true if the local opcode is BNE.
+    #[inline(always)]
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut BranchEqualPreCompute,
+    ) -> Result<bool, StaticProgramError> {
+        let data: &mut BranchEqualPreCompute = data.borrow_mut();
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
+        } else {
+            c as isize
+        };
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        *data = BranchEqualPreCompute {
+            imm,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+        };
+        Ok(local_opcode == BranchEqualOpcode::BNE)
     }
 }
 
 // Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
-pub(super) fn run_eq<F: PrimeField32, const NUM_LIMBS: usize>(
+#[inline(always)]
+pub(super) fn fast_run_eq<const NUM_LIMBS: usize>(
     local_opcode: BranchEqualOpcode,
-    x: &[u32; NUM_LIMBS],
-    y: &[u32; NUM_LIMBS],
-) -> (bool, usize, F) {
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> bool {
+    match local_opcode {
+        BranchEqualOpcode::BEQ => x == y,
+        BranchEqualOpcode::BNE => x != y,
+    }
+}
+
+// Returns (cmp_result, diff_idx, x[diff_idx] - y[diff_idx])
+#[inline(always)]
+pub(super) fn run_eq<F, const NUM_LIMBS: usize>(
+    is_beq: bool,
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> (bool, usize, F)
+where
+    F: PrimeField32,
+{
     for i in 0..NUM_LIMBS {
         if x[i] != y[i] {
             return (
-                local_opcode == BranchEqualOpcode::BNE,
+                !is_beq,
                 i,
-                (F::from_canonical_u32(x[i]) - F::from_canonical_u32(y[i])).inverse(),
+                (F::from_canonical_u8(x[i]) - F::from_canonical_u8(y[i])).inverse(),
             );
         }
     }
-    (local_opcode == BranchEqualOpcode::BEQ, 0, F::ZERO)
+    (is_beq, 0, F::ZERO)
 }

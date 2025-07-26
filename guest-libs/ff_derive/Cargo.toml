@@ -27,7 +27,7 @@ syn = { version = "1", features = ["full"] }
 
 [dev-dependencies]
 openvm-instructions = { workspace = true }
-openvm-stark-sdk = { workspace = true } 
+openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils", "parallel"]}
 openvm-transpiler = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
@@ -37,4 +37,3 @@ openvm-toolchain-tests = { workspace = true }
 
 eyre = { workspace = true }
 num-bigint = { workspace = true }
-

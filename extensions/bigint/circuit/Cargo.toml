@@ -29,6 +29,8 @@ serde.workspace = true
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
+test-case.workspace = true
+alloy-primitives = { version = "1.2.1" }
 
 [features]
 default = ["parallel", "jemalloc"]

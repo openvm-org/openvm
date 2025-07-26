@@ -627,6 +627,7 @@ pub mod tests {
     };
     use openvm_stark_backend::{
         config::{StarkGenericConfig, Val},
+        engine::StarkEngine,
         p3_challenger::{CanObserve, FieldChallenger},
         p3_commit::{Pcs, TwoAdicMultiplicativeCoset},
         p3_matrix::dense::RowMajorMatrix,
@@ -662,8 +663,8 @@ pub mod tests {
         let mut rng = &mut OsRng;
         let log_degrees = &[nb_log2_rows];
         let engine = default_engine();
-        let pcs = engine.config.pcs();
-        let perm = engine.perm;
+        let pcs = engine.config().pcs();
+        let perm = engine.perm.clone();
 
         // Generate proof.
         let domains_and_polys = log_degrees

@@ -1,10 +1,23 @@
-use std::borrow::{Borrow, BorrowMut};
-
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, Result, VmAdapterInterface, VmCoreAir, VmCoreChip,
+use std::{
+    array,
+    borrow::{Borrow, BorrowMut},
+    fmt::Debug,
 };
-use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+
+use openvm_circuit::{
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
+    },
+};
+use openvm_circuit_primitives::{AlignedBorrow, AlignedBytesBorrow};
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode, NATIVE_AS,
+};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -12,10 +25,8 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_big_array::BigArray;
 
-use crate::adapters::LoadStoreInstruction;
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 #[derive(Debug, Clone, Copy)]
 enum InstructionOpcode {
@@ -56,21 +67,7 @@ pub struct LoadStoreCoreCols<T, const NUM_CELLS: usize> {
     pub write_data: [T; NUM_CELLS],
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "F: Serialize + DeserializeOwned")]
-pub struct LoadStoreCoreRecord<F, const NUM_CELLS: usize> {
-    pub opcode: Rv32LoadStoreOpcode,
-    pub shift: u32,
-    #[serde(with = "BigArray")]
-    pub read_data: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub prev_data: [F; NUM_CELLS],
-    #[serde(with = "BigArray")]
-    pub write_data: [F; NUM_CELLS],
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct LoadStoreCoreAir<const NUM_CELLS: usize> {
     pub offset: usize,
 }
@@ -246,70 +243,115 @@ where
     }
 }
 
-#[derive(Debug)]
-pub struct LoadStoreCoreChip<const NUM_CELLS: usize> {
-    pub air: LoadStoreCoreAir<NUM_CELLS>,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
+    pub local_opcode: u8,
+    pub shift_amount: u8,
+    pub read_data: [u8; NUM_CELLS],
+    // Note: `prev_data` can be from native address space, so we need to use u32
+    pub prev_data: [u32; NUM_CELLS],
 }
 
-impl<const NUM_CELLS: usize> LoadStoreCoreChip<NUM_CELLS> {
-    pub fn new(offset: usize) -> Self {
-        Self {
-            air: LoadStoreCoreAir { offset },
-        }
-    }
+#[derive(Clone, Copy, derive_new::new)]
+pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
+    adapter: A,
+    pub offset: usize,
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>, const NUM_CELLS: usize> VmCoreChip<F, I>
-    for LoadStoreCoreChip<NUM_CELLS>
+#[derive(Clone, derive_new::new)]
+pub struct LoadStoreFiller<
+    A = Rv32LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
+> {
+    adapter: A,
+    pub offset: usize,
+}
+
+impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
 where
-    I::Reads: Into<([[F; NUM_CELLS]; 2], F)>,
-    I::Writes: From<[[F; NUM_CELLS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceStep<
+            F,
+            ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
+            WriteData = [u32; NUM_CELLS],
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut LoadStoreCoreRecord<NUM_CELLS>),
+    >,
 {
-    type Record = LoadStoreCoreRecord<F, NUM_CELLS>;
-    type Air = LoadStoreCoreAir<NUM_CELLS>;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        _from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let local_opcode =
-            Rv32LoadStoreOpcode::from_usize(instruction.opcode.local_opcode_idx(self.air.offset));
-
-        let (reads, shift_amount) = reads.into();
-        let shift = shift_amount.as_canonical_u32();
-        let prev_data = reads[0];
-        let read_data = reads[1];
-        let write_data = run_write_data(local_opcode, read_data, prev_data, shift);
-        let output = AdapterRuntimeContext::without_pc([write_data]);
-
-        Ok((
-            output,
-            LoadStoreCoreRecord {
-                opcode: local_opcode,
-                shift,
-                prev_data,
-                read_data,
-                write_data,
-            },
-        ))
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
-            Rv32LoadStoreOpcode::from_usize(opcode - self.air.offset)
+            Rv32LoadStoreOpcode::from_usize(opcode - self.offset)
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        let core_cols: &mut LoadStoreCoreCols<F, NUM_CELLS> = row_slice.borrow_mut();
-        let opcode = record.opcode;
-        let flags = &mut core_cols.flags;
+    fn execute(
+        &mut self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let Instruction { opcode, .. } = instruction;
+
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        (
+            (core_record.prev_data, core_record.read_data),
+            core_record.shift_amount,
+        ) = self
+            .adapter
+            .read(state.memory, instruction, &mut adapter_record);
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        core_record.local_opcode = local_opcode as u8;
+
+        let write_data = run_write_data(
+            local_opcode,
+            core_record.read_data,
+            core_record.prev_data,
+            core_record.shift_amount as usize,
+        );
+        self.adapter
+            .write(state.memory, instruction, write_data, &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
+    }
+}
+
+impl<F, A, const NUM_CELLS: usize> TraceFiller<F> for LoadStoreFiller<A, NUM_CELLS>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
+        let record: &LoadStoreCoreRecord<NUM_CELLS> =
+            unsafe { get_record_from_slice(&mut core_row, ()) };
+        let core_row: &mut LoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();
+
+        let opcode = Rv32LoadStoreOpcode::from_usize(record.local_opcode as usize);
+        let shift = record.shift_amount;
+
+        let write_data = run_write_data(opcode, record.read_data, record.prev_data, shift as usize);
+        // Writing in reverse order
+        core_row.write_data = write_data.map(F::from_canonical_u32);
+        core_row.prev_data = record.prev_data.map(F::from_canonical_u32);
+        core_row.read_data = record.read_data.map(F::from_canonical_u8);
+        core_row.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
+        core_row.is_valid = F::ONE;
+        let flags = &mut core_row.flags;
         *flags = [F::ZERO; 4];
-        match (opcode, record.shift) {
+        match (opcode, shift) {
             (LOADW, 0) => flags[0] = F::TWO,
             (LOADHU, 0) => flags[1] = F::TWO,
             (LOADHU, 2) => flags[2] = F::TWO,
@@ -328,51 +370,442 @@ where
             (STOREB, 3) => (flags[2], flags[3]) = (F::ONE, F::ONE),
             _ => unreachable!(),
         };
-        core_cols.prev_data = record.prev_data;
-        core_cols.read_data = record.read_data;
-        core_cols.is_valid = F::ONE;
-        core_cols.is_load = F::from_bool([LOADW, LOADHU, LOADBU].contains(&opcode));
-        core_cols.write_data = record.write_data;
-    }
-
-    fn air(&self) -> &Self::Air {
-        &self.air
     }
 }
 
-pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
-    opcode: Rv32LoadStoreOpcode,
-    read_data: [F; NUM_CELLS],
-    prev_data: [F; NUM_CELLS],
-    shift: u32,
-) -> [F; NUM_CELLS] {
-    let shift = shift as usize;
-    let mut write_data = read_data;
-    match (opcode, shift) {
-        (LOADW, 0) => (),
-        (LOADBU, 0) | (LOADBU, 1) | (LOADBU, 2) | (LOADBU, 3) => {
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(1) {
-                *cell = F::ZERO;
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct LoadStorePreCompute {
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+    e: u8,
+}
+
+impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<LoadStorePreCompute>()
+    }
+
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e1_impl::<_, _, U8, LoadWOp, true>,
+            (LOADW, false, _) => execute_e1_impl::<_, _, U8, LoadWOp, false>,
+            (LOADHU, true, _) => execute_e1_impl::<_, _, U8, LoadHUOp, true>,
+            (LOADHU, false, _) => execute_e1_impl::<_, _, U8, LoadHUOp, false>,
+            (LOADBU, true, _) => execute_e1_impl::<_, _, U8, LoadBUOp, true>,
+            (LOADBU, false, _) => execute_e1_impl::<_, _, U8, LoadBUOp, false>,
+            (STOREW, true, false) => execute_e1_impl::<_, _, U8, StoreWOp, true>,
+            (STOREW, false, false) => execute_e1_impl::<_, _, U8, StoreWOp, false>,
+            (STOREW, true, true) => execute_e1_impl::<_, _, F, StoreWOp, true>,
+            (STOREW, false, true) => execute_e1_impl::<_, _, F, StoreWOp, false>,
+            (STOREH, true, false) => execute_e1_impl::<_, _, U8, StoreHOp, true>,
+            (STOREH, false, false) => execute_e1_impl::<_, _, U8, StoreHOp, false>,
+            (STOREH, true, true) => execute_e1_impl::<_, _, F, StoreHOp, true>,
+            (STOREH, false, true) => execute_e1_impl::<_, _, F, StoreHOp, false>,
+            (STOREB, true, false) => execute_e1_impl::<_, _, U8, StoreBOp, true>,
+            (STOREB, false, false) => execute_e1_impl::<_, _, U8, StoreBOp, false>,
+            (STOREB, true, true) => execute_e1_impl::<_, _, F, StoreBOp, true>,
+            (STOREB, false, true) => execute_e1_impl::<_, _, F, StoreBOp, false>,
+            (_, _, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, A, const NUM_CELLS: usize> InsExecutorE2<F> for LoadStoreStep<A, NUM_CELLS>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<LoadStorePreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e2_impl::<_, _, U8, LoadWOp, true>,
+            (LOADW, false, _) => execute_e2_impl::<_, _, U8, LoadWOp, false>,
+            (LOADHU, true, _) => execute_e2_impl::<_, _, U8, LoadHUOp, true>,
+            (LOADHU, false, _) => execute_e2_impl::<_, _, U8, LoadHUOp, false>,
+            (LOADBU, true, _) => execute_e2_impl::<_, _, U8, LoadBUOp, true>,
+            (LOADBU, false, _) => execute_e2_impl::<_, _, U8, LoadBUOp, false>,
+            (STOREW, true, false) => execute_e2_impl::<_, _, U8, StoreWOp, true>,
+            (STOREW, false, false) => execute_e2_impl::<_, _, U8, StoreWOp, false>,
+            (STOREW, true, true) => execute_e2_impl::<_, _, F, StoreWOp, true>,
+            (STOREW, false, true) => execute_e2_impl::<_, _, F, StoreWOp, false>,
+            (STOREH, true, false) => execute_e2_impl::<_, _, U8, StoreHOp, true>,
+            (STOREH, false, false) => execute_e2_impl::<_, _, U8, StoreHOp, false>,
+            (STOREH, true, true) => execute_e2_impl::<_, _, F, StoreHOp, true>,
+            (STOREH, false, true) => execute_e2_impl::<_, _, F, StoreHOp, false>,
+            (STOREB, true, false) => execute_e2_impl::<_, _, U8, StoreBOp, true>,
+            (STOREB, false, false) => execute_e2_impl::<_, _, U8, StoreBOp, false>,
+            (STOREB, true, true) => execute_e2_impl::<_, _, F, StoreBOp, true>,
+            (STOREB, false, true) => execute_e2_impl::<_, _, F, StoreBOp, false>,
+            (_, _, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    T: Copy + Debug + Default,
+    OP: LoadStoreOp<T>,
+    const ENABLED: bool,
+>(
+    pre_compute: &LoadStorePreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1_val = u32::from_le_bytes(rs1_bytes);
+    let ptr_val = rs1_val.wrapping_add(pre_compute.imm_extended);
+    // sign_extend([r32{c,g}(b):2]_e)`
+    debug_assert!(ptr_val < (1 << POINTER_MAX_BITS));
+    let shift_amount = ptr_val % 4;
+    let ptr_val = ptr_val - shift_amount; // aligned ptr
+
+    let read_data: [u8; RV32_REGISTER_NUM_LIMBS] = if OP::IS_LOAD {
+        vm_state.vm_read(pre_compute.e as u32, ptr_val)
+    } else {
+        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32)
+    };
+
+    // We need to write 4 u32s for STORE.
+    let mut write_data: [T; RV32_REGISTER_NUM_LIMBS] = if OP::HOST_READ {
+        vm_state.host_read(pre_compute.e as u32, ptr_val)
+    } else {
+        [T::default(); RV32_REGISTER_NUM_LIMBS]
+    };
+
+    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
+
+    if ENABLED {
+        if OP::IS_LOAD {
+            vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+        } else {
+            vm_state.vm_write(pre_compute.e as u32, ptr_val, &write_data);
+        }
+    }
+
+    vm_state.pc += DEFAULT_PC_STEP;
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    T: Copy + Debug + Default,
+    OP: LoadStoreOp<T>,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    T: Copy + Debug + Default,
+    OP: LoadStoreOp<T>,
+    const ENABLED: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<LoadStorePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
+    /// Return (local_opcode, enabled, is_native_store)
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut LoadStorePreCompute,
+    ) -> Result<(Rv32LoadStoreOpcode, bool, bool), StaticProgramError> {
+        let Instruction {
+            opcode,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            ..
+        } = inst;
+        let enabled = !f.is_zero();
+
+        let e_u32 = e.as_canonical_u32();
+        if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        match local_opcode {
+            LOADW | LOADBU | LOADHU => {}
+            STOREW | STOREH | STOREB => {
+                if !enabled {
+                    return Err(StaticProgramError::InvalidInstruction(pc));
+                }
             }
-            write_data[0] = read_data[shift];
+            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
+        }
+
+        let imm = c.as_canonical_u32();
+        let imm_sign = g.as_canonical_u32();
+        let imm_extended = imm + imm_sign * 0xffff0000;
+        let is_native_store = e_u32 == NATIVE_AS;
+
+        *data = LoadStorePreCompute {
+            imm_extended,
+            a: a.as_canonical_u32() as u8,
+            b: b.as_canonical_u32() as u8,
+            e: e_u32 as u8,
+        };
+        Ok((local_opcode, enabled, is_native_store))
+    }
+}
+
+trait LoadStoreOp<T> {
+    const IS_LOAD: bool;
+    const HOST_READ: bool;
+
+    /// Return if the operation is valid.
+    fn compute_write_data(
+        write_data: &mut [T; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool;
+}
+/// Wrapper type for u8 so we can implement `LoadStoreOp<F>` for `F: PrimeField32`.
+/// For memory read/write, this type behaves as same as `u8`.
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, Default)]
+struct U8(u8);
+struct LoadWOp;
+struct LoadHUOp;
+struct LoadBUOp;
+struct StoreWOp;
+struct StoreHOp;
+struct StoreBOp;
+impl LoadStoreOp<U8> for LoadWOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data.map(U8);
+        true
+    }
+}
+
+impl LoadStoreOp<U8> for LoadHUOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        if shift_amount != 0 && shift_amount != 2 {
+            return false;
+        }
+        write_data[0] = U8(read_data[shift_amount]);
+        write_data[1] = U8(read_data[shift_amount + 1]);
+        true
+    }
+}
+impl LoadStoreOp<U8> for LoadBUOp {
+    const IS_LOAD: bool = true;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        write_data[0] = U8(read_data[shift_amount]);
+        true
+    }
+}
+
+impl LoadStoreOp<U8> for StoreWOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data.map(U8);
+        true
+    }
+}
+impl LoadStoreOp<U8> for StoreHOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        if shift_amount != 0 && shift_amount != 2 {
+            return false;
+        }
+        write_data[shift_amount] = U8(read_data[0]);
+        write_data[shift_amount + 1] = U8(read_data[1]);
+        true
+    }
+}
+impl LoadStoreOp<U8> for StoreBOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [U8; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        write_data[shift_amount] = U8(read_data[0]);
+        true
+    }
+}
+
+impl<F: PrimeField32> LoadStoreOp<F> for StoreWOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = false;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [F; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data.map(F::from_canonical_u8);
+        true
+    }
+}
+impl<F: PrimeField32> LoadStoreOp<F> for StoreHOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [F; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        if shift_amount != 0 && shift_amount != 2 {
+            return false;
+        }
+        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
+        write_data[shift_amount + 1] = F::from_canonical_u8(read_data[1]);
+        true
+    }
+}
+impl<F: PrimeField32> LoadStoreOp<F> for StoreBOp {
+    const IS_LOAD: bool = false;
+    const HOST_READ: bool = true;
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [F; RV32_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV32_REGISTER_NUM_LIMBS],
+        shift_amount: usize,
+    ) -> bool {
+        write_data[shift_amount] = F::from_canonical_u8(read_data[0]);
+        true
+    }
+}
+
+// Returns the write data
+#[inline(always)]
+pub(super) fn run_write_data<const NUM_CELLS: usize>(
+    opcode: Rv32LoadStoreOpcode,
+    read_data: [u8; NUM_CELLS],
+    prev_data: [u32; NUM_CELLS],
+    shift: usize,
+) -> [u32; NUM_CELLS] {
+    match (opcode, shift) {
+        (LOADW, 0) => {
+            read_data.map(|x| x as u32)
+        },
+        (LOADBU, 0) | (LOADBU, 1) | (LOADBU, 2) | (LOADBU, 3) => {
+           let mut wrie_data = [0; NUM_CELLS];
+           wrie_data[0] = read_data[shift] as u32;
+           wrie_data
         }
         (LOADHU, 0) | (LOADHU, 2) => {
-            for cell in write_data.iter_mut().take(NUM_CELLS).skip(NUM_CELLS / 2) {
-                *cell = F::ZERO;
-            }
+            let mut write_data = [0; NUM_CELLS];
             for (i, cell) in write_data.iter_mut().take(NUM_CELLS / 2).enumerate() {
-                *cell = read_data[i + shift];
+                *cell = read_data[i + shift] as u32;
             }
+            write_data
         }
-        (STOREW, 0) => (),
+        (STOREW, 0) => {
+            read_data.map(|x| x as u32)
+        },
         (STOREB, 0) | (STOREB, 1) | (STOREB, 2) | (STOREB, 3) => {
-            write_data = prev_data;
-            write_data[shift] = read_data[0];
+            let mut write_data = prev_data;
+            write_data[shift] = read_data[0] as u32;
+            write_data
         }
         (STOREH, 0) | (STOREH, 2) => {
-            write_data = prev_data;
-            write_data[shift..(NUM_CELLS / 2 + shift)]
-                .copy_from_slice(&read_data[..(NUM_CELLS / 2)]);
+            array::from_fn(|i| {
+                if i >= shift && i < (NUM_CELLS / 2 + shift){
+                    read_data[i - shift] as u32
+                } else {
+                    prev_data[i]
+                }
+            })
         }
         // Currently the adapter AIR requires `ptr_val` to be aligned to the data size in bytes.
         // The circuit requires that `shift = ptr_val % 4` so that `ptr_val - shift` is a multiple of 4.
@@ -380,6 +813,5 @@ pub(super) fn run_write_data<F: PrimeField32, const NUM_CELLS: usize>(
         _ => unreachable!(
             "unaligned memory access not supported by this execution environment: {opcode:?}, shift: {shift}"
         ),
-    };
-    write_data
+    }
 }

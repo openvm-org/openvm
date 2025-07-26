@@ -2,10 +2,10 @@ use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
 use openvm_circuit::{
-    arch::{instructions::exe::VmExe, VmExecutor},
+    arch::{execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance},
     utils::air_test,
 };
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -39,9 +39,10 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
                 )?;
-                let executor = VmExecutor::<F, _>::new(config.clone());
-                let res = executor.execute(exe, vec![])?;
-                Ok(res)
+                let interpreter = InterpretedInstance::new(config.clone(), exe)?;
+                let state = interpreter.execute(E1Ctx::new(None), vec![])?;
+                state.exit_code?;
+                Ok(())
             });
 
             match result {
@@ -80,7 +81,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(config.clone(), exe);
+                air_test(Rv32ImCpuBuilder, config.clone(), exe);
             });
 
             match result {

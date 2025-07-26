@@ -3,18 +3,23 @@ use std::{
     borrow::{Borrow, BorrowMut},
 };
 
-use openvm_circuit::arch::{
-    AdapterAirContext, AdapterRuntimeContext, Result, SignedImmInstruction, VmAdapterInterface,
-    VmCoreAir, VmCoreChip,
+use openvm_circuit::{
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+    AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
+    riscv::RV32_REGISTER_AS,
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -24,11 +29,10 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
-use serde::{Deserialize, Serialize};
 
-use crate::adapters::{compose, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-
-const RV32_LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
+use crate::adapters::{
+    Rv32JalrAdapterFiller, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+};
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow)]
@@ -46,18 +50,7 @@ pub struct Rv32JalrCoreCols<T> {
     pub imm_sign: T,
 }
 
-#[repr(C)]
-#[derive(Serialize, Deserialize)]
-pub struct Rv32JalrCoreRecord<F> {
-    pub imm: F,
-    pub rs1_data: [F; RV32_REGISTER_NUM_LIMBS],
-    pub rd_data: [F; RV32_REGISTER_NUM_LIMBS - 1],
-    pub to_pc_least_sig_bit: F,
-    pub to_pc_limbs: [u32; 2],
-    pub imm_sign: F,
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, derive_new::new)]
 pub struct Rv32JalrCoreAir {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub range_bus: VariableRangeCheckerBus,
@@ -181,89 +174,57 @@ where
     }
 }
 
-pub struct Rv32JalrCoreChip {
-    pub air: Rv32JalrCoreAir,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv32JalrCoreRecord {
+    pub imm: u16,
+    pub from_pc: u32,
+    pub rs1_val: u32,
+    pub imm_sign: bool,
+}
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
+    adapter: A,
+}
+
+#[derive(Clone)]
+pub struct Rv32JalrFiller<A = Rv32JalrAdapterFiller> {
+    adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl Rv32JalrCoreChip {
+impl<A> Rv32JalrFiller<A> {
     pub fn new(
+        adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         assert!(range_checker_chip.range_max_bits() >= 16);
         Self {
-            air: Rv32JalrCoreAir {
-                bitwise_lookup_bus: bitwise_lookup_chip.bus(),
-                range_bus: range_checker_chip.bus(),
-            },
+            adapter,
             bitwise_lookup_chip,
             range_checker_chip,
         }
     }
 }
 
-impl<F: PrimeField32, I: VmAdapterInterface<F>> VmCoreChip<F, I> for Rv32JalrCoreChip
+impl<F, A, RA> InstructionExecutor<F, RA> for Rv32JalrStep<A>
 where
-    I::Reads: Into<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
-    I::Writes: From<[[F; RV32_REGISTER_NUM_LIMBS]; 1]>,
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceStep<
+            F,
+            ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
+            WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut Rv32JalrCoreRecord),
+    >,
 {
-    type Record = Rv32JalrCoreRecord<F>;
-    type Air = Rv32JalrCoreAir;
-
-    #[allow(clippy::type_complexity)]
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: u32,
-        reads: I::Reads,
-    ) -> Result<(AdapterRuntimeContext<F, I>, Self::Record)> {
-        let Instruction { opcode, c, g, .. } = *instruction;
-        let local_opcode =
-            Rv32JalrOpcode::from_usize(opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET));
-
-        let imm = c.as_canonical_u32();
-        let imm_sign = g.as_canonical_u32();
-        let imm_extended = imm + imm_sign * 0xffff0000;
-
-        let rs1 = reads.into()[0];
-        let rs1_val = compose(rs1);
-
-        let (to_pc, rd_data) = run_jalr(local_opcode, from_pc, imm_extended, rs1_val);
-
-        self.bitwise_lookup_chip
-            .request_range(rd_data[0], rd_data[1]);
-        self.range_checker_chip
-            .add_count(rd_data[2], RV32_CELL_BITS);
-        self.range_checker_chip
-            .add_count(rd_data[3], PC_BITS - RV32_CELL_BITS * 3);
-
-        let mask = (1 << 15) - 1;
-        let to_pc_least_sig_bit = rs1_val.wrapping_add(imm_extended) & 1;
-
-        let to_pc_limbs = array::from_fn(|i| ((to_pc >> (1 + i * 15)) & mask));
-
-        let rd_data = rd_data.map(F::from_canonical_u32);
-
-        let output = AdapterRuntimeContext {
-            to_pc: Some(to_pc),
-            writes: [rd_data].into(),
-        };
-
-        Ok((
-            output,
-            Rv32JalrCoreRecord {
-                imm: c,
-                rd_data: array::from_fn(|i| rd_data[i + 1]),
-                rs1_data: rs1,
-                to_pc_least_sig_bit: F::from_canonical_u32(to_pc_least_sig_bit),
-                to_pc_limbs,
-                imm_sign: g,
-            },
-        ))
-    }
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -271,37 +232,223 @@ where
         )
     }
 
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record) {
-        self.range_checker_chip.add_count(record.to_pc_limbs[0], 15);
-        self.range_checker_chip.add_count(record.to_pc_limbs[1], 14);
+    fn execute(
+        &mut self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let Instruction { opcode, c, g, .. } = *instruction;
 
-        let core_cols: &mut Rv32JalrCoreCols<F> = row_slice.borrow_mut();
-        core_cols.imm = record.imm;
-        core_cols.rd_data = record.rd_data;
-        core_cols.rs1_data = record.rs1_data;
-        core_cols.to_pc_least_sig_bit = record.to_pc_least_sig_bit;
-        core_cols.to_pc_limbs = record.to_pc_limbs.map(F::from_canonical_u32);
-        core_cols.imm_sign = record.imm_sign;
-        core_cols.is_valid = F::ONE;
+        debug_assert_eq!(
+            opcode.local_opcode_idx(Rv32JalrOpcode::CLASS_OFFSET),
+            JALR as usize
+        );
+
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+
+        core_record.rs1_val = u32::from_le_bytes(self.adapter.read(
+            state.memory,
+            instruction,
+            &mut adapter_record,
+        ));
+
+        core_record.imm = c.as_canonical_u32() as u16;
+        core_record.imm_sign = g.is_one();
+        core_record.from_pc = *state.pc;
+
+        let (to_pc, rd_data) = run_jalr(
+            core_record.from_pc,
+            core_record.rs1_val,
+            core_record.imm,
+            core_record.imm_sign,
+        );
+
+        self.adapter
+            .write(state.memory, instruction, rd_data, &mut adapter_record);
+
+        // RISC-V spec explicitly sets the least significant bit of `to_pc` to 0
+        *state.pc = to_pc & !1;
+
+        Ok(())
+    }
+}
+impl<F, A> TraceFiller<F> for Rv32JalrFiller<A>
+where
+    F: PrimeField32,
+    A: 'static + AdapterTraceFiller<F>,
+{
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
+
+        self.adapter.fill_trace_row(mem_helper, adapter_row);
+        let record: &Rv32JalrCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+
+        let core_row: &mut Rv32JalrCoreCols<F> = core_row.borrow_mut();
+
+        let (to_pc, rd_data) =
+            run_jalr(record.from_pc, record.rs1_val, record.imm, record.imm_sign);
+        let to_pc_limbs = [(to_pc & ((1 << 16) - 1)) >> 1, to_pc >> 16];
+        self.range_checker_chip.add_count(to_pc_limbs[0], 15);
+        self.range_checker_chip
+            .add_count(to_pc_limbs[1], PC_BITS - 16);
+        self.bitwise_lookup_chip
+            .request_range(rd_data[0] as u32, rd_data[1] as u32);
+
+        self.range_checker_chip
+            .add_count(rd_data[2] as u32, RV32_CELL_BITS);
+        self.range_checker_chip
+            .add_count(rd_data[3] as u32, PC_BITS - RV32_CELL_BITS * 3);
+
+        // Write in reverse order
+        core_row.imm_sign = F::from_bool(record.imm_sign);
+        core_row.to_pc_limbs = to_pc_limbs.map(F::from_canonical_u32);
+        core_row.to_pc_least_sig_bit = F::from_bool(to_pc & 1 == 1);
+        // fill_trace_row is called only on valid rows
+        core_row.is_valid = F::ONE;
+        core_row.rs1_data = record.rs1_val.to_le_bytes().map(F::from_canonical_u8);
+        core_row
+            .rd_data
+            .iter_mut()
+            .rev()
+            .zip(rd_data.iter().skip(1).rev())
+            .for_each(|(dst, src)| {
+                *dst = F::from_canonical_u8(*src);
+            });
+        core_row.imm = F::from_canonical_u16(record.imm);
+    }
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct JalrPreCompute {
+    imm_extended: u32,
+    a: u8,
+    b: u8,
+}
+
+impl<F, A> InsExecutorE1<F> for Rv32JalrStep<A>
+where
+    F: PrimeField32,
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        size_of::<JalrPreCompute>()
+    }
+    #[inline(always)]
+    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+        let data: &mut JalrPreCompute = data.borrow_mut();
+        let enabled = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = if enabled {
+            execute_e1_impl::<_, _, true>
+        } else {
+            execute_e1_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
+
+impl<F, A> InsExecutorE2<F> for Rv32JalrStep<A>
+where
+    F: PrimeField32,
+{
+    fn e2_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<JalrPreCompute>>()
     }
 
-    fn air(&self) -> &Self::Air {
-        &self.air
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let fn_ptr = if enabled {
+            execute_e2_impl::<_, _, true>
+        } else {
+            execute_e2_impl::<_, _, false>
+        };
+        Ok(fn_ptr)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &JalrPreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = u32::from_le_bytes(rs1);
+    let to_pc = rs1.wrapping_add(pre_compute.imm_extended);
+    let to_pc = to_pc - (to_pc & 1);
+    debug_assert!(to_pc < (1 << PC_BITS));
+    let rd = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
+
+    if ENABLED {
+        vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    }
+
+    vm_state.pc = to_pc;
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &JalrPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX, ENABLED>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const ENABLED: bool>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<JalrPreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, ENABLED>(&pre_compute.data, vm_state);
+}
+
+impl<A> Rv32JalrStep<A> {
+    /// Return true if enabled.
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut JalrPreCompute,
+    ) -> Result<bool, StaticProgramError> {
+        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        if inst.d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        *data = JalrPreCompute {
+            imm_extended,
+            a: inst.a.as_canonical_u32() as u8,
+            b: inst.b.as_canonical_u32() as u8,
+        };
+        let enabled = !inst.f.is_zero();
+        Ok(enabled)
     }
 }
 
 // returns (to_pc, rd_data)
-pub(super) fn run_jalr(
-    _opcode: Rv32JalrOpcode,
-    pc: u32,
-    imm: u32,
-    rs1: u32,
-) -> (u32, [u32; RV32_REGISTER_NUM_LIMBS]) {
-    let to_pc = rs1.wrapping_add(imm);
-    let to_pc = to_pc - (to_pc & 1);
+#[inline(always)]
+pub(super) fn run_jalr(pc: u32, rs1: u32, imm: u16, imm_sign: bool) -> (u32, [u8; 4]) {
+    let to_pc = rs1.wrapping_add(imm as u32 + (imm_sign as u32 * 0xffff0000));
     assert!(to_pc < (1 << PC_BITS));
-    (
-        to_pc,
-        array::from_fn(|i: usize| ((pc + DEFAULT_PC_STEP) >> (RV32_CELL_BITS * i)) & RV32_LIMB_MAX),
-    )
+    (to_pc, pc.wrapping_add(DEFAULT_PC_STEP).to_le_bytes())
 }

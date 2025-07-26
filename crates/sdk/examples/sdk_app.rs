@@ -5,7 +5,7 @@ use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_build::GuestOptions;
 use openvm_sdk::{
-    config::{AppConfig, SdkVmConfig},
+    config::{AppConfig, SdkVmConfig, SdkVmCpuBuilder},
     prover::AppProver,
     Sdk, StdIn,
 };
@@ -93,15 +93,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 8. Generate an AppProvingKey
     let app_pk = Arc::new(sdk.app_keygen(app_config)?);
 
+    // Choose a VmBuilder that matches the VmConfig
+    let builder = SdkVmCpuBuilder;
     // 9a. Generate a proof
-    let proof = sdk.generate_app_proof(app_pk.clone(), app_committed_exe.clone(), stdin.clone())?;
+    let proof = sdk.generate_app_proof(
+        builder,
+        app_pk.clone(),
+        app_committed_exe.clone(),
+        stdin.clone(),
+    )?;
     // 9b. Generate a proof with an AppProver with custom fields
-    let app_prover = AppProver::<_, BabyBearPoseidon2Engine>::new(
+    let mut app_prover = AppProver::<BabyBearPoseidon2Engine, _>::new(
+        builder,
         app_pk.app_vm_pk.clone(),
         app_committed_exe.clone(),
-    )
+    )?
     .with_program_name("test_program");
-    let proof = app_prover.generate_app_proof(stdin.clone());
+    let proof = app_prover.generate_app_proof(stdin.clone())?;
     // ANCHOR_END: proof_generation
 
     // ANCHOR: verification

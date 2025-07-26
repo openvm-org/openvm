@@ -2,7 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_keccak256_circuit::Keccak256Rv32Config;
+use openvm_keccak256_circuit::{Keccak256Rv32Config, Keccak256Rv32CpuBuilder};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -29,6 +29,12 @@ fn main() -> Result<()> {
         let data = include_str!("../../../guest/base64_json/json_payload_encoded.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe("base64_json", config, exe, StdIn::from_bytes(&fe_bytes))
+        args.bench_from_exe(
+            "base64_json",
+            Keccak256Rv32CpuBuilder,
+            config,
+            exe,
+            StdIn::from_bytes(&fe_bytes),
+        )
     })
 }

@@ -1,16 +1,17 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use super::adapters::native_vectorized_adapter::{
-    NativeVectorizedAdapterAir, NativeVectorizedAdapterChip,
+use crate::adapters::{
+    NativeVectorizedAdapterAir, NativeVectorizedAdapterFiller, NativeVectorizedAdapterStep,
 };
-
-#[cfg(test)]
-mod tests;
 
 mod core;
 pub use core::*;
 
+#[cfg(test)]
+mod tests;
+
 pub type FieldExtensionAir =
     VmAirWrapper<NativeVectorizedAdapterAir<EXT_DEG>, FieldExtensionCoreAir>;
+pub type FieldExtensionStep = FieldExtensionCoreStep<NativeVectorizedAdapterStep<EXT_DEG>>;
 pub type FieldExtensionChip<F> =
-    VmChipWrapper<F, NativeVectorizedAdapterChip<F, EXT_DEG>, FieldExtensionCoreChip>;
+    VmChipWrapper<F, FieldExtensionCoreFiller<NativeVectorizedAdapterFiller<EXT_DEG>>>;

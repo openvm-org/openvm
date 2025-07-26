@@ -1,6 +1,6 @@
 use derivative::Derivative;
 use openvm_circuit::{
-    arch::ContinuationVmProof, system::memory::tree::public_values::UserPublicValuesProof,
+    arch::ContinuationVmProof, system::memory::merkle::public_values::UserPublicValuesProof,
 };
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_sdk::{

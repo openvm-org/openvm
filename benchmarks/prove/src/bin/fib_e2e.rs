@@ -4,8 +4,9 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::{instructions::exe::VmExe, DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_native_circuit::NativeCpuBuilder;
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
-use openvm_rv32im_circuit::Rv32ImConfig;
+use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -59,16 +60,18 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || {
-        let mut e2e_prover = EvmHalo2Prover::<_, BabyBearPoseidon2Engine>::new(
+        let mut e2e_prover = EvmHalo2Prover::<BabyBearPoseidon2Engine, _, _>::new(
             &halo2_params_reader,
+            Rv32ImCpuBuilder,
+            NativeCpuBuilder,
             app_pk,
             app_committed_exe,
             full_agg_pk,
             args.agg_tree_config,
-        );
+        )?;
         e2e_prover.set_program_name("fib_e2e");
-        let _proof = e2e_prover.generate_proof_for_evm(stdin);
-    });
+        e2e_prover.generate_proof_for_evm(stdin)
+    })?;
 
     Ok(())
 }

@@ -5,6 +5,16 @@ All notable changes to OpenVM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows a versioning principles documented in [VERSIONING.md](./VERSIONING.md).
 
+## [Unreleased]
+
+### Added
+- (Config) Added `addr_spaces` vector of `AddressSpaceHostConfig` to `MemoryConfig`.
+
+### Changed
+- (Toolchain) Removed `step` from `Program` struct because `DEFAULT_PC_STEP = 4` is always used.
+- (Config) The `clk_max_bits` field in `MemoryConfig` has been renamed to `timestamp_max_bits`.
+- (Prover) Guest memory is stored on host with address space-specified memory layouts. In particular address space `1` through `3` are now represented in bytes instead of field elements.
+
 ## v1.3.0 (2025-07-15)
 
 No circuit constraints or verifying keys were changed in this release.

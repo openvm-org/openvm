@@ -34,7 +34,7 @@ strum = { workspace = true }
 [dev-dependencies]
 p3-symmetric = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-native-circuit = { workspace = true }
+openvm-native-circuit = { workspace = true, features = ["test-utils"]}
 openvm-stark-sdk = { workspace = true }
 rand.workspace = true
 
@@ -42,4 +42,4 @@ rand.workspace = true
 default = ["parallel", "halo2-compiler"]
 halo2-compiler = ["dep:snark-verifier-sdk"]
 parallel = ["openvm-circuit/parallel"]
-bench-metrics = ["dep:metrics", "openvm-circuit/bench-metrics"]
+metrics = ["dep:metrics", "openvm-circuit/metrics"]

@@ -18,6 +18,8 @@ pub mod utils;
 
 pub use phantom::*;
 
+pub const NATIVE_AS: u32 = 4;
+
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;
     /// Convert from the discriminant of the enum to the typed enum variant.
@@ -25,8 +27,11 @@ pub trait LocalOpcode {
     fn from_usize(value: usize) -> Self;
     fn local_usize(&self) -> usize;
 
+    fn global_opcode_usize(&self) -> usize {
+        self.local_usize() + Self::CLASS_OFFSET
+    }
     fn global_opcode(&self) -> VmOpcode {
-        VmOpcode::from_usize(self.local_usize() + Self::CLASS_OFFSET)
+        VmOpcode::from_usize(self.global_opcode_usize())
     }
 }
 
@@ -36,17 +41,19 @@ pub struct VmOpcode(usize);
 
 impl VmOpcode {
     /// Returns the corresponding `local_opcode_idx`
-    pub fn local_opcode_idx(&self, offset: usize) -> usize {
+    #[inline(always)]
+    pub const fn local_opcode_idx(&self, offset: usize) -> usize {
         self.as_usize() - offset
     }
 
     /// Returns the opcode as a usize
-    pub fn as_usize(&self) -> usize {
+    #[inline(always)]
+    pub const fn as_usize(&self) -> usize {
         self.0
     }
 
     /// Create a new [VmOpcode] from a usize
-    pub fn from_usize(value: usize) -> Self {
+    pub const fn from_usize(value: usize) -> Self {
         Self(value)
     }
 

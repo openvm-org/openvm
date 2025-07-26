@@ -1,37 +1,41 @@
+//! Chip to handle phantom instructions.
+//! The Air will always constrain a NOP which advances pc by DEFAULT_PC_STEP.
+//! The runtime executor will execute different phantom instructions that may
+//! affect trace generation based on the operand.
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::{Arc, Mutex, OnceLock},
+    sync::Arc,
 };
 
+use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant,
-    SysPhantom, SystemOpcode, VmOpcode,
+    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
+    SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use rand::rngs::StdRng;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::memory::MemoryController;
+use super::memory::online::{GuestMemory, TracingMemory};
 use crate::{
     arch::{
-        ExecutionBridge, ExecutionBus, ExecutionError, ExecutionState, InstructionExecutor,
-        PcIncOrSet, PhantomSubExecutor, Streams,
+        get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
+        ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
+        TraceFiller, VmChipWrapper, VmStateMut,
     },
-    system::program::ProgramBus,
+    system::memory::MemoryAuxColsFactory,
 };
 
+mod execution;
 #[cfg(test)]
 mod tests;
 
@@ -88,95 +92,99 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for PhantomAir {
     }
 }
 
-pub struct PhantomChip<F> {
-    pub air: PhantomAir,
-    pub rows: Vec<PhantomCols<F>>,
-    streams: OnceLock<Arc<Mutex<Streams<F>>>>,
-    phantom_executors: FxHashMap<PhantomDiscriminant, Box<dyn PhantomSubExecutor<F>>>,
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug, Clone)]
+pub struct PhantomRecord {
+    pub pc: u32,
+    pub operands: [u32; NUM_PHANTOM_OPERANDS],
+    pub timestamp: u32,
 }
 
-impl<F> PhantomChip<F> {
-    pub fn new(execution_bus: ExecutionBus, program_bus: ProgramBus, offset: usize) -> Self {
-        Self {
-            air: PhantomAir {
-                execution_bridge: ExecutionBridge::new(execution_bus, program_bus),
-                phantom_opcode: VmOpcode::from_usize(offset + SystemOpcode::PHANTOM.local_usize()),
-            },
-            rows: vec![],
-            streams: OnceLock::new(),
-            phantom_executors: FxHashMap::default(),
-        }
-    }
-
-    pub fn set_streams(&mut self, streams: Arc<Mutex<Streams<F>>>) {
-        if self.streams.set(streams).is_err() {
-            panic!("Streams should only be set once");
-        }
-    }
-
-    pub(crate) fn add_sub_executor<P: PhantomSubExecutor<F> + 'static>(
-        &mut self,
-        sub_executor: P,
-        discriminant: PhantomDiscriminant,
-    ) -> Option<Box<dyn PhantomSubExecutor<F>>> {
-        self.phantom_executors
-            .insert(discriminant, Box::new(sub_executor))
-    }
+/// `PhantomChip` is a special executor because it is stateful and stores all the phantom
+/// sub-executors.
+#[derive(Clone, derive_new::new)]
+pub struct PhantomExecutor<F> {
+    pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
+    phantom_opcode: VmOpcode,
 }
 
-impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
+pub struct PhantomFiller;
+pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
+
+impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
+{
     fn execute(
         &mut self,
-        memory: &mut MemoryController<F>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-    ) -> Result<ExecutionState<u32>, ExecutionError> {
-        let &Instruction {
-            opcode, a, b, c, ..
-        } = instruction;
-        assert_eq!(opcode, self.air.phantom_opcode);
+    ) -> Result<(), ExecutionError> {
+        let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
+        let pc = *state.pc;
+        record.pc = pc;
+        record.timestamp = state.memory.timestamp;
+        let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
+        record.operands = [a, b, c];
 
-        let c_u32 = c.as_canonical_u32();
-        let discriminant = PhantomDiscriminant(c_u32 as u16);
-        // If not a system phantom sub-instruction (which is handled in
-        // ExecutionSegment), look for a phantom sub-executor to handle it.
-        if SysPhantom::from_repr(discriminant.0).is_none() {
-            let sub_executor = self
-                .phantom_executors
-                .get_mut(&discriminant)
-                .ok_or_else(|| ExecutionError::PhantomNotFound {
-                    pc: from_state.pc,
-                    discriminant,
-                })?;
-            let mut streams = self.streams.get().unwrap().lock().unwrap();
+        debug_assert_eq!(instruction.opcode, self.phantom_opcode);
+        let discriminant = PhantomDiscriminant(c as u16);
+        if let Some(sys) = SysPhantom::from_repr(discriminant.0) {
+            tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
+            match sys {
+                SysPhantom::DebugPanic => {
+                    #[cfg(feature = "metrics")]
+                    {
+                        let metrics = state.metrics;
+                        metrics.update_backtrace(pc);
+                        if let Some(mut backtrace) = metrics.prev_backtrace.take() {
+                            backtrace.resolve();
+                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
+                        } else {
+                            eprintln!("openvm program failure; no backtrace");
+                        }
+                    }
+                    return Err(ExecutionError::Fail { pc });
+                }
+                #[cfg(feature = "metrics")]
+                SysPhantom::CtStart => {
+                    let metrics = state.metrics;
+                    if let Some(info) = metrics.debug_infos.get(pc) {
+                        metrics.cycle_tracker.start(info.dsl_instruction.clone());
+                    }
+                }
+                #[cfg(feature = "metrics")]
+                SysPhantom::CtEnd => {
+                    let metrics = state.metrics;
+                    if let Some(info) = metrics.debug_infos.get(pc) {
+                        metrics.cycle_tracker.end(info.dsl_instruction.clone());
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            let sub_executor = self.phantom_executors.get(&discriminant).unwrap();
             sub_executor
-                .as_mut()
                 .phantom_execute(
-                    memory,
-                    &mut streams,
+                    &state.memory.data,
+                    state.streams,
+                    state.rng,
                     discriminant,
                     a,
                     b,
-                    (c_u32 >> 16) as u16,
+                    (c >> 16) as u16,
                 )
-                .map_err(|e| ExecutionError::Phantom {
-                    pc: from_state.pc,
+                .map_err(|err| ExecutionError::Phantom {
+                    pc,
                     discriminant,
-                    inner: e,
+                    inner: err,
                 })?;
         }
+        *state.pc += DEFAULT_PC_STEP;
+        state.memory.increment_timestamp();
 
-        self.rows.push(PhantomCols {
-            pc: F::from_canonical_u32(from_state.pc),
-            operands: [a, b, c],
-            timestamp: F::from_canonical_u32(from_state.timestamp),
-            is_valid: F::ONE,
-        });
-        memory.increment_timestamp();
-        Ok(ExecutionState::new(
-            from_state.pc + DEFAULT_PC_STEP,
-            from_state.timestamp + 1,
-        ))
+        Ok(())
     }
 
     fn get_opcode_name(&self, _: usize) -> String {
@@ -184,41 +192,72 @@ impl<F: PrimeField32> InstructionExecutor<F> for PhantomChip<F> {
     }
 }
 
-impl<F: PrimeField32> ChipUsageGetter for PhantomChip<F> {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.rows.len()
-    }
-    fn trace_width(&self) -> usize {
-        PhantomCols::<F>::width()
-    }
-    fn current_trace_cells(&self) -> usize {
-        self.trace_width() * self.current_trace_height()
+impl<F: Field> TraceFiller<F> for PhantomFiller {
+    fn fill_trace_row(&self, _mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
+        // SAFETY: assume that row has size PhantomCols::<F>::width()
+        let record: &PhantomRecord = unsafe { get_record_from_slice(&mut row_slice, ()) };
+        let row: &mut PhantomCols<F> = row_slice.borrow_mut();
+        // SAFETY: must assign in reverse order of column struct to prevent overwriting
+        // borrowed data
+        row.is_valid = F::ONE;
+        row.timestamp = F::from_canonical_u32(record.timestamp);
+        row.operands[2] = F::from_canonical_u32(record.operands[2]);
+        row.operands[1] = F::from_canonical_u32(record.operands[1]);
+        row.operands[0] = F::from_canonical_u32(record.operands[0]);
+        row.pc = F::from_canonical_u32(record.pc)
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for PhantomChip<Val<SC>>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
+pub struct NopPhantomExecutor;
+pub struct CycleStartPhantomExecutor;
+pub struct CycleEndPhantomExecutor;
+
+impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        Ok(())
     }
+}
 
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        let correct_height = self.rows.len().next_power_of_two();
-        let width = PhantomCols::<Val<SC>>::width();
-        let mut rows = Val::<SC>::zero_vec(width * correct_height);
-        rows.par_chunks_mut(width)
-            .zip(&self.rows)
-            .for_each(|(row, row_record)| {
-                let row: &mut PhantomCols<_> = row.borrow_mut();
-                *row = *row_record;
-            });
-        let trace = RowMajorMatrix::new(rows, width);
+impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // Cycle tracking is implemented separately only in Preflight Execution
+        Ok(())
+    }
+}
 
-        AirProofInput::simple(trace, vec![])
+impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
+    #[inline(always)]
+    fn phantom_execute(
+        &self,
+        _memory: &GuestMemory,
+        _streams: &mut Streams<F>,
+        _rng: &mut StdRng,
+        _discriminant: PhantomDiscriminant,
+        _a: u32,
+        _b: u32,
+        _c_upper: u16,
+    ) -> eyre::Result<()> {
+        // Cycle tracking is implemented separately only in Preflight Execution
+        Ok(())
     }
 }

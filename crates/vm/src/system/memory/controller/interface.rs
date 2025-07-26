@@ -1,9 +1,22 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
+    merkle::{MemoryMerkleAir, MemoryMerkleChip},
+    persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
+    volatile::{VolatileBoundaryAir, VolatileBoundaryChip},
     MemoryImage, CHUNK,
 };
+
+#[derive(Clone)]
+pub enum MemoryInterfaceAirs {
+    Volatile {
+        boundary: VolatileBoundaryAir,
+    },
+    Persistent {
+        boundary: PersistentBoundaryAir<CHUNK>,
+        merkle: MemoryMerkleAir<CHUNK>,
+    },
+}
 
 #[allow(clippy::large_enum_variant)]
 pub enum MemoryInterface<F> {
@@ -13,25 +26,11 @@ pub enum MemoryInterface<F> {
     Persistent {
         boundary_chip: PersistentBoundaryChip<F, CHUNK>,
         merkle_chip: MemoryMerkleChip<CHUNK, F>,
-        initial_memory: MemoryImage<F>,
+        initial_memory: MemoryImage,
     },
 }
 
 impl<F: PrimeField32> MemoryInterface<F> {
-    pub fn touch_range(&mut self, addr_space: u32, pointer: u32, len: u32) {
-        match self {
-            MemoryInterface::Volatile { .. } => {}
-            MemoryInterface::Persistent {
-                boundary_chip,
-                merkle_chip,
-                ..
-            } => {
-                boundary_chip.touch_range(addr_space, pointer, len);
-                merkle_chip.touch_range(addr_space, pointer, len);
-            }
-        }
-    }
-
     pub fn compression_bus(&self) -> Option<PermutationCheckBus> {
         match self {
             MemoryInterface::Volatile { .. } => None,

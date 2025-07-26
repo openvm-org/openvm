@@ -392,7 +392,8 @@ fn assert_failed_assertion(
 ) {
     let program = builder.compile_isa();
 
-    let executor = VmExecutor::<BabyBear, NativeConfig>::new(NativeConfig::aggregation(4, 3));
-    let result = executor.execute(program, vec![]);
+    let config = NativeConfig::aggregation(4, 3);
+    let executor = VmExecutor::new(config).unwrap();
+    let result = executor.execute_e1(program, vec![], None);
     assert!(matches!(result, Err(ExecutionError::Fail { .. })));
 }

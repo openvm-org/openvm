@@ -1,13 +1,12 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use air::ProgramDummyAir;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip, ChipUsageGetter,
 };
 
 use crate::{
@@ -15,7 +14,7 @@ use crate::{
     system::program::{ProgramBus, ProgramExecutionCols},
 };
 
-mod air;
+pub mod air;
 
 #[derive(Debug)]
 pub struct ProgramTester<F: Field> {
@@ -52,22 +51,18 @@ impl<F: Field> ProgramTester<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for ProgramTester<Val<SC>> {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(ProgramDummyAir::new(self.bus))
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ProgramTester<Val<SC>> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).zip(self.records) {
-            *(row[..width - 1]).borrow_mut() = record;
+        for (row, record) in values.chunks_mut(width).zip(&self.records) {
+            *(row[..width - 1]).borrow_mut() = *record;
             row[width - 1] = Val::<SC>::ONE;
         }
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
+        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }
 }
 

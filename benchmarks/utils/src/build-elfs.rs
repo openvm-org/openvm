@@ -63,6 +63,12 @@ fn main() -> Result<()> {
     let programs_to_build = if cli.programs.is_empty() {
         available_programs
     } else {
+        for prog in &cli.programs {
+            if !available_programs.iter().any(|(name, _)| name == prog) {
+                tracing::warn!("Program '{}' not found in available programs", prog);
+            }
+        }
+
         available_programs
             .into_iter()
             .filter(|(name, _)| cli.programs.contains(name))
@@ -70,6 +76,12 @@ fn main() -> Result<()> {
     };
 
     // Filter out skipped programs
+    for prog in &cli.skip {
+        if !programs_to_build.iter().any(|(name, _)| name == prog) {
+            tracing::warn!("Program '{}' not found in programs to skip", prog);
+        }
+    }
+
     let programs_to_build = programs_to_build
         .into_iter()
         .filter(|(name, _)| !cli.skip.contains(name))

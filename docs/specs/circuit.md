@@ -39,7 +39,7 @@ When the program is being run, in the simple scenario, the following happens at 
   - This instruction executor returns the new execution state (and maybe reports that the execution is finished). The timestamp and program counter change accordingly.
 
 There are limitations to how many interactions/trace rows/etc. we can have in total; see [soundness criteria](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf). If executing the full program would lead us to overflowing these limits, the program needs to be executed in several segments. Then the process is slightly different:
-- After executing an instruction, we may decide (based on `SegmentationStrategy`, which looks at the traces) to _segment_ our execution at this point. In this case, the execution will be split into several segments.
+- After executing an instruction, we may decide to _segment_ our execution at this point. In this case, the execution will be split into several segments.
 - The timestamp resets on segmentation.
 - Each segment is going to be proven separately. Of course, this means that adjacent segments need to agree on some things (mainly memory state). See [Continuations](./continuations.md) for full details.
 
