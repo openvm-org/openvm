@@ -25,7 +25,7 @@ use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_pairing_circuit::{
-    PairingCpuProverExt, PairingCurve, PairingExtension, PairingExtensionExecutor,
+    PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
 use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
 use openvm_pairing_transpiler::PairingTranspilerExtension;
@@ -176,11 +176,7 @@ where
             &config.weierstrass,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &PairingCpuProverExt,
-            &config.pairing,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }
 }

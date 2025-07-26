@@ -24,7 +24,7 @@ use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
 use openvm_native_transpiler::LongFormTranspilerExtension;
-use openvm_pairing_circuit::{PairingCpuProverExt, PairingExtension, PairingExtensionExecutor};
+use openvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingProverExt};
 use openvm_pairing_transpiler::PairingTranspilerExtension;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
@@ -274,7 +274,7 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
-            VmProverExtension::<E, _, _>::extend_prover(&PairingCpuProverExt, pairing, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
             VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, ecc, inventory)?;

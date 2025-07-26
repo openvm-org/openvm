@@ -100,11 +100,7 @@ where
             &config.weierstrass,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &PairingCpuProverExt,
-            &config.pairing,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }
 }

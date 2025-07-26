@@ -4,8 +4,8 @@ use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension, VmExecutionExtension,
+        VmProverExtension,
     },
     system::phantom::PhantomExecutor,
 };
@@ -19,12 +19,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
-    p3_field::{Field, PrimeField32},
-    prover::cpu::{CpuBackend, CpuDevice},
-};
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -74,7 +69,7 @@ pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for PairingExtension {
+impl<F: Field> VmExecutionExtension<F> for PairingExtension {
     type Executor = PairingExtensionExecutor<F>;
 
     fn extend_execution(
@@ -95,18 +90,15 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for PairingExtension {
     }
 }
 
-pub struct PairingCpuProverExt;
-impl<E, SC, RA> VmProverExtension<E, RA, PairingExtension> for PairingCpuProverExt
+pub struct PairingProverExt;
+impl<E, RA> VmProverExtension<E, RA, PairingExtension> for PairingProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E: StarkEngine,
 {
     fn extend_prover(
         &self,
         _: &PairingExtension,
-        _inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        _inventory: &mut ChipInventory<E::SC, RA, E::PB>,
     ) -> Result<(), ChipInventoryError> {
         Ok(())
     }
@@ -132,14 +124,14 @@ pub(crate) mod phantom {
         pairing::{FinalExp, MultiMillerLoop},
     };
     use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
-    use openvm_stark_backend::p3_field::PrimeField32;
+    use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
     pub struct PairingHintSubEx;
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
+    impl<F: Field> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -156,7 +148,7 @@ pub(crate) mod phantom {
         }
     }
 
-    fn hint_pairing<F: PrimeField32>(
+    fn hint_pairing<F: Field>(
         memory: &GuestMemory,
         hint_stream: &mut VecDeque<F>,
         rs1: u32,
