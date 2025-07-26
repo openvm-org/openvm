@@ -141,8 +141,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             public_values,
         } = system_records;
 
-        self.program.filtered_exec_freqs = filtered_exec_frequencies;
-        let program_ctx = self.program.generate_proving_ctx(());
+        let program_ctx = self.program.generate_proving_ctx(filtered_exec_frequencies);
 
         self.connector.begin(from_state);
         self.connector.end(to_state, exit_code);
