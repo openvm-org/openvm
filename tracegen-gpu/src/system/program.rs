@@ -25,15 +25,11 @@ use crate::system::cuda;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
-    pub filtered_exec_freqs: Vec<u32>,
 }
 
 impl ProgramChipGPU {
     pub fn new() -> Self {
-        Self {
-            cached: None,
-            filtered_exec_freqs: Vec::new(),
-        }
+        Self { cached: None }
     }
 
     pub fn generate_cached_trace(program: Program<F>) -> DeviceMatrix<F> {
@@ -100,30 +96,29 @@ impl Default for ProgramChipGPU {
     }
 }
 
-impl<RA> Chip<RA, GpuBackend> for ProgramChipGPU {
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
+impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
+    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.trace.height();
+        let filtered_len = filtered_exec_freqs.len();
         assert!(
-            self.filtered_exec_freqs.len() <= height,
+            filtered_len <= height,
             "filtered_exec_freqs len={} > cached trace height={}",
-            self.filtered_exec_freqs.len(),
+            filtered_len,
             height
         );
         let mut buffer: DeviceBuffer<F> = DeviceBuffer::with_capacity(height);
 
-        // Making sure to zero-out the untouched part of the buffer.
-        if self.filtered_exec_freqs.len() < height {
-            buffer
-                .fill_zero_suffix(self.filtered_exec_freqs.len())
-                .unwrap();
-        }
-        self.filtered_exec_freqs
-            .iter()
-            .map(|f| F::from_canonical_u32(*f))
+        filtered_exec_freqs
+            .into_iter()
+            .map(F::from_canonical_u32)
             .collect::<Vec<_>>()
             .copy_to(&mut buffer)
             .unwrap();
+        // Making sure to zero-out the untouched part of the buffer.
+        if filtered_len < height {
+            buffer.fill_zero_suffix(filtered_len).unwrap();
+        }
 
         let trace = DeviceMatrix::new(Arc::new(buffer), height, 1);
 
