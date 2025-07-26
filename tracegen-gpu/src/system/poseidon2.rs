@@ -68,6 +68,8 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
             )
             .expect("Failed to generate trace");
         }
+        // Reset state of this chip.
+        self.idx.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 }

@@ -51,19 +51,19 @@ impl<RA> Chip<RA, GpuBackend> for VariableRangeCheckerChipGPU {
             cpu_chip
                 .count
                 .iter()
-                .map(|c| c.load(Ordering::Relaxed))
+                .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
                 .to_device()
                 .unwrap()
         });
-        let trace = DeviceMatrix::<F>::new(
-            self.count.clone(),
-            self.count.len(),
-            NUM_VARIABLE_RANGE_COLS,
-        );
+        // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
+        // `count` will be reused.
+        let trace = DeviceMatrix::<F>::with_capacity(self.count.len(), NUM_VARIABLE_RANGE_COLS);
         unsafe {
             tracegen(&self.count, &cpu_count, trace.buffer()).unwrap();
         }
+        // Zero the internal count buffer because this chip is stateful and may be used again.
+        self.count.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 }

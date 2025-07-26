@@ -69,19 +69,19 @@ impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for BitwiseOperationLookupC
                 .count_range
                 .iter()
                 .chain(cpu_chip.count_xor.iter())
-                .map(|c| c.load(Ordering::Relaxed))
+                .map(|c| c.swap(0, Ordering::Relaxed))
                 .collect::<Vec<_>>()
                 .to_device()
                 .unwrap()
         });
-        let trace = DeviceMatrix::<F>::new(
-            self.count.clone(),
-            Self::num_rows(),
-            NUM_BITWISE_OP_LOOKUP_COLS,
-        );
+        // ATTENTION: we create a new buffer to copy `count` into because this chip is stateful and
+        // `count` will be reused.
+        let trace = DeviceMatrix::<F>::with_capacity(Self::num_rows(), NUM_BITWISE_OP_LOOKUP_COLS);
         unsafe {
             tracegen(&self.count, &cpu_count, trace.buffer(), NUM_BITS as u32).unwrap();
         }
+        // Zero the internal count buffer because this chip is stateful and may be used again.
+        self.count.fill_zero().unwrap();
         AirProvingContext::simple_no_pis(trace)
     }
 }
