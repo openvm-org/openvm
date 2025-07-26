@@ -156,7 +156,7 @@ impl AsMut<SystemConfig> for SdkVmConfig {
 }
 
 impl SdkVmConfig {
-    fn to_inner(&self) -> SdkVmConfigInner {
+    pub fn to_inner(&self) -> SdkVmConfigInner {
         let system = self.system.config.clone();
         let rv32i = self.rv32i.map(|_| Rv32I);
         let io = self.io.map(|_| Rv32Io);
