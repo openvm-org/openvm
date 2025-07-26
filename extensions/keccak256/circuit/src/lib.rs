@@ -33,7 +33,7 @@ use crate::utils::{keccak256, num_keccak_f};
 /// Register reads to get dst, src, len
 const KECCAK_REGISTER_READS: usize = 3;
 /// Number of cells to read/write in a single memory access
-const KECCAK_WORD_SIZE: usize = 4;
+const KECCAK_WORD_SIZE: usize = 8;
 /// Memory reads for absorb per row
 const KECCAK_ABSORB_READS: usize = KECCAK_RATE_BYTES / KECCAK_WORD_SIZE;
 /// Memory writes for digest per row
