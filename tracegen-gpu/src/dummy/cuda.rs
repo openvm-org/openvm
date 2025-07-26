@@ -295,8 +295,6 @@ pub mod poseidon2 {
     /// * `SBOX_DEGREE` - 7
     /// * `HALF_FULL_ROUNDS` - 4
     /// * `PARTIAL_ROUNDS` - 13
-    ///
-    ///
     use super::*;
 
     extern "C" {

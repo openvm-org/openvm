@@ -20,8 +20,8 @@ use crate::{
 #[derive(Clone)]
 pub struct EccGpuProverExt;
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, WeierstrassExtension>
     for EccGpuProverExt
 {

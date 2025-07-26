@@ -27,8 +27,8 @@ use crate::{
 #[derive(Clone)]
 pub struct AlgebraGpuProverExt;
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extension>
     for AlgebraGpuProverExt
 {

@@ -70,7 +70,8 @@ impl MemoryInventoryGPU {
 
     pub fn set_initial_memory(&mut self, initial_memory: AddressMap) {
         if let Some(persistent) = &mut self.persistent {
-            // TODO[INT-4453]: Convert AddressMap to GPU version, pass it to merkle and boundary chips
+            // TODO[INT-4453]: Convert AddressMap to GPU version, pass it to merkle and boundary
+            // chips
             persistent.initial_memory = initial_memory;
         }
     }

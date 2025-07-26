@@ -19,8 +19,8 @@ use crate::{
 
 pub struct Keccak256GpuProverExt;
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
     for Keccak256GpuProverExt
 {

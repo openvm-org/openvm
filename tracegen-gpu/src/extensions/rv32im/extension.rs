@@ -27,8 +27,8 @@ use crate::{
 
 pub struct Rv32ImGpuProverExt;
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32I> for Rv32ImGpuProverExt {
     fn extend_prover(
         &self,
@@ -131,8 +131,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32I> for 
     }
 }
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32M> for Rv32ImGpuProverExt {
     fn extend_prover(
         &self,
@@ -207,8 +207,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32M> for 
     }
 }
 
-// This implementation is specific to GpuBackend because the lookup chips (VariableRangeCheckerChipGPU,
-// BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32Io>
     for Rv32ImGpuProverExt
 {
