@@ -17,7 +17,9 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{primitives::var_range::VariableRangeCheckerChipGPU, system::cuda};
+use crate::{
+    get_empty_air_proving_ctx, primitives::var_range::VariableRangeCheckerChipGPU, system::cuda,
+};
 
 #[repr(C)]
 struct FullPublicValuesRecord {
@@ -71,6 +73,9 @@ impl PublicValuesChipGPU {
 impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let num_records = Self::trace_height(&arena);
+        if num_records == 0 {
+            return get_empty_air_proving_ctx();
+        }
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
         unsafe {
