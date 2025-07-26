@@ -165,7 +165,7 @@ pub struct MemoryConfig {
     /// for searching the address space. The allowed address spaces are those in the range `[1,
     /// 1 + 2^addr_space_height)` where it starts from 1 to not allow address space 0 in memory.
     pub addr_space_height: usize,
-    /// It is expected that the size of the list is `1 << addr_space_height + 1` and the first
+    /// It is expected that the size of the list is `(1 << addr_space_height) + 1` and the first
     /// element is 0, which means no address space.
     pub addr_spaces: Vec<AddressSpaceHostConfig>,
     pub pointer_max_bits: usize,
