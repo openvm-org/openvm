@@ -43,7 +43,7 @@ pub use extension::*;
 mod utils;
 #[cfg(any(test, feature = "test-utils"))]
 pub use utils::test_utils::*;
-pub use utils::*;
+pub(crate) use utils::*;
 
 #[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
 pub struct NativeConfig {
