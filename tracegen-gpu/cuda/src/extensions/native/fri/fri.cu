@@ -1,7 +1,6 @@
 #include "../field_extension/field_ext_operations.cuh"
 #include "column.cuh"
 #include "constants.h"
-#include "execution.h"
 #include "launcher.cuh"
 #include "system/memory/controller.cuh"
 #include "trace_access.h"
@@ -166,7 +165,7 @@ struct FriReducedOpening {
         if (header.is_init) {
             COL_WRITE_VALUE(row, WorkloadCols, a_aux.prev_data, Fp::zero());
         } else {
-            COL_WRITE_VALUE(row, WorkloadCols, a_aux.prev_data, *prev_data);
+            COL_WRITE_VALUE(row, WorkloadCols, a_aux.prev_data, prev_data[local_idx]);
         }
 
         mem_helper.fill(
