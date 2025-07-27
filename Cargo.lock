@@ -5933,6 +5933,7 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "thiserror 1.0.69",
+ "toml 0.8.23",
  "tracing",
 ]
 

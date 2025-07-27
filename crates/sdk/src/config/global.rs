@@ -43,7 +43,7 @@ use openvm_stark_backend::{
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
-use crate::F;
+use crate::{config::AppConfig, F};
 
 #[derive(Builder, Clone, Debug, Serialize, Deserialize)]
 #[serde(from = "SdkVmConfigWithDefaultDeser")]
@@ -140,6 +140,11 @@ impl SdkVmConfig {
             transpiler = transpiler.with_extension(EccTranspilerExtension);
         }
         transpiler
+    }
+
+    /// `openvm_toml` should be the TOML string read from an openvm.toml file.
+    pub fn from_toml(openvm_toml: &str) -> Result<AppConfig<Self>, toml::de::Error> {
+        toml::from_str(openvm_toml)
     }
 }
 

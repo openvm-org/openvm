@@ -3,20 +3,22 @@ use std::{path::PathBuf, sync::Arc};
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::{instructions::exe::VmExe, DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_circuit::arch::{
+    execution_mode::metered::segment_ctx::SegmentationLimits, instructions::exe::VmExe,
+    DEFAULT_MAX_NUM_PUBLIC_VALUES,
+};
 use openvm_native_circuit::NativeCpuBuilder;
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
-use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
-};
 use openvm_sdk::{
-    commit::commit_app_exe, prover::EvmHalo2Prover, DefaultStaticVerifierPvHandler, Sdk, StdIn,
+    commit::commit_app_exe,
+    config::{SdkVmConfig, SdkVmCpuBuilder},
+    prover::EvmHalo2Prover,
+    DefaultStaticVerifierPvHandler, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
 };
-use openvm_transpiler::{transpiler::Transpiler, FromElf};
+use openvm_transpiler::FromElf;
 
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
 
@@ -27,12 +29,16 @@ async fn main() -> Result<()> {
     // Must be larger than RangeTupleCheckerAir.height == 524288
     let max_segment_length = args.max_segment_length.unwrap_or(1_000_000);
 
-    let app_config = args.app_config(Rv32ImConfig::with_public_values_and_segment_len(
-        NUM_PUBLIC_VALUES,
-        max_segment_length,
-    ));
-    let elf = args.build_bench_program("fibonacci", &app_config.app_vm_config, None)?;
+    let mut config =
+        SdkVmConfig::from_toml(include_str!("../../../guest/fibonacci/openvm.toml"))?.app_vm_config;
+    config.as_mut().set_segmentation_limits(
+        SegmentationLimits::default().with_max_trace_height(max_segment_length as u32),
+    );
+    config.as_mut().num_public_values = NUM_PUBLIC_VALUES;
 
+    let elf = args.build_bench_program("fibonacci", &config, None)?;
+    let exe = VmExe::from_elf(elf, config.transpiler())?;
+    let app_config = args.app_config(config);
     let agg_config = args.agg_config();
 
     let sdk = Sdk::new();
@@ -47,13 +53,6 @@ async fn main() -> Result<()> {
         &halo2_params_reader,
         &DefaultStaticVerifierPvHandler,
     )?;
-    let exe = VmExe::from_elf(
-        elf,
-        Transpiler::default()
-            .with_extension(Rv32ITranspilerExtension)
-            .with_extension(Rv32MTranspilerExtension)
-            .with_extension(Rv32IoTranspilerExtension),
-    )?;
     let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
 
     let n = 800_000u64;
@@ -62,7 +61,7 @@ async fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || {
         let mut e2e_prover = EvmHalo2Prover::<BabyBearPoseidon2Engine, _, _>::new(
             &halo2_params_reader,
-            Rv32ImCpuBuilder,
+            SdkVmCpuBuilder,
             NativeCpuBuilder,
             app_pk,
             app_committed_exe,

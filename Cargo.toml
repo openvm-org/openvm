@@ -70,7 +70,7 @@ members = [
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
 ]
-exclude = ["crates/sdk/example"]
+exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
 
 # Fastest runtime configuration

@@ -3,7 +3,7 @@ use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
-use openvm_sdk::config::{AppConfig, SdkVmConfig, SdkVmCpuBuilder};
+use openvm_sdk::config::{SdkVmConfig, SdkVmCpuBuilder};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
 use openvm_transpiler::FromElf;
@@ -29,11 +29,8 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<BabyBear> {
 fn main() -> Result<()> {
     let args = BenchmarkCli::parse();
 
-    let config = toml::from_str::<AppConfig<SdkVmConfig>>(include_str!(
-        "../../../guest/ecrecover/openvm.toml"
-    ))?
-    .app_vm_config;
-
+    let config =
+        SdkVmConfig::from_toml(include_str!("../../../guest/ecrecover/openvm.toml"))?.app_vm_config;
     let elf = args.build_bench_program("ecrecover", &config, None)?;
     let exe = VmExe::from_elf(elf, config.transpiler())?;
 
