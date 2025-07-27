@@ -5153,7 +5153,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "tiny-keccak",
  "tokio",
- "toml 0.8.23",
  "tracing",
 ]
 
