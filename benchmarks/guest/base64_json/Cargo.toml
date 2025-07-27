@@ -11,8 +11,3 @@ serde-json-core = "0.6.0"
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

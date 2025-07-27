@@ -9,8 +9,3 @@ openvm-sha2.workspace = true
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

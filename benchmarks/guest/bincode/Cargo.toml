@@ -15,8 +15,3 @@ rand_pcg = "0.3.1"
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

@@ -16,3 +16,16 @@ openvm-pairing = { path = "../../guest-libs/pairing/", default-features = false 
 openvm-sha2 = { path = "../../guest-libs/sha2/", default-features = false }
 openvm-k256 = { path = "../../guest-libs/k256/", package = "k256" }
 openvm-p256 = { path = "../../guest-libs/p256/", package = "p256" }
+
+# patch for ecrecover
+[patch.crates-io]
+k256 = { path = "../../guest-libs/k256/" }
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # faster compile time
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

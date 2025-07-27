@@ -17,15 +17,3 @@ k256 = { version = "0.13.3", default-features = false }
 
 [features]
 default = []
-
-[profile.release]
-panic = "abort"
-lto = "thin"    # faster compile time
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false
-
-[patch.crates-io]
-k256 = { path = "../../../guest-libs/k256/" }

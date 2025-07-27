@@ -14,8 +14,3 @@ derive_more = { version = "1.0.0", default-features = false, features = [
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

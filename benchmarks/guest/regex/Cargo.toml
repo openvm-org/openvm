@@ -10,8 +10,3 @@ regex = { version = "1.11.1", default-features = false }
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

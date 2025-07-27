@@ -23,12 +23,3 @@ serde = "1.0"
 
 [features]
 default = []
-
-[profile.release]
-panic = "abort"
-lto = "thin"    # faster compile time
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false
