@@ -281,10 +281,7 @@ impl Parse for TeDefine {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let items = input.parse_terminated(<LitStr as Parse>::parse, Token![,])?;
         Ok(Self {
-            items: items
-                .into_iter()
-                .map(|e| e.value())
-                .collect(),
+            items: items.into_iter().map(|e| e.value()).collect(),
         })
     }
 }

@@ -9,8 +9,8 @@ members = []
 [dependencies]
 openvm = { git = "https://github.com/openvm-org/openvm.git", features = [
     "std",
-] }
-openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git" }
+], branch = "feat/remove-import-for-init" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", branch = "feat/remove-import-for-init" }
 
 serde = { version = "1.0.216" }
 num-bigint = { version = "0.4.6", features = ["serde"] }
