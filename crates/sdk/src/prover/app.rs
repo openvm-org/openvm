@@ -3,13 +3,18 @@ use std::sync::Arc;
 use getset::Getters;
 use openvm_circuit::{
     arch::{
-        ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
+        verify_segments, ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
         InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
         VmExecutionConfig, VmLocalProver,
     },
-    system::program::trace::VmCommittedExe,
+    system::{memory::CHUNK, program::trace::VmCommittedExe},
 };
-use openvm_stark_backend::{config::Val, p3_field::PrimeField32, proof::Proof};
+use openvm_stark_backend::{
+    config::{Com, Val},
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::PrimeField32,
+    proof::Proof,
+};
 use openvm_stark_sdk::engine::{StarkEngine, StarkFriEngine};
 use tracing::info_span;
 
@@ -27,13 +32,16 @@ where
     pub program_name: Option<String>,
     #[getset(get = "pub")]
     app_prover: VmLocalProver<E, VB>,
+    #[getset(get = "pub")]
+    app_vm_vk: MultiStarkVerifyingKey<E::SC>,
 }
 
 impl<E, VB> AppProver<E, VB>
 where
     E: StarkFriEngine,
-    Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
+    Val<E::SC>: PrimeField32,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
 {
     pub fn new(
         vm_builder: VB,
@@ -41,9 +49,11 @@ where
         app_committed_exe: Arc<VmCommittedExe<E::SC>>,
     ) -> Result<Self, VirtualMachineError> {
         let app_prover = new_local_prover(vm_builder, &app_vm_pk, &app_committed_exe)?;
+        let app_vm_vk = app_vm_pk.vm_pk.get_vk();
         Ok(Self {
             program_name: None,
             app_prover,
+            app_vm_vk,
         })
     }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
@@ -69,7 +79,7 @@ where
             self.vm_config().as_ref().continuation_enabled,
             "Use generate_app_proof_without_continuations instead."
         );
-        info_span!(
+        let proofs = info_span!(
             "app proof",
             group = self
                 .program_name
@@ -81,7 +91,15 @@ where
             metrics::counter!("fri.log_blowup")
                 .absolute(self.app_prover.vm.engine.fri_params().log_blowup as u64);
             ContinuationVmProver::prove(&mut self.app_prover, input)
-        })
+        })?;
+        // We skip verification of the user public values proof here because it is directly computed
+        // from the merkle tree above
+        verify_segments(
+            &self.app_prover.vm.engine,
+            &self.app_vm_vk,
+            &proofs.per_segment,
+        )?;
+        Ok(proofs)
     }
 
     pub fn generate_app_proof_without_continuations(
