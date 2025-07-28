@@ -1,9 +1,5 @@
 #pragma once
 
-#include "fp.h"
-#include "meta.cuh"
-#include "trace_access.h"
-#include "system/memory/offline_checker.cuh"
 #include "../../src/extensions/rv32_adapters/vec_heap.cuh"
 
 struct FieldExprCoreRecord {
@@ -18,6 +14,7 @@ template <
     size_t READ_SIZE,
     size_t WRITE_SIZE>
 struct FieldExprRecord {
-    Rv32VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE> adapter;
+    Rv32VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+        adapter;
     FieldExprCoreRecord core;
-}; 
+};

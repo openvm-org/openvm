@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use openvm_algebra_circuit::{
     fp2_chip::Fp2Air,
     modular_chip::{ModularAir, ModularIsEqualAir},
@@ -20,8 +18,7 @@ use crate::{
         Fp2AddSubChipGpu, Fp2MulDivChipGpu, ModularAddSubChipGpu, ModularIsEqualChipGpu,
         ModularMulDivChipGpu,
     },
-    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    system::extensions::get_inventory_range_checker,
+    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 
 #[derive(Clone)]
@@ -43,18 +40,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         // Range checker should always exist in inventory
         let range_checker = get_inventory_range_checker(inventory);
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         for (i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
             // Determine the number of bytes needed to represent a prime field element
@@ -140,18 +126,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
         // Range checker should always exist in inventory
         let range_checker = get_inventory_range_checker(inventory);
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         for (i, modulus) in extension.supported_moduli.iter().enumerate() {
             let bytes = modulus.bits().div_ceil(8);

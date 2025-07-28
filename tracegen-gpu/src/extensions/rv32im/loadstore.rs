@@ -70,7 +70,7 @@ mod test {
     };
     use openvm_instructions::{
         instruction::Instruction,
-        riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
+        riscv::{RV32_CELL_BITS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
         LocalOpcode,
     };
     use openvm_rv32im_circuit::{
@@ -219,8 +219,9 @@ mod test {
     fn test_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
         let mut rng = create_seeded_rng();
         let mut mem_config = MemoryConfig::default();
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
         if [STOREW, STOREB, STOREH].contains(&opcode) {
-            mem_config.addr_space_sizes[PUBLIC_VALUES_AS as usize] = 1 << 29;
+            mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
         }
         let mut tester = GpuChipTestBuilder::volatile(mem_config, default_var_range_checker_bus());
 

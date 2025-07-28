@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use openvm_circuit::arch::{
     AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
     VmProverExtension,
@@ -10,9 +8,10 @@ use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuB
 
 use crate::{
     extensions::{keccak256::Keccak256ChipGpu, rv32im::Rv32ImGpuProverExt},
-    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
     system::{
-        extensions::{get_inventory_range_checker, SystemGpuBuilder},
+        extensions::{
+            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
+        },
         SystemChipInventoryGPU,
     },
 };
@@ -33,18 +32,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition

@@ -140,7 +140,7 @@ mod tests {
     ) -> Harness {
         let num_custom_pvs = system_config.num_public_values;
         let max_degree = system_config.max_constraint_degree as u32 - 1;
-        let timestamp_max_bits = mem_config.clk_max_bits;
+        let timestamp_max_bits = mem_config.timestamp_max_bits;
 
         let air = PublicValuesAir::new(
             NativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),

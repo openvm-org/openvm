@@ -38,6 +38,7 @@ use openvm_circuit_primitives::{
         VariableRangeCheckerChip,
     },
 };
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::Val,
@@ -136,7 +137,10 @@ pub struct GpuChipTestBuilder {
 
 impl Default for GpuChipTestBuilder {
     fn default() -> Self {
-        Self::volatile(MemoryConfig::default(), default_var_range_checker_bus())
+        let mut mem_config = MemoryConfig::default();
+        // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        Self::volatile(mem_config, default_var_range_checker_bus())
     }
 }
 
@@ -432,7 +436,10 @@ impl GpuChipTestBuilder {
     // result in altered tracegen. For use during trace comparison, see
     // utils::dummy_memory_helper.
     pub fn cpu_memory_helper(&self) -> SharedMemoryHelper<F> {
-        SharedMemoryHelper::new(self.cpu_range_checker(), self.memory.config.clk_max_bits)
+        SharedMemoryHelper::new(
+            self.cpu_range_checker(),
+            self.memory.config.timestamp_max_bits,
+        )
     }
 
     // See [cpu_memory_helper]. Use this utility for creation of CPU chips that
@@ -443,7 +450,7 @@ impl GpuChipTestBuilder {
     }
 
     pub fn timestamp_max_bits(&self) -> usize {
-        self.memory.config.clk_max_bits
+        self.memory.config.timestamp_max_bits
     }
 
     pub fn build(self) -> GpuChipTester {

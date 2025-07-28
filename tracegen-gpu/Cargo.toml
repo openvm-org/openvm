@@ -35,6 +35,7 @@ openvm-keccak256-circuit = { workspace = true }
 openvm-sha256-circuit = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
 openvm-bigint-circuit = { workspace = true }
+openvm-pairing-circuit = { workspace = true }
 
 # p3
 p3-air = { workspace = true }

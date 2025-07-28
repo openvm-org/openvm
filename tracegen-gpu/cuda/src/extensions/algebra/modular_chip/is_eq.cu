@@ -168,7 +168,7 @@ extern "C" int _modular_is_equal_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     constexpr size_t NUM_READS = 2;
 

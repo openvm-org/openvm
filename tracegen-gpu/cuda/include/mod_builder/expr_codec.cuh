@@ -1,6 +1,5 @@
 #pragma once
 #include "bigint_ops.cuh"
-#include "fpext.h"
 #include "limb_ops.cuh"
 #include "meta.cuh"
 

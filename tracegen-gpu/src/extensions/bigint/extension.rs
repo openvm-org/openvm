@@ -1,38 +1,45 @@
 use std::sync::Arc;
 
-use openvm_bigint_circuit::{Int256, Int256Rv32Config};
-use openvm_circuit::arch::{
-    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
-    VmProverExtension,
+use openvm_bigint_circuit::{
+    Int256, Int256Rv32Config, Rv32BaseAlu256Air, Rv32BranchEqual256Air, Rv32BranchLessThan256Air,
+    Rv32LessThan256Air, Rv32LessThan256Chip, Rv32Multiplication256Air, Rv32Shift256Air,
 };
+use openvm_circuit::{
+    arch::{
+        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
+        VmChipComplex, VmProverExtension,
+    },
+    system::memory::SharedMemoryHelper,
+};
+use openvm_circuit_primitives::range_tuple::RangeTupleCheckerAir;
+use openvm_rv32_adapters::Rv32HeapAdapterFiller;
+use openvm_rv32im_circuit::LessThanFiller;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
 use crate::{
     extensions::{
         bigint::{
-            BaseAlu256ChipGpu, BranchEqual256ChipGpu, BranchLessThan256ChipGpu, LessThan256ChipGpu,
-            Multiplication256ChipGpu, Rv32BaseAlu256Air, Rv32BranchEqual256Air,
-            Rv32BranchLessThan256Air, Rv32LessThan256Air, Rv32Multiplication256Air,
-            Rv32Shift256Air, Shift256ChipGpu,
+            BaseAlu256ChipGpu, BranchEqual256ChipGpu, BranchLessThan256ChipGpu,
+            Multiplication256ChipGpu, Shift256ChipGpu,
         },
         rv32im::Rv32ImGpuProverExt,
     },
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-    },
+    primitives::range_tuple::RangeTupleCheckerChipGPU,
     system::{
-        extensions::{get_inventory_range_checker, SystemGpuBuilder},
+        extensions::{
+            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
+        },
         SystemChipInventoryGPU,
     },
 };
 
-pub struct BigIntGpuProverExt;
+pub struct Int256GpuProverExt;
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
-    for BigIntGpuProverExt
+    for Int256GpuProverExt
 {
     fn extend_prover(
         &self,
@@ -43,18 +50,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         let range_tuple_checker = {
             let existing_chip = inventory
@@ -66,6 +62,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
             if let Some(chip) = existing_chip {
                 chip.clone()
             } else {
+                inventory.next_air::<RangeTupleCheckerAir<2>>()?;
                 let chip = Arc::new(RangeTupleCheckerChipGPU::new(
                     extension.range_tuple_checker_sizes,
                 ));
@@ -86,13 +83,24 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
 
         // 2. lt (LessThan256)
         inventory.next_air::<Rv32LessThan256Air>()?;
-        let lt = LessThan256ChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu.clone(),
-            pointer_max_bits,
-            timestamp_max_bits,
+        // TODO[jpw]: use GPU once fixed
+        // let lt = LessThan256ChipGpu::new(
+        //     range_checker.clone(),
+        //     bitwise_lu.clone(),
+        //     pointer_max_bits,
+        //     timestamp_max_bits,
+        // );
+        let lt = Rv32LessThan256Chip::new(
+            LessThanFiller::new(
+                Rv32HeapAdapterFiller::new(pointer_max_bits, bitwise_lu.cpu_chip.clone().unwrap()),
+                bitwise_lu.cpu_chip.clone().unwrap(),
+                0x408,
+                // Rv32LessThan256Opcode::CLASS_OFFSET,
+            ),
+            SharedMemoryHelper::new(range_checker.cpu_chip.clone().unwrap(), timestamp_max_bits),
         );
-        inventory.add_executor_chip(lt);
+
+        inventory.add_executor_chip(super::hybrid::HybridLessThan256Chip::new(lt));
 
         // 3. beq (BranchEqual256)
         inventory.next_air::<Rv32BranchEqual256Air>()?;
@@ -169,7 +177,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Int256Rv32GpuBuilder {
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &BigIntGpuProverExt,
+            &Int256GpuProverExt,
             &config.bigint,
             inventory,
         )?;

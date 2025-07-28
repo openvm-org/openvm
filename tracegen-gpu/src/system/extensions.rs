@@ -7,13 +7,18 @@ use openvm_circuit::{
     },
     system::poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
 };
-use openvm_circuit_primitives::var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChip},
+    var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip},
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
 use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
+    primitives::{
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    },
     system::{phantom::PhantomChipGPU, SystemChipInventoryGPU},
     HybridChip,
 };
@@ -28,6 +33,30 @@ pub fn get_inventory_range_checker(
         .next()
         .unwrap()
         .clone()
+}
+
+/// A utility method to find a **byte** [BitwiseOperationLookupChipGPU] or create one and add
+/// to the inventory if it does not exist.
+pub fn get_or_create_bitwise_op_lookup(
+    inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+) -> Result<Arc<BitwiseOperationLookupChipGPU<8>>, ChipInventoryError> {
+    let bitwise_lu = {
+        let existing_chip = inventory
+            .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
+            .next();
+        if let Some(chip) = existing_chip {
+            chip.clone()
+        } else {
+            let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+
+            let chip = Arc::new(BitwiseOperationLookupChipGPU::hybrid(Arc::new(
+                BitwiseOperationLookupChip::new(air.bus),
+            )));
+            inventory.add_periphery_chip(chip.clone());
+            chip
+        }
+    };
+    Ok(bitwise_lu)
 }
 
 /// **If** internal poseidon2 chip exists, then its insertion index is 1.

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use openvm_circuit::arch::{
     ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
 };
@@ -13,8 +11,7 @@ use strum::EnumCount;
 
 use crate::{
     extensions::ecc::{WeierstrassAddNeChipGpu, WeierstrassDoubleChipGpu},
-    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    system::extensions::get_inventory_range_checker,
+    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 
 #[derive(Clone)]
@@ -36,18 +33,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
         // Range checker should always exist in inventory
         let range_checker = get_inventory_range_checker(inventory);
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         for (i, curve) in extension.supported_curves.iter().enumerate() {
             let start_offset =
