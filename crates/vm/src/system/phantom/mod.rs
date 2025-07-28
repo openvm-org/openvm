@@ -147,14 +147,14 @@ where
                     }
                     return Err(ExecutionError::Fail { pc });
                 }
-                #[cfg(feature = "metrics")]
+                #[cfg(feature = "perf-metrics")]
                 SysPhantom::CtStart => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {
                         metrics.cycle_tracker.start(info.dsl_instruction.clone());
                     }
                 }
-                #[cfg(feature = "metrics")]
+                #[cfg(feature = "perf-metrics")]
                 SysPhantom::CtEnd => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {
