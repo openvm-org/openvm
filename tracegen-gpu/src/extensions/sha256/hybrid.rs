@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use openvm_circuit::{
     arch::{
         Arena, ChipInventory, ChipInventoryError, DenseRecordArena, MatrixRecordArena,
@@ -18,8 +16,7 @@ use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuB
 
 use crate::{
     cpu_proving_ctx_to_gpu, get_empty_air_proving_ctx,
-    primitives::bitwise_op_lookup::BitwiseOperationLookupChipGPU,
-    system::extensions::get_inventory_range_checker,
+    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 
 pub struct Sha2GpuProverExt;
@@ -38,18 +35,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha256> for
         let mem_helper =
             SharedMemoryHelper::new(range_checker.cpu_chip.clone().unwrap(), timestamp_max_bits);
 
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<Sha256VmAir>()?;
         let cpu_sha256 = VmChipWrapper::new(

@@ -299,7 +299,7 @@ extern "C" int _keccak256_p3_tracegen(
     uint64_t *states
 ) {
     auto threads = div_ceil(height, NUM_ROUNDS);
-    auto [grid, block] = kernel_launch_params(threads);
+    auto [grid, block] = kernel_launch_params(threads, 256);
     p3_inner_tracegen<<<grid, block>>>(trace, height, total_num_blocks, threads, states);
     return cudaGetLastError();
 }

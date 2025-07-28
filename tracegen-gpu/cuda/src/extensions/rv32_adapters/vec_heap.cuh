@@ -97,7 +97,7 @@ struct Rv32VecHeapAdapter {
     ) {
         const size_t limb_shift_bits = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits;
 
-        if (NUM_READS > 1) {
+        if (NUM_READS == 2) {
             bitwise_lookup.add_range(
                 (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
                 (record.rs_vals[1] >> MSL_SHIFT) << limb_shift_bits
@@ -106,11 +106,13 @@ struct Rv32VecHeapAdapter {
                 (record.rd_val >> MSL_SHIFT) << limb_shift_bits,
                 (record.rd_val >> MSL_SHIFT) << limb_shift_bits
             );
-        } else {
+        } else if (NUM_READS == 1) {
             bitwise_lookup.add_range(
                 (record.rs_vals[0] >> MSL_SHIFT) << limb_shift_bits,
                 (record.rd_val >> MSL_SHIFT) << limb_shift_bits
             );
+        } else {
+            assert(false);
         }
 
         uint32_t timestamp =

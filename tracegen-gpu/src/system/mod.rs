@@ -63,7 +63,7 @@ impl SystemChipInventoryGPU {
         let program_chip = ProgramChipGPU::new();
         let connector_chip = VmConnectorChipGPU::new(VmConnectorChip::new(
             cpu_range_checker.clone(),
-            config.memory_config.clk_max_bits,
+            config.memory_config.timestamp_max_bits,
         ));
 
         let memory_bus = mem_inventory.bridge.memory_bus();
@@ -97,7 +97,7 @@ impl SystemChipInventoryGPU {
                 range_checker,
                 config.num_public_values,
                 config.max_constraint_degree as u32 - 1,
-                config.memory_config.clk_max_bits as u32,
+                config.memory_config.timestamp_max_bits as u32,
             )
         });
 

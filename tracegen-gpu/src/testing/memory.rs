@@ -64,7 +64,7 @@ impl DeviceMemoryTester {
     }
 
     pub fn memory_bridge(&self) -> MemoryBridge {
-        MemoryBridge::new(self.mem_bus, self.config.clk_max_bits, self.range_bus)
+        MemoryBridge::new(self.mem_bus, self.config.timestamp_max_bits, self.range_bus)
     }
 
     pub fn read<const N: usize>(&mut self, addr_space: usize, ptr: usize) -> [F; N] {

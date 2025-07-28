@@ -1,6 +1,4 @@
-#include "../extensions/rv32_adapters/vec_heap.cuh"
 #include "fp.h"
-#include "fpext.h"
 #include "launcher.cuh"
 #include "mod_builder/bigint_ops.cuh"
 #include "mod_builder/expr_codec.cuh"
@@ -179,12 +177,8 @@ __device__ void generate_subrow_gpu(
                 col++;
             }
 
-            uint32_t max_overflow_bits = 1;
-            max_limb_abs -= 1;
-            while (max_limb_abs > 1) {
-                max_overflow_bits++;
-                max_limb_abs >>= 1;
-            }
+            // max_overflow_bits = log2_ceil(max_limb_abs)
+            uint32_t max_overflow_bits = max_limb_abs == 0 ? 0 : 32 - __clz(max_limb_abs - 1);
             uint32_t carry_bits = max_overflow_bits - limb_bits;
             uint32_t carry_min_abs = 1 << carry_bits;
             carry_bits++;
@@ -243,11 +237,14 @@ __device__ void generate_subrow_gpu(
     free(temp_buffer);
 }
 
+// NOTE: this does not match the CPU run_field_expression function, it is part of generate_subrow on CPU and responsible for computing the non-overflow representation of all the vars.
+//
+// Assumes vars is already memset to 0
 __device__ void run_field_expression_gpu(
     const FieldExprMeta *meta,
     const uint32_t *inputs,
     const bool *flags,
-    uint32_t *output_vars
+    uint32_t *vars
 ) {
     uint32_t num_limbs = meta->num_limbs;
     uint32_t limb_bits = meta->limb_bits;
@@ -259,15 +256,13 @@ __device__ void run_field_expression_gpu(
         return;
     memset(temp_storage, 0, temp_storage_size * sizeof(uint32_t));
 
-    for (uint32_t var = 0; var < meta->expr_meta.num_vars; var++) {
-        for (uint32_t limb = 0; limb < num_limbs; limb++) {
-            output_vars[var * num_limbs + limb] = 0;
-        }
-    }
+    BigUintGpu prime(
+        meta->expr_meta.prime_limbs, meta->expr_meta.prime_limb_count, meta->limb_bits
+    );
 
     for (uint32_t var = 0; var < meta->expr_meta.num_vars; var++) {
         uint32_t root = meta->compute_root_indices[var];
-        uint32_t *result = &output_vars[var * num_limbs];
+        uint32_t *result = &vars[var * num_limbs];
 
         compute(
             result,
@@ -275,27 +270,18 @@ __device__ void run_field_expression_gpu(
             root,
             &meta->expr_meta,
             inputs,
-            output_vars,
+            vars,
             flags,
             num_limbs,
             limb_bits,
             temp_storage
         );
-    }
 
-    BigUintGpu prime(
-        meta->expr_meta.prime_limbs, meta->expr_meta.prime_limb_count, meta->limb_bits
-    );
-
-    for (uint32_t var_idx = 0; var_idx < meta->expr_meta.num_vars; var_idx++) {
-        uint32_t *var_ptr = &output_vars[var_idx * meta->num_limbs];
-
+        uint32_t *var_ptr = &vars[var * meta->num_limbs];
         BigUintGpu var_value(var_ptr, meta->num_limbs, meta->limb_bits);
-
-        while (biguint_compare(&var_value, &prime) >= 0) {
-            biguint_sub(&var_value, &var_value, &prime);
+        if(biguint_compare(&var_value, &prime) >= 0) {
+             biguint_sub(&var_value, &var_value, &prime);
         }
-
         for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
             var_ptr[limb] = (limb < var_value.num_limbs) ? var_value.limbs[limb] : 0;
         }
@@ -325,21 +311,21 @@ struct FieldExprCore {
         uint32_t var_size = VAR_U32_COUNT(meta);
 
         uint32_t *inputs = (uint32_t *)malloc(in_size * sizeof(uint32_t));
-        uint32_t *output_vars = (uint32_t *)malloc(var_size * sizeof(uint32_t));
+        uint32_t *vars = (uint32_t *)malloc(var_size * sizeof(uint32_t));
         bool *flags = (bool *)malloc(meta->num_u32_flags * sizeof(bool));
 
-        if (inputs == nullptr || output_vars == nullptr || flags == nullptr) {
+        if (inputs == nullptr || vars == nullptr || flags == nullptr) {
             if (inputs)
                 free(inputs);
-            if (output_vars)
-                free(output_vars);
+            if (vars)
+                free(vars);
             if (flags)
                 free(flags);
             return;
         }
 
         memset(inputs, 0, in_size * sizeof(uint32_t));
-        memset(output_vars, 0, var_size * sizeof(uint32_t));
+        memset(vars, 0, var_size * sizeof(uint32_t));
         memset(flags, 0, meta->num_u32_flags * sizeof(bool));
 
         uint32_t bytes_per_limb = (meta->limb_bits + 7) / 8;
@@ -355,27 +341,28 @@ struct FieldExprCore {
             }
         }
 
+        // flags for needs setup
         for (uint32_t j = 0; j < meta->num_local_opcodes; j++) {
             if (opcode == meta->local_opcode_idx[j] && j < meta->num_u32_flags) {
                 flags[meta->opcode_flag_idx[j]] = true;
             }
         }
 
-        run_field_expression_gpu(meta, inputs, flags, output_vars);
+        run_field_expression_gpu(meta, inputs, flags, vars);
+
+        generate_subrow_gpu(meta, inputs, flags, vars, range_checker, is_valid, core_row);
 
         for (uint32_t i = 0; i < meta->expr_meta.num_vars; i++) {
             for (uint32_t limb = 0; limb < meta->num_limbs; limb++) {
-                uint32_t var_val = output_vars[i * meta->num_limbs + limb];
+                uint32_t var_val = vars[i * meta->num_limbs + limb];
                 if (is_valid) {
                     range_checker.add_count(var_val, meta->limb_bits);
                 }
             }
         }
 
-        generate_subrow_gpu(meta, inputs, flags, output_vars, range_checker, is_valid, core_row);
-
         free(inputs);
-        free(output_vars);
+        free(vars);
         free(flags);
     }
 };
@@ -462,7 +449,7 @@ extern "C" int _field_expression_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
     field_expression_tracegen<<<grid, block>>>(
         (uint8_t *)d_records,
         d_trace,

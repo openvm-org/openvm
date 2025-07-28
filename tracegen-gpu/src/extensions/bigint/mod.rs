@@ -1,20 +1,16 @@
 use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
-use openvm_circuit::{
-    arch::{DenseRecordArena, VmAirWrapper},
-    utils::next_power_of_two_or_zero,
-};
+use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32_adapters::{
-    Rv32HeapAdapterAir, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterCols,
-    Rv32HeapBranchAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterRecord,
+    Rv32HeapBranchAdapterCols, Rv32HeapBranchAdapterRecord, Rv32VecHeapAdapterCols,
+    Rv32VecHeapAdapterRecord,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
-    BaseAluCoreAir, BaseAluCoreCols, BaseAluCoreRecord, BranchEqualCoreAir, BranchEqualCoreCols,
-    BranchEqualCoreRecord, BranchLessThanCoreAir, BranchLessThanCoreCols, BranchLessThanCoreRecord,
-    LessThanCoreAir, LessThanCoreCols, LessThanCoreRecord, MultiplicationCoreAir,
-    MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreAir, ShiftCoreCols, ShiftCoreRecord,
+    BaseAluCoreCols, BaseAluCoreRecord, BranchEqualCoreCols, BranchEqualCoreRecord,
+    BranchLessThanCoreCols, BranchLessThanCoreRecord, LessThanCoreCols, LessThanCoreRecord,
+    MultiplicationCoreCols, MultiplicationCoreRecord, ShiftCoreCols, ShiftCoreRecord,
 };
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
@@ -32,17 +28,13 @@ use crate::{
 
 pub mod cuda;
 pub mod extension;
+// TEMP(jpw): remove this once GPU version of LessThan256Chip is fixed
+pub mod hybrid;
 
-pub use extension::{BigIntGpuProverExt, Int256Rv32GpuBuilder};
+pub use extension::{Int256GpuProverExt, Int256Rv32GpuBuilder};
 
 #[cfg(test)]
 mod tests;
-
-/// Base ALU
-pub type Rv32BaseAlu256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
 
 pub type BaseAlu256AdapterRecord =
     Rv32VecHeapAdapterRecord<2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
@@ -89,12 +81,6 @@ impl Chip<DenseRecordArena, GpuBackend> for BaseAlu256ChipGpu {
         AirProvingContext::simple_no_pis(d_trace)
     }
 }
-
-/// Branch Equal
-pub type Rv32BranchEqual256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchEqualCoreAir<INT256_NUM_LIMBS>,
->;
 
 pub type BranchEqual256AdapterRecord = Rv32HeapBranchAdapterRecord<2>;
 pub type BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_LIMBS>;
@@ -144,11 +130,6 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
 
 // Less Than
 
-pub type Rv32LessThan256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    LessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-
 pub type LessThan256AdapterRecord =
     Rv32VecHeapAdapterRecord<2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 pub type LessThan256CoreRecord = LessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
@@ -196,11 +177,6 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
 }
 
 // Branch Less Than
-
-pub type Rv32BranchLessThan256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
 
 pub type BranchLessThan256AdapterRecord = Rv32HeapBranchAdapterRecord<2>;
 pub type BranchLessThan256CoreRecord = BranchLessThanCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
@@ -250,11 +226,6 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
 
 // Shift
 
-pub type Rv32Shift256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-
 pub type Shift256AdapterRecord =
     Rv32VecHeapAdapterRecord<2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 pub type Shift256CoreRecord = ShiftCoreRecord<INT256_NUM_LIMBS, RV32_CELL_BITS>;
@@ -302,11 +273,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Shift256ChipGpu {
 }
 
 // Multiplication
-
-pub type Rv32Multiplication256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
 
 pub type Multiplication256AdapterRecord =
     Rv32VecHeapAdapterRecord<2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use openvm_circuit::arch::{
     ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
 };
+use openvm_circuit_primitives::range_tuple::RangeTupleCheckerAir;
 use openvm_rv32im_circuit::{
     Rv32AuipcAir, Rv32BaseAluAir, Rv32BranchEqualAir, Rv32BranchLessThanAir, Rv32DivRemAir,
     Rv32HintStoreAir, Rv32I, Rv32Io, Rv32JalLuiAir, Rv32JalrAir, Rv32LessThanAir,
@@ -19,10 +20,8 @@ use crate::{
         Rv32LessThanChipGpu, Rv32LoadSignExtendChipGpu, Rv32LoadStoreChipGpu, Rv32MulHChipGpu,
         Rv32MultiplicationChipGpu, Rv32ShiftChipGpu,
     },
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-    },
-    system::extensions::get_inventory_range_checker,
+    primitives::range_tuple::RangeTupleCheckerChipGPU,
+    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
 };
 
 pub struct Rv32ImGpuProverExt;
@@ -39,18 +38,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32I> for 
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         // These calls to next_air are not strictly necessary to construct the chips, but provide a
         // safeguard to ensure that chip construction matches the circuit definition
@@ -143,18 +131,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32M> for 
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         let range_tuple_checker = {
             let existing_chip = inventory
@@ -166,6 +143,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32M> for 
             if let Some(chip) = existing_chip {
                 chip.clone()
             } else {
+                inventory.next_air::<RangeTupleCheckerAir<2>>()?;
                 let chip = Arc::new(RangeTupleCheckerChipGPU::new(
                     extension.range_tuple_checker_sizes,
                 ));
@@ -221,18 +199,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv32Io>
         let timestamp_max_bits = inventory.timestamp_max_bits();
 
         let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = {
-            let existing_chip = inventory
-                .find_chip::<Arc<BitwiseOperationLookupChipGPU<8>>>()
-                .next();
-            if let Some(chip) = existing_chip {
-                chip.clone()
-            } else {
-                let chip = Arc::new(BitwiseOperationLookupChipGPU::new());
-                inventory.add_periphery_chip(chip.clone());
-                chip
-            }
-        };
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
 
         inventory.next_air::<Rv32HintStoreAir>()?;
         let hint_store = Rv32HintStoreChipGpu::new(

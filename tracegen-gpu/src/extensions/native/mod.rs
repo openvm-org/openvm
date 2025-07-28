@@ -37,7 +37,7 @@ use crate::{
 
 type E = GpuBabyBearPoseidon2Engine;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct NativeGpuBuilder;
 
 impl VmBuilder<E> for NativeGpuBuilder {
