@@ -2,25 +2,20 @@ use std::sync::Arc;
 
 use openvm_bigint_circuit::{
     Int256, Int256Rv32Config, Rv32BaseAlu256Air, Rv32BranchEqual256Air, Rv32BranchLessThan256Air,
-    Rv32LessThan256Air, Rv32LessThan256Chip, Rv32Multiplication256Air, Rv32Shift256Air,
+    Rv32LessThan256Air, Rv32Multiplication256Air, Rv32Shift256Air,
 };
-use openvm_circuit::{
-    arch::{
-        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
-        VmChipComplex, VmProverExtension,
-    },
-    system::memory::SharedMemoryHelper,
+use openvm_circuit::arch::{
+    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
+    VmProverExtension,
 };
 use openvm_circuit_primitives::range_tuple::RangeTupleCheckerAir;
-use openvm_rv32_adapters::Rv32HeapAdapterFiller;
-use openvm_rv32im_circuit::LessThanFiller;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
 use crate::{
     extensions::{
         bigint::{
-            BaseAlu256ChipGpu, BranchEqual256ChipGpu, BranchLessThan256ChipGpu,
+            BaseAlu256ChipGpu, BranchEqual256ChipGpu, BranchLessThan256ChipGpu, LessThan256ChipGpu,
             Multiplication256ChipGpu, Shift256ChipGpu,
         },
         rv32im::Rv32ImGpuProverExt,
@@ -83,24 +78,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Int256>
 
         // 2. lt (LessThan256)
         inventory.next_air::<Rv32LessThan256Air>()?;
-        // TODO[jpw]: use GPU once fixed
-        // let lt = LessThan256ChipGpu::new(
-        //     range_checker.clone(),
-        //     bitwise_lu.clone(),
-        //     pointer_max_bits,
-        //     timestamp_max_bits,
-        // );
-        let lt = Rv32LessThan256Chip::new(
-            LessThanFiller::new(
-                Rv32HeapAdapterFiller::new(pointer_max_bits, bitwise_lu.cpu_chip.clone().unwrap()),
-                bitwise_lu.cpu_chip.clone().unwrap(),
-                0x408,
-                // Rv32LessThan256Opcode::CLASS_OFFSET,
-            ),
-            SharedMemoryHelper::new(range_checker.cpu_chip.clone().unwrap(), timestamp_max_bits),
+        let lt = LessThan256ChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            pointer_max_bits,
+            timestamp_max_bits,
         );
-
-        inventory.add_executor_chip(super::hybrid::HybridLessThan256Chip::new(lt));
+        inventory.add_executor_chip(lt);
 
         // 3. beq (BranchEqual256)
         inventory.next_air::<Rv32BranchEqual256Air>()?;
