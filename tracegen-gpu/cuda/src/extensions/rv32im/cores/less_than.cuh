@@ -16,8 +16,8 @@ struct LessThanResult {
 template <size_t NUM_LIMBS>
 __forceinline__ __device__ LessThanResult
 run_less_than(bool is_slt, const uint8_t x[NUM_LIMBS], const uint8_t y[NUM_LIMBS]) {
-    bool x_sign = (x[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1) && is_slt;
-    bool y_sign = (y[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1) == 1) && is_slt;
+    bool x_sign = ((x[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) == 1) && is_slt;
+    bool y_sign = ((y[NUM_LIMBS - 1] >> (RV32_CELL_BITS - 1)) == 1) && is_slt;
 
 #pragma unroll
     for (int i = NUM_LIMBS - 1; i >= 0; i--) {

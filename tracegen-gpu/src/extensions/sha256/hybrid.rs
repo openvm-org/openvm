@@ -58,7 +58,7 @@ impl Chip<DenseRecordArena, GpuBackend> for HybridSha256VmChip {
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
         // Lazy HACK: for now even a dense_arena's capacity is the matrix size
