@@ -324,7 +324,7 @@ extern "C" int _keccak256_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(height > total_num_blocks * NUM_ROUNDS);
-    auto [grid, block] = kernel_launch_params(height, 512);
+    auto [grid, block] = kernel_launch_params(height, 256);
     keccak256_tracegen<<<grid, block>>>(
         trace,
         height,
