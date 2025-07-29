@@ -1,4 +1,3 @@
-#include "columns.cuh"
 #include "constants.h"
 #include "histogram.cuh"
 #include "keccakvm.cuh"
@@ -193,7 +192,8 @@ __global__ void keccakf_kernel(
                         i_bytes[i] = 0;
                         if (global_idx == last_block_len)
                             i_bytes[i] = 0x01;
-                        else if (global_idx == KECCAK_RATE_BYTES - 1)
+                        // WARNING: it is possible for i_bytes[i] = 0x81=0b10000001 in the case all padding happens in a single byte
+                        if (global_idx == KECCAK_RATE_BYTES - 1)
                             i_bytes[i] ^= 0x80;
                     }
                 }

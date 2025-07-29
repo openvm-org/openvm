@@ -109,14 +109,18 @@ fn test_keccak256_tracegen() {
         set_and_execute(&mut tester, &mut harness, &mut rng, KECCAK256, None, None);
     }
 
-    set_and_execute(
-        &mut tester,
-        &mut harness,
-        &mut rng,
-        KECCAK256,
-        None,
-        Some(2000),
-    );
+    // Test special length edge cases:
+    for len in [0, 135, 136, 137, 2000] {
+        println!("Testing length: {}", len);
+        set_and_execute(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            KECCAK256,
+            None,
+            Some(len),
+        );
+    }
 
     harness
         .dense_arena
