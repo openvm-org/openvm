@@ -15,7 +15,7 @@ use std::{
 };
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
-use itertools::{zip_eq, Itertools};
+use itertools::{multiunzip, zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::{
@@ -27,7 +27,7 @@ use openvm_stark_backend::{
     proof::Proof,
     prover::{
         hal::{DeviceDataTransporter, MatrixDimensions},
-        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
+        types::{AirProofRawInput, CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
     },
     verifier::VerificationError,
 };
@@ -441,6 +441,7 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    h_pk: Option<MultiStarkProvingKey<E::SC>>,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -462,6 +463,7 @@ where
             executor,
             pk: d_pk,
             chip_complex,
+            h_pk: None,
         })
     }
 
@@ -473,7 +475,8 @@ where
         let circuit = config.create_airs()?;
         let pk = circuit.keygen(&engine);
         let d_pk = engine.device().transport_pk_to_device(&pk);
-        let vm = Self::new(engine, builder, config, d_pk)?;
+        let mut vm = Self::new(engine, builder, config, d_pk)?;
+        vm.h_pk = Some(pk.clone());
         Ok((vm, pk))
     }
 
@@ -711,7 +714,37 @@ where
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-
+        let device = self.engine.device();
+        if self.h_pk.is_none() {
+            self.h_pk = Some(self.config().create_airs()?.keygen(&self.engine));
+        }
+        let pk = self.h_pk.as_ref().unwrap();
+        let global_airs = self.config().create_airs()?.into_airs().collect_vec();
+        let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+            multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
+                // Unfortunate H2D transfers
+                let cached_mains = air_ctx
+                    .cached_mains
+                    .iter()
+                    .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                    .collect_vec();
+                let common_main = air_ctx
+                    .common_main
+                    .as_ref()
+                    .map(|m| device.transport_matrix_from_device_to_host(m));
+                let public_values = air_ctx.public_values.clone();
+                let raw = AirProofRawInput {
+                    cached_mains,
+                    common_main,
+                    public_values,
+                };
+                (
+                    global_airs[*air_id].clone(),
+                    pk.per_air[*air_id].clone(),
+                    raw,
+                )
+            }));
+        self.engine.debug(&airs, &pks, &proof_inputs);
         let proof = self.engine.prove(&self.pk, ctx);
 
         Ok((proof, final_memory))

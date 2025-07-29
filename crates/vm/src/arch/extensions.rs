@@ -161,7 +161,7 @@ where
 {
     /// Read-only view of AIRs, as constructed via the [VmCircuitExtension] trait.
     #[get = "pub"]
-    airs: AirInventory<SC>,
+    pub airs: AirInventory<SC>,
     /// Chips that are being built.
     #[get = "pub"]
     chips: Vec<Box<dyn AnyChip<RA, PB>>>,
