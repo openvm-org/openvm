@@ -678,6 +678,43 @@ where
         #[cfg(feature = "metrics")]
         self.finalize_metrics(&mut current_trace_heights);
 
+        let device = self.engine.device();
+        if self.h_pk.is_none() {
+            self.h_pk = Some(self.config().create_airs().unwrap().keygen(&self.engine));
+        }
+        let pk = self.h_pk.as_ref().unwrap();
+        let global_airs = self
+            .config()
+            .create_airs()
+            .unwrap()
+            .into_airs()
+            .collect_vec();
+        let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+            multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
+                // Unfortunate H2D transfers
+                let cached_mains = air_ctx
+                    .cached_mains
+                    .iter()
+                    .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                    .collect_vec();
+                let common_main = air_ctx
+                    .common_main
+                    .as_ref()
+                    .map(|m| device.transport_matrix_from_device_to_host(m));
+                let public_values = air_ctx.public_values.clone();
+                let raw = AirProofRawInput {
+                    cached_mains,
+                    common_main,
+                    public_values,
+                };
+                (
+                    global_airs[*air_id].clone(),
+                    pk.per_air[*air_id].clone(),
+                    raw,
+                )
+            }));
+        self.engine.debug(&airs, &pks, &proof_inputs);
+
         Ok(ctx)
     }
 
@@ -714,37 +751,6 @@ where
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-        let device = self.engine.device();
-        if self.h_pk.is_none() {
-            self.h_pk = Some(self.config().create_airs()?.keygen(&self.engine));
-        }
-        let pk = self.h_pk.as_ref().unwrap();
-        let global_airs = self.config().create_airs()?.into_airs().collect_vec();
-        let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-            multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
-                // Unfortunate H2D transfers
-                let cached_mains = air_ctx
-                    .cached_mains
-                    .iter()
-                    .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
-                    .collect_vec();
-                let common_main = air_ctx
-                    .common_main
-                    .as_ref()
-                    .map(|m| device.transport_matrix_from_device_to_host(m));
-                let public_values = air_ctx.public_values.clone();
-                let raw = AirProofRawInput {
-                    cached_mains,
-                    common_main,
-                    public_values,
-                };
-                (
-                    global_airs[*air_id].clone(),
-                    pk.per_air[*air_id].clone(),
-                    raw,
-                )
-            }));
-        self.engine.debug(&airs, &pks, &proof_inputs);
         let proof = self.engine.prove(&self.pk, ctx);
 
         Ok((proof, final_memory))
