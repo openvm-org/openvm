@@ -1051,6 +1051,6 @@ mod tests {
                 }
             }
         }
-        assert_eq!(memory.access_adapter_records.current_size(), 0);
+        assert!(memory.access_adapter_records.allocated().is_empty());
     }
 }

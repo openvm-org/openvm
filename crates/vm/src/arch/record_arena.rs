@@ -182,12 +182,9 @@ impl DenseRecordArena {
         self.records_buffer = cursor;
     }
 
-    /// Returns the current size of the allocated buffer so far.
-    pub fn current_size(&self) -> usize {
-        self.records_buffer.position() as usize
-    }
-
     /// Returns the allocated size of the arena in bytes.
+    ///
+    /// **Note**: This may include additional bytes for alignment.
     pub fn capacity(&self) -> usize {
         self.records_buffer.get_ref().len()
     }
