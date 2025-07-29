@@ -359,13 +359,13 @@ where
         input: impl Into<Streams<F>>,
         executor_idx_to_air_idx: &[usize],
         ctx: MeteredCtx,
-    ) -> Result<Vec<Segment>, ExecutionError> {
+    ) -> Result<(Vec<Segment>, GuestMemory), ExecutionError> {
         let interpreter = InterpretedInstance::new(self.config.clone(), exe)?;
 
         let state = interpreter.execute_e2(ctx, input, executor_idx_to_air_idx)?;
         check_termination(state.exit_code)?;
 
-        Ok(state.ctx.into_segments())
+        Ok((state.ctx.into_segments(), state.memory))
     }
 }
 
@@ -930,7 +930,7 @@ where
         let exe = &self.exe;
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let e2_ctx = vm.build_metered_ctx();
-        let segments = vm.executor().execute_metered(
+        let (segments, _) = vm.executor().execute_metered(
             self.exe.clone(),
             input.clone(),
             &executor_idx_to_air_idx,

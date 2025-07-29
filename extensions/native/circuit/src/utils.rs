@@ -98,7 +98,7 @@ pub mod test_utils {
         let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-        let mut segments = vm.executor().execute_metered(
+        let (mut segments, _) = vm.executor().execute_metered(
             program.clone(),
             input.clone(),
             &executor_idx_to_air_idx,

@@ -117,7 +117,7 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx();
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let segments = vm.executor().execute_metered(
+    let (segments, _) = vm.executor().execute_metered(
         exe.clone(),
         input.clone(),
         &executor_idx_to_air_idx,
