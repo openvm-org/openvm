@@ -28,8 +28,6 @@ use crate::{
 
 pub mod cuda;
 pub mod extension;
-// TEMP(jpw): remove this once GPU version of LessThan256Chip is fixed
-pub mod hybrid;
 
 pub use extension::{Int256GpuProverExt, Int256Rv32GpuBuilder};
 

@@ -40,6 +40,7 @@ struct Rv32JalrAdapter {
 
         if (do_write) {
             RowSlice aux_row = row.slice_from(COL_INDEX(Rv32JalrAdapterCols, rd_aux_cols));
+            // NOTE: COL_WRITE_ARRAY uses the default NUM_LIMBS = RV32_REGISTER_NUM_LIMBS in MemoryWriteAuxCols template definition for size calculations, which is correct in this case for Rv32JalrAdapterCols
             COL_WRITE_ARRAY(aux_row, MemoryWriteAuxCols, prev_data, record.writes_aux.prev_data);
             mem_helper.fill(
                 aux_row.slice_from(COL_INDEX(MemoryWriteAuxCols, base)),
@@ -48,6 +49,8 @@ struct Rv32JalrAdapter {
             );
             COL_WRITE_VALUE(row, Rv32JalrAdapterCols, rd_ptr, record.rd_ptr);
         } else {
+            // NOTE: see note above on size calculation for MemoryWriteAuxCols
+            COL_FILL_ZERO(row, Rv32JalrAdapterCols, rd_aux_cols);
             COL_WRITE_VALUE(row, Rv32JalrAdapterCols, rd_ptr, 0u);
         }
 
