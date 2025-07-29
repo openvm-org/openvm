@@ -22,14 +22,14 @@ impl Chip<DenseRecordArena, GpuBackend> for HybridLessThan256Chip {
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
 
         let record_size = size_of::<(LessThan256AdapterRecord, LessThan256CoreRecord)>();
         let trace_width = LessThanCoreCols::<F, INT256_NUM_LIMBS, RV32_CELL_BITS>::width()
             + Rv32VecHeapAdapterCols::<F, 2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>::width();
-        let rows_used = dense_arena.current_size().div_ceil(record_size);
+        let rows_used = dense_arena.allocated().len().div_ceil(record_size);
         let height = rows_used.next_power_of_two();
         let mut seeker = dense_arena.get_record_seeker::<(
             &mut Rv32VecHeapAdapterRecord<2, 1, 1, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,

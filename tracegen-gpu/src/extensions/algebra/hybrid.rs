@@ -48,7 +48,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
 
@@ -64,7 +64,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             AlgebraRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
         >::get_aligned_record_size(&layout);
-        let rows_used = dense_arena.current_size().div_ceil(record_size);
+        let rows_used = dense_arena.allocated().len().div_ceil(record_size);
         let height = rows_used.next_power_of_two();
         let mut seeker = dense_arena
             .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
@@ -101,7 +101,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
 
@@ -111,7 +111,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
         )>();
         let trace_width = Rv32IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
-        let rows_used = dense_arena.current_size().div_ceil(record_size);
+        let rows_used = dense_arena.allocated().len().div_ceil(record_size);
         let height = rows_used.next_power_of_two();
         let mut seeker = dense_arena.get_record_seeker::<(
             &mut Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
@@ -265,7 +265,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
 
@@ -281,7 +281,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
             AlgebraRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
         >::get_aligned_record_size(&layout);
-        let rows_used = dense_arena.current_size().div_ceil(record_size);
+        let rows_used = dense_arena.allocated().len().div_ceil(record_size);
         let height = rows_used.next_power_of_two();
         let mut seeker = dense_arena
             .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<

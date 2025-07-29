@@ -44,7 +44,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
         &self,
         mut dense_arena: DenseRecordArena,
     ) -> AirProvingContext<GpuBackend> {
-        if dense_arena.current_size() == 0 {
+        if dense_arena.allocated().is_empty() {
             return get_empty_air_proving_ctx();
         }
 
@@ -60,7 +60,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
             EccRecord<NUM_READS, BLOCKS, BLOCK_SIZE>,
             _,
         >::get_aligned_record_size(&layout);
-        let rows_used = dense_arena.current_size().div_ceil(record_size);
+        let rows_used = dense_arena.allocated().len().div_ceil(record_size);
         let height = rows_used.next_power_of_two();
         let mut seeker = dense_arena
             .get_record_seeker::<EccRecord<NUM_READS, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
