@@ -470,31 +470,6 @@ impl GpuChipTestBuilder {
     }
 }
 
-#[cfg(feature = "touchemall")]
-fn check_trace_validity(proving_ctx: &AirProvingContext<GpuBackend>) {
-    use openvm_stark_backend::prover::hal::MatrixDimensions;
-    use stark_backend_gpu::cuda::copy::MemCopyD2H;
-
-    let trace = proving_ctx.common_main.as_ref().unwrap();
-    let height = trace.height();
-    let width = trace.width();
-    let trace = trace.to_host().unwrap();
-    for r in 0..height {
-        for c in 0..width {
-            let value = trace[c * height + r];
-            let value_u32 = unsafe { *(&value as *const F as *const u32) };
-            assert!(
-                value_u32 != 0xffffffff,
-                "potentially untouched value at ({}, {}) of a trace of size {}x{}",
-                r,
-                c,
-                height,
-                width
-            );
-        }
-    }
-}
-
 #[derive(Default)]
 pub struct GpuChipTester {
     pub airs: Vec<AirRef<SC>>,
@@ -541,7 +516,9 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            check_trace_validity(&proving_ctx);
+            use stark_backend_gpu::engine::check_trace_validity;
+
+            check_trace_validity(&proving_ctx, &air.name());
         }
         self.airs.push(air);
         self.ctxs.push(proving_ctx);
@@ -569,7 +546,9 @@ impl GpuChipTester {
         }
         #[cfg(feature = "touchemall")]
         {
-            check_trace_validity(&proving_ctx);
+            use stark_backend_gpu::engine::check_trace_validity;
+
+            check_trace_validity(&proving_ctx, &air.name());
         }
         assert_eq_cpu_and_gpu_matrix(
             expected_trace.unwrap(),
