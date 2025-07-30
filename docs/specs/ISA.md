@@ -133,10 +133,11 @@ to. Address space `0` is considered a read-only array with `[a]_0 = a` for any `
 #### Memory Accesses and Block Accesses
 
 VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space.
-The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and the access has alignment requirements that depend on the
-address space. For non-native address spaces (address spaces other than `4`), all memory accesses must be 4-byte aligned,
-meaning the starting pointer address must be divisible by 4. For the native address space (`4`), accesses can start from
-any pointer address. An access is called a **block access** if it has size greater than 1. Block accesses are not supported
+The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and the access has alignment requirements that are configurable
+per address space. For address spaces `1`, `2`, and `3`, all memory accesses must be 4-byte aligned, meaning the starting
+pointer address must be divisible by 4. For the native address space (`4`), accesses can start from any pointer address
+(alignment of 1). For address spaces beyond `4`, the alignment defaults to 1 but can be configured.
+An access is called a **block access** if it has size greater than 1. Block accesses are not supported
 for address space `0`.
 
 #### Address Spaces

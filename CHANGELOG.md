@@ -17,7 +17,7 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 - (ISA) Field arithmetic instructions now restrict address spaces `e, f` to be either `0` or `4`, instead of allowing any address space.
 - (ISA) RV32IM load instructions are now restricted to address space `2` only, instead of allowing address spaces `0`, `1`, or `2`.
 - (ISA) The maximum valid pointer value in address space `1` (register address space) is now `127`, corresponding to 32 registers with 4 byte limbs each.
-- (ISA) Memory accesses in non-native address spaces (address spaces other than `4`) now require 4-byte alignment, meaning the starting pointer address must be divisible by 4.
+- (ISA) Memory accesses now have configurable alignment requirements per address space. Address spaces `1`, `2`, and `3` require 4-byte alignment. Native address space (`4`) allows any alignment. Address spaces beyond `4` default to 1-byte alignment but are configurable.
 
 ## v1.3.0 (2025-07-15)
 
