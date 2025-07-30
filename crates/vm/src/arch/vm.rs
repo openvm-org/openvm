@@ -441,6 +441,8 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    #[cfg(feature = "stark-debug")]
+    pub h_pk: Option<MultiStarkProvingKey<E::SC>>,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -462,6 +464,8 @@ where
             executor,
             pk: d_pk,
             chip_complex,
+            #[cfg(feature = "stark-debug")]
+            h_pk: None,
         })
     }
 
@@ -674,6 +678,8 @@ where
         }
         #[cfg(feature = "metrics")]
         self.finalize_metrics(&mut current_trace_heights);
+        #[cfg(feature = "stark-debug")]
+        self.debug_proving_ctx(&ctx);
 
         Ok(ctx)
     }
@@ -711,7 +717,6 @@ where
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
         let ctx = self.generate_proving_ctx(system_records, record_arenas)?;
-
         let proof = self.engine.prove(&self.pk, ctx);
 
         Ok((proof, final_memory))
@@ -818,6 +823,17 @@ where
 
     pub fn air_names(&self) -> impl Iterator<Item = &'_ str> {
         self.pk.per_air.iter().map(|pk| pk.air_name.as_str())
+    }
+
+    /// See [`debug_proving_ctx`].
+    #[cfg(feature = "stark-debug")]
+    pub fn debug_proving_ctx(&mut self, ctx: &ProvingContext<E::PB>) {
+        if self.h_pk.is_none() {
+            let air_inv = self.config().create_airs().unwrap();
+            self.h_pk = Some(air_inv.keygen(&self.engine));
+        }
+        let pk = self.h_pk.as_ref().unwrap();
+        debug_proving_ctx(self, pk, ctx);
     }
 }
 
@@ -1229,6 +1245,58 @@ where
             .system
             .override_trace_heights(&heights[..num_sys_airs]);
     }
+}
+
+/// Runs the STARK backend debugger to check the constraints against the trace matrices
+/// logically, instead of cryptographically. This will panic if any constraint is violated, and
+/// using `RUST_BACKTRACE=1` can be used to read the stack backtrace of where the constraint
+/// failed in the code (this requires the code to be compiled with debug=true). Using lower
+/// optimization levels like -O0 will prevent the compiler from inlining and give better
+/// debugging information.
+// @dev The debugger needs the host proving key.
+//      This function is used both by VirtualMachine::debug_proving_ctx and by
+// stark_utils::air_test_impl
+#[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
+#[tracing::instrument(level = "debug", skip_all)]
+pub fn debug_proving_ctx<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    pk: &MultiStarkProvingKey<E::SC>,
+    ctx: &ProvingContext<E::PB>,
+) where
+    E: StarkEngine,
+    VB: VmBuilder<E>,
+{
+    use itertools::multiunzip;
+    use openvm_stark_backend::prover::types::AirProofRawInput;
+
+    let device = vm.engine.device();
+    let air_inv = vm.config().create_airs().unwrap();
+    let global_airs = air_inv.into_airs().collect_vec();
+    let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+        multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
+            // Transfer from device **back** to host so the debugger can read the data.
+            let cached_mains = air_ctx
+                .cached_mains
+                .iter()
+                .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                .collect_vec();
+            let common_main = air_ctx
+                .common_main
+                .as_ref()
+                .map(|m| device.transport_matrix_from_device_to_host(m));
+            let public_values = air_ctx.public_values.clone();
+            let raw = AirProofRawInput {
+                cached_mains,
+                common_main,
+                public_values,
+            };
+            (
+                global_airs[*air_id].clone(),
+                pk.per_air[*air_id].clone(),
+                raw,
+            )
+        }));
+    vm.engine.debug(&airs, &pks, &proof_inputs);
 }
 
 #[cfg(feature = "metrics")]

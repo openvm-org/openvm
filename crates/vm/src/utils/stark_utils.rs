@@ -1,10 +1,8 @@
-use itertools::{multiunzip, Itertools};
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
-    prover::{hal::DeviceDataTransporter, types::AirProofRawInput},
 };
 use openvm_stark_sdk::{
     config::{
@@ -17,9 +15,9 @@ use openvm_stark_sdk::{
 
 use crate::{
     arch::{
-        execution_mode::metered::Segment, vm::VirtualMachine, ExitCode, InsExecutorE1,
-        InsExecutorE2, InstructionExecutor, MatrixRecordArena, PreflightExecutionOutput, Streams,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx, execution_mode::metered::Segment, vm::VirtualMachine, ExitCode,
+        InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
+        PreflightExecutionOutput, Streams, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -129,7 +127,6 @@ where
     let exe = committed_exe.exe;
 
     let mut state = Some(vm.create_initial_state(&exe, input));
-    let global_airs = vm.config().create_airs().unwrap().into_airs().collect_vec();
     let mut proofs = Vec::new();
     let mut exit_code = None;
     for segment in segments {
@@ -150,33 +147,8 @@ where
         exit_code = system_records.exit_code;
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-        let device = vm.engine.device();
         if debug {
-            let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(ctx.per_air.iter().map(|(air_id, air_ctx)| {
-                    // Unfortunate H2D transfers
-                    let cached_mains = air_ctx
-                        .cached_mains
-                        .iter()
-                        .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
-                        .collect_vec();
-                    let common_main = air_ctx
-                        .common_main
-                        .as_ref()
-                        .map(|m| device.transport_matrix_from_device_to_host(m));
-                    let public_values = air_ctx.public_values.clone();
-                    let raw = AirProofRawInput {
-                        cached_mains,
-                        common_main,
-                        public_values,
-                    };
-                    (
-                        global_airs[*air_id].clone(),
-                        pk.per_air[*air_id].clone(),
-                        raw,
-                    )
-                }));
-            vm.engine.debug(&airs, &pks, &proof_inputs);
+            debug_proving_ctx(&vm, &pk, &ctx);
         }
         let proof = vm.engine.prove(vm.pk(), ctx);
         proofs.push(proof);
