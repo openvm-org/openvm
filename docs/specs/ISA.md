@@ -31,8 +31,8 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `PC_BITS`           | The number of bits in the program counter.                         | Fixed to 30.                                                                                        |
 | `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
 | `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
-| `as_offset`         | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
-| `as_height`         | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `as_height <= F::bits() - 2`                                             |
+| `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
+| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
 | `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
 
@@ -113,12 +113,12 @@ Data memory is a random access memory (RAM) which supports read and write operat
 cells which represent a single field element indexed by **address space** and **pointer**. The number of supported
 address spaces and the size of each address space are configurable constants.
 
-- Valid address spaces not used for immediates lie in `[1, 1 + 2^as_height)` for configuration constant `as_height`.
+- Valid address spaces not used for immediates lie in `[1, 1 + 2^addr_space_height)` for configuration constant `addr_space_height`.
 - Valid pointers are field elements that lie in `[0, 2^pointer_max_bits)`, for
   configuration constant `pointer_max_bits`. When accessing an address out of `[0, 2^pointer_max_bits)`, the VM should
   panic.
-
-These configuration constants must satisfy `as_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
+- For the register address space (address space `1`), valid pointers lie in `[0, 128)`, corresponding to 32 registers with 4 byte limbs each.
+These configuration constants must satisfy `addr_space_height, pointer_max_bits <= F::bits() - 2`. We use the following notation
 to denote cells in memory:
 
 - `[a]_d` denotes the single-cell value at pointer location `a` in address space `d`. This is a single
@@ -171,7 +171,7 @@ structures during runtime execution:
 - `hint_space`: a vector of vectors of field elements used to store hints during runtime execution
   via [phantom sub-instructions](#phantom-sub-instructions) such as `NativeHintLoad`. The outer `hint_space` vector is append-only, but
   each internal `hint_space[hint_id]` vector may be mutated, including deletions, by the host.
-- `kv_store`: a read-only key-value store for hints. Executors(e.g. `Rv32HintLoadByKey`) can read data from `kv_store` 
+- `kv_store`: a read-only key-value store for hints. Executors(e.g. `Rv32HintLoadByKey`) can read data from `kv_store`
   at runtime. `kv_store` is designed for general purposes so both key and value are byte arrays. Encoding of key/value
   are decided by each executor. Users need to use the corresponding encoding when adding data to `kv_store`.
 
@@ -327,7 +327,7 @@ unsigned integer, and convert to field element. In the instructions below, `[c:4
 #### Load/Store
 
 For all load/store instructions, we assume the operand `c` is in `[0, 2^16)`, and we fix address spaces `d = 1`.
-The address space `e` can be `0`, `1`, or `2` for load instructions, and `2`, `3`, or `4` for store instructions.
+The address space `e` is `2` for load instructions, and can be `2`, `3`, or `4` for store instructions.
 The operand `g` must be a boolean. We let `sign_extend(decompose(c)[0:2], g)` denote the `i32` defined by first taking
 the unsigned integer encoding of `c` as 16 bits, then sign extending it to 32 bits using the sign bit `g`, and considering
 the 32 bits as the 2's complement of an `i32`.
@@ -464,7 +464,7 @@ reads but not allowed for writes. When using immediates, we interpret `[a]_0` as
 
 #### Field Arithmetic
 
-This instruction set does native field operations. Below, `e,f` may be any address space.
+This instruction set does native field operations. Below, `e,f` must be either `0` or `4`.
 When either `e` or `f` is zero, `[b]_0` and `[c]_0` should be interpreted as the immediates `b`
 and `c`, respectively.
 
