@@ -174,9 +174,6 @@ mod tests {
                 EmptyAdapterCoreLayout::<F, Rv32JalrAdapterStep>::new(),
             );
 
-        // TODO[INT-4481]: Because memory is not implemented yet, this test fails
-        // interaction constraints. Once memory is completed, we should make sure
-        // that verification passes.
         tester
             .build()
             .load_gpu_harness(harness)
