@@ -133,9 +133,15 @@ to. Address space `0` is considered a read-only array with `[a]_0 = a` for any `
 #### Memory Accesses and Block Accesses
 
 VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space.
-The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and the access does not need to be aligned, meaning that
-it can start from any pointer address, even those not divisible by the block size. An access is called a **block access
-** if it has size greater than 1. Block accesses are not supported for address space `0`.
+The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and each address space has a minimum block size that is
+configurable. All block accesses must be at pointers that are a multiple of the minimum block size. For address
+spaces `1`, `2`, and `3`, the minimum block size is 4, meaning all accesses must be at pointer addresses that are
+divisible by 4. However, RISC-V instructions like `lb`, `lh`, `sb`, and `sh` still work despite having minimum
+block size requirements equal to the size of the access (1 byte for `lb`/`sb`, 2 bytes for `lh`/`sh`) because these
+instructions are implemented by doing a block access of size 4. For the native address space (`4`), the minimum
+block size is 1, so accesses can start from any pointer address. For address spaces beyond `4`, the minimum
+block size defaults to 1 but can be configured.
+Block accesses are not supported for address space `0`.
 
 #### Address Spaces
 
