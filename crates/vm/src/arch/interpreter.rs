@@ -1,3 +1,4 @@
+use memmap2::MmapMut;
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
@@ -12,7 +13,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 use tracing::info_span;
 
@@ -46,14 +47,14 @@ struct TerminatePreCompute {
 }
 
 macro_rules! execute_with_metrics {
-    ($span:literal, $program:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
+    ($span:literal, $program:expr, $vm_state:expr, $fn_ptrs_base:expr) => {{
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
         let start_instret = $vm_state.instret;
 
-        info_span!($span).in_scope(|| unsafe {
-            execute_impl($program, $vm_state, $pre_compute_insts);
+        info_span!($span).in_scope(|| {
+            execute_impl($program, $vm_state, $fn_ptrs_base);
         });
 
         #[cfg(feature = "metrics")]
@@ -112,7 +113,20 @@ where
             &self.inventory,
             &mut split_pre_compute_buf,
         )?;
-        execute_with_metrics!("execute_e1", program, &mut vm_state, &pre_compute_insts);
+        // Create mmap buffer for instructions
+        let program_len = program.instructions_and_debug_infos.len();
+        let mut mmap_buffer = MmapPreComputeBuffer::new::<F, Ctx>(program_len);
+
+        // Copy instructions to mmap buffer
+        unsafe {
+            let mmap_slice = mmap_buffer.as_mut_slice(program_len);
+            for (i, inst) in pre_compute_insts.into_iter().enumerate() {
+                mmap_slice[i] = inst;
+            }
+
+            // Execute using mmap implementation
+            execute_with_metrics!("execute_e1", program, &mut vm_state, mmap_slice.as_ptr());
+        }
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
@@ -145,12 +159,25 @@ where
             executor_idx_to_air_idx,
             &mut split_pre_compute_buf,
         )?;
-        execute_with_metrics!(
-            "execute_metered",
-            program,
-            &mut vm_state,
-            &pre_compute_insts
-        );
+        // Create mmap buffer for instructions
+        let program_len = program.instructions_and_debug_infos.len();
+        let mut mmap_buffer = MmapPreComputeBuffer::new::<F, Ctx>(program_len);
+
+        // Copy instructions to mmap buffer
+        unsafe {
+            let mmap_slice = mmap_buffer.as_mut_slice(program_len);
+            for (i, inst) in pre_compute_insts.into_iter().enumerate() {
+                mmap_slice[i] = inst;
+            }
+
+            // Execute using mmap implementation
+            execute_with_metrics!(
+                "execute_metered",
+                program,
+                &mut vm_state,
+                mmap_slice.as_ptr()
+            );
+        }
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
         } else {
@@ -206,13 +233,15 @@ where
     }
 }
 
+/// Execute implementation that relies on mmap segfault protection instead of bounds checking.
+/// This function assumes the fn_ptrs are stored in mmap memory with exact program length,
+/// so any out-of-bounds access will trigger a segfault.
 #[inline(never)]
 unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     program: &Program<F>,
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
-    fn_ptrs: &[PreComputeInstruction<F, Ctx>],
+    fn_ptrs_base: *const PreComputeInstruction<F, Ctx>,
 ) {
-    // let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -221,8 +250,10 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
         if Ctx::should_suspend(vm_state) {
             break;
         }
-        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
-        let inst = &fn_ptrs[pc_index];
+
+        // The mmap will segfault if pc_index is out of bounds
+        let pc_index = ((vm_state.pc - program.pc_base) / DEFAULT_PC_STEP) as usize;
+        let inst = unsafe { &*fn_ptrs_base.add(pc_index) };
         unsafe { (inst.handler)(inst.pre_compute, vm_state) };
     }
     if vm_state
@@ -232,26 +263,75 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     {
         Ctx::on_terminate(vm_state);
     }
-    // println!("execute time: {}ms", start.elapsed().as_millis());
-}
-
-fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
-    let pc_base = program.pc_base;
-    let pc_index = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-    if !(0..program.len()).contains(&pc_index) {
-        return Err(ExecutionError::PcOutOfBounds {
-            pc,
-            pc_base,
-            program_len: program.len(),
-        });
-    }
-    Ok(pc_index)
 }
 
 /// Bytes allocated according to the given Layout
 pub struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
+}
+
+/// Memory-mapped buffer for PreComputeInstructions
+pub struct MmapPreComputeBuffer {
+    mmap: MmapMut,
+}
+
+impl MmapPreComputeBuffer {
+    /// Create a new mmap buffer that can hold the exact number of PreComputeInstructions.
+    /// The buffer is sized to fit exactly `program_len` instructions, so any access
+    /// beyond this will trigger a segfault.
+    pub fn new<F, Ctx>(program_len: usize) -> Self {
+        let instruction_size = std::mem::size_of::<PreComputeInstruction<F, Ctx>>();
+        let total_size = program_len * instruction_size;
+
+        let mmap = MmapMut::map_anon(total_size).expect("Failed to create mmap");
+
+        Self { mmap }
+    }
+
+    /// Get a mutable slice that can hold PreComputeInstructions
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `len * size_of::<PreComputeInstruction<'a, F, Ctx>>()` does not exceed the size of the
+    ///   underlying mmap buffer that was allocated in `new()`.
+    /// - The mmap buffer contains properly initialized `PreComputeInstruction` values for the
+    ///   entire range `[0, len)`. Uninitialized memory must not be read.
+    /// - The lifetime `'a` must not outlive any references contained within the `PreComputeInstruction`
+    ///   structs (particularly the `pre_compute: &'a [u8]` field).
+    /// - The cast from `*mut u8` to `*mut PreComputeInstruction<'a, F, Ctx>` assumes proper alignment.
+    ///   This is typically satisfied because mmap returns page-aligned memory and `PreComputeInstruction`
+    ///   has standard alignment requirements.
+    pub unsafe fn as_mut_slice<'a, F, Ctx>(
+        &'a mut self,
+        len: usize,
+    ) -> &'a mut [PreComputeInstruction<'a, F, Ctx>] {
+        let ptr = self.mmap.as_mut_ptr() as *mut PreComputeInstruction<'a, F, Ctx>;
+        std::slice::from_raw_parts_mut(ptr, len)
+    }
+
+    /// Get an immutable slice of PreComputeInstructions
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure:
+    /// - `len * size_of::<PreComputeInstruction<'a, F, Ctx>>()` does not exceed the size of the
+    ///   underlying mmap buffer that was allocated in `new()`.
+    /// - The mmap buffer contains properly initialized `PreComputeInstruction` values for the
+    ///   entire range `[0, len)`. Uninitialized memory must not be read.
+    /// - The lifetime `'a` must not outlive any references contained within the `PreComputeInstruction`
+    ///   structs (particularly the `pre_compute: &'a [u8]` field).
+    /// - The cast from `*const u8` to `*const PreComputeInstruction<'a, F, Ctx>` assumes proper alignment.
+    ///   This is typically satisfied because mmap returns page-aligned memory and `PreComputeInstruction`
+    ///   has standard alignment requirements.
+    pub unsafe fn as_slice<'a, F, Ctx>(
+        &'a self,
+        len: usize,
+    ) -> &'a [PreComputeInstruction<'a, F, Ctx>] {
+        let ptr = self.mmap.as_ptr() as *const PreComputeInstruction<'a, F, Ctx>;
+        std::slice::from_raw_parts(ptr, len)
+    }
 }
 
 impl AlignedBuf {
