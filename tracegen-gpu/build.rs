@@ -23,10 +23,13 @@ fn main() {
             .output()
             .expect("Failed to run nvidia-smi");
 
-        let arch = String::from_utf8(output.stdout)
-            .unwrap()
+        let full_output = String::from_utf8(output.stdout).unwrap();
+        let arch = full_output
+            .lines()
+            .next()
+            .expect("`nvidia-smi --query-gpu=compute_cap` failed to return any output")
             .trim()
-            .replace(".", "");
+            .replace('.', "");
         println!("cargo:rustc-env=CUDA_ARCH={}", arch);
         arch
     });
