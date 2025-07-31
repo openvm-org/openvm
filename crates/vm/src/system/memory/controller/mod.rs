@@ -337,7 +337,7 @@ impl<F: PrimeField32> MemoryController<F> {
 /// Owned version of [MemoryAuxColsFactory].
 #[derive(Clone)]
 pub struct SharedMemoryHelper<F> {
-    pub(crate) range_checker: SharedVariableRangeCheckerChip,
+    pub range_checker: SharedVariableRangeCheckerChip,
     pub(crate) timestamp_lt_air: AssertLtSubAir,
     pub(crate) _marker: PhantomData<F>,
 }

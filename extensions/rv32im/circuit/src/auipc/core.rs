@@ -392,7 +392,7 @@ impl<A> Rv32AuipcStep<A> {
 
 // returns rd_data
 #[inline(always)]
-pub(super) fn run_auipc(pc: u32, imm: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
+pub fn run_auipc(pc: u32, imm: u32) -> [u8; RV32_REGISTER_NUM_LIMBS] {
     let rd = pc.wrapping_add(imm << RV32_CELL_BITS);
     rd.to_le_bytes()
 }

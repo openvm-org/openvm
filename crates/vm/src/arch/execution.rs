@@ -181,8 +181,8 @@ impl ExecutionBus {
 
 #[derive(Copy, Clone, Debug)]
 pub struct ExecutionBridge {
-    execution_bus: ExecutionBus,
-    program_bus: ProgramBus,
+    pub execution_bus: ExecutionBus,
+    pub program_bus: ProgramBus,
 }
 
 pub struct ExecutionBridgeInteractor<AB: InteractionBuilder> {

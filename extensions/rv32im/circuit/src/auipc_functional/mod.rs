@@ -1,3 +1,9 @@
+
+#[cfg(test)]
+mod tests;
+
+pub type AuipcChip<F> = VmChipWrapper<F, AuipcFiller>;
+
 use crate::adapters::tracing_write;
 use crate::adapters::RV32_CELL_BITS;
 use openvm_circuit::{
@@ -44,6 +50,7 @@ pub struct AuipcRecord {
     pub inline0_start_t: u32,
     pub inline0_instruction: TL_Instruction,
 }
+#[repr(C)]
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TL_Instruction {
     Instruction(u32, [u32; 7usize]),
@@ -92,10 +99,10 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
         };
         let constant_expr = |x: isize| AB::Expr::from(constant(x));
         let cell = |i: usize| local[i].into();
-        let UF_123_0: AB::F;
-        UF_123_0 = {
+        let UF_576_0: AB::F;
+        UF_576_0 = {
             let result: AB::F;
-            result = AB::F::from_canonical_u32(123);
+            result = AB::F::from_canonical_u32(576);
             result
         };
         let UF_1_0: AB::F;
@@ -283,7 +290,7 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
             self.custom_bus_program,
             [
                 cell(12),
-                AB::Expr::from(UF_123_0),
+                AB::Expr::from(UF_576_0),
                 cell(5),
                 AB::Expr::from(UF_0_0),
                 cell(6)
@@ -318,7 +325,7 @@ pub struct AuipcStep {}
 impl<F, RA> InstructionExecutor<F, RA> for AuipcStep
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, MultiRowLayout<EmptyMultiRowMetadata>, AuipcRecord>,
+    for<'buf> RA: RecordArena<'buf, MultiRowLayout<EmptyMultiRowMetadata>, &'buf mut AuipcRecord>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         todo!()
@@ -395,9 +402,9 @@ where
         pc = record.inline0_start_pc;
         "line 6, column 13: instruction";
         instruction = record.inline0_instruction;
-        "line 14, column 5: Instruction(123UF, [set rd_ptr, 0UF, let imm, 1UF, 0UF, 0UF, 0UF]) = rep instruction;" ;
+        "line 14, column 5: Instruction(576UF, [set rd_ptr, 0UF, let imm, 1UF, 0UF, 0UF, 0UF]) = rep instruction;" ;
         if let TL_Instruction::Instruction(temp_4, temp_5) = instruction {
-            assert_eq!(temp_4, 123);
+            assert_eq!(temp_4, 576);
             let [temp_6, temp_7, temp_8, temp_9, temp_10, temp_11, temp_12] = temp_5;
             rd_ptr = temp_6;
             assert_eq!(temp_7, 0);
@@ -574,9 +581,9 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         pc = record.inline0_start_pc;
         "line 6, column 13: instruction";
         instruction = record.inline0_instruction;
-        "line 14, column 5: Instruction(123UF, [set rd_ptr, 0UF, let imm, 1UF, 0UF, 0UF, 0UF]) = rep instruction;" ;
+        "line 14, column 5: Instruction(576UF, [set rd_ptr, 0UF, let imm, 1UF, 0UF, 0UF, 0UF]) = rep instruction;" ;
         if let TL_Instruction::Instruction(temp_1, temp_2) = instruction {
-            assert_eq!(temp_1, 123);
+            assert_eq!(temp_1, 576);
             let [temp_3, temp_4, temp_5, temp_6, temp_7, temp_8, temp_9] = temp_2;
             rd_ptr = temp_3;
             assert_eq!(temp_4, 0);
