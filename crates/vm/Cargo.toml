@@ -35,6 +35,7 @@ eyre.workspace = true
 derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
+bincode = "1.3"
 
 [dev-dependencies]
 test-log.workspace = true

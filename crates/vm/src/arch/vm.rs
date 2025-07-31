@@ -4,8 +4,10 @@ use std::{
     marker::PhantomData,
     mem,
     sync::Arc,
+    fmt::{Display, Formatter},
 };
 
+use bincode::serialized_size;
 use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
@@ -873,6 +875,25 @@ where
 pub struct ContinuationVmProof<SC: StarkGenericConfig> {
     pub per_segment: Vec<Proof<SC>>,
     pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+}
+
+impl<SC: StarkGenericConfig> Display for ContinuationVmProof<SC> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "ContinuationVmProof with {} segments", self.per_segment.len())?;
+        for (i, segment) in self.per_segment.iter().enumerate() {
+            let ov_size = serialized_size(&segment.opening.values).unwrap();
+            let pcs_proof_size = serialized_size(&segment.opening.proof).unwrap();
+            writeln!(f, "Segment {}: size = {}, ov.size = {} ({}k), pcs proof size = {} ({}k)", 
+                i,
+                serialized_size(segment).unwrap(),
+                ov_size,
+                ov_size as f64 / 1024.0,
+                pcs_proof_size,
+                pcs_proof_size as f64 / 1024.0,
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl<SC: StarkGenericConfig> Clone for ContinuationVmProof<SC>
