@@ -2,24 +2,37 @@ use std::sync::Arc;
 
 use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{Rng, rngs::StdRng};
+use rand::{rngs::StdRng, Rng};
 
-use openvm_circuit::arch::{Arena, CustomBorrow, DenseRecordArena, EmptyMultiRowMetadata, InstructionExecutor, MultiRowLayout, testing::{BITWISE_OP_LOOKUP_BUS, TestChipHarness, VmChipTestBuilder}, VmChipWrapper};
+use openvm_circuit::arch::{
+    testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    Arena, CustomBorrow, DenseRecordArena, EmptyMultiRowMetadata, InstructionExecutor,
+    MultiRowLayout, VmChipWrapper,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode, program::PC_BITS};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32AuipcOpcode::{self, *};
 
 use crate::{adapters::RV32_CELL_BITS, run_auipc};
 
-use super::{AuipcAir, AuipcChip, AuipcFiller, AuipcRecord, AuipcStep};
+use super::{
+    Rv32AuipcFunctionalAir, Rv32AuipcFunctionalChip, Rv32AuipcFunctionalFiller,
+    Rv32AuipcFunctionalRecord, Rv32AuipcFunctionalStep,
+};
 
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<RA> = TestChipHarness<F, AuipcStep, AuipcAir, AuipcChip<F>, RA>;
+type Harness<RA> = TestChipHarness<
+    F,
+    Rv32AuipcFunctionalStep,
+    Rv32AuipcFunctionalAir,
+    Rv32AuipcFunctionalChip<F>,
+    RA,
+>;
 
 fn create_test_chip<RA: Arena>(
     tester: &VmChipTestBuilder<F>,
@@ -35,7 +48,7 @@ fn create_test_chip<RA: Arena>(
         bitwise_bus,
     ));
 
-    let air = AuipcAir {
+    let air = Rv32AuipcFunctionalAir {
         custom_bus_bitwise: bitwise_bus.inner.index,
         custom_bus_memory: tester.memory_bridge().memory_bus().index(),
         custom_bus_range_check: tester.memory_bridge().range_bus().index(),
@@ -43,9 +56,9 @@ fn create_test_chip<RA: Arena>(
         custom_bus_execution: tester.execution_bridge().execution_bus.index(),
     };
 
-    let executor = AuipcStep::new();
+    let executor = Rv32AuipcFunctionalStep::new();
     let chip = VmChipWrapper::<F, _>::new(
-        AuipcFiller::new(bitwise_chip.clone(), tester.memory_helper().range_checker),
+        Rv32AuipcFunctionalFiller::new(bitwise_chip.clone(), tester.memory_helper().range_checker),
         tester.memory_helper(),
     );
     let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
@@ -61,7 +74,7 @@ fn set_and_execute<RA: Arena>(
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) where
-    AuipcStep: InstructionExecutor<F, RA>,
+    Rv32AuipcFunctionalStep: InstructionExecutor<F, RA>,
 {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
@@ -124,12 +137,12 @@ fn dense_record_arena_test() {
             set_and_execute(&mut tester, &mut dense_harness, &mut rng, AUIPC, None, None);
         }
 
-        type Record<'a> = &'a mut AuipcRecord;
+        type Record<'a> = &'a mut Rv32AuipcFunctionalRecord;
 
-        let mut record_interpreter = dense_harness.arena.get_record_seeker::<Record, MultiRowLayout<EmptyMultiRowMetadata>>();
-        record_interpreter.transfer_to_matrix_arena(
-            &mut sparse_harness.arena,
-        );
+        let mut record_interpreter = dense_harness
+            .arena
+            .get_record_seeker::<Record, MultiRowLayout<EmptyMultiRowMetadata>>();
+        record_interpreter.transfer_to_matrix_arena(&mut sparse_harness.arena);
     }
 
     let tester = tester

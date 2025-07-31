@@ -48,9 +48,9 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
+mod auipc_functional;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
-mod auipc_functional;
 
 // Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]

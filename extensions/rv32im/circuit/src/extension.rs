@@ -35,8 +35,11 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
+use crate::auipc_functional::{
+    Rv32AuipcFunctionalAir, Rv32AuipcFunctionalChip, Rv32AuipcFunctionalFiller,
+    Rv32AuipcFunctionalStep,
+};
 use crate::{adapters::*, *};
-
 // ============ Extension Struct Definitions ============
 
 /// RISC-V 32-bit Base (RV32I) Extension
@@ -81,7 +84,7 @@ pub enum Rv32IExecutor {
     BranchLessThan(Rv32BranchLessThanStep),
     JalLui(Rv32JalLuiStep),
     Jalr(Rv32JalrStep),
-    Auipc(Rv32AuipcStep),
+    Auipc(Rv32AuipcFunctionalStep),
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
@@ -153,7 +156,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
         let jalr = Rv32JalrStep::new(Rv32JalrAdapterStep);
         inventory.add_executor(jalr, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc = Rv32AuipcStep::new(Rv32RdWriteAdapterStep);
+        let auipc = Rv32AuipcFunctionalStep::new();
         inventory.add_executor(auipc, Rv32AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
@@ -267,9 +270,12 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Rv32I {
         );
         inventory.add_air(jalr);
 
-        let auipc = Rv32AuipcAir::new(
-            Rv32RdWriteAdapterAir::new(memory_bridge, exec_bridge),
-            Rv32AuipcCoreAir::new(bitwise_lu),
+        let auipc = Rv32AuipcFunctionalAir::new(
+            memory_bridge.memory_bus().index(),
+            memory_bridge.range_bus().index(),
+            bitwise_lu.inner.index,
+            exec_bridge.program_bus.index(),
+            exec_bridge.execution_bus.index(),
         );
         inventory.add_air(auipc);
 
@@ -410,9 +416,9 @@ where
         );
         inventory.add_executor_chip(jalr);
 
-        inventory.next_air::<Rv32AuipcAir>()?;
-        let auipc = Rv32AuipcChip::new(
-            Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller, bitwise_lu.clone()),
+        inventory.next_air::<Rv32AuipcFunctionalAir>()?;
+        let auipc = Rv32AuipcFunctionalChip::new(
+            Rv32AuipcFunctionalFiller::new(bitwise_lu.clone(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);

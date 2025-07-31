@@ -1,9 +1,3 @@
-
-#[cfg(test)]
-mod tests;
-
-pub type AuipcChip<F> = VmChipWrapper<F, AuipcFiller>;
-
 use crate::adapters::tracing_write;
 use crate::adapters::RV32_CELL_BITS;
 use openvm_circuit::{
@@ -37,20 +31,24 @@ use std::{
     array::{self, from_fn},
     borrow::{Borrow, BorrowMut},
 };
+mod e1_e2;
+#[cfg(test)]
+mod tests;
+
+pub type Rv32AuipcFunctionalChip<F> = VmChipWrapper<F, Rv32AuipcFunctionalFiller>;
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Clone, Default, Debug)]
-pub struct AuipcRecord {
-    pub start_baton: (),
-    pub inline0_baton1: (),
-    pub inline2_prev_data: [u8; 4usize],
+pub struct Rv32AuipcFunctionalRecord {
     pub inline2_baton1: (),
-    pub inline0_start_pc: u32,
     pub inline2_prev_t: u32,
-    pub inline0_end_baton: (),
+    pub start_baton: (),
     pub inline0_start_t: u32,
     pub inline0_instruction: TL_Instruction,
+    pub inline2_prev_data: [u8; 4usize],
+    pub inline0_start_pc: u32,
+    pub inline0_baton1: (),
+    pub inline0_end_baton: (),
 }
-#[repr(C)]
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum TL_Instruction {
     Instruction(u32, [u32; 7usize]),
@@ -69,22 +67,22 @@ impl Default for TL_Timestamp {
         Self::Timestamp(Default::default(), Default::default())
     }
 }
-#[derive(Clone, Copy, Debug, Default)]
-pub struct AuipcAir {
+#[derive(derive_new :: new, Clone, Copy, Debug, Default)]
+pub struct Rv32AuipcFunctionalAir {
     custom_bus_bitwise: u16,
     custom_bus_memory: u16,
     custom_bus_range_check: u16,
     custom_bus_program: u16,
     custom_bus_execution: u16,
 }
-impl<F: Field> BaseAir<F> for AuipcAir {
+impl<F: Field> BaseAir<F> for Rv32AuipcFunctionalAir {
     fn width(&self) -> usize {
         19usize
     }
 }
-impl<F: Field> BaseAirWithPublicValues<F> for AuipcAir {}
-impl<F: Field> PartitionedBaseAir<F> for AuipcAir {}
-impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
+impl<F: Field> BaseAirWithPublicValues<F> for Rv32AuipcFunctionalAir {}
+impl<F: Field> PartitionedBaseAir<F> for Rv32AuipcFunctionalAir {}
+impl<AB: InteractionBuilder> Air<AB> for Rv32AuipcFunctionalAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
@@ -99,16 +97,10 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
         };
         let constant_expr = |x: isize| AB::Expr::from(constant(x));
         let cell = |i: usize| local[i].into();
-        let UF_576_0: AB::F;
-        UF_576_0 = {
+        let UF_16_0: AB::F;
+        UF_16_0 = {
             let result: AB::F;
-            result = AB::F::from_canonical_u32(576);
-            result
-        };
-        let UF_1_0: AB::F;
-        UF_1_0 = {
-            let result: AB::F;
-            result = AB::F::from_canonical_u32(1);
+            result = AB::F::from_canonical_u32(16);
             result
         };
         let UF_13_0: AB::F;
@@ -117,16 +109,22 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
             result = AB::F::from_canonical_u32(13);
             result
         };
+        let UF_1_0: AB::F;
+        UF_1_0 = {
+            let result: AB::F;
+            result = AB::F::from_canonical_u32(1);
+            result
+        };
         let UF_0_0: AB::F;
         UF_0_0 = {
             let result: AB::F;
             result = AB::F::from_canonical_u32(0);
             result
         };
-        let UF_16_0: AB::F;
-        UF_16_0 = {
+        let UF_576_0: AB::F;
+        UF_576_0 = {
             let result: AB::F;
-            result = AB::F::from_canonical_u32(16);
+            result = AB::F::from_canonical_u32(576);
             result
         };
         let U8F_0_0: AB::F;
@@ -138,60 +136,63 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
         builder.assert_eq(cell(0), cell(0) * cell(0));
         "line 434, column 5: x * x ";
         builder.when(cell(0)).assert_eq(
-            (cell(9) + cell(6) - cell(2))
+            (cell(5) + cell(9) - cell(2))
                 * constant(256).inverse()
-                * (cell(9) + cell(6) - cell(2))
+                * (cell(5) + cell(9) - cell(2))
                 * constant(256).inverse(),
-            (cell(9) + cell(6) - cell(2)) * constant(256).inverse(),
+            (cell(5) + cell(9) - cell(2)) * constant(256).inverse(),
         );
         "line 434, column 5: x * x ";
         builder.when(cell(0)).assert_eq(
-            (cell(12)
+            (((cell(8)
                 - cell(1)
-                - (constant_expr(256) * cell(9))
-                - (constant_expr(256) * constant(256) * cell(10))
-                + cell(8)
-                + ((cell(10)
-                + cell(7)
-                + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
-                - cell(3))
-                * constant(256).inverse())
+                - (constant_expr(256) * cell(5))
+                - (constant_expr(256) * constant(256) * cell(6)))
+                * (constant(256) * constant(256) * constant(256)).inverse())
+                + cell(11)
+                + ((cell(6)
+                    + cell(10)
+                    + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
+                    - cell(3))
+                    * constant(256).inverse())
                 - cell(4))
                 * constant(256).inverse()
-                * (cell(12)
-                - cell(1)
-                - (constant_expr(256) * cell(9))
-                - (constant_expr(256) * constant(256) * cell(10))
-                + cell(8)
-                + ((cell(10)
-                + cell(7)
-                + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
-                - cell(3))
-                * constant(256).inverse())
-                - cell(4))
+                * (((cell(8)
+                    - cell(1)
+                    - (constant_expr(256) * cell(5))
+                    - (constant_expr(256) * constant(256) * cell(6)))
+                    * (constant(256) * constant(256) * constant(256)).inverse())
+                    + cell(11)
+                    + ((cell(6)
+                        + cell(10)
+                        + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
+                        - cell(3))
+                        * constant(256).inverse())
+                    - cell(4))
                 * constant(256).inverse(),
-            (cell(12)
+            (((cell(8)
                 - cell(1)
-                - (constant_expr(256) * cell(9))
-                - (constant_expr(256) * constant(256) * cell(10))
-                + cell(8)
-                + ((cell(10)
-                + cell(7)
-                + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
-                - cell(3))
-                * constant(256).inverse())
+                - (constant_expr(256) * cell(5))
+                - (constant_expr(256) * constant(256) * cell(6)))
+                * (constant(256) * constant(256) * constant(256)).inverse())
+                + cell(11)
+                + ((cell(6)
+                    + cell(10)
+                    + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
+                    - cell(3))
+                    * constant(256).inverse())
                 - cell(4))
                 * constant(256).inverse(),
         );
         "line 434, column 5: x * x ";
         builder.when(cell(0)).assert_eq(
-            (cell(10) + cell(7) + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
+            (cell(6) + cell(10) + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
                 - cell(3))
                 * constant(256).inverse()
-                * (cell(10) + cell(7) + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
-                - cell(3))
+                * (cell(6) + cell(10) + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
+                    - cell(3))
                 * constant(256).inverse(),
-            (cell(10) + cell(7) + ((cell(9) + cell(6) - cell(2)) * constant(256).inverse())
+            (cell(6) + cell(10) + ((cell(5) + cell(9) - cell(2)) * constant(256).inverse())
                 - cell(3))
                 * constant(256).inverse(),
         );
@@ -202,41 +203,33 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
             constant_expr(1) * cell(0),
             1,
         );
+        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
+        builder.push_interaction(
+            self.custom_bus_bitwise,
+            [cell(5), cell(9), AB::Expr::from(U8F_0_0), constant_expr(0)],
+            constant_expr(1) * cell(0),
+            1,
+        );
         "line 335, column 5: memory << address_space, pointer, |data), t;";
         builder.push_interaction(
             self.custom_bus_memory,
             [
                 AB::Expr::from(UF_1_0),
-                cell(5),
+                cell(12),
                 cell(1),
                 cell(2),
                 cell(3),
                 cell(4),
-                cell(11),
+                cell(7),
             ],
             constant_expr(1) * cell(0),
-            1,
-        );
-        "line 334, column 5: memory >> address_space, pointer, prev_data, prev_t;";
-        builder.push_interaction(
-            self.custom_bus_memory,
-            [
-                AB::Expr::from(UF_1_0),
-                cell(5),
-                cell(13),
-                cell(14),
-                cell(15),
-                cell(16),
-                cell(17),
-            ],
-            -(constant_expr(1) * cell(0)),
             1,
         );
         "line 494, column 5: range_check << x, num_bits;";
         builder.push_interaction(
             self.custom_bus_range_check,
             [
-                cell(11) - cell(17) - UF_1_0 - (constant_expr(65536) * cell(18)),
+                cell(7) - cell(17) - UF_1_0 - (constant_expr(65536) * cell(18)),
                 AB::Expr::from(UF_16_0),
             ],
             constant_expr(1) * cell(0),
@@ -249,32 +242,25 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
             constant_expr(1) * cell(0),
             1,
         );
-        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
+        "line 334, column 5: memory >> address_space, pointer, prev_data, prev_t;";
         builder.push_interaction(
-            self.custom_bus_bitwise,
-            [cell(10), cell(7), AB::Expr::from(U8F_0_0), constant_expr(0)],
-            constant_expr(1) * cell(0),
-            1,
-        );
-        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
-        builder.push_interaction(
-            self.custom_bus_bitwise,
-            [cell(9), cell(6), AB::Expr::from(U8F_0_0), constant_expr(0)],
-            constant_expr(1) * cell(0),
-            1,
-        );
-        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
-        builder.push_interaction(
-            self.custom_bus_bitwise,
+            self.custom_bus_memory,
             [
-                cell(12)
-                    - cell(1)
-                    - (constant_expr(256) * cell(9))
-                    - (constant_expr(256) * constant(256) * cell(10)),
-                cell(8),
-                AB::Expr::from(U8F_0_0),
-                constant_expr(0),
+                AB::Expr::from(UF_1_0),
+                cell(12),
+                cell(13),
+                cell(14),
+                cell(15),
+                cell(16),
+                cell(17),
             ],
+            -(constant_expr(1) * cell(0)),
+            1,
+        );
+        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
+        builder.push_interaction(
+            self.custom_bus_bitwise,
+            [cell(6), cell(10), AB::Expr::from(U8F_0_0), constant_expr(0)],
             constant_expr(1) * cell(0),
             1,
         );
@@ -289,13 +275,13 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
         builder.push_interaction(
             self.custom_bus_program,
             [
-                cell(12),
+                cell(8),
                 AB::Expr::from(UF_576_0),
-                cell(5),
+                cell(12),
                 AB::Expr::from(UF_0_0),
-                cell(6)
-                    + (constant_expr(256) * cell(7))
-                    + (constant_expr(256) * constant(256) * cell(8)),
+                cell(9)
+                    + (constant_expr(256) * cell(10))
+                    + (constant_expr(256) * constant(256) * cell(11)),
                 AB::Expr::from(UF_1_0),
                 AB::Expr::from(UF_0_0),
                 AB::Expr::from(UF_0_0),
@@ -304,28 +290,48 @@ impl<AB: InteractionBuilder> Air<AB> for AuipcAir {
             constant_expr(1) * cell(0),
             1,
         );
-        "line 269, column 5: execution >> start_pc, start_t;";
-        builder.push_interaction(
-            self.custom_bus_execution,
-            [cell(12), cell(11)],
-            -(constant_expr(1) * cell(0)),
-            1,
-        );
         "line 270, column 5: execution << next_pc, next_t;";
         builder.push_interaction(
             self.custom_bus_execution,
-            [cell(12) + UF_1_0, cell(11) + UF_1_0],
+            [cell(8) + UF_1_0, cell(7) + UF_1_0],
+            constant_expr(1) * cell(0),
+            1,
+        );
+        "line 269, column 5: execution >> start_pc, start_t;";
+        builder.push_interaction(
+            self.custom_bus_execution,
+            [cell(8), cell(7)],
+            -(constant_expr(1) * cell(0)),
+            1,
+        );
+        "line 116, column 5: bitwise << x, y, 0U8F, 0;";
+        builder.push_interaction(
+            self.custom_bus_bitwise,
+            [
+                (cell(8)
+                    - cell(1)
+                    - (constant_expr(256) * cell(5))
+                    - (constant_expr(256) * constant(256) * cell(6)))
+                    * (constant(256) * constant(256) * constant(256)).inverse(),
+                cell(11),
+                AB::Expr::from(U8F_0_0),
+                constant_expr(0),
+            ],
             constant_expr(1) * cell(0),
             1,
         );
     }
 }
 #[derive(Clone, derive_new :: new)]
-pub struct AuipcStep {}
-impl<F, RA> InstructionExecutor<F, RA> for AuipcStep
+pub struct Rv32AuipcFunctionalStep {}
+impl<F, RA> InstructionExecutor<F, RA> for Rv32AuipcFunctionalStep
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, MultiRowLayout<EmptyMultiRowMetadata>, &'buf mut AuipcRecord>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        MultiRowLayout<EmptyMultiRowMetadata>,
+        &'buf mut Rv32AuipcFunctionalRecord,
+    >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         todo!()
@@ -335,40 +341,51 @@ where
         vm_state: VmStateMut<F, TracingMemory, RA>,
         vm_instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        println!(
+            "pc = {}, imm = {}, real imm = {}, rd_ptr = {} | written value should be {}",
+            vm_state.pc,
+            vm_instruction.c,
+            (vm_instruction.c.as_canonical_u32() * 256) as i32,
+            vm_instruction.a,
+            vm_state
+                .pc
+                .wrapping_add(vm_instruction.c.as_canonical_u32() * 256)
+        );
+
         let mut record = vm_state
             .ctx
             .alloc(MultiRowLayout::new(EmptyMultiRowMetadata::new()));
         let argument_0 = ();
-        let mut inline0_baton2: () = Default::default();
-        let mut imm: u32 = Default::default();
-        let mut rd: u32 = Default::default();
-        let mut inline0_start_timestamp: TL_Timestamp = Default::default();
         let mut inline0_next_t: u32 = Default::default();
-        let mut rd_ptr: u32 = Default::default();
-        let mut inline1_y: u32 = Default::default();
-        let mut inline1_x: u32 = Default::default();
-        let mut inline2_data: u32 = Default::default();
-        let mut inline2_baton0: () = Default::default();
-        let mut inline0_next_pc: u32 = Default::default();
-        let mut pc: u32 = Default::default();
         let mut inline2_next_timestamp: TL_Timestamp = Default::default();
-        let mut instruction: TL_Instruction = Default::default();
-        let mut inline2_next_t: u32 = Default::default();
-        let mut inline2_address_space: u32 = Default::default();
-        let mut end_timestamp: TL_Timestamp = Default::default();
-        let mut inline0_next_timestamp: TL_Timestamp = Default::default();
+        let mut rd_ptr: u32 = Default::default();
+        let mut inline2_timestamp: TL_Timestamp = Default::default();
+        let mut inline2_data: u32 = Default::default();
+        let mut inline0_next_pc: u32 = Default::default();
+        let mut inline1_y: u32 = Default::default();
+        let mut inline2_t: u32 = Default::default();
         let mut next_pc: u32 = Default::default();
         let mut inline2_inline0_y: u32 = Default::default();
-        let mut inline1_z: u32 = Default::default();
-        let mut end_baton: () = Default::default();
         let mut inline2_inline0_x: u32 = Default::default();
         let mut inline2_inline0_z: u32 = Default::default();
+        let mut inline0_start_timestamp: TL_Timestamp = Default::default();
         let mut start_timestamp: TL_Timestamp = Default::default();
-        let mut inline2_timestamp: TL_Timestamp = Default::default();
-        let mut inline2_pointer: u32 = Default::default();
-        let mut inline2_t: u32 = Default::default();
         let mut inline0_start_baton: () = Default::default();
+        let mut inline1_z: u32 = Default::default();
+        let mut inline0_baton2: () = Default::default();
+        let mut inline2_next_t: u32 = Default::default();
+        let mut inline0_next_timestamp: TL_Timestamp = Default::default();
+        let mut pc: u32 = Default::default();
+        let mut imm: u32 = Default::default();
+        let mut rd: u32 = Default::default();
         let mut real_imm: u32 = Default::default();
+        let mut inline2_pointer: u32 = Default::default();
+        let mut end_timestamp: TL_Timestamp = Default::default();
+        let mut inline1_x: u32 = Default::default();
+        let mut instruction: TL_Instruction = Default::default();
+        let mut inline2_baton0: () = Default::default();
+        let mut inline2_address_space: u32 = Default::default();
+        let mut end_baton: () = Default::default();
         record.start_baton = argument_0;
         "line 3, column 9: start_baton";
         inline0_start_baton = record.start_baton;
@@ -422,7 +439,7 @@ where
         real_imm = temp_13;
         "line 19, column 6: uadd({pc|, {real_imm|, set {rd|)";
         let mut temp_14: u32 = Default::default();
-        temp_14 = (pc) + (real_imm);
+        temp_14 = (pc).wrapping_add((real_imm));
         rd = temp_14;
         "line 21, column 48: rd";
         inline2_data = rd;
@@ -442,6 +459,13 @@ where
         "line 329, column 6: e_write_memory(baton0, 1UF, pointer, data, set prev_t, set prev_data, set baton1)" ;
         let mut temp_17: u32 = Default::default();
         let mut temp_18: [u8; 4usize] = Default::default();
+        println!(
+            "writing: as = {}, pointer = {}, data = {:?}, data_before_le_bytes = {}",
+            1,
+            inline2_pointer,
+            inline2_data.to_le_bytes(),
+            inline2_data
+        );
         tracing_write(
             vm_state.memory,
             (1),
@@ -458,7 +482,7 @@ where
         inline2_inline0_x = inline2_t;
         "line 410, column 6: uadd({x|, {y|, set {z|)";
         let mut temp_19: u32 = Default::default();
-        temp_19 = (inline2_inline0_x) + (inline2_inline0_y);
+        temp_19 = (inline2_inline0_x).wrapping_add((inline2_inline0_y));
         inline2_inline0_z = temp_19;
         "line 331, column 24: next_t";
         inline2_next_t = inline2_inline0_z;
@@ -472,7 +496,7 @@ where
         inline1_x = pc;
         "line 410, column 6: uadd({x|, {y|, set {z|)";
         let mut temp_20: u32 = Default::default();
-        temp_20 = (inline1_x) + (inline1_y);
+        temp_20 = (inline1_x).wrapping_add((inline1_y));
         inline1_z = temp_20;
         "line 11, column 25: next_pc";
         next_pc = inline1_z;
@@ -496,80 +520,81 @@ where
     }
 }
 #[derive(Clone, derive_new :: new)]
-pub struct AuipcFiller {
+pub struct Rv32AuipcFunctionalFiller {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
-impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
+impl<F: PrimeField32> TraceFiller<F> for Rv32AuipcFunctionalFiller {
     fn fill_trace_row(&self, _: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
-        let record: &AuipcRecord = unsafe { get_record_from_slice(&mut row_slice, ()) };
+        let record: &Rv32AuipcFunctionalRecord =
+            unsafe { get_record_from_slice(&mut row_slice, ()) };
         let record = record.clone();
-        let mut next_pc: u32 = Default::default();
-        let mut inline2_inline1_inline1_y: u32 = Default::default();
-        let mut inline2_inline0_z: u32 = Default::default();
+        let mut start_timestamp: TL_Timestamp = Default::default();
+        let mut inline0_start_timestamp: TL_Timestamp = Default::default();
+        let mut inline7_x: u8 = Default::default();
+        let mut inline0_next_timestamp: TL_Timestamp = Default::default();
+        let mut inline10_y: u8 = Default::default();
+        let mut inline6_x: u8 = Default::default();
         let mut inline0_next_t: u32 = Default::default();
+        let mut inline2_inline1_inline1_x: u32 = Default::default();
+        let mut inline2_t: u32 = Default::default();
+        let mut inline2_inline0_x: u32 = Default::default();
+        let mut inline2_inline1_inline1_y: u32 = Default::default();
+        let mut inline2_inline1_inline2_x: u32 = Default::default();
+        let mut inline2_data: u32 = Default::default();
+        let mut inline1_x: u32 = Default::default();
+        let mut inline5_x: F = Default::default();
         let mut pc_repped: [u8; 2usize] = Default::default();
         let mut rd: u32 = Default::default();
-        let mut inline2_inline1_inline0_x: u32 = Default::default();
-        let mut inline2_inline0_y: u32 = Default::default();
-        let mut imm_repped: [u8; 3usize] = Default::default();
-        let mut inline2_inline1_lower: u32 = Default::default();
-        let mut inline9_y: u8 = Default::default();
-        let mut inline2_timestamp: TL_Timestamp = Default::default();
-        let mut inline2_inline1_upper: u32 = Default::default();
-        let mut inline2_inline1_y: u32 = Default::default();
-        let mut inline2_inline1_inline2_num_bits: u32 = Default::default();
-        let mut inline2_inline1_inline2_x: u32 = Default::default();
+        let mut inline2_inline1_inline3_num_bits: u32 = Default::default();
+        let mut inline2_inline0_z: u32 = Default::default();
+        let mut pc_u32: u32 = Default::default();
+        let mut inline2_inline1_inline1_z: u32 = Default::default();
+        let mut instruction: TL_Instruction = Default::default();
+        let mut inline1_y: u32 = Default::default();
+        let mut inline2_address_space: u32 = Default::default();
+        let mut inline0_next_pc: u32 = Default::default();
+        let mut inline2_pointer: u32 = Default::default();
         let mut carry3: F = Default::default();
-        let mut inline5_x: F = Default::default();
+        let mut inline2_inline1_lower: u32 = Default::default();
+        let mut inline2_inline1_upper: u32 = Default::default();
+        let mut inline2_timestamp: TL_Timestamp = Default::default();
+        let mut end_baton: () = Default::default();
+        let mut pc_upper_limb: u8 = Default::default();
         let mut inline2_next_t: u32 = Default::default();
-        let mut inline7_x: u8 = Default::default();
         let mut inline2_next_timestamp: TL_Timestamp = Default::default();
         let mut inline3_x: F = Default::default();
-        let mut inline2_inline1_inline0_z: u32 = Default::default();
-        let mut instruction: TL_Instruction = Default::default();
-        let mut inline0_next_pc: u32 = Default::default();
-        let mut inline2_inline1_x: u32 = Default::default();
-        let mut inline10_x: u8 = Default::default();
-        let mut pc: u32 = Default::default();
-        let mut inline10_y: u8 = Default::default();
-        let mut inline6_y: u8 = Default::default();
-        let mut inline2_pointer: u32 = Default::default();
-        let mut inline0_next_timestamp: TL_Timestamp = Default::default();
-        let mut end_baton: () = Default::default();
-        let mut inline6_x: u8 = Default::default();
-        let mut inline2_baton0: () = Default::default();
-        let mut inline1_y: u32 = Default::default();
-        let mut inline2_inline1_inline1_x: u32 = Default::default();
-        let mut imm: u32 = Default::default();
-        let mut inline2_t: u32 = Default::default();
-        let mut start_timestamp: TL_Timestamp = Default::default();
-        let mut inline1_z: u32 = Default::default();
-        let mut inline2_inline0_x: u32 = Default::default();
-        let mut inline2_inline1_inline3_num_bits: u32 = Default::default();
+        let mut inline2_inline0_y: u32 = Default::default();
+        let mut inline8_x: u8 = Default::default();
+        let mut inline0_baton2: () = Default::default();
+        let mut inline9_y: u8 = Default::default();
         let mut carry1: F = Default::default();
         let mut inline4_x: F = Default::default();
-        let mut inline2_data: u32 = Default::default();
-        let mut inline8_y: u8 = Default::default();
-        let mut inline8_x: u8 = Default::default();
-        let mut rd_ptr: u32 = Default::default();
-        let mut inline0_baton2: () = Default::default();
-        let mut inline1_x: u32 = Default::default();
-        let mut inline0_start_timestamp: TL_Timestamp = Default::default();
-        let mut pc_u32: u32 = Default::default();
-        let mut pc_upper_limb: u8 = Default::default();
-        let mut carry2: F = Default::default();
-        let mut inline2_address_space: u32 = Default::default();
-        let mut end_timestamp: TL_Timestamp = Default::default();
-        let mut inline7_y: u8 = Default::default();
-        let mut inline2_inline1_real_diff: u32 = Default::default();
-        let mut inline2_inline1_inline1_z: u32 = Default::default();
-        let mut real_imm: u32 = Default::default();
-        let mut inline0_start_baton: () = Default::default();
+        let mut imm: u32 = Default::default();
+        let mut inline10_x: u8 = Default::default();
         let mut inline9_x: u8 = Default::default();
+        let mut next_pc: u32 = Default::default();
+        let mut inline2_inline1_inline0_x: u32 = Default::default();
+        let mut end_timestamp: TL_Timestamp = Default::default();
+        let mut inline1_z: u32 = Default::default();
+        let mut inline2_baton0: () = Default::default();
+        let mut carry2: F = Default::default();
+        let mut inline6_y: u8 = Default::default();
+        let mut imm_repped: [u8; 3usize] = Default::default();
+        let mut inline2_inline1_real_diff: u32 = Default::default();
+        let mut rd_ptr: u32 = Default::default();
+        let mut inline7_y: u8 = Default::default();
         let mut inline2_inline1_diff: u32 = Default::default();
-        let mut inline2_inline1_inline0_y: u32 = Default::default();
         let mut inline2_inline1_inline3_x: u32 = Default::default();
+        let mut inline2_inline1_x: u32 = Default::default();
+        let mut inline0_start_baton: () = Default::default();
+        let mut real_imm: u32 = Default::default();
+        let mut inline2_inline1_inline0_y: u32 = Default::default();
+        let mut inline2_inline1_inline2_num_bits: u32 = Default::default();
+        let mut inline8_y: u8 = Default::default();
+        let mut inline2_inline1_inline0_z: u32 = Default::default();
+        let mut pc: u32 = Default::default();
+        let mut inline2_inline1_y: u32 = Default::default();
         "line 3, column 9: start_baton";
         inline0_start_baton = record.start_baton;
         "line 265, column 5: fix start_timestamp = Timestamp(baton1, start_t);";
@@ -601,7 +626,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         real_imm = temp_10;
         "line 19, column 6: uadd({pc|, {real_imm|, set {rd|)";
         let mut temp_11: u32 = Default::default();
-        temp_11 = (pc) + (real_imm);
+        temp_11 = (pc).wrapping_add((real_imm));
         rd = temp_11;
         "line 21, column 48: rd";
         inline2_data = rd;
@@ -624,7 +649,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         inline2_inline0_x = inline2_t;
         "line 410, column 6: uadd({x|, {y|, set {z|)";
         let mut temp_14: u32 = Default::default();
-        temp_14 = (inline2_inline0_x) + (inline2_inline0_y);
+        temp_14 = (inline2_inline0_x).wrapping_add((inline2_inline0_y));
         inline2_inline0_z = temp_14;
         "line 331, column 24: next_t";
         inline2_next_t = inline2_inline0_z;
@@ -638,7 +663,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         inline1_x = pc;
         "line 410, column 6: uadd({x|, {y|, set {z|)";
         let mut temp_15: u32 = Default::default();
-        temp_15 = (inline1_x) + (inline1_y);
+        temp_15 = (inline1_x).wrapping_add((inline1_y));
         inline1_z = temp_15;
         "line 11, column 25: next_pc";
         next_pc = inline1_z;
@@ -657,6 +682,26 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         end_baton = record.inline0_end_baton;
         "line 28, column 5: set {pc_u32| = {pc|;";
         pc_u32 = pc;
+        "line 32, column 5: [|rd)[0]] ++ set pc_repped ++ [set pc_upper_limb] = rep |pc_u32);";
+        let [temp_18, temp_19, temp_20, temp_21] = {
+            let result: [u8; 4usize];
+            result = pc_u32.to_le_bytes();
+            result
+        };
+        let [temp_22, temp_23, temp_24] = [temp_18, temp_19, temp_20];
+        let [temp_25] = [temp_22];
+        assert_eq!(
+            temp_25,
+            {
+                let result: [u8; 4usize];
+                result = rd.to_le_bytes();
+                result
+            }[0usize]
+        );
+        pc_repped = [temp_23, temp_24];
+        let [temp_26] = [temp_21];
+        pc_upper_limb = temp_26;
+        "line 30, column 5: unalloc<U8F> pc_upper_limb;";
         "line 34, column 5: def carry1 = ( ||pc_u32)[1]) + ||real_imm)[1]) - ||rd)[1]) ) / 256;";
         carry1 = (({
             let result: F;
@@ -712,18 +757,17 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
             result
         } + carry1)
             - ({
-            let result: F;
-            result = F::from_canonical_u32(
-                {
-                    let result: [u8; 4usize];
-                    result = rd.to_le_bytes();
-                    result
-                }[2usize] as u32,
-            );
-            result
-        }))
+                let result: F;
+                result = F::from_canonical_u32(
+                    {
+                        let result: [u8; 4usize];
+                        result = rd.to_le_bytes();
+                        result
+                    }[2usize] as u32,
+                );
+                result
+            }))
             / (F::from_canonical_u32(256));
-        "line 16, column 5: unalloc<U32B> real_imm;";
         "line 38, column 5: def carry3 = ( ||pc_u32)[3]) + ||real_imm)[3]) + carry2 - ||rd)[3]) ) / 256;" ;
         carry3 = (({
             let result: F;
@@ -747,43 +791,30 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
             result
         } + carry2)
             - ({
-            let result: F;
-            result = F::from_canonical_u32(
-                {
-                    let result: [u8; 4usize];
-                    result = rd.to_le_bytes();
-                    result
-                }[3usize] as u32,
-            );
-            result
-        }))
+                let result: F;
+                result = F::from_canonical_u32(
+                    {
+                        let result: [u8; 4usize];
+                        result = rd.to_le_bytes();
+                        result
+                    }[3usize] as u32,
+                );
+                result
+            }))
             / (F::from_canonical_u32(256));
-        "line 39, column 13: carry3";
-        inline5_x = carry3;
-        "line 45, column 38: |real_imm)[3]";
-        inline10_y = {
-            let result: [u8; 4usize];
-            result = real_imm.to_le_bytes();
-            result
-        }[3usize];
-        "line 45, column 25: |pc_u32)[3]";
-        inline10_x = {
-            let result: [u8; 4usize];
-            result = pc_u32.to_le_bytes();
-            result
-        }[3usize];
-        "line 117, column 6: balance_bitwise_range_check(x, y)";
-        self.bitwise_lookup_chip
-            .request_range((inline10_x) as u32, (inline10_y) as u32);
         "line 25, column 5: [0U8F] ++ set imm_repped = rep |real_imm);";
-        let [temp_18, temp_19, temp_20, temp_21] = {
+        let [temp_27, temp_28, temp_29, temp_30] = {
             let result: [u8; 4usize];
             result = real_imm.to_le_bytes();
             result
         };
-        let [temp_22] = [temp_18];
-        assert_eq!(temp_22, 0);
-        imm_repped = [temp_19, temp_20, temp_21];
+        let [temp_31] = [temp_27];
+        assert_eq!(temp_31, 0);
+        imm_repped = [temp_28, temp_29, temp_30];
+        "line 37, column 13: carry2";
+        inline4_x = carry2;
+        "line 39, column 13: carry3";
+        inline5_x = carry3;
         "line 44, column 38: |real_imm)[2]";
         inline9_y = {
             let result: [u8; 4usize];
@@ -799,69 +830,22 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         "line 117, column 6: balance_bitwise_range_check(x, y)";
         self.bitwise_lookup_chip
             .request_range((inline9_x) as u32, (inline9_y) as u32);
-        "line 32, column 5: [|rd)[0]] ++ set pc_repped ++ [set pc_upper_limb] = rep |pc_u32);";
-        let [temp_23, temp_24, temp_25, temp_26] = {
+        "line 18, column 5: alloc<U32B> rd;";
+        "line 45, column 38: |real_imm)[3]";
+        inline10_y = {
+            let result: [u8; 4usize];
+            result = real_imm.to_le_bytes();
+            result
+        }[3usize];
+        "line 45, column 25: |pc_u32)[3]";
+        inline10_x = {
             let result: [u8; 4usize];
             result = pc_u32.to_le_bytes();
             result
-        };
-        let [temp_27, temp_28, temp_29] = [temp_23, temp_24, temp_25];
-        let [temp_30] = [temp_27];
-        assert_eq!(
-            temp_30,
-            {
-                let result: [u8; 4usize];
-                result = rd.to_le_bytes();
-                result
-            }[0usize]
-        );
-        pc_repped = [temp_28, temp_29];
-        let [temp_31] = [temp_26];
-        pc_upper_limb = temp_31;
-        "line 37, column 13: carry2";
-        inline4_x = carry2;
-        "line 23, column 5: rep |imm) = ||real_imm)[1]) + (256 * ||real_imm)[2]) ) + (256^2 * ||real_imm)[3]) );" ;
-        assert_eq!(
-            {
-                let result: F;
-                result = F::from_canonical_u32(
-                    {
-                        let result: [u8; 4usize];
-                        result = real_imm.to_le_bytes();
-                        result
-                    }[1usize] as u32,
-                );
-                result
-            } + (F::from_canonical_u32(256))
-                * ({
-                let result: F;
-                result = F::from_canonical_u32(
-                    {
-                        let result: [u8; 4usize];
-                        result = real_imm.to_le_bytes();
-                        result
-                    }[2usize] as u32,
-                );
-                result
-            })
-                + (F::from_canonical_u32(256) * F::from_canonical_u32(256))
-                * ({
-                let result: F;
-                result = F::from_canonical_u32(
-                    {
-                        let result: [u8; 4usize];
-                        result = real_imm.to_le_bytes();
-                        result
-                    }[3usize] as u32,
-                );
-                result
-            }),
-            {
-                let result: F;
-                result = F::from_canonical_u32(imm);
-                result
-            }
-        );
+        }[3usize];
+        "line 117, column 6: balance_bitwise_range_check(x, y)";
+        self.bitwise_lookup_chip
+            .request_range((inline10_x) as u32, (inline10_y) as u32);
         "line 43, column 38: |real_imm)[1]";
         inline8_y = {
             let result: [u8; 4usize];
@@ -877,24 +861,49 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         "line 117, column 6: balance_bitwise_range_check(x, y)";
         self.bitwise_lookup_chip
             .request_range((inline8_x) as u32, (inline8_y) as u32);
-        "line 18, column 5: alloc<U32B> rd;";
         "line 13, column 5: alloc<UF> rd_ptr;";
-        "line 42, column 34: |rd)[3]";
-        inline7_y = {
-            let result: [u8; 4usize];
-            result = rd.to_le_bytes();
-            result
-        }[3usize];
-        "line 42, column 25: |rd)[2]";
-        inline7_x = {
-            let result: [u8; 4usize];
-            result = rd.to_le_bytes();
-            result
-        }[2usize];
-        "line 117, column 6: balance_bitwise_range_check(x, y)";
-        self.bitwise_lookup_chip
-            .request_range((inline7_x) as u32, (inline7_y) as u32);
-        "line 27, column 5: unalloc<U32B> pc_u32;";
+        "line 23, column 5: rep |imm) = ||real_imm)[1]) + (256 * ||real_imm)[2]) ) + (256^2 * ||real_imm)[3]) );" ;
+        assert_eq!(
+            {
+                let result: F;
+                result = F::from_canonical_u32(
+                    {
+                        let result: [u8; 4usize];
+                        result = real_imm.to_le_bytes();
+                        result
+                    }[1usize] as u32,
+                );
+                result
+            } + (F::from_canonical_u32(256))
+                * ({
+                    let result: F;
+                    result = F::from_canonical_u32(
+                        {
+                            let result: [u8; 4usize];
+                            result = real_imm.to_le_bytes();
+                            result
+                        }[2usize] as u32,
+                    );
+                    result
+                })
+                + (F::from_canonical_u32(256) * F::from_canonical_u32(256))
+                    * ({
+                        let result: F;
+                        result = F::from_canonical_u32(
+                            {
+                                let result: [u8; 4usize];
+                                result = real_imm.to_le_bytes();
+                                result
+                            }[3usize] as u32,
+                        );
+                        result
+                    }),
+            {
+                let result: F;
+                result = F::from_canonical_u32(imm);
+                result
+            }
+        );
         "line 29, column 5: alloc<[U8F; 2]> pc_repped;";
         "line 41, column 34: |rd)[1]";
         inline6_y = {
@@ -911,11 +920,29 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         "line 117, column 6: balance_bitwise_range_check(x, y)";
         self.bitwise_lookup_chip
             .request_range((inline6_x) as u32, (inline6_y) as u32);
+        "line 27, column 5: unalloc<U32B> pc_u32;";
+        "line 24, column 5: alloc<[U8F; 3]> imm_repped;";
+        "line 42, column 34: |rd)[3]";
+        inline7_y = {
+            let result: [u8; 4usize];
+            result = rd.to_le_bytes();
+            result
+        }[3usize];
+        "line 42, column 25: |rd)[2]";
+        inline7_x = {
+            let result: [u8; 4usize];
+            result = rd.to_le_bytes();
+            result
+        }[2usize];
+        "line 117, column 6: balance_bitwise_range_check(x, y)";
+        self.bitwise_lookup_chip
+            .request_range((inline7_x) as u32, (inline7_y) as u32);
+        "line 16, column 5: unalloc<U32B> real_imm;";
         "line 35, column 13: carry1";
         inline3_x = carry1;
-        "line 31, column 5: rep |pc_upper_limb) = |pc) - ||rd)[0]) - (256 * |pc_repped[0])) - (256^2 * |pc_repped[1]));" ;
+        "line 31, column 5: rep |pc_upper_limb) = (|pc) - ||rd)[0]) - (256 * |pc_repped[0])) - (256^2 * |pc_repped[1]))) / 256^3;" ;
         assert_eq!(
-            ((({
+            (((({
                 let result: F;
                 result = F::from_canonical_u32(pc);
                 result
@@ -931,30 +958,31 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
                 result
             })) - ((F::from_canonical_u32(256))
                 * ({
-                let result: F;
-                result = F::from_canonical_u32(pc_repped[0usize] as u32);
-                result
-            })))
+                    let result: F;
+                    result = F::from_canonical_u32(pc_repped[0usize] as u32);
+                    result
+                })))
                 - ((F::from_canonical_u32(256) * F::from_canonical_u32(256))
-                * ({
-                let result: F;
-                result = F::from_canonical_u32(pc_repped[1usize] as u32);
-                result
-            })),
+                    * ({
+                        let result: F;
+                        result = F::from_canonical_u32(pc_repped[1usize] as u32);
+                        result
+                    })))
+                / (F::from_canonical_u32(256)
+                    * F::from_canonical_u32(256)
+                    * F::from_canonical_u32(256)),
             {
                 let result: F;
                 result = F::from_canonical_u32(pc_upper_limb as u32);
                 result
             }
         );
-        "line 30, column 5: unalloc<U8F> pc_upper_limb;";
-        "line 24, column 5: alloc<[U8F; 3]> imm_repped;";
-        "line 269, column 5: execution >> start_pc, start_t;";
-        "line 270, column 5: execution << next_pc, next_t;";
-        "line 261, column 5: alloc start_pc;";
         "line 262, column 5: alloc<Baton> baton1;";
-        "line 263, column 5: alloc<UF> start_t;";
+        "line 261, column 5: alloc start_pc;";
         "line 271, column 5: program << start_pc, instruction;";
+        "line 270, column 5: execution << next_pc, next_t;";
+        "line 263, column 5: alloc<UF> start_t;";
+        "line 269, column 5: execution >> start_pc, start_t;";
         "line 411, column 5: rep |z) = |x) + |y);";
         assert_eq!(
             {
@@ -972,9 +1000,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
                 result
             }
         );
-        "line 327, column 5: alloc<Baton> baton1;";
-        "line 334, column 5: memory >> address_space, pointer, prev_data, prev_t;";
-        "line 326, column 5: alloc<[U8F; 4]> prev_data;";
+        "line 335, column 5: memory << address_space, pointer, |data), t;";
         "line 337, column 30: t";
         inline2_inline1_y = inline2_t;
         "line 337, column 22: prev_t";
@@ -985,7 +1011,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         inline2_inline1_inline0_x = inline2_inline1_y;
         "line 415, column 6: usub({x|, {y|, set {z|)";
         let mut temp_32: u32 = Default::default();
-        temp_32 = (inline2_inline1_inline0_x) - (inline2_inline1_inline0_y);
+        temp_32 = (inline2_inline1_inline0_x).wrapping_sub((inline2_inline1_inline0_y));
         inline2_inline1_inline0_z = temp_32;
         "line 502, column 22: real_diff";
         inline2_inline1_real_diff = inline2_inline1_inline0_z;
@@ -995,7 +1021,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         inline2_inline1_inline1_x = inline2_inline1_real_diff;
         "line 415, column 6: usub({x|, {y|, set {z|)";
         let mut temp_33: u32 = Default::default();
-        temp_33 = (inline2_inline1_inline1_x) - (inline2_inline1_inline1_y);
+        temp_33 = (inline2_inline1_inline1_x).wrapping_sub((inline2_inline1_inline1_y));
         inline2_inline1_inline1_z = temp_33;
         "line 503, column 32: diff";
         inline2_inline1_diff = inline2_inline1_inline1_z;
@@ -1007,8 +1033,10 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         let mut temp_35: u32 = Default::default();
         temp_35 = (inline2_inline1_diff) >> (16);
         inline2_inline1_upper = temp_35;
+        "line 326, column 5: alloc<[U8F; 4]> prev_data;";
+        "line 334, column 5: memory >> address_space, pointer, prev_data, prev_t;";
+        "line 327, column 5: alloc<Baton> baton1;";
         "line 328, column 5: alloc<UF> prev_t;";
-        "line 335, column 5: memory << address_space, pointer, |data), t;";
         "line 411, column 5: rep |z) = |x) + |y);";
         assert_eq!(
             {
@@ -1026,6 +1054,7 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
                 result
             }
         );
+        "line 505, column 5: unalloc<UF> lower;";
         "line 509, column 5: rep |lower) = |diff) - (65536 * |upper));";
         assert_eq!(
             ({
@@ -1034,26 +1063,15 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
                 result
             }) - ((F::from_canonical_u32(65536))
                 * ({
-                let result: F;
-                result = F::from_canonical_u32(inline2_inline1_upper);
-                result
-            })),
+                    let result: F;
+                    result = F::from_canonical_u32(inline2_inline1_upper);
+                    result
+                })),
             {
                 let result: F;
                 result = F::from_canonical_u32(inline2_inline1_lower);
                 result
             }
-        );
-        "line 505, column 5: unalloc<UF> lower;";
-        "line 506, column 5: alloc<UF> upper;";
-        "line 511, column 24: 16UF";
-        inline2_inline1_inline2_num_bits = 16;
-        "line 511, column 17: lower";
-        inline2_inline1_inline2_x = inline2_inline1_lower;
-        "line 495, column 6: balance_range_check(x, num_bits)";
-        self.range_checker_chip.add_count(
-            (inline2_inline1_inline2_x),
-            (inline2_inline1_inline2_num_bits) as usize,
         );
         "line 512, column 24: 13UF";
         inline2_inline1_inline3_num_bits = 13;
@@ -1064,6 +1082,16 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
             (inline2_inline1_inline3_x),
             (inline2_inline1_inline3_num_bits) as usize,
         );
+        "line 511, column 24: 16UF";
+        inline2_inline1_inline2_num_bits = 16;
+        "line 511, column 17: lower";
+        inline2_inline1_inline2_x = inline2_inline1_lower;
+        "line 495, column 6: balance_range_check(x, num_bits)";
+        self.range_checker_chip.add_count(
+            (inline2_inline1_inline2_x),
+            (inline2_inline1_inline2_num_bits) as usize,
+        );
+        "line 506, column 5: alloc<UF> upper;";
         "line 416, column 5: rep |z) = |x) - |y);";
         assert_eq!(
             ({
@@ -1112,9 +1140,49 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
         "line 116, column 5: bitwise << x, y, 0U8F, 0;";
         "line 116, column 5: bitwise << x, y, 0U8F, 0;";
         row_slice[0usize] = F::ONE;
-        row_slice[11usize] = {
+        row_slice[5usize] = {
+            let result: F;
+            result = F::from_canonical_u32(pc_repped[0usize] as u32);
+            result
+        };
+        row_slice[6usize] = {
+            let result: F;
+            result = F::from_canonical_u32(pc_repped[1usize] as u32);
+            result
+        };
+        row_slice[7usize] = {
             let result: F;
             result = F::from_canonical_u32(record.inline0_start_t);
+            result
+        };
+        row_slice[13usize] = {
+            let result: F;
+            result = F::from_canonical_u32(record.inline2_prev_data[0usize] as u32);
+            result
+        };
+        row_slice[14usize] = {
+            let result: F;
+            result = F::from_canonical_u32(record.inline2_prev_data[1usize] as u32);
+            result
+        };
+        row_slice[15usize] = {
+            let result: F;
+            result = F::from_canonical_u32(record.inline2_prev_data[2usize] as u32);
+            result
+        };
+        row_slice[16usize] = {
+            let result: F;
+            result = F::from_canonical_u32(record.inline2_prev_data[3usize] as u32);
+            result
+        };
+        row_slice[8usize] = {
+            let result: F;
+            result = F::from_canonical_u32(record.inline0_start_pc);
+            result
+        };
+        row_slice[12usize] = {
+            let result: F;
+            result = F::from_canonical_u32(rd_ptr);
             result
         };
         row_slice[17usize] = {
@@ -1122,29 +1190,19 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
             result = F::from_canonical_u32(record.inline2_prev_t);
             result
         };
-        row_slice[5usize] = {
-            let result: F;
-            result = F::from_canonical_u32(rd_ptr);
-            result
-        };
-        row_slice[6usize] = {
+        row_slice[9usize] = {
             let result: F;
             result = F::from_canonical_u32(imm_repped[0usize] as u32);
             result
         };
-        row_slice[7usize] = {
+        row_slice[10usize] = {
             let result: F;
             result = F::from_canonical_u32(imm_repped[1usize] as u32);
             result
         };
-        row_slice[8usize] = {
+        row_slice[11usize] = {
             let result: F;
             result = F::from_canonical_u32(imm_repped[2usize] as u32);
-            result
-        };
-        row_slice[18usize] = {
-            let result: F;
-            result = F::from_canonical_u32(inline2_inline1_upper);
             result
         };
         row_slice[1usize] = {
@@ -1191,39 +1249,9 @@ impl<F: PrimeField32> TraceFiller<F> for AuipcFiller {
             );
             result
         };
-        row_slice[9usize] = {
+        row_slice[18usize] = {
             let result: F;
-            result = F::from_canonical_u32(pc_repped[0usize] as u32);
-            result
-        };
-        row_slice[10usize] = {
-            let result: F;
-            result = F::from_canonical_u32(pc_repped[1usize] as u32);
-            result
-        };
-        row_slice[12usize] = {
-            let result: F;
-            result = F::from_canonical_u32(record.inline0_start_pc);
-            result
-        };
-        row_slice[13usize] = {
-            let result: F;
-            result = F::from_canonical_u32(record.inline2_prev_data[0usize] as u32);
-            result
-        };
-        row_slice[14usize] = {
-            let result: F;
-            result = F::from_canonical_u32(record.inline2_prev_data[1usize] as u32);
-            result
-        };
-        row_slice[15usize] = {
-            let result: F;
-            result = F::from_canonical_u32(record.inline2_prev_data[2usize] as u32);
-            result
-        };
-        row_slice[16usize] = {
-            let result: F;
-            result = F::from_canonical_u32(record.inline2_prev_data[3usize] as u32);
+            result = F::from_canonical_u32(inline2_inline1_upper);
             result
         };
     }
