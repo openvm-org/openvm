@@ -206,7 +206,7 @@ where
     }
 }
 
-#[inline(never)]
+#[inline(always)]
 unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     program: &Program<F>,
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
