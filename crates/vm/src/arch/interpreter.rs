@@ -253,7 +253,7 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
 
         // The mmap will segfault if pc_index is out of bounds
         let pc_index = ((vm_state.pc - program.pc_base) / DEFAULT_PC_STEP) as usize;
-        let inst = unsafe { &*fn_ptrs_base.add(pc_index) };
+        let inst = unsafe { core::ptr::read(fn_ptrs_base.add(pc_index)) };
         unsafe { (inst.handler)(inst.pre_compute, vm_state) };
     }
     if vm_state
