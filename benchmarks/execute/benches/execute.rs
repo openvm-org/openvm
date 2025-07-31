@@ -263,7 +263,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 // &exe, vec![], 0);
 
 //             let (widths, interactions) = shared_widths_and_interactions();
-//             let segments = vm
+//             let (segments, _) = vm
 //                 .executor
 //                 .execute_metered(exe.clone(), vec![], interactions)
 //                 .expect("Failed to execute program");
