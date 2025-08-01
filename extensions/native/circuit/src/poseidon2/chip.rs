@@ -966,6 +966,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Filler<F, SBOX
     }
 }
 
+#[inline]
 fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
     memory: &mut TracingMemory,
     ptr: u32,
@@ -978,6 +979,7 @@ fn tracing_read_native_helper<F: PrimeField32, const BLOCK_SIZE: usize>(
 }
 
 /// Fill `MemoryBaseAuxCols`, assuming that the `prev_timestamp` is already set in `base_aux`.
+#[inline(always)]
 fn mem_fill_helper<F: PrimeField32>(
     mem_helper: &MemoryAuxColsFactory<F>,
     timestamp: u32,

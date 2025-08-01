@@ -175,6 +175,7 @@ impl<M: LinearMemory> AddressMap<M> {
 
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    #[inline]
     pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
         let layout = &self.config.get_unchecked(addr_space as usize).layout;
         let start = ptr as usize * layout.size();
@@ -185,6 +186,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    #[inline]
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
         debug_assert_eq!(
             size_of::<T>(),
@@ -463,29 +465,28 @@ impl TracingMemory {
 
     /// Updates the metadata with the given block.
     #[inline]
-    fn set_meta_block(
+    fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
-        align: usize,
-        block_size: usize,
         timestamp: u32,
     ) {
-        let ptr = pointer / align;
+        let ptr = pointer / ALIGN;
         // SAFETY: address_space is assumed to be valid and within bounds
         let meta = unsafe { self.meta.get_unchecked_mut(address_space) };
-        for i in 0..(block_size / align) {
+        for i in 0..(BLOCK_SIZE / ALIGN) {
             meta.set(
                 ptr + i,
                 AccessMetadata {
                     start_ptr: pointer as u32,
-                    block_size: block_size as u32,
+                    block_size: BLOCK_SIZE as u32,
                     timestamp,
                 },
             );
         }
     }
 
+    #[inline]
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
         if header.block_size == header.lowest_block_size {
             return;
@@ -506,7 +507,8 @@ impl TracingMemory {
         // we don't mind garbage values in prev_*
     }
 
-    /// `data_slice` is the underlying data of the record in raw host memory format.
+    // `data_slice` is the underlying data of the record in raw host memory format.
+    #[inline]
     pub(crate) fn add_merge_record(
         &mut self,
         header: AccessRecordHeader,
@@ -526,6 +528,7 @@ impl TracingMemory {
         record_mut.timestamps.copy_from_slice(prev_ts);
     }
 
+    #[inline]
     fn split_by_meta<T: Copy>(
         &mut self,
         meta: &AccessMetadata,
@@ -537,14 +540,16 @@ impl TracingMemory {
         }
         let begin = meta.start_ptr as usize / lowest_block_size;
         for i in 0..(meta.block_size as usize / lowest_block_size) {
-            self.meta[address_space].set(
-                begin + i,
-                AccessMetadata {
-                    start_ptr: (meta.start_ptr + (i * lowest_block_size) as u32),
-                    block_size: lowest_block_size as u32,
-                    timestamp: meta.timestamp,
-                },
-            );
+            unsafe {
+                self.meta.get_unchecked_mut(address_space).set(
+                    begin + i,
+                    AccessMetadata {
+                        start_ptr: (meta.start_ptr + (i * lowest_block_size) as u32),
+                        block_size: lowest_block_size as u32,
+                        timestamp: meta.timestamp,
+                    },
+                );
+            }
         }
         self.add_split_record(AccessRecordHeader {
             timestamp_and_mask: meta.timestamp,
@@ -560,18 +565,18 @@ impl TracingMemory {
     /// and the offset of the record in bytes.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
-    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize>(
+    #[inline]
+    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
-        align: usize,
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
-        let num_segs = BLOCK_SIZE / align;
+        let num_segs = BLOCK_SIZE / ALIGN;
 
-        let begin = pointer / align;
+        let begin = pointer / ALIGN;
 
-        let first_meta = self.meta[address_space].get(begin);
+        let first_meta = unsafe { self.meta.get_unchecked_mut(address_space).get(begin) };
         let need_to_merge =
             first_meta.block_size != BLOCK_SIZE as u32 || first_meta.start_ptr != pointer as u32;
         let result = if need_to_merge {
@@ -579,34 +584,34 @@ impl TracingMemory {
             // And add a merge record in the end
             let mut i = 0;
             while i < num_segs {
-                let meta = self.meta[address_space].get(begin + i);
+                let meta = unsafe { self.meta.get_unchecked_mut(address_space).get(begin + i) };
                 if meta.block_size == 0 {
                     i += 1;
                     continue;
                 }
                 let meta = *meta;
-                self.split_by_meta::<T>(&meta, address_space, align);
-                i = (meta.start_ptr + meta.block_size) as usize / align - begin;
+                self.split_by_meta::<T>(&meta, address_space, ALIGN);
+                i = (meta.start_ptr + meta.block_size) as usize / ALIGN - begin;
             }
 
             let prev_ts = (0..num_segs)
                 .map(|i| {
-                    let meta = self.meta[address_space].get(begin + i);
+                    let meta = unsafe { self.meta.get_unchecked_mut(address_space).get(begin + i) };
                     if meta.block_size > 0 {
                         meta.timestamp
                     } else {
                         // Initialize
-                        if self.initial_block_size >= align {
+                        if self.initial_block_size >= ALIGN {
                             // We need to split the initial block into chunks
-                            let block_start = (begin + i) & !(self.initial_block_size / align - 1);
+                            let block_start = (begin + i) & !(self.initial_block_size / ALIGN - 1);
                             self.split_by_meta::<T>(
                                 &AccessMetadata {
-                                    start_ptr: (block_start * align) as u32,
+                                    start_ptr: (block_start * ALIGN) as u32,
                                     block_size: self.initial_block_size as u32,
                                     timestamp: INITIAL_TIMESTAMP,
                                 },
                                 address_space,
-                                align,
+                                ALIGN,
                             );
                         } else {
                             debug_assert_eq!(self.initial_block_size, 1);
@@ -615,13 +620,13 @@ impl TracingMemory {
                                 AccessRecordHeader {
                                     timestamp_and_mask: INITIAL_TIMESTAMP,
                                     address_space: address_space as u32,
-                                    pointer: (pointer + i * align) as u32,
-                                    block_size: align as u32,
+                                    pointer: (pointer + i * ALIGN) as u32,
+                                    block_size: ALIGN as u32,
                                     lowest_block_size: self.initial_block_size as u32,
                                     type_size: 1,
                                 },
-                                &INITIAL_CELL_BUFFER[..align], // TODO: this assumes cell_size=1
-                                &INITIAL_TIMESTAMP_BUFFER[..align],
+                                &INITIAL_CELL_BUFFER[..ALIGN], // TODO: this assumes cell_size=1
+                                &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
                             );
                         }
                         INITIAL_TIMESTAMP
@@ -636,7 +641,7 @@ impl TracingMemory {
                     address_space: address_space as u32,
                     pointer: pointer as u32,
                     block_size: BLOCK_SIZE as u32,
-                    lowest_block_size: align as u32,
+                    lowest_block_size: ALIGN as u32,
                     type_size: size_of::<T>() as u32,
                 },
                 // SAFETY: T is plain old data
@@ -647,7 +652,7 @@ impl TracingMemory {
         } else {
             first_meta.timestamp
         };
-        self.set_meta_block(address_space, pointer, align, BLOCK_SIZE, self.timestamp);
+        self.set_meta_block::<BLOCK_SIZE, ALIGN>(address_space, pointer, self.timestamp);
         result
     }
 
@@ -672,7 +677,7 @@ impl TracingMemory {
     ///
     /// In addition:
     /// - `address_space` must be valid.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn read<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
@@ -683,10 +688,9 @@ impl TracingMemory {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE>(
+        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
             address_space as usize,
             pointer as usize,
-            ALIGN,
             &values,
         );
         self.timestamp += 1;
@@ -715,7 +719,7 @@ impl TracingMemory {
     ///
     /// In addition:
     /// - `address_space` must be valid.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn write<T, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
@@ -727,10 +731,9 @@ impl TracingMemory {
     {
         self.assert_alignment(BLOCK_SIZE, ALIGN, address_space, pointer);
         let values_prev = self.data.read(address_space, pointer);
-        let t_prev = self.prev_access_time::<T, BLOCK_SIZE>(
+        let t_prev = self.prev_access_time::<T, BLOCK_SIZE, ALIGN>(
             address_space as usize,
             pointer as usize,
-            ALIGN,
             &values_prev,
         );
         self.data.write(address_space, pointer, values);
@@ -739,14 +742,17 @@ impl TracingMemory {
         (t_prev, values_prev)
     }
 
+    #[inline(always)]
     pub fn increment_timestamp(&mut self) {
         self.timestamp += 1;
     }
 
+    #[inline(always)]
     pub fn increment_timestamp_by(&mut self, amount: u32) {
         self.timestamp += amount;
     }
 
+    #[inline(always)]
     pub fn timestamp(&self) -> u32 {
         self.timestamp
     }

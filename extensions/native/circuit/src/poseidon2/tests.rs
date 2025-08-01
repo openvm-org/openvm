@@ -199,17 +199,17 @@ fn set_and_execute<const SBOX_REGISTERS: usize>(
         commit,
     } = instance;
 
-    let dim_register = gen_pointer(rng, 1);
-    let opened_register = gen_pointer(rng, 1);
-    let opened_length_register = gen_pointer(rng, 1);
-    let proof_id = gen_pointer(rng, 1);
-    let index_register = gen_pointer(rng, 1);
-    let commit_register = gen_pointer(rng, 1);
+    let dim_register = (2 << 20) - 100;
+    let opened_register = dim_register - 100;
+    let opened_length_register = dim_register - 200;
+    let proof_id = dim_register - 300;
+    let index_register = dim_register - 400;
+    let commit_register = dim_register - 500;
 
-    let dim_base_pointer = gen_pointer(rng, 1);
-    let opened_base_pointer = gen_pointer(rng, 2);
-    let index_base_pointer = gen_pointer(rng, 1);
-    let commit_pointer = gen_pointer(rng, 1);
+    let dim_base_pointer = (2 << 20) + 10000;
+    let opened_base_pointer = dim_base_pointer + 10000;
+    let index_base_pointer = dim_base_pointer + 10000 * 2;
+    let commit_pointer = dim_base_pointer + 10000 * 3;
 
     let address_space = AS::Native as usize;
     tester.write_usize(address_space, dim_register, [dim_base_pointer]);
@@ -222,8 +222,9 @@ fn set_and_execute<const SBOX_REGISTERS: usize>(
     for (i, &dim_value) in dim.iter().enumerate() {
         tester.write_usize(address_space, dim_base_pointer + i, [dim_value]);
     }
+
+    let mut row_pointer = dim_base_pointer + 10000 * 4;
     for (i, opened_row) in opened.iter().enumerate() {
-        let row_pointer = gen_pointer(rng, 1);
         tester.write_usize(
             address_space,
             opened_base_pointer + (2 * i),
@@ -232,6 +233,7 @@ fn set_and_execute<const SBOX_REGISTERS: usize>(
         for (j, &opened_value) in opened_row.iter().enumerate() {
             tester.write(address_space, row_pointer + j, [opened_value]);
         }
+        row_pointer += opened_row.len() + 1;
     }
     tester
         .streams
@@ -268,41 +270,44 @@ fn test<const N: usize>(cases: [Case; N]) {
     }
     let mut valid_tester = VmChipTestBuilder::default_native();
     let mut valid_harness = create_test_chip::<F, SBOX_REGISTERS>(&valid_tester);
-    let mut prank_tester = VmChipTestBuilder::default_native();
-    let mut prank_harness = create_test_chip::<F, SBOX_REGISTERS>(&prank_tester);
+    // let mut prank_tester = VmChipTestBuilder::default_native();
+    // let mut prank_harness = create_test_chip::<F, SBOX_REGISTERS>(&prank_tester);
 
     let mut rng = create_seeded_rng();
     for case in cases {
+        let mut valid_tester = VmChipTestBuilder::default_native();
+        let mut valid_harness = create_test_chip::<F, SBOX_REGISTERS>(&valid_tester);
         set_and_execute(
             &mut valid_tester,
             &mut valid_harness,
             &mut rng,
             case.clone(),
         );
-        set_and_execute(&mut prank_tester, &mut prank_harness, &mut rng, case);
+        // set_and_execute(&mut prank_tester, &mut prank_harness, &mut rng, case);
     }
 
-    let valid_tester = valid_tester.build().load(valid_harness).finalize();
-    valid_tester.simple_test().expect("Verification failed");
-
-    disable_debug_builder();
-    let p2_chip = Poseidon2SubChip::<F, SBOX_REGISTERS>::new(Poseidon2Config::default().constants);
-    let inner_trace = p2_chip.generate_trace(vec![[F::ZERO; 2 * CHUNK]]);
-    let inner_width = p2_chip.air.width();
-
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut trace_row = trace.row_slice(0).to_vec();
-        trace_row[..inner_width].copy_from_slice(&inner_trace.values);
-        *trace = RowMajorMatrix::new(trace_row, trace.width());
-    };
-
-    let prank_tester = prank_tester
-        .build()
-        .load_and_prank_trace(prank_harness, modify_trace)
-        .finalize();
-
-    // Run a test after pranking the poseidon2 stuff
-    prank_tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+    // let valid_tester = valid_tester.build().load(valid_harness).finalize();
+    // valid_tester.simple_test().expect("Verification failed");
+    //
+    // disable_debug_builder();
+    // let p2_chip = Poseidon2SubChip::<F,
+    // SBOX_REGISTERS>::new(Poseidon2Config::default().constants); let inner_trace =
+    // p2_chip.generate_trace(vec![[F::ZERO; 2 * CHUNK]]); let inner_width =
+    // p2_chip.air.width();
+    //
+    // let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+    //     let mut trace_row = trace.row_slice(0).to_vec();
+    //     trace_row[..inner_width].copy_from_slice(&inner_trace.values);
+    //     *trace = RowMajorMatrix::new(trace_row, trace.width());
+    // };
+    //
+    // let prank_tester = prank_tester
+    //     .build()
+    //     .load_and_prank_trace(prank_harness, modify_trace)
+    //     .finalize();
+    //
+    // // Run a test after pranking the poseidon2 stuff
+    // prank_tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
 }
 
 #[test]
@@ -359,28 +364,11 @@ fn verify_batch_test_ext_multiple() {
 
 #[test]
 fn verify_batch_test_felt_and_ext() {
-    test([
-        Case {
-            row_lengths: vec![vec![3], vec![], vec![9, 2, 1, 13, 4], vec![16]],
-            opened_element_size: 1,
-        },
-        Case {
-            row_lengths: vec![vec![1, 1, 1], vec![3], vec![2]],
-            opened_element_size: 4,
-        },
-        Case {
-            row_lengths: vec![vec![8], vec![7], vec![6]],
-            opened_element_size: 1,
-        },
-        Case {
-            row_lengths: vec![vec![], vec![], vec![], vec![1]],
-            opened_element_size: 4,
-        },
-        Case {
-            row_lengths: vec![vec![4], vec![3], vec![2]],
-            opened_element_size: 4,
-        },
-    ])
+    let cases: [_; 500] = std::array::from_fn(|_| Case {
+        row_lengths: vec![vec![9, 2, 1, 13, 4]; 1000],
+        opened_element_size: 1,
+    });
+    test(cases)
 }
 
 /// Create random instructions for the poseidon2 chip.

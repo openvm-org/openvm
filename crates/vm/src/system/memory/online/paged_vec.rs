@@ -29,16 +29,19 @@ impl<T: Copy + Default> PagedVec<T> {
         let page_idx = index / self.page_size;
         let offset = index % self.page_size;
 
-        assert!(
+        debug_assert!(
             page_idx < self.pages.len(),
             "PagedVec::get index out of bounds: {} >= {}",
             index,
             self.pages.len() * self.page_size
         );
 
-        if self.pages[page_idx].is_none() {
-            let page = vec![T::default(); self.page_size];
-            self.pages[page_idx] = Some(page.into_boxed_slice());
+        if unsafe { self.pages.get_unchecked(page_idx).is_none() } {
+            self.init_page(page_idx);
+            // let page = vec![T::default(); self.page_size];
+            // unsafe {
+            //     *self.pages.get_unchecked_mut(page_idx) = Some(page.into_boxed_slice());
+            // }
         }
 
         unsafe {
@@ -59,23 +62,43 @@ impl<T: Copy + Default> PagedVec<T> {
         let page_idx = index / self.page_size;
         let offset = index % self.page_size;
 
-        assert!(
+        debug_assert!(
             page_idx < self.pages.len(),
             "PagedVec::set index out of bounds: {} >= {}",
             index,
             self.pages.len() * self.page_size
         );
 
-        if let Some(page) = &mut self.pages[page_idx] {
+        if let Some(page) = unsafe { self.pages.get_unchecked_mut(page_idx) } {
             // SAFETY:
             // - If page exists, then it has size `page_size`
             unsafe {
                 *page.get_unchecked_mut(offset) = value;
             }
         } else {
-            let mut page = vec![T::default(); self.page_size];
-            page[offset] = value;
-            self.pages[page_idx] = Some(page.into_boxed_slice());
+            self.init_page_with_value(page_idx, offset, value);
+            // let mut page = vec![T::default(); self.page_size];
+            // unsafe {
+            //     *page.get_unchecked_mut(offset) = value;
+            //     *self.pages.get_unchecked_mut(page_idx) = Some(page.into_boxed_slice());
+            // }
+        }
+    }
+
+    #[cold]
+    fn init_page(&mut self, page_idx: usize) {
+        let page = vec![T::default(); self.page_size];
+        unsafe {
+            *self.pages.get_unchecked_mut(page_idx) = Some(page.into_boxed_slice());
+        }
+    }
+
+    #[cold]
+    fn init_page_with_value(&mut self, page_idx: usize, offset: usize, value: T) {
+        let mut page = vec![T::default(); self.page_size];
+        unsafe {
+            *page.get_unchecked_mut(offset) = value;
+            *self.pages.get_unchecked_mut(page_idx) = Some(page.into_boxed_slice());
         }
     }
 

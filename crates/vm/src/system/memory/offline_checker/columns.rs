@@ -20,6 +20,7 @@ pub struct MemoryBaseAuxCols<T> {
 }
 
 impl<F: PrimeField32> MemoryBaseAuxCols<F> {
+    #[inline(always)]
     pub fn set_prev(&mut self, prev_timestamp: F) {
         self.prev_timestamp = prev_timestamp;
     }
