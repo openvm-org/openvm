@@ -100,7 +100,7 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
-        unsafe { self.vm_state.memory.read(addr_space, ptr) }
+        unsafe { self.memory.read(addr_space, ptr) }
     }
 
     #[inline(always)]
@@ -110,12 +110,12 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
-        unsafe { self.vm_state.memory.write(addr_space, ptr, *data) }
+        unsafe { self.memory.write(addr_space, ptr, *data) }
     }
 
     #[inline(always)]
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
-        unsafe { self.vm_state.memory.get_slice(addr_space, ptr, len) }
+        unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
 }
 
