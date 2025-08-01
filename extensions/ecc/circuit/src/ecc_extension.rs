@@ -146,8 +146,6 @@ pub enum EccExtensionExecutor<F: PrimeField32> {
     SwEcDoubleRv32_48(SwDoubleChip<F, 6, 16>),
     // 32 limbs prime
     TeEcAddRv32_32(TeAddChip<F, 2, 32>),
-    // 48 limbs prime
-    TeEcAddRv32_48(TeAddChip<F, 6, 16>),
 }
 
 #[derive(ChipUsageGetter, Chip, AnyEnum, From)]
@@ -327,28 +325,6 @@ impl<F: PrimeField32> VmExtension<F> for EccExtension {
                 );
                 inventory.add_executor(
                     EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
-                    te_add_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + te_start_offset)),
-                )?;
-            } else if bytes <= 48 {
-                let te_add_chip = TeAddChip::new(
-                    Rv32VecHeapAdapterChip::<F, 2, 6, 6, 16, 16>::new(
-                        execution_bus,
-                        program_bus,
-                        memory_bridge,
-                        pointer_bits,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    config48.clone(),
-                    te_start_offset,
-                    curve.coeffs.a.clone(),
-                    curve.coeffs.d.clone(),
-                    range_checker.clone(),
-                    offline_memory.clone(),
-                );
-                inventory.add_executor(
-                    EccExtensionExecutor::TeEcAddRv32_48(te_add_chip),
                     te_add_opcodes
                         .clone()
                         .map(|x| VmOpcode::from_usize(x + te_start_offset)),
