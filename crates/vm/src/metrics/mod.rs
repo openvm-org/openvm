@@ -79,7 +79,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
         let pc = state.pc;
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
-        let metrics = &mut state.ctx.metrics;
+        let metrics = &mut state.metrics;
         let debug_info = metrics.debug_infos.get(pc);
         let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
         let now_trace_heights = get_dyn_trace_heights_from_arenas::<F, _>(
