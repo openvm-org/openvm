@@ -79,22 +79,27 @@ pub fn update_instruction_metrics<F, RA, Executor>(
         let pc = state.pc;
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
-        let metrics = &mut state.metrics;
-        let debug_info = metrics.debug_infos.get(pc);
+
+        let num_sys_airs = state.metrics.num_sys_airs;
+        let access_adapter_offset = state.metrics.access_adapter_offset;
+        let debug_info = state.metrics.debug_infos.get(pc);
         let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
+
         let now_trace_heights = get_dyn_trace_heights_from_arenas::<F, _>(
-            metrics.num_sys_airs,
-            metrics.access_adapter_offset,
+            num_sys_airs,
+            access_adapter_offset,
             &state.memory.access_adapter_records,
             &state.ctx.arenas,
         );
         let mut now_trace_cells = now_trace_heights;
+
+        let metrics = &mut state.metrics;
         for (main_width, cell_count) in zip(&metrics.main_widths, &mut now_trace_cells) {
             *cell_count *= main_width;
         }
         metrics.update_trace_cells(now_trace_cells, opcode_name, dsl_instr);
 
-        metrics.update_current_fn(state.pc);
+        metrics.update_current_fn(pc);
     }
 }
 
