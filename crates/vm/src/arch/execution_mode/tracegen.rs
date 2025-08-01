@@ -102,13 +102,13 @@ impl<F> TracegenExecutionControl<F> {
             state.ctx.arenas.get_unchecked_mut(air_idx)
         };
         let state_mut = VmStateMut {
-            pc: &mut state.pc,
-            memory: &mut state.memory,
-            streams: &mut state.streams,
-            rng: &mut state.rng,
+            pc: &mut state.vm_state.pc,
+            memory: &mut state.vm_state.memory,
+            streams: &mut state.vm_state.streams,
+            rng: &mut state.vm_state.rng,
             ctx: arena,
             #[cfg(feature = "metrics")]
-            metrics: &mut state.metrics,
+            metrics: &mut state.vm_state.metrics,
         };
         executor.execute(state_mut, &pc_entry.insn)?;
 

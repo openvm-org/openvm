@@ -1,11 +1,11 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::rngs::StdRng;
 
-use super::{ExecutionError, Streams, VmState};
-#[cfg(feature = "metrics")]
-use crate::metrics::VmMetrics;
+use super::{ExecutionError, VmState};
 use crate::{
     arch::{
         execution_mode::{
@@ -23,52 +23,34 @@ use crate::{
 
 /// Represents the full execution state of a VM during segment execution.
 pub struct VmSegmentState<F, MEM, CTX> {
-    pub instret: u64,
-    pub pc: u32,
-    pub memory: MEM,
-    pub streams: Streams<F>,
-    pub rng: StdRng,
+    /// Core VM state
+    pub vm_state: VmState<F, MEM>,
+    /// Execution-specific fields
     pub exit_code: Result<Option<u32>, ExecutionError>,
     pub ctx: CTX,
-    #[cfg(feature = "metrics")]
-    pub metrics: VmMetrics,
 }
 
-impl<F, CTX> From<VmSegmentState<F, GuestMemory, CTX>> for VmState<F> {
-    fn from(segment_state: VmSegmentState<F, GuestMemory, CTX>) -> Self {
-        VmState {
-            instret: segment_state.instret,
-            pc: segment_state.pc,
-            memory: segment_state.memory,
-            streams: segment_state.streams,
-            rng: segment_state.rng,
-            #[cfg(feature = "metrics")]
-            metrics: segment_state.metrics,
+impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
+    pub fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
+        Self {
+            vm_state,
+            ctx,
+            exit_code: Ok(None),
         }
     }
 }
 
-impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
-    pub fn new(
-        instret: u64,
-        pc: u32,
-        memory: MEM,
-        streams: Streams<F>,
-        rng: StdRng,
-        ctx: CTX,
-        #[cfg(feature = "metrics")] metrics: VmMetrics,
-    ) -> Self {
-        Self {
-            instret,
-            pc,
-            memory,
-            streams,
-            rng,
-            ctx,
-            exit_code: Ok(None),
-            #[cfg(feature = "metrics")]
-            metrics,
-        }
+impl<F, MEM, CTX> Deref for VmSegmentState<F, MEM, CTX> {
+    type Target = VmState<F, MEM>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.vm_state
+    }
+}
+
+impl<F, MEM, CTX> DerefMut for VmSegmentState<F, MEM, CTX> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.vm_state
     }
 }
 
@@ -118,7 +100,7 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
-        unsafe { self.memory.read(addr_space, ptr) }
+        unsafe { self.vm_state.memory.read(addr_space, ptr) }
     }
 
     #[inline(always)]
@@ -128,12 +110,12 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
-        unsafe { self.memory.write(addr_space, ptr, *data) }
+        unsafe { self.vm_state.memory.write(addr_space, ptr, *data) }
     }
 
     #[inline(always)]
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
-        unsafe { self.memory.get_slice(addr_space, ptr, len) }
+        unsafe { self.vm_state.memory.get_slice(addr_space, ptr, len) }
     }
 }
 

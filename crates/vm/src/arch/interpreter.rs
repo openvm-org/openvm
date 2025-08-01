@@ -13,18 +13,15 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
-use rand::{rngs::StdRng, SeedableRng};
 use tracing::info_span;
 
-#[cfg(feature = "metrics")]
-use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         create_memory_image,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         ExecuteFunc, ExecutionError, ExecutorInventory, ExecutorInventoryError, ExitCode,
         InsExecutorE1, InsExecutorE2, PreComputeInstruction, StaticProgramError, Streams,
-        SystemConfig, VmExecutionConfig, VmSegmentState,
+        SystemConfig, VmExecutionConfig, VmSegmentState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -169,16 +166,8 @@ where
         let memory_config = &self.system_config.memory_config;
         let memory = create_memory_image(memory_config, self.exe.init_memory.clone());
 
-        VmSegmentState::new(
-            0,
-            self.exe.pc_start,
-            memory,
-            inputs.into(),
-            StdRng::seed_from_u64(0),
-            ctx,
-            #[cfg(feature = "metrics")]
-            VmMetrics::default(),
-        )
+        let vm_state = VmState::new(0, self.exe.pc_start, memory, inputs.into(), 0);
+        VmSegmentState::new(vm_state, ctx)
     }
 
     #[inline(always)]

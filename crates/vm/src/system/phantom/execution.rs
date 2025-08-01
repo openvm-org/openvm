@@ -70,10 +70,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     let sub_executor = &*pre_compute.sub_executor;
     if let Err(e) = execute_impl(
         PhantomStateMut {
-            pc: &mut vm_state.pc,
-            memory: &mut vm_state.memory,
-            streams: &mut vm_state.streams,
-            rng: &mut vm_state.rng,
+            pc: &mut vm_state.vm_state.pc,
+            memory: &mut vm_state.vm_state.memory,
+            streams: &mut vm_state.vm_state.streams,
+            rng: &mut vm_state.vm_state.rng,
         },
         &pre_compute.operands,
         sub_executor,
