@@ -67,7 +67,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     Executor: InstructionExecutor<F, RA>,
 {
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
-    state.ctx.metrics.update_backtrace(state.pc);
+    state.metrics.update_backtrace(state.pc);
 
     #[cfg(feature = "perf-metrics")]
     {

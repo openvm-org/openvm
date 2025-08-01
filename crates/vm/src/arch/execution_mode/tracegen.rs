@@ -1,7 +1,5 @@
 use std::marker::PhantomData;
 
-#[cfg(feature = "metrics")]
-use crate::metrics::VmMetrics;
 use crate::{
     arch::{Arena, ExecutionError, InstructionExecutor, VmSegmentState, VmStateMut},
     system::{memory::online::TracingMemory, program::PcEntry},
@@ -10,8 +8,6 @@ use crate::{
 pub struct TracegenCtx<RA> {
     pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
-    #[cfg(feature = "metrics")]
-    pub(crate) metrics: VmMetrics,
 }
 
 impl<RA: Arena> TracegenCtx<RA> {
@@ -19,11 +15,7 @@ impl<RA: Arena> TracegenCtx<RA> {
     /// The length of `capacities` must equal the number of AIRs.
     /// Here `height` will always mean an overestimate of the trace height for that AIR, while
     /// `width` may have different meanings depending on the `RA` type.
-    pub fn new_with_capacity(
-        capacities: &[(usize, usize)],
-        instret_end: Option<u64>,
-        #[cfg(feature = "metrics")] metrics: VmMetrics,
-    ) -> Self {
+    pub fn new_with_capacity(capacities: &[(usize, usize)], instret_end: Option<u64>) -> Self {
         let arenas = capacities
             .iter()
             .map(|&(height, main_width)| RA::with_capacity(height, main_width))
@@ -32,8 +24,6 @@ impl<RA: Arena> TracegenCtx<RA> {
         Self {
             arenas,
             instret_end,
-            #[cfg(feature = "metrics")]
-            metrics,
         }
     }
 }
@@ -118,7 +108,7 @@ impl<F> TracegenExecutionControl<F> {
             rng: &mut state.rng,
             ctx: arena,
             #[cfg(feature = "metrics")]
-            metrics: &mut state.ctx.metrics,
+            metrics: &mut state.metrics,
         };
         executor.execute(state_mut, &pc_entry.insn)?;
 

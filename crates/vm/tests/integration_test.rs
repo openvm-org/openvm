@@ -661,7 +661,7 @@ fn test_hint_load_1() {
     let input = vec![vec![F::ONE, F::TWO]];
 
     let state = execute_program(program, input);
-    let streams = state.input;
+    let streams = state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
     assert_eq!(streams.hint_space, vec![vec![F::ONE, F::TWO]]);
@@ -693,7 +693,7 @@ fn test_hint_load_2() {
     let state = execute_program(program, input);
     let [read] = unsafe { state.memory.read::<F, 1>(4, 32) };
     assert_eq!(read, F::ZERO);
-    let streams = state.input;
+    let streams = state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
     assert_eq!(

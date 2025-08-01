@@ -3,7 +3,9 @@ use std::fmt::Debug;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
-use super::{ExecutionError, Streams};
+use super::{ExecutionError, Streams, VmState};
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         execution_mode::{
@@ -19,6 +21,7 @@ use crate::{
     },
 };
 
+/// Represents the full execution state of a VM during segment execution.
 pub struct VmSegmentState<F, MEM, CTX> {
     pub instret: u64,
     pub pc: u32,
@@ -27,6 +30,22 @@ pub struct VmSegmentState<F, MEM, CTX> {
     pub rng: StdRng,
     pub exit_code: Result<Option<u32>, ExecutionError>,
     pub ctx: CTX,
+    #[cfg(feature = "metrics")]
+    pub metrics: VmMetrics,
+}
+
+impl<F, CTX> From<VmSegmentState<F, GuestMemory, CTX>> for VmState<F> {
+    fn from(segment_state: VmSegmentState<F, GuestMemory, CTX>) -> Self {
+        VmState {
+            instret: segment_state.instret,
+            pc: segment_state.pc,
+            memory: segment_state.memory,
+            streams: segment_state.streams,
+            rng: segment_state.rng,
+            #[cfg(feature = "metrics")]
+            metrics: segment_state.metrics,
+        }
+    }
 }
 
 impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
@@ -37,6 +56,7 @@ impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
         streams: Streams<F>,
         rng: StdRng,
         ctx: CTX,
+        #[cfg(feature = "metrics")] metrics: VmMetrics,
     ) -> Self {
         Self {
             instret,
@@ -46,6 +66,8 @@ impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
             rng,
             ctx,
             exit_code: Ok(None),
+            #[cfg(feature = "metrics")]
+            metrics,
         }
     }
 }

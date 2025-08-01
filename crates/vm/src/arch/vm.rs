@@ -172,11 +172,12 @@ pub enum ExitCode {
     Suspended = -1, // Continuations
 }
 
+/// Represents the state of a VM between execution segments.
 pub struct VmState<F> {
     pub instret: u64,
     pub pc: u32,
     pub memory: GuestMemory,
-    pub input: Streams<F>,
+    pub streams: Streams<F>,
     pub rng: StdRng,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
@@ -187,14 +188,14 @@ impl<F> VmState<F> {
         instret: u64,
         pc: u32,
         memory: GuestMemory,
-        input: impl Into<Streams<F>>,
+        streams: impl Into<Streams<F>>,
         seed: u64,
     ) -> Self {
         Self {
             instret,
             pc,
             memory,
-            input: input.into(),
+            streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
@@ -342,15 +343,7 @@ where
         let ctx = E1Ctx::new(num_insns);
         let state = interpreter.execute(ctx, inputs)?;
 
-        Ok(VmState {
-            instret: state.instret,
-            pc: state.pc,
-            memory: state.memory,
-            input: state.streams,
-            rng: state.rng,
-            #[cfg(feature = "metrics")]
-            metrics: Default::default(),
-        })
+        Ok(state.into())
     }
 
     pub fn execute_metered(
@@ -525,12 +518,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(
-            &capacities,
-            instret_end,
-            #[cfg(feature = "metrics")]
-            state.metrics,
-        );
+        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -546,8 +534,16 @@ where
             access_adapter_arena_size_bound,
         );
         let from_state = ExecutionState::new(state.pc, memory.timestamp());
-        let mut exec_state =
-            VmSegmentState::new(state.instret, state.pc, memory, state.input, state.rng, ctx);
+        let mut exec_state = VmSegmentState::new(
+            state.instret,
+            state.pc,
+            memory,
+            state.streams,
+            state.rng,
+            ctx,
+            #[cfg(feature = "metrics")]
+            state.metrics,
+        );
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
         let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
         let mut memory = exec_state.memory;
@@ -579,10 +575,10 @@ where
             instret: exec_state.instret,
             pc: exec_state.pc,
             memory: memory.data,
-            input: exec_state.streams,
+            streams: exec_state.streams,
             rng: exec_state.rng,
             #[cfg(feature = "metrics")]
-            metrics: exec_state.ctx.metrics,
+            metrics: exec_state.metrics,
         };
         Ok(PreflightExecutionOutput {
             system_records,

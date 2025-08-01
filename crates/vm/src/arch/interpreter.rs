@@ -16,6 +16,8 @@ use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rand::{rngs::StdRng, SeedableRng};
 use tracing::info_span;
 
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         create_memory_image,
@@ -174,6 +176,8 @@ where
             inputs.into(),
             StdRng::seed_from_u64(0),
             ctx,
+            #[cfg(feature = "metrics")]
+            VmMetrics::default(),
         )
     }
 
