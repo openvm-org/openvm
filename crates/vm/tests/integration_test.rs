@@ -1,27 +1,23 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    iter::zip,
     mem::transmute,
     sync::Arc,
 };
 
+use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        create_and_initialize_chip_complex,
         execution_mode::{
             e1::E1Ctx,
-            tracegen::{TracegenCtx, TracegenExecutionControl},
+            metered::{ctx::DEFAULT_SEGMENT_CHECK_INSNS, segment_ctx::SegmentationLimits},
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         interpreter::InterpretedInstance,
-        ChipId, DefaultSegmentationStrategy, SingleSegmentVmExecutor, SystemTraceHeights,
-        VirtualMachine, VmComplexTraceHeights, VmConfig, VmInventoryTraceHeights,
-        VmSegmentExecutor, VmSegmentState,
+        verify_segments, verify_single, AirInventory, ContinuationVmProver,
+        PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
+        VmCircuitConfig, VmLocalProver, PUBLIC_VALUES_AIR_ID,
     },
-    system::{
-        memory::{MemoryTraceHeights, VolatileMemoryTraceHeights, CHUNK},
-        program::trace::VmCommittedExe,
-    },
+    system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
     utils::{air_test, air_test_with_min_segments, test_system_config},
 };
 use openvm_instructions::{
@@ -34,8 +30,8 @@ use openvm_instructions::{
     SystemOpcode::*,
 };
 use openvm_native_circuit::{
-    test_native_config, test_native_continuations_config, test_rv32_with_kernels_config,
-    NativeConfig,
+    execute_program, test_native_config, test_native_continuations_config,
+    test_rv32_with_kernels_config, NativeConfig, NativeCpuBuilder,
 };
 use openvm_native_compiler::{
     CastfOpcode,
@@ -59,7 +55,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::Rng;
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -110,11 +106,12 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(test_native_config(), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
+// See crates/sdk/src/prover/root.rs for intended usage
 #[test]
-fn test_vm_override_executor_height() {
+fn test_vm_override_trace_heights() -> eyre::Result<()> {
     let e = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
@@ -124,198 +121,124 @@ fn test_vm_override_executor_height() {
         program.into(),
         e.config().pcs(),
     ));
+    // It's hard to define the mapping semantically. Please recompute the following magical AIR
+    // heights by hands whenever something changes.
+    let fixed_air_heights = vec![
+        2, 2, 16, 1, 8, 4, 2, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 262144,
+    ];
 
     // Test getting heights.
     let vm_config = NativeConfig::aggregation(8, 3);
-
-    let vm = VirtualMachine::new(e, vm_config.clone());
-    let pk = vm.keygen();
+    let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeCpuBuilder, vm_config)?;
     let vk = pk.get_vk();
 
-    let executor = SingleSegmentVmExecutor::new(vm_config.clone());
+    let state = vm
+        .executor()
+        .create_initial_state(&committed_exe.exe, vec![]);
+    vm.transport_init_memory_to_device(&state.memory);
+    let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
+    vm.load_program(cached_program_trace);
+    let PreflightExecutionOutput {
+        system_records,
+        mut record_arenas,
+        ..
+    } = vm.execute_preflight(&committed_exe.exe, state, None, &fixed_air_heights)?;
 
-    let max_trace_heights = executor
-        .execute_metered(committed_exe.exe.clone(), vec![], &vk.num_interactions())
-        .unwrap();
-
-    let res = executor
-        .execute_and_compute_heights(committed_exe.exe.clone(), vec![], &max_trace_heights)
-        .unwrap();
-    // Memory trace heights are not computed during execution.
+    let mut expected_actual_heights = vec![0; vk.inner.per_air.len()];
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    expected_actual_heights[executor_idx_to_air_idx[6]] = 1; // corresponds to FieldArithmeticChip
     assert_eq!(
-        res.vm_heights.system,
-        SystemTraceHeights {
-            memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-                boundary: 1,
-                access_adapters: vec![0, 0, 0],
-            }),
-        }
+        record_arenas
+            .iter()
+            .map(|ra| ra.trace_offset() / ra.width())
+            .collect_vec(),
+        expected_actual_heights
     );
-    assert_eq!(
-        res.vm_heights.inventory,
-        VmInventoryTraceHeights {
-            chips: vec![
-                (ChipId::Executor(0), 0),
-                (ChipId::Executor(1), 0),
-                (ChipId::Executor(2), 0),
-                (ChipId::Executor(3), 0),
-                (ChipId::Executor(4), 0),
-                (ChipId::Executor(5), 0),
-                (ChipId::Executor(6), 1), // corresponds to FieldArithmeticChip
-                (ChipId::Executor(7), 0),
-                (ChipId::Executor(8), 0),
-                (ChipId::Executor(9), 0),
-            ]
-            .into_iter()
-            .collect(),
-        }
-    );
+    for ra in &mut record_arenas {
+        ra.force_matrix_dimensions();
+    }
+    vm.override_system_trace_heights(&fixed_air_heights);
 
-    // Test overriding heights.
-    let system_overridden_heights = SystemTraceHeights {
-        memory: MemoryTraceHeights::Volatile(VolatileMemoryTraceHeights {
-            boundary: 1,
-            access_adapters: vec![8, 4, 2],
-        }),
-    };
-    let inventory_overridden_heights = VmInventoryTraceHeights {
-        chips: vec![
-            (ChipId::Executor(0), 16),
-            (ChipId::Executor(1), 32),
-            (ChipId::Executor(2), 64),
-            (ChipId::Executor(3), 128),
-            (ChipId::Executor(4), 256),
-            (ChipId::Executor(5), 512),
-            (ChipId::Executor(6), 1024),
-            (ChipId::Executor(7), 2048),
-            (ChipId::Executor(8), 4096),
-            (ChipId::Executor(9), 8192),
-        ]
-        .into_iter()
-        .collect(),
-    };
-    let overridden_heights = VmComplexTraceHeights::new(
-        system_overridden_heights.clone(),
-        inventory_overridden_heights.clone(),
-    );
-    let executor = SingleSegmentVmExecutor::new_with_overridden_trace_heights(
-        vm_config,
-        Some(overridden_heights),
-    );
-    let proof_input = executor
-        .execute_and_generate(committed_exe, vec![], &max_trace_heights)
-        .unwrap();
-    let air_heights: Vec<_> = proof_input
+    let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+    let air_heights: Vec<_> = ctx
         .per_air
         .iter()
-        .map(|(_, api)| api.main_trace_height())
+        .map(|(_, air_ctx)| air_ctx.main_trace_height() as u32)
         .collect();
-    // It's hard to define the mapping semantically. Please recompute the following magical AIR
-    // heights by hands whenever something changes.
-    assert_eq!(
-        air_heights,
-        vec![2, 2, 16, 1, 8, 4, 2, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 262144]
-    );
+    assert_eq!(air_heights, fixed_air_heights);
+    Ok(())
 }
 
 #[test]
-fn test_vm_1_optional_air() {
+fn test_vm_1_optional_air() -> eyre::Result<()> {
     // Aggregation VmConfig has Core/Poseidon2/FieldArithmetic/FieldExtension chips. The program
     // only uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let vm = VirtualMachine::new(engine, config);
-    let pk = vm.keygen();
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config)?;
     let num_airs = pk.per_air.len();
 
-    {
-        let n = 6;
-        let instructions = vec![
-            Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
-            Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
-            Instruction::from_isize(
-                NativeBranchEqualOpcode(BNE).global_opcode(),
-                0,
-                0,
-                -(DEFAULT_PC_STEP as isize),
-                4,
-                0,
-            ),
-            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-        ];
+    let n = 6;
+    let instructions = vec![
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).global_opcode(),
+            0,
+            0,
+            -(DEFAULT_PC_STEP as isize),
+            4,
+            0,
+        ),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
 
-        let program = Program::from_instructions(&instructions);
-
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
-        let segments = vm
-            .executor
-            .execute_metered(program.clone(), vec![], &vk.num_interactions())
-            .unwrap();
-
-        let result = vm
-            .execute_and_generate(program, vec![], &segments)
-            .expect("Failed to execute VM");
-        assert_eq!(result.per_segment.len(), 1);
-        let proof_input = result.per_segment.last().unwrap();
-        assert!(
-            proof_input.per_air.len() < num_airs,
-            "Expect less used AIRs"
-        );
-        let proofs = vm.prove(&pk, result);
-        assert_eq!(proofs.len(), 1);
-        vm.verify(&pk.get_vk(), proofs)
-            .expect("Verification failed");
-    }
+    let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
+    let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
+    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let proof = SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; num_airs])?;
+    assert!(proof.per_air.len() < num_airs, "Expect less used AIRs");
+    verify_single(&prover.vm.engine, &pk.get_vk(), &proof)?;
+    Ok(())
 }
 
 #[test]
-fn test_vm_public_values() {
+fn test_vm_public_values() -> eyre::Result<()> {
     setup_tracing();
     let num_public_values = 100;
     let config = test_system_config().with_public_values(num_public_values);
+    assert!(!config.continuation_enabled);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let vm = VirtualMachine::new(engine, config.clone());
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config)?;
 
-    {
-        let instructions = vec![
-            Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
-            Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-        ];
-
-        let program = Program::from_instructions(&instructions);
-        let committed_exe = Arc::new(VmCommittedExe::commit(
-            program.clone().into(),
-            vm.engine.config.pcs(),
-        ));
-        let single_vm = SingleSegmentVmExecutor::new(config);
-
-        let max_trace_heights = single_vm
-            .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
-            .unwrap();
-
-        let exe_result = single_vm
-            .execute_and_compute_heights(program, vec![], &max_trace_heights)
-            .unwrap();
-        assert_eq!(
-            exe_result.public_values,
-            [
-                vec![None, None, Some(BabyBear::from_canonical_u32(12))],
-                vec![None; num_public_values - 3]
-            ]
-            .concat(),
-        );
-        let proof_input = single_vm
-            .execute_and_generate(committed_exe, vec![], &max_trace_heights)
-            .unwrap();
-        vm.engine
-            .prove_then_verify(&pk, proof_input)
-            .expect("Verification failed");
-    }
+    let instructions = vec![
+        Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+    let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
+    let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
+    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let proof = SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; pk.per_air.len()])?;
+    assert_eq!(
+        proof.per_air[PUBLIC_VALUES_AIR_ID].air_id,
+        PUBLIC_VALUES_AIR_ID
+    );
+    assert_eq!(
+        proof.per_air[PUBLIC_VALUES_AIR_ID].public_values,
+        [
+            vec![
+                BabyBear::ZERO,
+                BabyBear::ZERO,
+                BabyBear::from_canonical_u32(12)
+            ],
+            vec![BabyBear::ZERO; num_public_values - 3]
+        ]
+        .concat(),
+    );
+    verify_single(&prover.vm.engine, &pk.get_vk(), &proof)?;
+    Ok(())
 }
 
 #[test]
@@ -351,22 +274,18 @@ fn test_vm_initial_memory() {
         init_memory,
         fn_bounds: Default::default(),
     };
-    air_test(config, exe);
+    air_test(NativeCpuBuilder, config, exe);
 }
 
 #[test]
-fn test_vm_1_persistent() {
+fn test_vm_1_persistent() -> eyre::Result<()> {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let config = test_native_continuations_config();
+    let merkle_air_idx = config.system.memory_boundary_air_id() + 1;
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
     let addr_space_height = config.system.memory_config.addr_space_height;
-    let airs = VmConfig::<BabyBear>::create_chip_complex(&config)
-        .unwrap()
-        .airs::<BabyBearPoseidon2Config>();
 
-    let vm = VirtualMachine::new(engine, config);
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config)?;
 
     let n = 6;
     let instructions = vec![
@@ -383,34 +302,25 @@ fn test_vm_1_persistent() {
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program::from_instructions(&instructions);
+    let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
+    let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
+    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let proof = ContinuationVmProver::prove(&mut prover, vec![])?;
 
-    let segments = vm
-        .executor
-        .execute_metered(program.clone(), vec![], &vk.num_interactions())
-        .unwrap();
-
-    let result = vm
-        .execute_and_generate(program.clone(), vec![], &segments)
-        .unwrap();
     {
-        let proof_input = result.per_segment.into_iter().next().unwrap();
-
-        let ((_, merkle_air_proof_input), _) = zip(&proof_input.per_air, &airs)
-            .find(|(_, air)| air.name() == "MemoryMerkleAir<8>")
-            .unwrap();
-        assert_eq!(merkle_air_proof_input.raw.public_values.len(), 16);
-        assert_eq!(
-            merkle_air_proof_input.raw.public_values[..8],
-            merkle_air_proof_input.raw.public_values[8..]
-        );
+        assert_eq!(proof.per_segment.len(), 1);
+        let public_values = proof.per_segment[0].per_air[merkle_air_idx]
+            .public_values
+            .clone();
+        assert_eq!(public_values.len(), 16);
+        assert_eq!(public_values[..8], public_values[8..]);
         let mut digest = [BabyBear::ZERO; CHUNK];
         let compression = vm_poseidon2_hasher();
         for _ in 0..ptr_max_bits + addr_space_height - 2 {
             digest = compression.compress(&digest, &digest);
         }
         assert_eq!(
-            merkle_air_proof_input.raw.public_values[..8],
+            public_values[..8],
             // The value when you start with zeros and repeatedly hash the value with itself
             // ptr_max_bits + addr_space_height - 2 times.
             // The height of the tree is ptr_max_bits + addr_space_height - log2(8). The leaf also
@@ -418,11 +328,8 @@ fn test_vm_1_persistent() {
             digest
         );
     }
-
-    let result_for_proof = vm.execute_and_generate(program, vec![], &segments).unwrap();
-    let proofs = vm.prove(&pk, result_for_proof);
-    vm.verify(&pk.get_vk(), proofs)
-        .expect("Verification failed");
+    verify_segments(&prover.vm.engine, &pk.get_vk(), &proof.per_segment)?;
+    Ok(())
 }
 
 #[test]
@@ -470,7 +377,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(test_native_config(), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -517,7 +424,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(test_native_config(), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -576,7 +483,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(test_native_config(), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -600,7 +507,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(test_native_config(), program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -626,23 +533,30 @@ fn test_vm_max_access_adapter_8() {
 
     let mut config = test_native_config();
     {
-        let chip_complex1 = config.create_chip_complex().unwrap();
-        let mem_ctrl1 = chip_complex1.base.memory_controller;
+        let num_sys_airs1 = config.system.num_airs();
+        let inventory1: AirInventory<BabyBearPoseidon2Config> = config.create_airs().unwrap();
+        let num_ext_airs = inventory1.ext_airs().len();
+        let mem_inv1 = &inventory1.system().memory;
         config.system.memory_config.max_access_adapter_n = 8;
-        let chip_complex2 = config.create_chip_complex().unwrap();
-        let mem_ctrl2 = chip_complex2.base.memory_controller;
+        let num_sys_airs2 = config.system.num_airs();
+        let inventory2: AirInventory<BabyBearPoseidon2Config> = config.create_airs().unwrap();
+        let mem_inv2 = &inventory2.system().memory;
         // AccessAdapterAir with N=16/32 are disabled.
-        assert_eq!(mem_ctrl1.air_names().len(), mem_ctrl2.air_names().len() + 2);
         assert_eq!(
-            mem_ctrl1.airs::<BabyBearPoseidon2Config>().len(),
-            mem_ctrl2.airs::<BabyBearPoseidon2Config>().len() + 2
+            mem_inv1.access_adapters.len(),
+            mem_inv2.access_adapters.len() + 2
+        );
+        assert_eq!(num_sys_airs1, num_sys_airs2 + 2);
+        assert_eq!(
+            inventory1.into_airs().collect_vec().len(),
+            num_sys_airs1 + num_ext_airs
         );
         assert_eq!(
-            mem_ctrl1.current_trace_heights().len(),
-            mem_ctrl2.current_trace_heights().len() + 2
+            inventory2.into_airs().collect_vec().len(),
+            num_sys_airs2 + num_ext_airs
         );
     }
-    air_test(config, program);
+    air_test(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -666,7 +580,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = test_native_continuations_config();
-    air_test(config, program);
+    air_test(NativeCpuBuilder, config, program);
 }
 
 #[test]
@@ -727,7 +641,7 @@ fn test_vm_hint() {
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = test_native_config();
-    air_test_with_min_segments(config, program, input_stream, 1);
+    air_test_with_min_segments(NativeCpuBuilder, config, program, input_stream, 1);
 }
 
 #[test]
@@ -745,39 +659,9 @@ fn test_hint_load_1() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO]];
-    let rng = StdRng::seed_from_u64(0);
 
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, test_native_config());
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
-    let mut segments = vm
-        .executor
-        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
-        .unwrap();
-    assert_eq!(segments.len(), 1);
-    let segment = segments.pop().unwrap();
-
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
-
-    let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
-        chip_complex,
-        vec![],
-        Default::default(),
-        TracegenExecutionControl,
-    );
-
-    let ctx = TracegenCtx::new(Some(segment.num_insns));
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
-    executor.execute_from_state(&mut exec_state).unwrap();
-
-    let streams = exec_state.streams;
+    let state = execute_program(program, input);
+    let streams = state.input;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
     assert_eq!(streams.hint_space, vec![vec![F::ONE, F::TWO]]);
@@ -805,48 +689,11 @@ fn test_hint_load_2() {
 
     let program = Program::from_instructions(&instructions);
     let input = vec![vec![F::ONE, F::TWO], vec![F::TWO, F::ONE]];
-    let rng = StdRng::seed_from_u64(0);
 
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let vm = VirtualMachine::new(engine, test_native_config());
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
-    let mut segments = vm
-        .executor
-        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
-        .unwrap();
-    assert_eq!(segments.len(), 1);
-    let segment = segments.pop().unwrap();
-
-    let chip_complex = create_and_initialize_chip_complex(
-        &test_native_config(),
-        program,
-        None,
-        Some(&segment.trace_heights),
-    )
-    .unwrap();
-
-    let mut executor = VmSegmentExecutor::<F, NativeConfig, _>::new(
-        chip_complex,
-        vec![],
-        Default::default(),
-        TracegenExecutionControl,
-    );
-
-    let ctx = TracegenCtx::new(Some(segment.num_insns));
-    let mut exec_state = VmSegmentState::new(0, 0, None, input.into(), rng, ctx);
-    executor.execute_from_state(&mut exec_state).unwrap();
-
-    let [read] = unsafe {
-        executor
-            .chip_complex
-            .memory_controller()
-            .memory
-            .data
-            .read::<F, 1>(4, 32)
-    };
+    let state = execute_program(program, input);
+    let [read] = unsafe { state.memory.read::<F, 1>(4, 32) };
     assert_eq!(read, F::ZERO);
-    let streams = exec_state.streams;
+    let streams = state.input;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
     assert_eq!(
@@ -896,9 +743,9 @@ fn test_vm_pure_execution_non_continuation() {
 
     let program = Program::from_instructions(&instructions);
 
-    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program);
+    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program).unwrap();
     executor
-        .execute(E1Ctx::new(None), vec![])
+        .execute(E1Ctx::default(), vec![])
         .expect("Failed to execute");
 }
 
@@ -923,9 +770,10 @@ fn test_vm_pure_execution_continuation() {
     ];
 
     let program = Program::from_instructions(&instructions);
-    let executor = InterpretedInstance::<F, _>::new(test_native_continuations_config(), program);
+    let executor =
+        InterpretedInstance::<F, _>::new(test_native_continuations_config(), program).unwrap();
     executor
-        .execute(E1Ctx::new(None), vec![])
+        .execute(E1Ctx::default(), vec![])
         .expect("Failed to execute");
 }
 
@@ -1032,29 +880,26 @@ fn test_vm_e1_native_chips() {
     let program = Program::from_instructions(&instructions);
     let input_stream: Vec<Vec<F>> = vec![vec![]];
 
-    let executor = InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program);
+    let executor =
+        InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program).unwrap();
     executor
         .execute(E1Ctx::new(None), input_stream)
         .expect("Failed to execute");
 }
 
+// This test ensures that metered execution never segments when continuations is disabled
 #[test]
 fn test_single_segment_executor_no_segmentation() {
     setup_tracing();
-    type F = BabyBear;
 
     let mut config = test_native_config();
+    config
+        .system
+        .set_segmentation_limits(SegmentationLimits::default().with_max_trace_height(1));
 
-    config.system.set_segmentation_strategy(Arc::new(
-        DefaultSegmentationStrategy::new_with_max_segment_len(1),
-    ));
-
-    let engine =
-        BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let vm = VirtualMachine::new(engine, config.clone());
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
-    let instructions: Vec<_> = (0..1000)
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config).unwrap();
+    let instructions: Vec<_> = (0..2 * DEFAULT_SEGMENT_CHECK_INSNS)
         .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
         .chain(std::iter::once(Instruction::from_isize(
             TERMINATE.global_opcode(),
@@ -1067,9 +912,9 @@ fn test_single_segment_executor_no_segmentation() {
         .collect();
 
     let program = Program::from_instructions(&instructions);
-    let single_vm = SingleSegmentVmExecutor::<F, _>::new(config);
-
-    let _ = single_vm
-        .execute_metered(program.clone().into(), vec![], &vk.num_interactions())
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let metered_ctx = vm.build_metered_ctx();
+    vm.executor()
+        .execute_metered(program, vec![], &executor_idx_to_air_idx, metered_ctx)
         .unwrap();
 }

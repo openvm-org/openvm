@@ -134,19 +134,20 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
     pub write_aux: MemoryWriteAuxRecord<F, N>,
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone, Copy)]
 pub struct NativeVectorizedAdapterStep<const N: usize>;
 
-impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
-    for NativeVectorizedAdapterStep<N>
-{
+#[derive(derive_new::new)]
+pub struct NativeVectorizedAdapterFiller<const N: usize>;
+
+impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAdapterStep<N> {
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
     type WriteData = [F; N];
     type RecordMut<'a> = &'a mut NativeVectorizedAdapterRecord<F, N>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp();
     }
@@ -154,7 +155,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -181,7 +182,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -201,9 +202,9 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const N: usize> AdapterTraceFiller<F, CTX>
-    for NativeVectorizedAdapterStep<N>
-{
+impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorizedAdapterFiller<N> {
+    const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &NativeVectorizedAdapterRecord<F, N> =

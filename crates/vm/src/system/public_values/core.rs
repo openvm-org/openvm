@@ -23,12 +23,16 @@ use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmCoreAir, VmSegmentState, VmStateMut,
+        BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
+        InsExecutorE1, InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena,
+        StaticProgramError, TraceFiller, VmCoreAir, VmSegmentState, VmStateMut,
     },
     system::{
-        memory::{online::TracingMemory, MemoryAuxColsFactory},
+        memory::{
+            online::{GuestMemory, TracingMemory},
+            MemoryAuxColsFactory,
+        },
+        native_adapter::NativeAdapterStep,
         public_values::columns::PublicValuesCoreColsView,
     },
     utils::{transmute_field_to_u32, transmute_u32_to_field},
@@ -121,17 +125,14 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesCoreStep<A, F> {
+pub struct PublicValuesStep<F, A = NativeAdapterStep<F, 2, 0>> {
     adapter: A,
     encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-impl<A, F> PublicValuesCoreStep<A, F>
-where
-    F: PrimeField32,
-{
+impl<F: Clone, A> PublicValuesStep<F, A> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
@@ -142,19 +143,37 @@ where
             custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
         }
     }
-    pub fn get_custom_public_values(&self) -> Vec<Option<F>> {
-        self.custom_pvs.lock().unwrap().clone()
+
+    pub(crate) fn set_public_values(&mut self, public_values: &[F]) {
+        let mut custom_pvs = self.custom_pvs.lock().unwrap();
+        assert_eq!(public_values.len(), custom_pvs.len());
+        for (pv_mut, value) in custom_pvs.iter_mut().zip(public_values) {
+            *pv_mut = Some(value.clone());
+        }
     }
 }
 
-impl<F, CTX, A> TraceStep<F, CTX> for PublicValuesCoreStep<A, F>
+// We clone when we want to run a new instance of the program, so we reset the custom public values.
+impl<F: Clone, A: Clone> Clone for PublicValuesStep<F, A> {
+    fn clone(&self) -> Self {
+        Self {
+            adapter: self.adapter.clone(),
+            encoder: self.encoder.clone(),
+            custom_pvs: Mutex::new(vec![None; self.custom_pvs.lock().unwrap().len()]),
+        }
+    }
+}
+
+impl<F, A, RA> InstructionExecutor<F, RA> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, CTX, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
+    A: 'static + Clone + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut PublicValuesRecord<F>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut PublicValuesRecord<F>);
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -162,16 +181,12 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+    ) -> Result<(), ExecutionError> {
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -195,19 +210,12 @@ where
 
         Ok(())
     }
-
-    fn generate_public_values(&self) -> Vec<F> {
-        self.get_custom_public_values()
-            .into_iter()
-            .map(|x| x.unwrap_or(F::ZERO))
-            .collect()
-    }
 }
 
-impl<F, CTX, A> TraceFiller<F, CTX> for PublicValuesCoreStep<A, F>
+impl<F, A> TraceFiller<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -229,6 +237,11 @@ where
         *cols.value = record.value;
         *cols.is_valid = F::ONE;
     }
+
+    fn generate_public_values(&self) -> Vec<F> {
+        let custom_pvs = self.custom_pvs.lock().unwrap();
+        custom_pvs.iter().map(|&x| x.unwrap_or(F::ZERO)).collect()
+    }
 }
 
 #[derive(AlignedBytesBorrow)]
@@ -239,7 +252,7 @@ struct PublicValuesPreCompute<F> {
     pvs: *const Mutex<Vec<Option<F>>>,
 }
 
-impl<F, A> StepExecutorE1<F> for PublicValuesCoreStep<A, F>
+impl<F, A> InsExecutorE1<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
 {
@@ -254,7 +267,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -271,7 +284,7 @@ where
     }
 }
 
-impl<A, F> StepExecutorE2<F> for PublicValuesCoreStep<A, F>
+impl<F, A> InsExecutorE2<F> for PublicValuesStep<F, A>
 where
     F: PrimeField32,
 {
@@ -285,7 +298,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -306,7 +319,7 @@ where
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) where
     CTX: E1ExecutionCtx,
 {
@@ -317,7 +330,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) where
     CTX: E2ExecutionCtx,
 {
@@ -329,7 +342,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &PublicValuesPreCompute<F>,
-    state: &mut VmSegmentState<F, CTX>,
+    state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) where
     CTX: E1ExecutionCtx,
 {
@@ -361,7 +374,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     state.instret += 1;
 }
 
-impl<A, F> PublicValuesCoreStep<A, F>
+impl<F, A> PublicValuesStep<F, A>
 where
     F: PrimeField32,
 {

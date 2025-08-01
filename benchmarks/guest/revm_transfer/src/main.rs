@@ -2,7 +2,7 @@
 //! We run 100 transfers to take the average
 use alloy_primitives::{address, TxKind, U256};
 #[allow(unused_imports, clippy::single_component_path_imports)]
-use openvm_keccak256_guest; // export native keccak
+use openvm_keccak256; // export native keccak
 use revm::{db::BenchmarkDB, primitives::Bytecode, Evm};
 
 // Necessary so the linker doesn't skip importing openvm crate

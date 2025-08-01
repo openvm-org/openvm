@@ -9,3 +9,5 @@ pub use edwards_chip::*;
 
 mod config;
 pub use config::*;
+
+pub struct EccCpuProverExt;

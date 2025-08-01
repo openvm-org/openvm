@@ -4,7 +4,7 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::Rv32ModularConfig;
+    use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularCpuBuilder};
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::utils::{air_test, test_system_config_with_continuations};
     use openvm_instructions::exe::VmExe;
@@ -46,7 +46,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -65,7 +65,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -84,7 +84,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -108,7 +108,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -132,7 +132,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -181,7 +181,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

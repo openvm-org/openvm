@@ -27,7 +27,6 @@ backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
-cfg-if.workspace = true
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
@@ -57,12 +56,13 @@ parallel = [
     "openvm-stark-sdk?/parallel",
 ]
 test-utils = ["openvm-stark-sdk"]
-bench-metrics = [
+metrics = [
     "dep:metrics",
-    "openvm-stark-backend/bench-metrics",
-    "openvm-stark-sdk?/bench-metrics",
+    "openvm-stark-backend/metrics",
+    "openvm-stark-sdk?/metrics",
 ]
-function-span = ["bench-metrics"]
+# turns on more invasive profiling for fine-grained guest metrics
+perf-metrics = ["metrics"]
 # use basic memory instead of mmap:
 basic-memory = []
 # performance features:

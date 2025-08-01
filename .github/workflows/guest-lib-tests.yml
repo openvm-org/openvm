@@ -13,6 +13,7 @@ on:
       - "guest-libs/**"
       - "Cargo.toml"
       - ".github/workflows/guest-lib-tests.yml"
+      - "crates/sdk/guest/fib/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

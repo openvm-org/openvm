@@ -1,11 +1,14 @@
-use std::{array, borrow::BorrowMut, cmp::max, sync::Arc};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     instructions::riscv::RV32_CELL_BITS,
     testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
     SubAir,
 };
 use openvm_stark_backend::{
@@ -14,18 +17,18 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
     utils::disable_debug_builder,
     verifier::VerificationError,
-    AirRef, Chip, ChipUsageGetter,
+    AirRef, Chip,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
 
 use crate::{
-    Sha256Air, Sha256DigestCols, Sha256StepHelper, SHA256_BLOCK_U8S, SHA256_DIGEST_WIDTH,
-    SHA256_HASH_WORDS, SHA256_ROUND_WIDTH, SHA256_ROWS_PER_BLOCK, SHA256_WORD_U8S,
+    Sha256Air, Sha256DigestCols, Sha256FillerHelper, SHA256_BLOCK_U8S, SHA256_DIGEST_WIDTH,
+    SHA256_HASH_WORDS, SHA256_WIDTH, SHA256_WORD_U8S,
 };
 
 // A wrapper AIR purely for testing purposes
@@ -48,53 +51,47 @@ impl<AB: InteractionBuilder> Air<AB> for Sha256TestAir {
     }
 }
 
+const SELF_BUS_IDX: BusIndex = 28;
+type F = BabyBear;
+type RecordType = Vec<([u8; SHA256_BLOCK_U8S], bool)>;
+
 // A wrapper Chip purely for testing purposes
 pub struct Sha256TestChip {
-    pub air: Sha256TestAir,
-    pub step: Sha256StepHelper,
+    pub step: Sha256FillerHelper,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
-    pub records: Vec<([u8; SHA256_BLOCK_U8S], bool)>,
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for Sha256TestChip
+impl<SC: StarkGenericConfig> Chip<RecordType, CpuBackend<SC>> for Sha256TestChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, records: RecordType) -> AirProvingContext<CpuBackend<SC>> {
         let trace = crate::generate_trace::<Val<SC>>(
             &self.step,
             self.bitwise_lookup_chip.as_ref(),
-            <Sha256Air as BaseAir<Val<SC>>>::width(&self.air.sub_air),
-            self.records,
+            SHA256_WIDTH,
+            records,
         );
-        AirProofInput::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
-impl ChipUsageGetter for Sha256TestChip {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
-    }
-    fn current_trace_height(&self) -> usize {
-        self.records.len() * SHA256_ROWS_PER_BLOCK
-    }
-
-    fn trace_width(&self) -> usize {
-        max(SHA256_ROUND_WIDTH, SHA256_DIGEST_WIDTH)
-    }
-}
-
-const SELF_BUS_IDX: BusIndex = 28;
-type F = BabyBear;
-
-fn create_chip_with_rand_records() -> (Sha256TestChip, SharedBitwiseOperationLookupChip<8>) {
+#[allow(clippy::type_complexity)]
+fn create_air_with_air_ctx<SC: StarkGenericConfig>() -> (
+    (AirRef<SC>, AirProvingContext<CpuBackend<SC>>),
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
+)
+where
+    Val<SC>: PrimeField32,
+{
     let mut rng = create_seeded_rng();
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
     let len = rng.gen_range(1..100);
     let random_records: Vec<_> = (0..len)
         .map(|i| {
@@ -104,29 +101,35 @@ fn create_chip_with_rand_records() -> (Sha256TestChip, SharedBitwiseOperationLoo
             )
         })
         .collect();
-    let chip = Sha256TestChip {
-        air: Sha256TestAir {
-            sub_air: Sha256Air::new(bitwise_bus, SELF_BUS_IDX),
-        },
-        step: Sha256StepHelper::new(),
-        bitwise_lookup_chip: bitwise_chip.clone(),
-        records: random_records,
+
+    let air = Sha256TestAir {
+        sub_air: Sha256Air::new(bitwise_bus, SELF_BUS_IDX),
     };
-    (chip, bitwise_chip)
+    let chip = Sha256TestChip {
+        step: Sha256FillerHelper::new(),
+        bitwise_lookup_chip: bitwise_chip.clone(),
+    };
+    let air_ctx = chip.generate_proving_ctx(random_records);
+
+    ((Arc::new(air), air_ctx), (bitwise_chip.air, bitwise_chip))
 }
 
 #[test]
 fn rand_sha256_test() {
     let tester = VmChipTestBuilder::default();
-    let (chip, bitwise_chip) = create_chip_with_rand_records();
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let (air_ctx, bitwise) = create_air_with_air_ctx();
+    let tester = tester
+        .build()
+        .load_air_proving_ctx(air_ctx)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
 #[test]
 fn negative_sha256_test_bad_final_hash() {
     let tester = VmChipTestBuilder::default();
-    let (chip, bitwise_chip) = create_chip_with_rand_records();
+    let ((air, mut air_ctx), bitwise) = create_air_with_air_ctx();
 
     // Set the final_hash to all zeros
     let modify_trace = |trace: &mut RowMajorMatrix<F>| {
@@ -144,11 +147,17 @@ fn negative_sha256_test_bad_final_hash() {
         });
     };
 
+    // Modify the air_ctx
+    let trace = Option::take(&mut air_ctx.common_main).unwrap();
+    let mut trace = Arc::into_inner(trace).unwrap();
+    modify_trace(&mut trace);
+    air_ctx.common_main = Some(Arc::new(trace));
+
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(bitwise_chip)
+        .load_air_proving_ctx((air, air_ctx))
+        .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
 }

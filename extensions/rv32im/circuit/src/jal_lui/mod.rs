@@ -1,6 +1,6 @@
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::{Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterStep};
+use crate::adapters::Rv32CondRdWriteAdapterAir;
 
 mod core;
 pub use core::*;
@@ -9,6 +9,4 @@ pub use core::*;
 mod tests;
 
 pub type Rv32JalLuiAir = VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir>;
-pub type Rv32JalLuiStepWithAdapter = Rv32JalLuiStep<Rv32CondRdWriteAdapterStep>;
-pub type Rv32JalLuiChip<F> =
-    NewVmChipWrapper<F, Rv32JalLuiAir, Rv32JalLuiStepWithAdapter, MatrixRecordArena<F>>;
+pub type Rv32JalLuiChip<F> = VmChipWrapper<F, Rv32JalLuiFiller>;

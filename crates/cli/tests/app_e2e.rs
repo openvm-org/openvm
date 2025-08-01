@@ -14,7 +14,7 @@ fn install_cli() {
     static FORCE_INSTALL: OnceLock<bool> = OnceLock::new();
     FORCE_INSTALL.get_or_init(|| {
         if !matches!(env::var("SKIP_INSTALL"), Ok(x) if !x.is_empty()) {
-            run_cmd("cargo", &["install", "--path", ".", "--force"]).unwrap();
+            run_cmd("cargo", &["install", "--path", ".", "--force", "--locked"]).unwrap();
         }
         true
     });

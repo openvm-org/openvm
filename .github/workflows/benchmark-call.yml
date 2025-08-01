@@ -49,7 +49,7 @@ on:
       features:
         type: string
         required: false
-        description: Host features, comma separated (aggregation,profiling)
+        description: Host features, comma separated (aggregation,perf-metrics)
   workflow_call:
     inputs:
       benchmark_name:
@@ -102,12 +102,12 @@ on:
       features:
         type: string
         required: false
-        description: Host features, comma separated (aggregation,profiling)
+        description: Host features, comma separated (aggregation,perf-metrics)
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
+  FEATURE_FLAGS: "metrics,parallel,nightly-features"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -230,11 +230,11 @@ jobs:
           s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
 
       - name: Install inferno-flamegraph
-        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
         run: cargo install inferno
 
       - name: Generate flamegraphs
-        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
         run: |
           if [[ -f $METRIC_PATH ]]; then
             GUEST_SYMBOLS_PATH="${METRIC_PATH%.json}.syms"

@@ -10,7 +10,7 @@ use {
     crate::commit::CommitBytes,
     itertools::Itertools,
     openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
-    std::iter::{once, repeat},
+    std::iter::{once, repeat_n},
     thiserror::Error,
 };
 
@@ -195,7 +195,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
 
             let user_public_values = user_public_values
                 .into_iter()
-                .flat_map(|byte| once(byte).chain(repeat(0).take(31)))
+                .flat_map(|byte| once(byte).chain(repeat_n(0, 31)))
                 .collect::<Vec<_>>();
 
             let mut ret = Vec::new();

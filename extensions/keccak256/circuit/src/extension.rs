@@ -1,32 +1,40 @@
-use std::result::Result;
+use std::{result::Result, sync::Arc};
 
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        InitFileGenerator, SystemConfig, SystemPort, VmExtension, VmInventory, VmInventoryBuilder,
-        VmInventoryError,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
+        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::phantom::PhantomChip,
+    system::{
+        memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
+        SystemPort,
+    },
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
-use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupBus;
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+};
 use openvm_instructions::*;
 use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
+use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
 
-// TODO: this should be decided after e2 execution
-
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub rv32i: Rv32I,
@@ -53,70 +61,146 @@ impl Default for Keccak256Rv32Config {
 // Default implementation uses no init file
 impl InitFileGenerator for Keccak256Rv32Config {}
 
+#[derive(Clone)]
+pub struct Keccak256Rv32CpuBuilder;
+
+impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = Keccak256Rv32Config;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Keccak256Rv32Config,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Keccak256CpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+// =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(
-    ChipUsageGetter, Chip, InstructionExecutor, From, AnyEnum, InsExecutorE1, InsExecutorE2,
-)]
-pub enum Keccak256Executor<F: PrimeField32> {
-    Keccak256(KeccakVmChip<F>),
+#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+pub enum Keccak256Executor {
+    Keccak256(KeccakVmStep),
 }
 
-#[derive(From, ChipUsageGetter, Chip, AnyEnum)]
-pub enum Keccak256Periphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
-}
+impl<F> VmExecutionExtension<F> for Keccak256 {
+    type Executor = Keccak256Executor;
 
-impl<F: PrimeField32> VmExtension<F> for Keccak256 {
-    type Executor = Keccak256Executor<F>;
-    type Periphery = Keccak256Periphery<F>;
-
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
-        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+        inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let pointer_max_bits = inventory.pointer_max_bits();
+        let keccak_step = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+        inventory.add_executor(
+            keccak_step,
+            Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),
+        )?;
 
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
-        };
+        Ok(())
+    }
+}
 
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
             program_bus,
             memory_bridge,
-        } = builder.system_port();
-        let keccak_chip = KeccakVmChip::new(
-            KeccakVmAir::new(
-                ExecutionBridge::new(execution_bus, program_bus),
-                memory_bridge,
-                bitwise_lu_chip.bus(),
-                pointer_max_bits,
-                Rv32KeccakOpcode::CLASS_OFFSET,
-            ),
-            KeccakVmStep::new(
-                bitwise_lu_chip.clone(),
-                Rv32KeccakOpcode::CLASS_OFFSET,
-                pointer_max_bits,
-            ),
-            builder.system_base().memory_controller.helper(),
-        );
-        inventory.add_executor(
-            keccak_chip,
-            Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),
-        )?;
+        } = inventory.system().port();
 
-        Ok(inventory)
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let pointer_max_bits = inventory.pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+
+        let keccak = KeccakVmAir::new(
+            exec_bridge,
+            memory_bridge,
+            bitwise_lu,
+            pointer_max_bits,
+            Rv32KeccakOpcode::CLASS_OFFSET,
+        );
+        inventory.add_air(keccak);
+
+        Ok(())
+    }
+}
+
+pub struct Keccak256CpuProverExt;
+// This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
+// BitwiseOperationLookupChip) are specific to CpuBackend.
+impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        _: &Keccak256,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+
+        inventory.next_air::<KeccakVmAir>()?;
+        let keccak = KeccakVmChip::new(
+            KeccakVmFiller::new(bitwise_lu, pointer_max_bits),
+            mem_helper,
+        );
+        inventory.add_executor_chip(keccak);
+
+        Ok(())
     }
 }

@@ -1,20 +1,31 @@
-use std::str::FromStr;
+use std::{str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
-use num_traits::FromPrimitive;
-use openvm_circuit::arch::testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
-use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs,
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+use num_traits::{FromPrimitive, Num, Zero};
+use openvm_circuit::arch::{
+    testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MatrixRecordArena,
 };
-use openvm_ecc_transpiler::Rv32EdwardsOpcode;
+use openvm_circuit_primitives::{
+    bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256r1_coord_prime},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+};
+use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
 use openvm_rv32_adapters::rv32_write_heap_default;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::TeAddChip;
+use crate::{
+    edwards_chip::{
+        get_te_add_air, get_te_add_chip, get_te_add_step, EdwardsAir, EdwardsChip, TeAddStep,
+    },
+    weierstrass_chip::prime_limbs,
+};
 
 const NUM_LIMBS: usize = 32;
 const LIMB_BITS: usize = 8;
@@ -95,11 +106,62 @@ lazy_static::lazy_static! {
             .unwrap();
 }
 
-fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
-    expr.prime_limbs
-        .iter()
-        .map(|n| BabyBear::from_canonical_usize(*n))
-        .collect::<Vec<_>>()
+type EdwardsHarness = TestChipHarness<
+    F,
+    TeAddStep<2, BLOCK_SIZE>,
+    EdwardsAir<2, 2, BLOCK_SIZE>,
+    EdwardsChip<F, 2, 2, BLOCK_SIZE>,
+    MatrixRecordArena<F>,
+>;
+
+fn create_test_chip(
+    tester: &VmChipTestBuilder<F>,
+    config: ExprBuilderConfig,
+    offset: usize,
+    a_biguint: BigUint,
+    d_biguint: BigUint,
+) -> (
+    EdwardsHarness,
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let air = get_te_add_air(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        config.clone(),
+        tester.range_checker().bus(),
+        bitwise_bus,
+        tester.address_bits(),
+        offset,
+        a_biguint.clone(),
+        d_biguint.clone(),
+    );
+    let executor = get_te_add_step(
+        config.clone(),
+        tester.range_checker().bus(),
+        tester.address_bits(),
+        offset,
+        a_biguint.clone(),
+        d_biguint.clone(),
+    );
+    let chip = get_te_add_chip(
+        config.clone(),
+        tester.memory_helper(),
+        tester.range_checker(),
+        bitwise_chip.clone(),
+        tester.address_bits(),
+        a_biguint,
+        d_biguint,
+    );
+    let harness = EdwardsHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[test]
@@ -111,23 +173,19 @@ fn test_add() {
         limb_bits: LIMB_BITS,
     };
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-    let mut chip = TeAddChip::<F, 2, BLOCK_SIZE>::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        tester.memory_helper(),
-        tester.address_bits(),
+    let (mut harness, bitwise) = create_test_chip(
+        &tester,
         config,
         Rv32EdwardsOpcode::CLASS_OFFSET,
-        bitwise_chip.clone(),
-        tester.range_checker(),
         Edwards25519_A.clone(),
         Edwards25519_D.clone(),
     );
-    chip.0.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    assert_eq!(chip.0.step.0.expr.builder.num_variables, 12);
+    assert_eq!(harness.executor.expr.builder.num_variables, 12);
 
     let (p1_x, p1_y) = SampleEcPoints[0].clone();
     let (p2_x, p2_y) = SampleEcPoints[1].clone();
@@ -141,18 +199,15 @@ fn test_add() {
     let p2_y_limbs =
         biguint_to_limbs::<NUM_LIMBS>(p2_y.clone(), LIMB_BITS).map(BabyBear::from_canonical_u32);
 
-    let r = chip
-        .0
-        .step
-        .0
+    let r = harness
+        .executor
         .expr
         .execute(vec![p1_x, p1_y, p2_x, p2_y], vec![true]);
     assert_eq!(r.len(), 12);
 
-    let outputs = chip
-        .0
-        .step
-        .0
+    let outputs = harness
+        .executor
+        .expr
         .output_indices()
         .iter()
         .map(|i| &r[*i])
@@ -160,27 +215,32 @@ fn test_add() {
     assert_eq!(outputs[0], &SampleEcPoints[2].0);
     assert_eq!(outputs[1], &SampleEcPoints[2].1);
 
-    let prime_limbs: [BabyBear; NUM_LIMBS] = prime_limbs(&chip.0.step.0.expr).try_into().unwrap();
-    let mut one_limbs = [BabyBear::ONE; NUM_LIMBS];
+    let prime_limbs: [BabyBear; NUM_LIMBS] =
+        prime_limbs(&harness.executor.expr).try_into().unwrap();
+    let mut one_limbs = [BabyBear::ZERO; NUM_LIMBS];
     one_limbs[0] = BabyBear::ONE;
     let setup_instruction = rv32_write_heap_default(
         &mut tester,
         vec![prime_limbs, *Edwards25519_A_LIMBS],
         vec![*Edwards25519_D_LIMBS],
-        chip.0.step.0.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
+        harness.executor.offset + Rv32EdwardsOpcode::SETUP_TE_ADD as usize,
     );
-    tester.execute(&mut chip, &setup_instruction);
+    tester.execute(&mut harness, &setup_instruction);
 
     let instruction = rv32_write_heap_default(
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        chip.0.step.0.offset + Rv32EdwardsOpcode::TE_ADD as usize,
+        harness.executor.offset + Rv32EdwardsOpcode::TE_ADD as usize,
     );
 
-    tester.execute(&mut chip, &instruction);
+    tester.execute(&mut harness, &instruction);
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
 
     tester.simple_test().expect("Verification failed");
 }

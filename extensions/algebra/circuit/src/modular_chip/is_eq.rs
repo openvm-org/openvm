@@ -6,18 +6,12 @@ use std::{
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MatrixRecordArena, MinimalInstruction, NewVmChipWrapper, RecordArena, Result,
-        StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep, VmAdapterInterface, VmAirWrapper,
-        VmCoreAir, VmSegmentState, VmStateMut,
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory, POINTER_MAX_BITS},
 };
-use openvm_circuit_derive::{TraceFiller, TraceStep};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
@@ -28,16 +22,18 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
+use openvm_rv32_adapters::Rv32IsEqualModAdapterStep;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     rap::BaseAirWithPublicValues,
 };
+
+use crate::modular_chip::VmModularIsEqualStep;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -298,7 +294,7 @@ pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
     pub c: [u8; READ_LIMBS],
 }
 
-#[derive(derive_new::new)]
+#[derive(derive_new::new, Clone)]
 pub struct ModularIsEqualStep<
     A,
     const READ_LIMBS: usize,
@@ -306,35 +302,47 @@ pub struct ModularIsEqualStep<
     const LIMB_BITS: usize,
 > {
     adapter: A,
-    pub modulus_limbs: [u8; READ_LIMBS],
     pub offset: usize,
+    pub modulus_limbs: [u8; READ_LIMBS],
+}
+
+#[derive(derive_new::new, Clone)]
+pub struct ModularIsEqualFiller<
+    A,
+    const READ_LIMBS: usize,
+    const WRITE_LIMBS: usize,
+    const LIMB_BITS: usize,
+> {
+    adapter: A,
+    pub offset: usize,
+    pub modulus_limbs: [u8; READ_LIMBS],
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
-impl<F, CTX, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    TraceStep<F, CTX> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
+    InstructionExecutor<F, RA> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
-            CTX,
             ReadData: Into<[[u8; READ_LIMBS]; 2]>,
             WriteData: From<[u8; WRITE_LIMBS]>,
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut ModularIsEqualRecord<READ_LIMBS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut ModularIsEqualRecord<READ_LIMBS>);
-
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode =
@@ -344,7 +352,7 @@ where
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         );
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
         [core_record.b, core_record.c] = self
@@ -378,11 +386,11 @@ where
     }
 }
 
-impl<F, CTX, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    TraceFiller<F, CTX> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+impl<F, A, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for ModularIsEqualFiller<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
@@ -443,35 +451,15 @@ where
     }
 }
 
-#[derive(TraceStep, TraceFiller)]
-pub struct VmModularIsEqualStep<
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
->(
-    ModularIsEqualStep<
-        Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        TOTAL_LIMBS,
-        RV32_REGISTER_NUM_LIMBS,
-        RV32_CELL_BITS,
-    >,
-);
-
-impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
+    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModeAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>,
-        modulus_limbs: [u8; TOTAL_READ_SIZE],
+        adapter: Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {
-        Self(ModularIsEqualStep::new(
-            adapter,
-            modulus_limbs,
-            offset,
-            bitwise_lookup_chip,
-        ))
+        Self(ModularIsEqualStep::new(adapter, offset, modulus_limbs))
     }
 }
 
@@ -491,7 +479,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
-    ) -> Result<bool> {
+    ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -512,14 +500,14 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
         if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         if !matches!(
             local_opcode,
             Rv32ModularArithmeticOpcode::IS_EQ | Rv32ModularArithmeticOpcode::SETUP_ISEQ
         ) {
-            return Err(InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
@@ -536,7 +524,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    StepExecutorE1<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    InsExecutorE1<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -550,7 +538,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -565,7 +553,7 @@ where
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    StepExecutorE2<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    InsExecutorE2<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -580,7 +568,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
             data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -605,7 +593,7 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = pre_compute.borrow();
 
@@ -624,7 +612,7 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
         pre_compute.borrow();
@@ -646,7 +634,7 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     // Read register values
     let rs_vals = pre_compute
@@ -696,25 +684,3 @@ pub(super) fn run_unsigned_less_than<const NUM_LIMBS: usize>(
     }
     (false, NUM_LIMBS)
 }
-
-// Must have TOTAL_LIMBS = NUM_LANES * LANE_SIZE
-pub type ModularIsEqualAir<
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
-> = VmAirWrapper<
-    Rv32IsEqualModAdapterAir<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    ModularIsEqualCoreAir<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
->;
-
-pub type ModularIsEqualChip<
-    F,
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
-> = NewVmChipWrapper<
-    F,
-    ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    MatrixRecordArena<F>,
->;

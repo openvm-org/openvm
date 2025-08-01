@@ -1,18 +1,11 @@
-[workspace]
 [package]
 name = "openvm-keccak256-program"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
+openvm = { workspace = true, features = ["std"] }
+openvm-keccak256.workspace = true
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-
-strip = false

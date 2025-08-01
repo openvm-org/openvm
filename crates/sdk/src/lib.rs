@@ -5,6 +5,7 @@ use alloy_sol_types::sol;
 use commit::{commit_app_exe, AppExecutionCommit};
 use config::{AggregationTreeConfig, AppConfig};
 use eyre::Result;
+use getset::{Getters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
@@ -13,8 +14,9 @@ use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, ExecutionError, InitFileGenerator, InsExecutorE1,
-        VerifiedExecutionPayload, VmConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        verify_segments, ContinuationVmProof, InitFileGenerator, InsExecutorE1, InsExecutorE2,
+        InstructionExecutor, SystemConfig, VerifiedExecutionPayload, VmBuilder, VmCircuitConfig,
+        VmExecutionConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
@@ -29,17 +31,17 @@ pub use openvm_continuations::static_verifier::{
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
     internal::types::{InternalVmVerifierPvs, VmStarkProof},
-    root::{types::RootVmVerifierInput, RootVmVerifierConfig},
+    root::RootVmVerifierConfig,
 };
 // Re-exports:
 pub use openvm_continuations::{RootSC, C, F, SC};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 #[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
-use openvm_stark_backend::{config::Val, proof::Proof};
+use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
-    openvm_stark_backend::Chip,
     p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::{
@@ -103,34 +105,43 @@ pub struct VerifiedContinuationVmPayload {
     pub user_public_values: Vec<F>,
 }
 
-pub struct GenericSdk<E: StarkFriEngine<SC>> {
+// The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
+// BabyBearPoseidon2RootEngine right now.
+#[derive(Getters, WithSetters)]
+pub struct GenericSdk<E, NativeBuilder> {
+    #[getset(get = "pub", set_with = "pub")]
     agg_tree_config: AggregationTreeConfig,
+    #[getset(get = "pub")]
+    native_builder: NativeBuilder,
     _phantom: PhantomData<E>,
 }
 
-impl<E: StarkFriEngine<SC>> Default for GenericSdk<E> {
+pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, NativeCpuBuilder>;
+
+impl<E, NativeBuilder> Default for GenericSdk<E, NativeBuilder>
+where
+    NativeBuilder: Default,
+{
     fn default() -> Self {
         Self {
             agg_tree_config: AggregationTreeConfig::default(),
+            native_builder: NativeBuilder::default(),
             _phantom: PhantomData,
         }
     }
 }
 
-pub type Sdk = GenericSdk<BabyBearPoseidon2Engine>;
-
-impl<E: StarkFriEngine<SC>> GenericSdk<E> {
+// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
+// aggregation supports.
+impl<E, NativeBuilder> GenericSdk<E, NativeBuilder>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+{
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn with_agg_tree_config(mut self, agg_tree_config: AggregationTreeConfig) -> Self {
-        self.agg_tree_config = agg_tree_config;
-        self
-    }
-
-    pub fn agg_tree_config(&self) -> &AggregationTreeConfig {
-        &self.agg_tree_config
     }
 
     pub fn build<P: AsRef<Path>>(
@@ -168,20 +179,16 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         VmExe::from_elf(elf, transpiler)
     }
 
-    pub fn execute<VC: VmConfig<F>>(
-        &self,
-        exe: VmExe<F>,
-        vm_config: VC,
-        inputs: StdIn,
-    ) -> Result<Vec<F>, ExecutionError>
+    /// Returns the user public values as field elements.
+    pub fn execute<VC>(&self, exe: VmExe<F>, vm_config: VC, inputs: StdIn) -> Result<Vec<F>>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
+        VC::Executor: Clone + InsExecutorE1<F> + InsExecutorE2<F>,
     {
-        let vm = VmExecutor::new(vm_config);
+        let vm = VmExecutor::new(vm_config)?;
         let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
         let public_values =
-            extract_public_values(vm.config.system().num_public_values, &final_memory);
+            extract_public_values(vm.config.as_ref().num_public_values, &final_memory.memory);
         Ok(public_values)
     }
 
@@ -194,27 +201,30 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         Ok(committed_exe)
     }
 
-    pub fn app_keygen<VC: VmConfig<F>>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
+    pub fn app_keygen<VC>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
     {
-        let app_pk = AppProvingKey::keygen(config);
+        let app_pk = AppProvingKey::keygen(config)?;
         Ok(app_pk)
     }
 
-    pub fn generate_app_proof<VC: VmConfig<F>>(
+    pub fn generate_app_proof<VB>(
         &self,
-        app_pk: Arc<AppProvingKey<VC>>,
+        app_vm_builder: VB,
+        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         inputs: StdIn,
     ) -> Result<ContinuationVmProof<SC>>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VB: VmBuilder<E>,
+        VB::VmConfig: VmExecutionConfig<F> + VmCircuitConfig<SC>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VB::RecordArena>,
     {
-        let app_prover = AppProver::<VC, E>::new(app_pk.app_vm_pk.clone(), app_committed_exe);
-        let proof = app_prover.generate_app_proof(inputs);
+        let mut app_prover =
+            AppProver::<E, VB>::new(app_vm_builder, app_pk.app_vm_pk.clone(), app_committed_exe)?;
+        let proof = app_prover.generate_app_proof(inputs)?;
         Ok(proof)
     }
 
@@ -265,12 +275,12 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         reader: &impl Halo2ParamsReader,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Result<AggProvingKey> {
-        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler);
+        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler)?;
         Ok(agg_pk)
     }
 
     pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey> {
-        let agg_pk = AggStarkProvingKey::keygen(config);
+        let agg_pk = AggStarkProvingKey::keygen(config)?;
         Ok(agg_pk)
     }
 
@@ -292,37 +302,29 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
         program_to_asm(kernel_asm)
     }
 
-    pub fn generate_root_verifier_input<VC: VmConfig<F>>(
+    pub fn generate_e2e_stark_proof<VB>(
         &self,
-        app_pk: Arc<AppProvingKey<VC>>,
-        app_exe: Arc<NonRootCommittedExe>,
-        agg_stark_pk: AggStarkProvingKey,
-        inputs: StdIn,
-    ) -> Result<RootVmVerifierInput<SC>>
-    where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
-    {
-        let stark_prover =
-            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
-        let proof = stark_prover.generate_root_verifier_input(inputs);
-        Ok(proof)
-    }
-
-    pub fn generate_e2e_stark_proof<VC: VmConfig<F>>(
-        &self,
-        app_pk: Arc<AppProvingKey<VC>>,
+        app_vm_builder: VB,
+        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_stark_pk: AggStarkProvingKey,
         inputs: StdIn,
     ) -> Result<VmStarkProof<SC>>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<F>,
-        VC::Periphery: Chip<SC>,
+        VB: VmBuilder<E>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
+            + InsExecutorE2<F>
+            + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
     {
-        let stark_prover =
-            StarkProver::<VC, E>::new(app_pk, app_exe, agg_stark_pk, self.agg_tree_config);
-        let proof = stark_prover.generate_e2e_stark_proof(inputs);
+        let mut stark_prover = StarkProver::<E, _, _>::new(
+            app_vm_builder,
+            self.native_builder.clone(),
+            app_pk,
+            app_exe,
+            agg_stark_pk,
+            self.agg_tree_config,
+        )?;
+        let proof = stark_prover.generate_e2e_stark_proof(inputs)?;
         Ok(proof)
     }
 
@@ -427,21 +429,31 @@ impl<E: StarkFriEngine<SC>> GenericSdk<E> {
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn generate_evm_proof<VC: VmConfig<F>>(
+    pub fn generate_evm_proof<VB>(
         &self,
         reader: &impl Halo2ParamsReader,
-        app_pk: Arc<AppProvingKey<VC>>,
+        app_vm_builder: VB,
+        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_pk: AggProvingKey,
         inputs: StdIn,
     ) -> Result<EvmProof>
     where
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VB: VmBuilder<E>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
+            + InsExecutorE2<F>
+            + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
     {
-        let e2e_prover =
-            EvmHalo2Prover::<VC, E>::new(reader, app_pk, app_exe, agg_pk, self.agg_tree_config);
-        let proof = e2e_prover.generate_proof_for_evm(inputs);
+        let mut e2e_prover = EvmHalo2Prover::<E, _, _>::new(
+            reader,
+            app_vm_builder,
+            self.native_builder.clone(),
+            app_pk,
+            app_exe,
+            agg_pk,
+            self.agg_tree_config,
+        )?;
+        let proof = e2e_prover.generate_proof_for_evm(inputs)?;
         Ok(proof)
     }
 

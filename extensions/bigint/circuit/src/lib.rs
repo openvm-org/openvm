@@ -1,3 +1,32 @@
+use openvm_circuit::{
+    self,
+    arch::{
+        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
+        VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper, VmProverExtension,
+    },
+    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+};
+use openvm_circuit_derive::{InstructionExecutor, VmConfig};
+use openvm_rv32_adapters::{
+    Rv32HeapAdapterAir, Rv32HeapAdapterFiller, Rv32HeapAdapterStep, Rv32HeapBranchAdapterAir,
+    Rv32HeapBranchAdapterFiller, Rv32HeapBranchAdapterStep,
+};
+use openvm_rv32im_circuit::{
+    adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS},
+    BaseAluCoreAir, BaseAluFiller, BaseAluStep, BranchEqualCoreAir, BranchEqualFiller,
+    BranchEqualStep, BranchLessThanCoreAir, BranchLessThanFiller, BranchLessThanStep,
+    LessThanCoreAir, LessThanFiller, LessThanStep, MultiplicationCoreAir, MultiplicationFiller,
+    MultiplicationStep, Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M,
+    Rv32MExecutor, ShiftCoreAir, ShiftFiller, ShiftStep,
+};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
+use serde::{Deserialize, Serialize};
+
 mod extension;
 pub use extension::*;
 
@@ -11,12 +40,191 @@ mod shift;
 #[cfg(test)]
 mod tests;
 
-pub use base_alu::*;
-pub use branch_eq::*;
-pub use branch_lt::*;
-pub use less_than::*;
-pub use mult::*;
-pub use shift::*;
+/// BaseAlu256
+pub type Rv32BaseAlu256Air = VmAirWrapper<
+    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    BaseAluCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32BaseAlu256Step(
+    BaseAluStep<
+        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
+pub type Rv32BaseAlu256Chip<F> = VmChipWrapper<
+    F,
+    BaseAluFiller<
+        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;
 
-pub(crate) const INT256_NUM_LIMBS: usize = 32;
-pub(crate) const RV32_CELL_BITS: usize = 8;
+/// LessThan256
+pub type Rv32LessThan256Air = VmAirWrapper<
+    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    LessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32LessThan256Step(
+    LessThanStep<
+        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
+pub type Rv32LessThan256Chip<F> = VmChipWrapper<
+    F,
+    LessThanFiller<
+        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;
+
+/// Multiplication256
+pub type Rv32Multiplication256Air = VmAirWrapper<
+    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32Multiplication256Step(
+    MultiplicationStep<
+        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
+pub type Rv32Multiplication256Chip<F> = VmChipWrapper<
+    F,
+    MultiplicationFiller<
+        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;
+
+/// Shift256
+pub type Rv32Shift256Air = VmAirWrapper<
+    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+    ShiftCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32Shift256Step(
+    ShiftStep<
+        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
+pub type Rv32Shift256Chip<F> = VmChipWrapper<
+    F,
+    ShiftFiller<
+        Rv32HeapAdapterFiller<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;
+
+/// BranchEqual256
+pub type Rv32BranchEqual256Air = VmAirWrapper<
+    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
+    BranchEqualCoreAir<INT256_NUM_LIMBS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32BranchEqual256Step(
+    BranchEqualStep<Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>,
+);
+pub type Rv32BranchEqual256Chip<F> = VmChipWrapper<
+    F,
+    BranchEqualFiller<Rv32HeapBranchAdapterFiller<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>,
+>;
+
+/// BranchLessThan256
+pub type Rv32BranchLessThan256Air = VmAirWrapper<
+    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
+    BranchLessThanCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
+>;
+#[derive(Clone, InstructionExecutor)]
+pub struct Rv32BranchLessThan256Step(
+    BranchLessThanStep<
+        Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+);
+pub type Rv32BranchLessThan256Chip<F> = VmChipWrapper<
+    F,
+    BranchLessThanFiller<
+        Rv32HeapBranchAdapterFiller<2, INT256_NUM_LIMBS>,
+        INT256_NUM_LIMBS,
+        RV32_CELL_BITS,
+    >,
+>;
+
+#[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
+pub struct Int256Rv32Config {
+    #[config(executor = "SystemExecutor<F>")]
+    pub system: SystemConfig,
+    #[extension]
+    pub rv32i: Rv32I,
+    #[extension]
+    pub rv32m: Rv32M,
+    #[extension]
+    pub io: Rv32Io,
+    #[extension]
+    pub bigint: Int256,
+}
+
+// Default implementation uses no init file
+impl InitFileGenerator for Int256Rv32Config {}
+
+impl Default for Int256Rv32Config {
+    fn default() -> Self {
+        Self {
+            system: SystemConfig::default().with_continuations(),
+            rv32i: Rv32I,
+            rv32m: Rv32M::default(),
+            io: Rv32Io,
+            bigint: Int256::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Int256Rv32CpuBuilder;
+
+impl<E, SC> VmBuilder<E> for Int256Rv32CpuBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = Int256Rv32Config;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &Int256Rv32Config,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Int256CpuProverExt,
+            &config.bigint,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}

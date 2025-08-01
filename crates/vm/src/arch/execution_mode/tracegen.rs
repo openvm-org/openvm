@@ -1,37 +1,62 @@
-use openvm_instructions::instruction::Instruction;
-use openvm_stark_backend::p3_field::PrimeField32;
+use std::marker::PhantomData;
 
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
-    arch::{
-        execution_control::ExecutionControl, ExecutionError, ExecutionState, InstructionExecutor,
-        VmChipComplex, VmConfig, VmSegmentState,
-    },
-    system::memory::INITIAL_TIMESTAMP,
+    arch::{Arena, ExecutionError, InstructionExecutor, VmSegmentState, VmStateMut},
+    system::{memory::online::TracingMemory, program::PcEntry},
 };
 
-#[derive(Default, derive_new::new)]
-pub struct TracegenCtx {
+pub struct TracegenCtx<RA> {
+    pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
+    #[cfg(feature = "metrics")]
+    pub(crate) metrics: VmMetrics,
 }
 
-#[derive(Default)]
-pub struct TracegenExecutionControl;
+impl<RA: Arena> TracegenCtx<RA> {
+    /// `capacities` is list of `(height, width)` dimensions for each arena, indexed by AIR index.
+    /// The length of `capacities` must equal the number of AIRs.
+    /// Here `height` will always mean an overestimate of the trace height for that AIR, while
+    /// `width` may have different meanings depending on the `RA` type.
+    pub fn new_with_capacity(
+        capacities: &[(usize, usize)],
+        instret_end: Option<u64>,
+        #[cfg(feature = "metrics")] metrics: VmMetrics,
+    ) -> Self {
+        let arenas = capacities
+            .iter()
+            .map(|&(height, main_width)| RA::with_capacity(height, main_width))
+            .collect();
 
-impl<F, VC> ExecutionControl<F, VC> for TracegenExecutionControl
-where
-    F: PrimeField32,
-    VC: VmConfig<F>,
-{
-    type Ctx = TracegenCtx;
-
-    fn initialize_context(&self) -> Self::Ctx {
-        TracegenCtx { instret_end: None }
+        Self {
+            arenas,
+            instret_end,
+            #[cfg(feature = "metrics")]
+            metrics,
+        }
     }
+}
 
-    fn should_suspend(
+pub struct TracegenExecutionControl<F> {
+    executor_idx_to_air_idx: Vec<usize>,
+    phantom: PhantomData<F>,
+}
+
+impl<F> TracegenExecutionControl<F> {
+    pub fn new(executor_idx_to_air_idx: Vec<usize>) -> Self {
+        Self {
+            executor_idx_to_air_idx,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<F> TracegenExecutionControl<F> {
+    #[inline(always)]
+    pub fn should_suspend<RA>(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        _chip_complex: &VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> bool {
         state
             .ctx
@@ -39,58 +64,63 @@ where
             .is_some_and(|instret_end| state.instret >= instret_end)
     }
 
-    fn on_start(
+    #[inline(always)]
+    pub fn on_suspend_or_terminate<RA>(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        _state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        _exit_code: Option<u32>,
     ) {
-        chip_complex
-            .connector_chip_mut()
-            .begin(ExecutionState::new(state.pc, INITIAL_TIMESTAMP + 1));
     }
 
-    fn on_suspend_or_terminate(
+    #[inline(always)]
+    pub fn on_suspend<RA>(&self, state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>) {
+        self.on_suspend_or_terminate(state, None);
+    }
+
+    #[inline(always)]
+    pub fn on_terminate<RA>(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
-        exit_code: Option<u32>,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        exit_code: u32,
     ) {
-        let timestamp = chip_complex.memory_controller().timestamp();
-        chip_complex
-            .connector_chip_mut()
-            .end(ExecutionState::new(state.pc, timestamp), exit_code);
+        self.on_suspend_or_terminate(state, Some(exit_code));
     }
 
     /// Execute a single instruction
-    fn execute_instruction(
+    #[inline(always)]
+    pub fn execute_instruction<RA, Executor>(
         &self,
-        state: &mut VmSegmentState<F, Self::Ctx>,
-        instruction: &Instruction<F>,
-        chip_complex: &mut VmChipComplex<F, VC::Executor, VC::Periphery>,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        executor: &mut Executor,
+        pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError>
     where
-        F: PrimeField32,
+        Executor: InstructionExecutor<F, RA>,
     {
-        let timestamp = chip_complex.memory_controller().timestamp();
-
-        let &Instruction { opcode, .. } = instruction;
-
-        if let Some(executor) = chip_complex.inventory.get_mut_executor(&opcode) {
-            let memory_controller = &mut chip_complex.base.memory_controller;
-            let new_state = executor.execute(
-                memory_controller,
-                &mut state.streams,
-                &mut state.rng,
-                instruction,
-                ExecutionState::new(state.pc, timestamp),
-            )?;
-            state.pc = new_state.pc;
-        } else {
-            return Err(ExecutionError::DisabledOperation {
-                pc: state.pc,
-                opcode,
-            });
+        tracing::trace!(
+            "opcode: {} | timestamp: {}",
+            executor.get_opcode_name(pc_entry.insn.opcode.as_usize()),
+            state.memory.timestamp()
+        );
+        let arena = unsafe {
+            // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
+            let air_idx = *self
+                .executor_idx_to_air_idx
+                .get_unchecked(pc_entry.executor_idx as usize);
+            // SAFETY: air_idx is a valid AIR index in the vkey, and always construct arenas with
+            // length equal to num_airs
+            state.ctx.arenas.get_unchecked_mut(air_idx)
         };
+        let state_mut = VmStateMut {
+            pc: &mut state.pc,
+            memory: &mut state.memory,
+            streams: &mut state.streams,
+            rng: &mut state.rng,
+            ctx: arena,
+            #[cfg(feature = "metrics")]
+            metrics: &mut state.ctx.metrics,
+        };
+        executor.execute(state_mut, &pc_entry.insn)?;
 
         Ok(())
     }

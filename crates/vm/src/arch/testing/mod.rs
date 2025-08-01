@@ -1,18 +1,26 @@
-use std::{borrow::Borrow, iter::zip};
+use std::{marker::PhantomData, sync::Arc};
 
-use openvm_circuit_primitives::var_range::{
-    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
+use itertools::zip_eq;
+use openvm_circuit_primitives::{
+    utils::next_power_of_two_or_zero,
+    var_range::{
+        SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
+    },
 };
-use openvm_instructions::{instruction::Instruction, NATIVE_AS};
-use openvm_poseidon2_air::Poseidon2Config;
+use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::VerificationData,
     interaction::{BusIndex, PermutationCheckBus},
-    p3_field::PrimeField32,
-    p3_matrix::dense::{DenseMatrix, RowMajorMatrix},
+    p3_air::BaseAir,
+    p3_field::{Field, PrimeField32},
+    p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::types::AirProofInput,
+    prover::{
+        cpu::{CpuBackend, CpuDevice},
+        types::AirProvingContext,
+    },
+    rap::AnyRap,
     verifier::VerificationError,
     AirRef, Chip,
 };
@@ -29,17 +37,23 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBridge, ExecutionBus, InstructionExecutor, SystemPort};
+use super::{ExecutionBridge, ExecutionBus, InstructionExecutor};
 use crate::{
-    arch::{ExecutionState, MemoryConfig, Streams},
+    arch::{
+        testing::{execution::air::ExecutionDummyAir, program::air::ProgramDummyAir},
+        vm_poseidon2_config, Arena, ExecutionState, MatrixRecordArena, MemoryConfig, Streams,
+        VmStateMut,
+    },
     system::{
         memory::{
-            interface::MemoryInterface,
+            adapter::records::arena_size_bound,
             offline_checker::{MemoryBridge, MemoryBus},
-            MemoryController, SharedMemoryHelper,
+            online::TracingMemory,
+            MemoryAirInventory, MemoryController, SharedMemoryHelper, CHUNK,
         },
         poseidon2::Poseidon2PeripheryChip,
         program::ProgramBus,
+        SystemPort,
     },
 };
 
@@ -61,7 +75,37 @@ pub const MEMORY_MERKLE_BUS: BusIndex = 12;
 
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 
-pub struct VmChipTestBuilder<F: PrimeField32> {
+pub type ArenaId = usize;
+
+pub struct TestChipHarness<F, E, A, C, RA = MatrixRecordArena<F>> {
+    pub executor: E,
+    pub air: A,
+    pub chip: C,
+    pub arena: RA,
+    phantom: PhantomData<F>,
+}
+
+impl<F, E, A, C, RA> TestChipHarness<F, E, A, C, RA>
+where
+    F: Field,
+    A: BaseAir<F>,
+    RA: Arena,
+{
+    pub fn with_capacity(executor: E, air: A, chip: C, height: usize) -> Self {
+        let width = air.width();
+        let height = next_power_of_two_or_zero(height);
+        let arena = RA::with_capacity(height, width);
+        Self {
+            executor,
+            air,
+            chip,
+            arena,
+            phantom: PhantomData,
+        }
+    }
+}
+
+pub struct VmChipTestBuilder<F: Field> {
     pub memory: MemoryTester<F>,
     pub streams: Streams<F>,
     pub rng: StdRng,
@@ -74,7 +118,8 @@ pub struct VmChipTestBuilder<F: PrimeField32> {
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn new(
-        memory_controller: MemoryController<F>,
+        controller: MemoryController<F>,
+        memory: TracingMemory,
         streams: Streams<F>,
         rng: StdRng,
         execution_bus: ExecutionBus,
@@ -83,7 +128,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     ) -> Self {
         setup_tracing_with_log_level(Level::WARN);
         Self {
-            memory: MemoryTester::new(memory_controller),
+            memory: MemoryTester::new(controller, memory),
             streams,
             rng,
             execution: ExecutionTester::new(execution_bus),
@@ -95,36 +140,49 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     // Passthrough functions from ExecutionTester and MemoryTester for better dev-ex
-    pub fn execute<E: InstructionExecutor<F>>(
+    pub fn execute<E, A, C, RA>(
         &mut self,
-        executor: &mut E,
+        harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
-    ) {
+    ) where
+        E: InstructionExecutor<F, RA>,
+    {
         let initial_pc = self.next_elem_size_u32();
-        self.execute_with_pc(executor, instruction, initial_pc);
+        self.execute_with_pc(harness, instruction, initial_pc);
     }
 
-    pub fn execute_with_pc<E: InstructionExecutor<F>>(
+    pub fn execute_with_pc<E, A, C, RA>(
         &mut self,
-        executor: &mut E,
+        harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
         initial_pc: u32,
-    ) {
+    ) where
+        E: InstructionExecutor<F, RA>,
+    {
         let initial_state = ExecutionState {
             pc: initial_pc,
-            timestamp: self.memory.controller.timestamp(),
+            timestamp: self.memory.memory.timestamp(),
         };
-        tracing::debug!(?initial_state.timestamp);
+        tracing::debug!("initial_timestamp={}", self.memory.memory.timestamp());
 
-        let final_state = executor
-            .execute(
-                &mut self.memory.controller,
-                &mut self.streams,
-                &mut self.rng,
-                instruction,
-                initial_state,
-            )
+        let mut pc = initial_pc;
+        let state_mut = VmStateMut {
+            pc: &mut pc,
+            memory: &mut self.memory.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            ctx: &mut harness.arena,
+            #[cfg(feature = "metrics")]
+            metrics: &mut Default::default(),
+        };
+        harness
+            .executor
+            .execute(state_mut, instruction)
             .expect("Expected the execution not to fail");
+        let final_state = ExecutionState {
+            pc,
+            timestamp: self.memory.memory.timestamp(),
+        };
 
         self.program.execute(instruction, &initial_state);
         self.execution.execute(initial_state, final_state);
@@ -201,10 +259,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.memory.controller.memory_bus
     }
 
-    pub fn memory_controller(&self) -> &MemoryController<F> {
-        &self.memory.controller
-    }
-
     pub fn range_checker(&self) -> SharedVariableRangeCheckerChip {
         self.memory.controller.range_checker.clone()
     }
@@ -218,7 +272,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 
     pub fn address_bits(&self) -> usize {
-        self.memory.controller.mem_config.pointer_max_bits
+        self.memory.controller.memory_config().pointer_max_bits
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {
@@ -256,7 +310,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 }
 
 // Use Blake3 as hash for faster tests.
-type TestSC = BabyBearBlake3Config;
+pub(crate) type TestSC = BabyBearBlake3Config;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
@@ -264,23 +318,26 @@ impl VmChipTestBuilder<BabyBear> {
             memory: Some(self.memory),
             ..Default::default()
         };
-        let tester = tester.load(self.execution);
-        tester.load(self.program)
+        let tester =
+            tester.load_periphery((ExecutionDummyAir::new(self.execution.bus), self.execution));
+        tester.load_periphery((ProgramDummyAir::new(self.program.bus), self.program))
     }
     pub fn build_babybear_poseidon2(self) -> VmChipTester<BabyBearPoseidon2Config> {
         let tester = VmChipTester {
             memory: Some(self.memory),
             ..Default::default()
         };
-        let tester = tester.load(self.execution);
-        tester.load(self.program)
+        let tester =
+            tester.load_periphery((ExecutionDummyAir::new(self.execution.bus), self.execution));
+        tester.load_periphery((ProgramDummyAir::new(self.program.bus), self.program))
     }
 }
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
     pub fn default_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
-        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::persistent(mem_config)
     }
 
@@ -288,26 +345,39 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         Self::volatile(MemoryConfig::aggregation())
     }
 
-    pub fn persistent(mem_config: MemoryConfig) -> Self {
-        setup_tracing_with_log_level(Level::INFO);
-        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
+    fn range_checker_and_memory(
+        mem_config: &MemoryConfig,
+        init_block_size: usize,
+    ) -> (SharedVariableRangeCheckerChip, TracingMemory) {
+        let range_checker = Arc::new(VariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
             RANGE_CHECKER_BUS,
             mem_config.decomp,
-        ));
+        )));
         let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let mut memory_controller = MemoryController::with_persistent_memory(
+        let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
+        let memory = TracingMemory::new(mem_config, init_block_size, arena_size_bound);
+
+        (range_checker, memory)
+    }
+
+    pub fn persistent(mem_config: MemoryConfig) -> Self {
+        setup_tracing_with_log_level(Level::INFO);
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, CHUNK);
+        let hasher_chip = Arc::new(Poseidon2PeripheryChip::new(
+            vm_poseidon2_config(),
+            POSEIDON2_DIRECT_BUS,
+            3,
+        ));
+        let memory_controller = MemoryController::with_persistent_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+            hasher_chip,
         );
-        memory_controller
-            .memory
-            .access_adapter_inventory
-            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
-            memory: MemoryTester::new(memory_controller),
+            memory: MemoryTester::new(memory_controller, memory),
             streams: Default::default(),
             rng: StdRng::seed_from_u64(0),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
@@ -320,22 +390,14 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn volatile(mem_config: MemoryConfig) -> Self {
         setup_tracing_with_log_level(Level::INFO);
-        let range_checker = SharedVariableRangeCheckerChip::new(VariableRangeCheckerBus::new(
-            RANGE_CHECKER_BUS,
-            mem_config.decomp,
-        ));
-        let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
-        let mut memory_controller = MemoryController::with_volatile_memory(
+        let (range_checker, memory) = Self::range_checker_and_memory(&mem_config, 1);
+        let memory_controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
             mem_config,
             range_checker,
         );
-        memory_controller
-            .memory
-            .access_adapter_inventory
-            .set_arena_from_trace_heights(&vec![1 << 16; max_access_adapter_n]);
         Self {
-            memory: MemoryTester::new(memory_controller),
+            memory: MemoryTester::new(memory_controller, memory),
             streams: Default::default(),
             rng: StdRng::seed_from_u64(0),
             execution: ExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
@@ -350,21 +412,24 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 impl<F: PrimeField32> Default for VmChipTestBuilder<F> {
     fn default() -> Self {
         let mut mem_config = MemoryConfig::default();
-        mem_config.addr_space_sizes[NATIVE_AS as usize] = 0;
+        // TODO[jpw]: this is because old tests use `gen_pointer` on address space 1; this can be
+        // removed when tests are updated.
+        mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+        mem_config.addr_spaces[NATIVE_AS as usize].num_cells = 0;
         Self::volatile(mem_config)
     }
 }
 
 pub struct VmChipTester<SC: StarkGenericConfig> {
     pub memory: Option<MemoryTester<Val<SC>>>,
-    pub air_proof_inputs: Vec<(AirRef<SC>, AirProofInput<SC>)>,
+    pub air_ctxs: Vec<(AirRef<SC>, AirProvingContext<CpuBackend<SC>>)>,
 }
 
 impl<SC: StarkGenericConfig> Default for VmChipTester<SC> {
     fn default() -> Self {
         Self {
             memory: None,
-            air_proof_inputs: vec![],
+            air_ctxs: vec![],
         }
     }
 }
@@ -373,118 +438,149 @@ impl<SC: StarkGenericConfig> VmChipTester<SC>
 where
     Val<SC>: PrimeField32,
 {
-    pub fn load<C: Chip<SC>>(mut self, chip: C) -> Self {
-        if chip.current_trace_height() > 0 {
-            let air = chip.air();
-            let air_proof_input = chip.generate_air_proof_input();
-            tracing::debug!("Generated air proof input for {}", air.name());
-            self.air_proof_inputs.push((air, air_proof_input));
+    pub fn load<E, A, C>(
+        mut self,
+        harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
+    ) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
+    {
+        let arena = harness.arena;
+        let rows_used = arena.trace_offset.div_ceil(arena.width);
+        if rows_used > 0 {
+            let air = Arc::new(harness.air) as AirRef<SC>;
+            let ctx = harness.chip.generate_proving_ctx(arena);
+            tracing::debug!("Generated air proving context for {}", air.name());
+            self.air_ctxs.push((air, ctx));
         }
+
+        self
+    }
+
+    pub fn load_periphery<A, C>(self, (air, chip): (A, C)) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        C: Chip<(), CpuBackend<SC>>,
+    {
+        let air = Arc::new(air) as AirRef<SC>;
+        self.load_periphery_ref((air, chip))
+    }
+
+    pub fn load_periphery_ref<C>(mut self, (air, chip): (AirRef<SC>, C)) -> Self
+    where
+        C: Chip<(), CpuBackend<SC>>,
+    {
+        let ctx = chip.generate_proving_ctx(());
+        tracing::debug!("Generated air proving context for {}", air.name());
+        self.air_ctxs.push((air, ctx));
 
         self
     }
 
     pub fn finalize(mut self) -> Self {
         if let Some(memory_tester) = self.memory.take() {
-            // Balance memory boundaries
             let mut memory_controller = memory_tester.controller;
+            let is_persistent = memory_controller.continuation_enabled();
+            let mut memory = memory_tester.memory;
+            let touched_memory = memory.finalize::<Val<SC>>(is_persistent);
+            // Balance memory boundaries
             let range_checker = memory_controller.range_checker.clone();
-            match &memory_controller.interface_chip {
-                MemoryInterface::Volatile { .. } => {
-                    memory_controller.finalize(None::<&mut Poseidon2PeripheryChip<Val<SC>>>);
-                    // dummy memory interactions:
-                    for mem_chip in memory_tester.chip_for_block.into_values() {
-                        self = self.load(mem_chip);
-                    }
-                    {
-                        let airs = memory_controller.borrow().airs();
-                        let air_proof_inputs = memory_controller.generate_air_proof_inputs();
-                        self.air_proof_inputs.extend(
-                            zip(airs, air_proof_inputs)
-                                .filter(|(_, input)| input.main_trace_height() > 0),
-                        );
-                    }
-                }
-                MemoryInterface::Persistent { .. } => {
-                    let mut poseidon_chip = Poseidon2PeripheryChip::new(
-                        Poseidon2Config::default(),
-                        POSEIDON2_DIRECT_BUS,
-                        3,
-                    );
-                    memory_controller.finalize(Some(&mut poseidon_chip));
-                    // dummy memory interactions:
-                    for mem_chip in memory_tester.chip_for_block.into_values() {
-                        self = self.load(mem_chip);
-                    }
-                    {
-                        let airs = memory_controller.borrow().airs();
-                        let air_proof_inputs = memory_controller.generate_air_proof_inputs();
-                        self.air_proof_inputs.extend(
-                            zip(airs, air_proof_inputs)
-                                .filter(|(_, input)| input.main_trace_height() > 0),
-                        );
-                    }
-                    self = self.load(poseidon_chip);
-                }
-            };
-            self = self.load(range_checker); // this must be last because other trace generation
-                                             // mutates its state
+            for mem_chip in memory_tester.chip_for_block.into_values() {
+                self = self.load_periphery((mem_chip.air, mem_chip));
+            }
+            let mem_inventory = MemoryAirInventory::new(
+                memory_controller.memory_bridge(),
+                memory_controller.memory_config(),
+                range_checker.bus(),
+                is_persistent.then_some((
+                    PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+                    PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
+                )),
+            );
+            let ctxs = memory_controller
+                .generate_proving_ctx(memory.access_adapter_records, touched_memory);
+            for (air, ctx) in zip_eq(mem_inventory.into_airs(), ctxs)
+                .filter(|(_, ctx)| ctx.main_trace_height() > 0)
+            {
+                self.air_ctxs.push((air, ctx));
+            }
+            if let Some(hasher_chip) = memory_controller.hasher_chip {
+                let air: AirRef<SC> = match hasher_chip.as_ref() {
+                    Poseidon2PeripheryChip::Register0(chip) => chip.air.clone(),
+                    Poseidon2PeripheryChip::Register1(chip) => chip.air.clone(),
+                };
+                self = self.load_periphery_ref((air, hasher_chip));
+            }
+            // this must be last because other trace generation mutates its state
+            self = self.load_periphery((range_checker.air, range_checker));
         }
         self
     }
 
-    pub fn load_air_proof_input(
+    pub fn load_air_proving_ctx(
         mut self,
-        air_proof_input: (AirRef<SC>, AirProofInput<SC>),
+        air_proving_ctx: (AirRef<SC>, AirProvingContext<CpuBackend<SC>>),
     ) -> Self {
-        self.air_proof_inputs.push(air_proof_input);
+        self.air_ctxs.push(air_proving_ctx);
         self
     }
 
-    pub fn load_with_custom_trace<C: Chip<SC>>(
-        mut self,
-        chip: C,
-        trace: RowMajorMatrix<Val<SC>>,
-    ) -> Self {
-        let air = chip.air();
-        let mut air_proof_input = chip.generate_air_proof_input();
-        air_proof_input.raw.common_main = Some(trace);
-        self.air_proof_inputs.push((air, air_proof_input));
-        self
-    }
+    // pub fn load_with_custom_trace<C: Chip<SC>>(
+    //     mut self,
+    //     chip: C,
+    //     trace: RowMajorMatrix<Val<SC>>,
+    // ) -> Self {
+    //     let air = chip.air();
+    //     let mut air_proof_input = chip.generate_air_proof_input();
+    //     air_proof_input.raw.common_main = Some(trace);
+    //     self.air_proof_inputs.push((air, air_proof_input));
+    //     self
+    // }
 
-    pub fn load_and_prank_trace<C: Chip<SC>, P>(mut self, chip: C, modify_trace: P) -> Self
+    pub fn load_and_prank_trace<E, A, C, P>(
+        mut self,
+        harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,
+        modify_trace: P,
+    ) -> Self
     where
-        P: Fn(&mut DenseMatrix<Val<SC>>),
+        A: AnyRap<SC> + 'static,
+        C: Chip<MatrixRecordArena<Val<SC>>, CpuBackend<SC>>,
+        P: Fn(&mut RowMajorMatrix<Val<SC>>),
     {
-        let air = chip.air();
-        let mut air_proof_input = chip.generate_air_proof_input();
-        let trace = air_proof_input.raw.common_main.as_mut().unwrap();
-        modify_trace(trace);
-        self.air_proof_inputs.push((air, air_proof_input));
+        let arena = harness.arena;
+        let mut ctx = harness.chip.generate_proving_ctx(arena);
+        let trace: Arc<RowMajorMatrix<Val<SC>>> = Option::take(&mut ctx.common_main).unwrap();
+        let mut trace = Arc::into_inner(trace).unwrap();
+        modify_trace(&mut trace);
+        ctx.common_main = Some(Arc::new(trace));
+        self.air_ctxs.push((Arc::new(harness.air), ctx));
         self
     }
 
     /// Given a function to produce an engine from the max trace height,
     /// runs a simple test on that engine
-    pub fn test<E: StarkEngine<SC>, P: Fn() -> E>(
-        &self, // do no take ownership so it's easier to prank
+    pub fn test<E, P: Fn() -> E>(
+        self, // do no take ownership so it's easier to prank
         engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerificationError> {
+    ) -> Result<VerificationData<SC>, VerificationError>
+    where
+        E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    {
         assert!(self.memory.is_none(), "Memory must be finalized");
-        let (airs, air_proof_inputs) = self.air_proof_inputs.iter().cloned().unzip();
-        engine_provider().run_test_impl(airs, air_proof_inputs)
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        engine_provider().run_test_impl(airs, ctxs)
     }
 }
 
 impl VmChipTester<BabyBearPoseidon2Config> {
     pub fn simple_test(
-        &self,
+        self,
     ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
         self.test(|| BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
     }
 
-    pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error
@@ -495,11 +591,11 @@ impl VmChipTester<BabyBearPoseidon2Config> {
 }
 
 impl VmChipTester<BabyBearBlake3Config> {
-    pub fn simple_test(&self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
+    pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
         self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
     }
 
-    pub fn simple_test_with_expected_error(&self, expected_error: VerificationError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error

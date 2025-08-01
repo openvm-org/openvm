@@ -42,7 +42,6 @@ derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
 eyre.workspace = true
-async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
@@ -50,6 +49,7 @@ getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
+toml.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 snark-verifier = { workspace = true, optional = true }
@@ -57,8 +57,8 @@ snark-verifier-sdk = { workspace = true, optional = true }
 tempfile.workspace = true
 hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
-rrs-lib = { workspace = true }
-num-bigint = { workspace = true }
+rrs-lib.workspace = true
+num-bigint.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -74,13 +74,13 @@ evm-verify = [
     "dep:alloy-sol-types",
     "dep:forge-fmt",
 ]
-bench-metrics = [
-    "openvm-circuit/bench-metrics",
-    "openvm-native-recursion/bench-metrics",
-    "openvm-native-compiler/bench-metrics",
+metrics = [
+    "openvm-circuit/metrics",
+    "openvm-native-recursion/metrics",
+    "openvm-native-compiler/metrics",
 ]
 # for guest profiling:
-profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
+perf-metrics = ["openvm-circuit/perf-metrics", "openvm-transpiler/function-span"]
 test-utils = ["openvm-circuit/test-utils"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
@@ -96,4 +96,4 @@ path = "examples/sdk_evm.rs"
 required-features = ["evm-verify"]
 
 [package.metadata.cargo-shear]
-ignored = ["rand"]
+ignored = ["derive_more", "rand"]

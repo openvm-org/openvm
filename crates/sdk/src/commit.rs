@@ -6,7 +6,9 @@ use openvm_circuit::{
     system::program::trace::VmCommittedExe,
 };
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
+use openvm_stark_backend::{
+    config::StarkGenericConfig, engine::StarkEngine, p3_field::PrimeField32,
+};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
@@ -79,15 +81,15 @@ pub struct AppExecutionCommit {
 impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
-    pub fn compute<VC: VmConfig<F>>(
+    pub fn compute<VC: VmConfig<SC>>(
         app_vm_config: &VC,
         app_exe: &NonRootCommittedExe,
         leaf_vm_verifier_exe: &NonRootCommittedExe,
     ) -> Self {
         let exe_commit: [F; DIGEST_SIZE] = app_exe
-            .compute_exe_commit(&app_vm_config.system().memory_config)
+            .compute_exe_commit(&app_vm_config.as_ref().memory_config)
             .into();
-        let vm_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe.committed_program.commitment.into();
+        let vm_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe.commitment.into();
         Self::from_field_commit(exe_commit, vm_commit)
     }
 
@@ -105,7 +107,7 @@ pub fn commit_app_exe(
 ) -> Arc<NonRootCommittedExe> {
     let exe: VmExe<_> = app_exe.into();
     let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
+    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config().pcs()))
 }
 
 pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {

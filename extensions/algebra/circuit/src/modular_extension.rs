@@ -1,37 +1,51 @@
-use std::array;
+use std::{array, sync::Arc};
 
-use derive_more::derive::From;
 use num_bigint::{BigUint, RandBigInt};
 use num_traits::{FromPrimitive, One};
 use openvm_algebra_transpiler::{ModularPhantom, Rv32ModularArithmeticOpcode};
 use openvm_circuit::{
     self,
     arch::{
-        ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::phantom::PhantomChip,
+    system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerBus,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_rv32_adapters::{Rv32IsEqualModAdapterAir, Rv32IsEqualModeAdapterStep};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32_adapters::{
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+};
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
+use openvm_stark_sdk::engine::StarkEngine;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use crate::modular_chip::{
-    ModularAddSubChip, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularMulDivChip, VmModularIsEqualStep,
+use crate::{
+    modular_chip::{
+        get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+        get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+        ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
+        ModularStep, VmModularIsEqualStep,
+    },
+    AlgebraCpuProverExt,
 };
-
-// TODO: this should be decided after e2 execution
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -54,115 +68,65 @@ impl ModularExtension {
     }
 }
 
-#[derive(
-    ChipUsageGetter, Chip, InstructionExecutor, AnyEnum, From, InsExecutorE1, InsExecutorE2,
-)]
-pub enum ModularExtensionExecutor<F: PrimeField32> {
+#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv32_32(ModularAddSubChip<F, 1, 32>),
-    ModularMulDivRv32_32(ModularMulDivChip<F, 1, 32>),
-    ModularIsEqualRv32_32(ModularIsEqualChip<F, 1, 32, 32>),
+    ModularAddSubRv32_32(ModularStep<1, 32>), // ModularAddSub
+    ModularMulDivRv32_32(ModularStep<1, 32>), // ModularMulDiv
+    ModularIsEqualRv32_32(VmModularIsEqualStep<1, 32, 32>), // ModularIsEqual
     // 48 limbs prime
-    ModularAddSubRv32_48(ModularAddSubChip<F, 3, 16>),
-    ModularMulDivRv32_48(ModularMulDivChip<F, 3, 16>),
-    ModularIsEqualRv32_48(ModularIsEqualChip<F, 3, 16, 48>),
+    ModularAddSubRv32_48(ModularStep<3, 16>), // ModularAddSub
+    ModularMulDivRv32_48(ModularStep<3, 16>), // ModularMulDiv
+    ModularIsEqualRv32_48(VmModularIsEqualStep<3, 16, 48>), // ModularIsEqual
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum ModularExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    // We put this only to get the <F> generic to work
-    Phantom(PhantomChip<F>),
-}
+impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
+    type Executor = ModularExtensionExecutor;
 
-impl<F: PrimeField32> VmExtension<F> for ModularExtension {
-    type Executor = ModularExtensionExecutor<F>;
-    type Periphery = ModularExtensionPeriphery<F>;
-
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
-        let SystemPort {
-            execution_bus,
-            program_bus,
-            memory_bridge,
-        } = builder.system_port();
-
-        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
-
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
-        };
-
-        let addsub_opcodes = (Rv32ModularArithmeticOpcode::ADD as usize)
-            ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize);
-        let muldiv_opcodes = (Rv32ModularArithmeticOpcode::MUL as usize)
-            ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize);
-        let iseq_opcodes = (Rv32ModularArithmeticOpcode::IS_EQ as usize)
-            ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize);
-
+        inventory: &mut ExecutorInventoryBuilder<F, ModularExtensionExecutor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let pointer_max_bits = inventory.pointer_max_bits();
+        // TODO: somehow get the range checker bus from `ExecutorInventory`
+        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8);
             let start_offset =
                 Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
-
-            let config32 = ExprBuilderConfig {
-                modulus: modulus.clone(),
-                num_limbs: 32,
-                limb_bits: 8,
-            };
-            let config48 = ExprBuilderConfig {
-                modulus: modulus.clone(),
-                num_limbs: 48,
-                limb_bits: 8,
-            };
-
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
-
             if bytes <= 32 {
-                let addsub_chip = ModularAddSubChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+                let addsub = get_modular_addsub_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
                     pointer_max_bits,
-                    config32.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv32_32(addsub_chip),
-                    addsub_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularAddSubRv32_32(addsub),
+                    ((Rv32ModularArithmeticOpcode::ADD as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-                let muldiv_chip = ModularMulDivChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+
+                let muldiv = get_modular_muldiv_step(
+                    config,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
-                    config32.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv32_32(muldiv_chip),
-                    muldiv_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularMulDivRv32_32(muldiv),
+                    ((Rv32ModularArithmeticOpcode::MUL as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
@@ -173,67 +137,53 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         0
                     }
                 });
-                let isequal_chip = ModularIsEqualChip::new(
-                    ModularIsEqualAir::new(
-                        Rv32IsEqualModAdapterAir::new(
-                            execution_bridge,
-                            memory_bridge,
-                            bitwise_lu_chip.bus(),
-                            pointer_max_bits,
-                        ),
-                        ModularIsEqualCoreAir::new(
-                            modulus.clone(),
-                            bitwise_lu_chip.bus(),
-                            start_offset,
-                        ),
-                    ),
-                    VmModularIsEqualStep::new(
-                        Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
-                        modulus_limbs,
-                        start_offset,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    builder.system_base().memory_controller.helper(),
+
+                let is_eq = VmModularIsEqualStep::new(
+                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
+                    start_offset,
+                    modulus_limbs,
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv32_32(isequal_chip),
-                    iseq_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularIsEqualRv32_32(is_eq),
+                    ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
-                let addsub_chip = ModularAddSubChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+                let addsub = get_modular_addsub_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
                     pointer_max_bits,
-                    config48.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularAddSubRv32_48(addsub_chip),
-                    addsub_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularAddSubRv32_48(addsub),
+                    ((Rv32ModularArithmeticOpcode::ADD as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
-                let muldiv_chip = ModularMulDivChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+
+                let muldiv = get_modular_muldiv_step(
+                    config,
+                    dummy_range_checker_bus,
                     pointer_max_bits,
-                    config48.clone(),
                     start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularMulDivRv32_48(muldiv_chip),
-                    muldiv_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularMulDivRv32_48(muldiv),
+                    ((Rv32ModularArithmeticOpcode::MUL as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_MULDIV as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
+
                 let modulus_limbs = array::from_fn(|i| {
                     if i < modulus_limbs.len() {
                         modulus_limbs[i] as u8
@@ -241,51 +191,292 @@ impl<F: PrimeField32> VmExtension<F> for ModularExtension {
                         0
                     }
                 });
-                let isequal_chip = ModularIsEqualChip::new(
-                    ModularIsEqualAir::new(
-                        Rv32IsEqualModAdapterAir::new(
-                            execution_bridge,
-                            memory_bridge,
-                            bitwise_lu_chip.bus(),
-                            pointer_max_bits,
-                        ),
-                        ModularIsEqualCoreAir::new(
-                            modulus.clone(),
-                            bitwise_lu_chip.bus(),
-                            start_offset,
-                        ),
-                    ),
-                    VmModularIsEqualStep::new(
-                        Rv32IsEqualModeAdapterStep::new(pointer_max_bits, bitwise_lu_chip.clone()),
-                        modulus_limbs,
-                        start_offset,
-                        bitwise_lu_chip.clone(),
-                    ),
-                    builder.system_base().memory_controller.helper(),
+
+                let is_eq = VmModularIsEqualStep::new(
+                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
+                    start_offset,
+                    modulus_limbs,
                 );
+
                 inventory.add_executor(
-                    ModularExtensionExecutor::ModularIsEqualRv32_48(isequal_chip),
-                    iseq_opcodes
-                        .clone()
+                    ModularExtensionExecutor::ModularIsEqualRv32_48(is_eq),
+                    ((Rv32ModularArithmeticOpcode::IS_EQ as usize)
+                        ..=(Rv32ModularArithmeticOpcode::SETUP_ISEQ as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
                 panic!("Modulus too large");
             }
         }
+
         let non_qr_hint_sub_ex = phantom::NonQrHintSubEx::new(self.supported_moduli.clone());
-        builder.add_phantom_sub_executor(
+        inventory.add_phantom_sub_executor(
             non_qr_hint_sub_ex.clone(),
             PhantomDiscriminant(ModularPhantom::HintNonQr as u16),
         )?;
 
         let sqrt_hint_sub_ex = phantom::SqrtHintSubEx::new(non_qr_hint_sub_ex);
-        builder.add_phantom_sub_executor(
+        inventory.add_phantom_sub_executor(
             sqrt_hint_sub_ex,
             PhantomDiscriminant(ModularPhantom::HintSqrt as u16),
         )?;
 
-        Ok(inventory)
+        Ok(())
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for ModularExtension {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        let SystemPort {
+            execution_bus,
+            program_bus,
+            memory_bridge,
+        } = inventory.system().port();
+
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker_bus = inventory.range_checker().bus;
+        let pointer_max_bits = inventory.pointer_max_bits();
+
+        let bitwise_lu = {
+            // A trick to get around Rust's borrow rules
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
+        };
+        for (i, modulus) in self.supported_moduli.iter().enumerate() {
+            // determine the number of bytes needed to represent a prime field element
+            let bytes = modulus.bits().div_ceil(8);
+            let start_offset =
+                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                let addsub = get_modular_addsub_air::<1, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(addsub);
+
+                let muldiv = get_modular_muldiv_air::<1, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(muldiv);
+
+                let is_eq = ModularIsEqualAir::<1, 32, 32>::new(
+                    Rv32IsEqualModAdapterAir::new(
+                        exec_bridge,
+                        memory_bridge,
+                        bitwise_lu,
+                        pointer_max_bits,
+                    ),
+                    ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
+                );
+                inventory.add_air(is_eq);
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                let addsub = get_modular_addsub_air::<3, 16>(
+                    exec_bridge,
+                    memory_bridge,
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(addsub);
+
+                let muldiv = get_modular_muldiv_air::<3, 16>(
+                    exec_bridge,
+                    memory_bridge,
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                );
+                inventory.add_air(muldiv);
+
+                let is_eq = ModularIsEqualAir::<3, 16, 48>::new(
+                    Rv32IsEqualModAdapterAir::new(
+                        exec_bridge,
+                        memory_bridge,
+                        bitwise_lu,
+                        pointer_max_bits,
+                    ),
+                    ModularIsEqualCoreAir::new(modulus.clone(), bitwise_lu, start_offset),
+                );
+                inventory.add_air(is_eq);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
+// BitwiseOperationLookupChip) are specific to CpuBackend.
+impl<E, SC, RA> VmProverExtension<E, RA, ModularExtension> for AlgebraCpuProverExt
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        extension: &ModularExtension,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+        for (i, modulus) in extension.supported_moduli.iter().enumerate() {
+            // determine the number of bytes needed to represent a prime field element
+            let bytes = modulus.bits().div_ceil(8);
+            let start_offset =
+                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
+
+            let modulus_limbs = big_uint_to_limbs(modulus, 8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<ModularAir<1, 32>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 1, 32>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addsub);
+
+                inventory.next_air::<ModularAir<1, 32>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 1, 32>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(muldiv);
+
+                let modulus_limbs = array::from_fn(|i| {
+                    if i < modulus_limbs.len() {
+                        modulus_limbs[i] as u8
+                    } else {
+                        0
+                    }
+                });
+                inventory.next_air::<ModularIsEqualAir<1, 32, 32>>()?;
+                let is_eq = ModularIsEqualChip::<Val<SC>, 1, 32, 32>::new(
+                    ModularIsEqualFiller::new(
+                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        start_offset,
+                        modulus_limbs,
+                        bitwise_lu.clone(),
+                    ),
+                    mem_helper.clone(),
+                );
+                inventory.add_executor_chip(is_eq);
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<ModularAir<3, 16>>()?;
+                let addsub = get_modular_addsub_chip::<Val<SC>, 3, 16>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addsub);
+
+                inventory.next_air::<ModularAir<3, 16>>()?;
+                let muldiv = get_modular_muldiv_chip::<Val<SC>, 3, 16>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(muldiv);
+
+                let modulus_limbs = array::from_fn(|i| {
+                    if i < modulus_limbs.len() {
+                        modulus_limbs[i] as u8
+                    } else {
+                        0
+                    }
+                });
+                inventory.next_air::<ModularIsEqualAir<3, 16, 48>>()?;
+                let is_eq = ModularIsEqualChip::<Val<SC>, 3, 16, 48>::new(
+                    ModularIsEqualFiller::new(
+                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
+                        start_offset,
+                        modulus_limbs,
+                        bitwise_lu.clone(),
+                    ),
+                    mem_helper.clone(),
+                );
+                inventory.add_executor_chip(is_eq);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
     }
 }
 

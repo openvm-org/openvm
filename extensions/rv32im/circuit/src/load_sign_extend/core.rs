@@ -4,15 +4,11 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::{self, InvalidInstruction},
-        RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
-        VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
+    arch::*,
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives::{
     utils::select,
@@ -23,7 +19,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV32_CELL_BITS, RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
@@ -34,7 +30,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::adapters::LoadStoreInstruction;
+use crate::adapters::{LoadStoreInstruction, Rv32LoadStoreAdapterFiller};
 
 /// LoadSignExtend Core Chip handles byte/halfword into word conversions through sign extend
 /// This chip uses read_data to construct write_data
@@ -186,30 +182,40 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
     pub prev_data: [u8; NUM_CELLS],
 }
 
-#[derive(derive_new::new)]
+#[derive(Clone, Copy, derive_new::new)]
 pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct LoadSignExtendFiller<
+    A = Rv32LoadStoreAdapterFiller,
+    const NUM_CELLS: usize = RV32_REGISTER_NUM_LIMBS,
+    const LIMB_BITS: usize = RV32_CELL_BITS,
+> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
+impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
     for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceStep<
             F,
-            CTX,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut LoadSignExtendCoreRecord<NUM_CELLS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut LoadSignExtendCoreRecord<NUM_CELLS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -217,22 +223,18 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(
             opcode.local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -264,11 +266,11 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+impl<F, A, const NUM_CELLS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for LoadSignExtendFiller<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
@@ -310,7 +312,7 @@ struct LoadSignExtendPreCompute {
     e: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
+impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
     for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -325,7 +327,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
         let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
         let fn_ptr = match (is_loadb, enabled) {
@@ -338,7 +340,7 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
+impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
     for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -353,7 +355,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -378,7 +380,7 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &LoadSignExtendPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -419,7 +421,7 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, vm_state);
@@ -432,7 +434,7 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = pre_compute.borrow();
     vm_state
@@ -448,7 +450,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LoadSignExtendPreCompute,
-    ) -> Result<(bool, bool)> {
+    ) -> Result<(bool, bool), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -463,7 +465,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
 
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 == RV32_IMM_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
         let local_opcode = Rv32LoadStoreOpcode::from_usize(

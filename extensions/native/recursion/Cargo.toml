@@ -49,10 +49,10 @@ evm-verify = [
     "snark-verifier-sdk/revm",
 ] # evm-verify needs REVM to simulate EVM contract verification
 test-utils = ["openvm-circuit/test-utils"]
-bench-metrics = [
+metrics = [
     "dep:metrics",
-    "openvm-circuit/bench-metrics",
-    "openvm-native-compiler/bench-metrics",
+    "openvm-circuit/metrics",
+    "openvm-native-compiler/metrics",
 ]
 parallel = ["openvm-stark-backend/parallel"]
 mimalloc = ["openvm-stark-backend/mimalloc"]

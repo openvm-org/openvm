@@ -6,9 +6,9 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir},
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 
 use crate::system::memory::{offline_checker::MemoryBus, MemoryAddress};
@@ -125,20 +125,18 @@ impl<F: PrimeField32> MemoryDummyChip<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for MemoryDummyChip<Val<SC>>
+impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for MemoryDummyChip<Val<SC>>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(mut self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.current_trace_height().next_power_of_two();
         let width = self.trace_width();
-        self.trace.resize(height * width, Val::<SC>::ZERO);
+        let mut trace = self.trace.clone();
+        trace.resize(height * width, Val::<SC>::ZERO);
 
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(self.trace, width))
+        let trace = Arc::new(RowMajorMatrix::new(trace, width));
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 

@@ -6,20 +6,14 @@ use std::{
 
 use itertools::zip_eq;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
-        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
-        RecordArena, Result, SizedRecord, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
-        VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::{
         memory::{
             offline_checker::{
                 MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
                 MemoryWriteAuxRecord,
             },
-            online::TracingMemory,
+            online::{GuestMemory, TracingMemory},
             MemoryAddress, MemoryAuxColsFactory,
         },
         native_adapter::util::{memory_read_native, tracing_read_native, tracing_write_native},
@@ -682,6 +676,9 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     fn size(layout: &FriReducedOpeningLayout) -> usize {
         let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
         total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        if !layout.metadata.is_init {
+            total_len += layout.metadata.length * size_of::<F>();
+        }
         total_len += size_of::<FriReducedOpeningCommonRecord<F>>();
         total_len
     }
@@ -691,45 +688,35 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     }
 }
 
-pub struct FriReducedOpeningStep<F: Field> {
-    phantom: std::marker::PhantomData<F>,
-}
+#[derive(derive_new::new, Copy, Clone)]
+pub struct FriReducedOpeningStep;
 
-impl<F: PrimeField32> Default for FriReducedOpeningStep<F> {
+#[derive(derive_new::new)]
+pub struct FriReducedOpeningFiller;
+
+pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;
+
+impl Default for FriReducedOpeningStep {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+impl<F, RA> InstructionExecutor<F, RA> for FriReducedOpeningStep
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
 {
-    type RecordLayout = FriReducedOpeningLayout;
-    type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
         String::from("FRI_REDUCED_OPENING")
     }
 
-    fn execute<'buf, RA>(
+    fn execute(
         &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             a,
             b,
@@ -755,7 +742,7 @@ where
             length: length as usize,
             is_init,
         };
-        let record = arena.alloc(MultiRowLayout::new(metadata));
+        let record = state.ctx.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -880,10 +867,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -1113,14 +1097,14 @@ struct FriReducedOpeningPreCompute {
     is_init_ptr: u32,
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
+impl FriReducedOpeningStep {
     #[inline(always)]
-    fn pre_compute_impl(
+    fn pre_compute_impl<F: PrimeField32>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut FriReducedOpeningPreCompute,
-    ) -> Result<()> {
+    ) -> Result<(), StaticProgramError> {
         let &Instruction {
             a,
             b,
@@ -1154,7 +1138,7 @@ impl<F: PrimeField32> FriReducedOpeningStep<F> {
     }
 }
 
-impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
+impl<F> InsExecutorE1<F> for FriReducedOpeningStep
 where
     F: PrimeField32,
 {
@@ -1169,7 +1153,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
 
         self.pre_compute_impl(pc, inst, pre_compute)?;
@@ -1179,7 +1163,7 @@ where
     }
 }
 
-impl<F> StepExecutorE2<F> for FriReducedOpeningStep<F>
+impl<F> InsExecutorE2<F> for FriReducedOpeningStep
 where
     F: PrimeField32,
 {
@@ -1195,7 +1179,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
@@ -1208,7 +1192,7 @@ where
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -1216,7 +1200,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl(&pre_compute.data, vm_state);
@@ -1228,7 +1212,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &FriReducedOpeningPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) -> u32 {
     let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
 
@@ -1283,6 +1267,3 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
     length as u32 + 2
 }
-
-pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;

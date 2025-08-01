@@ -1,35 +1,4 @@
-use openvm_circuit::arch::{Streams, SystemConfig, VirtualMachine};
-use openvm_instructions::program::Program;
-use openvm_stark_sdk::{config::baby_bear_poseidon2::default_engine, p3_baby_bear::BabyBear};
-
-use crate::{Native, NativeConfig};
-
 pub(crate) const CASTF_MAX_BITS: usize = 30;
-
-pub fn execute_program_with_system_config(
-    program: Program<BabyBear>,
-    input_stream: impl Into<Streams<BabyBear>>,
-    system_config: SystemConfig,
-) {
-    let config = NativeConfig::new(system_config, Native);
-    let input = input_stream.into();
-
-    let vm = VirtualMachine::new(default_engine(), config);
-    let pk = vm.keygen();
-    let vk = pk.get_vk();
-    let segments = vm
-        .executor
-        .execute_metered(program.clone(), input.clone(), &vk.num_interactions())
-        .unwrap();
-    vm.execute(program, input, &segments).unwrap();
-}
-
-pub fn execute_program(program: Program<BabyBear>, input_stream: impl Into<Streams<BabyBear>>) {
-    let system_config = SystemConfig::default()
-        .with_public_values(4)
-        .with_max_segment_len((1 << 25) - 100);
-    execute_program_with_system_config(program, input_stream, system_config);
-}
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
@@ -42,22 +11,30 @@ pub mod test_utils {
 
     use openvm_circuit::{
         arch::{
+            execution_mode::metered::Segment,
             testing::{memory::gen_pointer, VmChipTestBuilder},
-            Streams,
+            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
+            VirtualMachineError, VmBuilder, VmState,
         },
         utils::test_system_config,
     };
     use openvm_instructions::{
+        exe::VmExe,
         program::Program,
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     };
     use openvm_native_compiler::conversion::AS;
-    use openvm_stark_backend::p3_field::PrimeField32;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_backend::{
+        config::Domain, p3_commit::PolynomialSpace, p3_field::PrimeField32,
+    };
+    use openvm_stark_sdk::{
+        config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, setup_tracing, FriParameters},
+        engine::StarkFriEngine,
+        p3_baby_bear::BabyBear,
+    };
     use rand::{distributions::Standard, prelude::Distribution, rngs::StdRng, Rng};
 
-    use super::execute_program_with_system_config;
-    use crate::{extension::NativeConfig, Rv32WithKernelsConfig};
+    use crate::{NativeConfig, NativeCpuBuilder, Rv32WithKernelsConfig};
 
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
@@ -93,21 +70,78 @@ pub mod test_utils {
         (value, ptr)
     }
 
-    pub fn test_execute_program(
+    // Besides taking in system_config, this also returns Result and the full
+    // (PreflightExecutionOutput, VirtualMachine) for more advanced testing needs.
+    #[allow(clippy::type_complexity)]
+    pub fn execute_program_with_config<E, VB>(
         program: Program<BabyBear>,
         input_stream: impl Into<Streams<BabyBear>>,
-    ) {
-        let system_config = test_native_config()
-            .system
-            .with_public_values(4)
-            .with_max_segment_len((1 << 25) - 100);
-        execute_program_with_system_config(program, input_stream, system_config);
+        builder: VB,
+        config: VB::VmConfig,
+    ) -> Result<
+        (
+            PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+            VirtualMachine<E, VB>,
+        ),
+        VirtualMachineError,
+    >
+    where
+        E: StarkFriEngine,
+        Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
+        VB: VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
+    {
+        setup_tracing();
+        assert!(!config.as_ref().continuation_enabled);
+        let input = input_stream.into();
+
+        let engine = E::new(FriParameters::new_for_testing(1));
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
+        let ctx = vm.build_metered_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let mut segments = vm.executor().execute_metered(
+            program.clone(),
+            input.clone(),
+            &executor_idx_to_air_idx,
+            ctx,
+        )?;
+        assert_eq!(segments.len(), 1, "test only supports one segment");
+        let Segment {
+            instret_start,
+            num_insns,
+            trace_heights,
+        } = segments.pop().unwrap();
+        assert_eq!(instret_start, 0);
+        let exe = VmExe::new(program);
+        let state = vm.create_initial_state(&exe, input);
+        let output = vm.execute_preflight(&exe, state, None, &trace_heights)?;
+        assert_eq!(
+            output.to_state.instret, num_insns,
+            "metered execution insn count doesn't match preflight execution"
+        );
+        Ok((output, vm))
+    }
+
+    pub fn execute_program(
+        program: Program<BabyBear>,
+        input_stream: impl Into<Streams<BabyBear>>,
+    ) -> VmState<BabyBear> {
+        let mut config = test_native_config();
+        config.system.num_public_values = 4;
+        // we set max segment len large so it doesn't segment
+        let (output, _) = execute_program_with_config::<BabyBearPoseidon2Engine, _>(
+            program,
+            input_stream,
+            NativeCpuBuilder,
+            config,
+        )
+        .unwrap();
+        output.to_state
     }
 
     pub fn test_native_config() -> NativeConfig {
         let mut system = test_system_config();
-        system.memory_config.addr_space_sizes[RV32_REGISTER_AS as usize] = 0;
-        system.memory_config.addr_space_sizes[RV32_MEMORY_AS as usize] = 0;
+        system.memory_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 0;
+        system.memory_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 0;
         NativeConfig {
             system,
             native: Default::default(),

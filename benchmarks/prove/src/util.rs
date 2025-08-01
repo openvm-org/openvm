@@ -1,12 +1,14 @@
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    instructions::exe::VmExe, DefaultSegmentationStrategy, InsExecutorE1, VmConfig,
+    execution_mode::metered::segment_ctx::SegmentationLimits, instructions::exe::VmExe,
+    verify_single, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
+    SystemConfig, VmBuilder, VmConfig, VmExecutionConfig,
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     commit::commit_app_exe,
@@ -16,17 +18,15 @@ use openvm_sdk::{
         DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::{leaf_keygen, AppProvingKey},
-    prover::{vm::local::VmLocalProver, AppProver, LeafProvingController},
-    Sdk, StdIn,
+    prover::{vm::new_local_prover, AppProver, LeafProvingController},
+    GenericSdk, StdIn,
 };
-use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         FriParameters,
     },
     engine::StarkFriEngine,
-    openvm_stark_backend::Chip,
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::elf::Elf;
@@ -77,17 +77,18 @@ pub struct BenchmarkCli {
 }
 
 impl BenchmarkCli {
-    pub fn app_config<VC: VmConfig<BabyBear>>(&self, mut app_vm_config: VC) -> AppConfig<VC> {
+    pub fn app_config<VC>(&self, mut app_vm_config: VC) -> AppConfig<VC>
+    where
+        VC: AsMut<SystemConfig>,
+    {
         let app_log_blowup = self.app_log_blowup.unwrap_or(DEFAULT_APP_LOG_BLOWUP);
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
-        app_vm_config.system_mut().profiling = self.profiling;
+        app_vm_config.as_mut().profiling = self.profiling;
         if let Some(max_segment_length) = self.max_segment_length {
-            app_vm_config
-                .system_mut()
-                .set_segmentation_strategy(Arc::new(
-                    DefaultSegmentationStrategy::new_with_max_segment_len(max_segment_length),
-                ));
+            app_vm_config.as_mut().set_segmentation_limits(
+                SegmentationLimits::default().with_max_trace_height(max_segment_length as u32),
+            );
         }
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
@@ -145,7 +146,7 @@ impl BenchmarkCli {
         init_file_name: Option<&str>,
     ) -> Result<Elf>
     where
-        VC: VmConfig<F>,
+        VC: VmConfig<SC>,
     {
         let profile = if self.profiling {
             "profiling"
@@ -158,21 +159,24 @@ impl BenchmarkCli {
         build_elf(&manifest_dir, profile)
     }
 
-    pub fn bench_from_exe<VC>(
+    pub fn bench_from_exe<VB, VC>(
         &self,
         bench_name: impl ToString,
+        app_vm_builder: VB,
         vm_config: VC,
         exe: impl Into<VmExe<F>>,
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VC: VmConfig<F>,
-        VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-        VC::Periphery: Chip<SC>,
+        VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
+        VC: VmExecutionConfig<F> + VmConfig<SC>,
+        <VC as VmExecutionConfig<F>>::Executor:
+            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<VC, BabyBearPoseidon2Engine>(
+        bench_from_exe::<BabyBearPoseidon2Engine, _, NativeCpuBuilder>(
             bench_name,
+            app_vm_builder,
             app_config,
             exe,
             input_stream,
@@ -192,22 +196,27 @@ impl BenchmarkCli {
 /// 6. Verify STARK proofs.
 ///
 /// Returns the data necessary for proof aggregation.
-pub fn bench_from_exe<VC, E: StarkFriEngine<SC>>(
+pub fn bench_from_exe<E, VB, NativeBuilder>(
     bench_name: impl ToString,
-    app_config: AppConfig<VC>,
+    app_vm_builder: VB,
+    app_config: AppConfig<VB::VmConfig>,
     exe: impl Into<VmExe<F>>,
     input_stream: StdIn,
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
-    VC: VmConfig<F>,
-    VC::Executor: Chip<SC> + InsExecutorE1<Val<SC>>,
-    VC::Periphery: Chip<SC>,
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VB::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.
     let app_pk = info_span!("keygen", group = &bench_name)
-        .in_scope(|| AppProvingKey::keygen(app_config.clone()));
+        .in_scope(|| AppProvingKey::keygen(app_config.clone()))?;
     // 2. Commit to the exe by generating cached trace for program.
     let committed_exe = info_span!("commit_exe", group = &bench_name)
         .in_scope(|| commit_app_exe(app_config.app_fri_params.fri_params, exe));
@@ -216,21 +225,27 @@ where
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with
     //    timer.
     let app_vk = app_pk.get_app_vk();
-    let prover =
-        AppProver::<VC, E>::new(app_pk.app_vm_pk, committed_exe).with_program_name(bench_name);
-    let app_proof = prover.generate_app_proof(input_stream);
+    let mut prover = AppProver::<E, _>::new(app_vm_builder, app_pk.app_vm_pk, committed_exe)?
+        .with_program_name(bench_name);
+    let app_proof = prover.generate_app_proof(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
-    let sdk = Sdk::new();
-    sdk.verify_app_proof(&app_vk, &app_proof)
-        .expect("Verification failed");
+    let sdk = GenericSdk::<E, NativeBuilder>::new();
+    sdk.verify_app_proof(&app_vk, &app_proof)?;
     if let Some(leaf_vm_config) = leaf_vm_config {
-        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config);
-        let leaf_prover =
-            VmLocalProver::<SC, NativeConfig, E>::new(leaf_vm_pk, app_pk.leaf_committed_exe);
+        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
+        let vk = leaf_vm_pk.vm_pk.get_vk();
+        let mut leaf_prover = new_local_prover(
+            sdk.native_builder().clone(),
+            &leaf_vm_pk,
+            &app_pk.leaf_committed_exe,
+        )?;
         let leaf_controller = LeafProvingController {
             num_children: AggregationTreeConfig::default().num_children_leaf,
         };
-        leaf_controller.generate_proof(&leaf_prover, &app_proof);
+        let leaf_proofs = leaf_controller.generate_proof(&mut leaf_prover, &app_proof)?;
+        for proof in leaf_proofs {
+            verify_single(&leaf_prover.vm.engine, &vk, &proof)?;
+        }
     }
     Ok(())
 }

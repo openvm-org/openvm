@@ -32,7 +32,7 @@ def run_cargo_command(
         command.extend(["--max_segment_length", max_segment_length])
     if kzg_params_dir is not None:
         command.extend(["--kzg-params-dir", kzg_params_dir])
-    if "profiling" in feature_flags:
+    if "perf-metrics" in feature_flags:
         # set guest build args and vm config to profiling
         command.extend(["--profiling"])
 
@@ -50,7 +50,7 @@ def run_cargo_command(
     # Prepare the environment variables
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
-    if "profiling" in feature_flags:
+    if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
@@ -73,7 +73,7 @@ def bench():
     parser.add_argument('--output_path', type=str, required=True, help="The path to write the metrics to")
     args = parser.parse_args()
 
-    feature_flags = ["bench-metrics", "parallel"] + (args.features.split(",") if args.features else [])
+    feature_flags = ["metrics", "parallel"] + (args.features.split(",") if args.features else [])
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
     run_cargo_command(

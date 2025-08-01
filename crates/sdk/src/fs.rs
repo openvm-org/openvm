@@ -4,7 +4,7 @@ use std::{
 };
 
 use eyre::{Report, Result};
-use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
+use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof};
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 #[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
@@ -35,13 +35,13 @@ pub fn write_exe_to_file<P: AsRef<Path>>(exe: VmExe<F>, path: P) -> Result<()> {
     write_to_file_bitcode(&path, exe)
 }
 
-pub fn read_app_pk_from_file<VC: VmConfig<F>, P: AsRef<Path>>(
+pub fn read_app_pk_from_file<VC: DeserializeOwned, P: AsRef<Path>>(
     path: P,
 ) -> Result<AppProvingKey<VC>> {
     read_from_file_bitcode(&path)
 }
 
-pub fn write_app_pk_to_file<VC: VmConfig<F>, P: AsRef<Path>>(
+pub fn write_app_pk_to_file<VC: Serialize, P: AsRef<Path>>(
     app_pk: AppProvingKey<VC>,
     path: P,
 ) -> Result<()> {

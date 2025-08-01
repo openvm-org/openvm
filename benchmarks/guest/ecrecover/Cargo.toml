@@ -1,14 +1,13 @@
-[workspace]
 [package]
 name = "openvm-ecdsa-recover-key-program"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
-openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
-openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
+openvm = { workspace = true, features = ["std"] }
+openvm-algebra-guest.workspace = true
+openvm-ecc-guest.workspace = true
+openvm-keccak256.workspace = true
 revm-precompile = { git = "https://github.com/bluealloy/revm.git", tag = "v75", default-features = false }
 # IMPORTANT: must be same version as used by revm; revm does not re-export this feature so we enable it here
 alloy-primitives = { version = "1.2.0", default-features = false, features = [
@@ -18,15 +17,3 @@ k256 = { version = "0.13.3", default-features = false }
 
 [features]
 default = []
-
-[profile.release]
-panic = "abort"
-lto = "thin"    # faster compile time
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false
-
-[patch.crates-io]
-k256 = { path = "../../../guest-libs/k256/" }

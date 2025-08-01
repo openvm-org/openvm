@@ -1,20 +1,28 @@
-use std::{fmt::Debug, slice::from_raw_parts};
+use std::{array::from_fn, fmt::Debug};
 
 use getset::Getters;
-use itertools::{izip, zip_eq};
-use openvm_circuit_primitives::var_range::SharedVariableRangeCheckerChip;
+use itertools::zip_eq;
 use openvm_instructions::{exe::SparseMemoryImage, NATIVE_AS};
 use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_maybe_rayon::prelude::*, p3_util::log2_strict_usize,
+    p3_field::{Field, PrimeField32},
+    p3_maybe_rayon::prelude::*,
+    p3_util::log2_strict_usize,
 };
+use tracing::instrument;
 
-use super::{adapter::AccessAdapterInventory, offline_checker::MemoryBus};
 use crate::{
-    arch::MemoryConfig,
-    system::memory::{
-        adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
-        MemoryImage,
+    arch::{
+        AddressSpaceHostConfig, AddressSpaceHostLayout, DenseRecordArena, MemoryConfig,
+        RecordArena, MAX_CELL_BYTE_SIZE,
     },
+    system::{
+        memory::{
+            adapter::records::{AccessLayout, AccessRecordHeader, MERGE_AND_NOT_SPLIT_FLAG},
+            MemoryAddress, TimestampedEquipartition, TimestampedValues, CHUNK,
+        },
+        TouchedMemory,
+    },
+    utils::slice_as_bytes,
 };
 
 mod basic;
@@ -129,9 +137,10 @@ pub trait LinearMemory {
 /// `unsafe` API.
 #[derive(Debug, Clone)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
+    /// Underlying memory data.
     pub mem: Vec<M>,
-    /// byte size of cells per address space
-    pub cell_size: Vec<usize>, // TODO: move to MmapWrapper
+    /// Host configuration for each address space.
+    pub config: Vec<AddressSpaceHostConfig>,
 }
 
 impl Default for AddressMap {
@@ -141,20 +150,17 @@ impl Default for AddressMap {
 }
 
 impl<M: LinearMemory> AddressMap<M> {
-    /// `mem_size` is the number of **cells** in each address space. It is required that
-    /// `mem_size[0] = 0`.
-    pub fn new(mem_size: Vec<usize>) -> Self {
-        // TMP: hardcoding for now
-        let mut cell_size = vec![1; 4];
-        cell_size.resize(mem_size.len(), 4);
-        let mem = zip_eq(&cell_size, &mem_size)
-            .map(|(cell_size, mem_size)| M::new(mem_size.checked_mul(*cell_size).unwrap()))
+    pub fn new(config: Vec<AddressSpaceHostConfig>) -> Self {
+        assert_eq!(config[0].num_cells, 0, "Address space 0 must have 0 cells");
+        let mem = config
+            .iter()
+            .map(|config| M::new(config.num_cells.checked_mul(config.layout.size()).unwrap()))
             .collect();
-        Self { mem, cell_size }
+        Self { mem, config }
     }
 
     pub fn from_mem_config(mem_config: &MemoryConfig) -> Self {
-        Self::new(mem_config.addr_space_sizes.clone())
+        Self::new(mem_config.addr_spaces.clone())
     }
 
     #[inline(always)]
@@ -167,24 +173,23 @@ impl<M: LinearMemory> AddressMap<M> {
         &mut self.mem
     }
 
-    pub fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
-        debug_assert_ne!(addr_space, 0);
-        // TODO: fix this
-        unsafe {
-            if self.cell_size[addr_space as usize] == 1 {
-                F::from_canonical_u8(self.get::<u8>((addr_space, ptr)))
-            } else {
-                debug_assert_eq!(self.cell_size[addr_space as usize], 4);
-                self.get::<F>((addr_space, ptr))
-            }
-        }
+    /// # Safety
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
+        let layout = &self.config.get_unchecked(addr_space as usize).layout;
+        let start = ptr as usize * layout.size();
+        let bytes = self.get_u8_slice(addr_space, start, layout.size());
+        layout.to_field(bytes)
     }
 
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         // SAFETY:
         // - alignment is automatic since we multiply by `size_of::<T>()`
         self.mem
@@ -202,7 +207,10 @@ impl<M: LinearMemory> AddressMap<M> {
         (addr_space, ptr): Address,
         len: usize,
     ) -> &[T] {
-        debug_assert_eq!(size_of::<T>(), self.cell_size[addr_space as usize]);
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.config[addr_space as usize].layout.size()
+        );
         let start = (ptr as usize) * size_of::<T>();
         let mem = self.mem.get_unchecked(addr_space as usize);
         // SAFETY:
@@ -210,12 +218,13 @@ impl<M: LinearMemory> AddressMap<M> {
         mem.get_aligned_slice(start, len)
     }
 
-    /// Panics or segfaults if `ptr..ptr + len` is out of bounds
+    /// Reads the slice at **byte** addresses `start..start + len` from address space `addr_space`
+    /// linear memory. Panics or segfaults if `start..start + len` is out of bounds
     ///
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get_u8_slice(&self, addr_space: usize, start: usize, len: usize) -> &[u8] {
-        let mem = self.mem.get_unchecked(addr_space);
+    pub unsafe fn get_u8_slice(&self, addr_space: u32, start: usize, len: usize) -> &[u8] {
+        let mem = self.mem.get_unchecked(addr_space as usize);
         mem.get_aligned_slice(start, len)
     }
 
@@ -245,8 +254,8 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(mem_size: Vec<usize>, sparse_map: SparseMemoryImage) -> Self {
-        let mut vec = Self::new(mem_size);
+    pub fn from_sparse(config: Vec<AddressSpaceHostConfig>, sparse_map: SparseMemoryImage) -> Self {
+        let mut vec = Self::new(config);
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
@@ -272,6 +281,7 @@ impl GuestMemory {
     pub fn new(addr: AddressMap) -> Self {
         Self { memory: addr }
     }
+
     /// Returns `[pointer:BLOCK_SIZE]_{address_space}`
     ///
     /// # Safety
@@ -279,6 +289,7 @@ impl GuestMemory {
     /// and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
+    #[inline(always)]
     pub unsafe fn read<T, const BLOCK_SIZE: usize>(
         &self,
         addr_space: u32,
@@ -287,7 +298,7 @@ impl GuestMemory {
     where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - `T` should be "plain old data"
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
@@ -301,6 +312,7 @@ impl GuestMemory {
     ///
     /// # Safety
     /// See [`GuestMemory::read`].
+    #[inline(always)]
     pub unsafe fn write<T, const BLOCK_SIZE: usize>(
         &mut self,
         addr_space: u32,
@@ -309,7 +321,7 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
@@ -331,7 +343,7 @@ impl GuestMemory {
     ) where
         T: Copy + Debug,
     {
-        debug_assert_eq!(size_of::<T>(), self.memory.cell_size[addr_space as usize]);
+        self.debug_assert_cell_type::<T>(addr_space);
         // SAFETY:
         // - alignment for `[T; BLOCK_SIZE]` is automatic since we multiply by `size_of::<T>()`
         self.memory
@@ -344,6 +356,14 @@ impl GuestMemory {
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
+    }
+
+    #[inline(always)]
+    fn debug_assert_cell_type<T>(&self, addr_space: u32) {
+        debug_assert_eq!(
+            size_of::<T>(),
+            self.memory.config[addr_space as usize].layout.size()
+        );
     }
 }
 
@@ -366,12 +386,11 @@ pub struct AccessMetadata {
 /// Online memory that stores additional information for trace generation purposes.
 /// In particular, keeps track of timestamp.
 #[derive(Getters)]
-pub struct TracingMemory<F> {
+pub struct TracingMemory {
     pub timestamp: u32,
     /// The initial block size -- this depends on the type of boundary chip.
     initial_block_size: usize,
     /// The underlying data memory, with memory cells typed by address space: see [AddressMap].
-    // TODO: make generic in GuestMemory
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// A map of `addr_space -> (ptr / min_block_size[addr_space] -> (timestamp: u32, block_size:
@@ -381,55 +400,52 @@ pub struct TracingMemory<F> {
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
-    pub access_adapter_inventory: AccessAdapterInventory<F>,
+    pub access_adapter_records: DenseRecordArena,
 }
 
-impl<F: PrimeField32> TracingMemory<F> {
-    // TODO: per-address space memory capacity specification
+// min_block_size * cell_size never exceeds 8
+const INITIAL_CELL_BUFFER: &[u8] = &[0u8; 8];
+// min_block_size never exceeds 8
+const INITIAL_TIMESTAMP_BUFFER: &[u32] = &[INITIAL_TIMESTAMP; 8];
+
+impl TracingMemory {
     pub fn new(
         mem_config: &MemoryConfig,
-        range_checker: SharedVariableRangeCheckerChip,
-        memory_bus: MemoryBus,
         initial_block_size: usize,
+        access_adapter_arena_size_bound: usize,
     ) -> Self {
-        let num_cells = mem_config.addr_space_sizes.clone();
-        let num_addr_sp = 1 + (1 << mem_config.addr_space_height);
-        let mut min_block_size = vec![1; num_addr_sp];
-        // TMP: hardcoding for now
-        min_block_size[1] = 4;
-        min_block_size[2] = 4;
-        min_block_size[3] = 4;
-        let meta = zip_eq(&min_block_size, &num_cells)
-            .map(|(min_block_size, num_cells)| {
-                let total_metadata_len = num_cells.div_ceil(*min_block_size as usize);
-                PagedVec::new(total_metadata_len, PAGE_SIZE)
-            })
-            .collect();
+        let image = GuestMemory::new(AddressMap::from_mem_config(mem_config));
+        Self::from_image(image, initial_block_size, access_adapter_arena_size_bound)
+    }
+
+    /// Constructor from pre-existing memory image.
+    pub fn from_image(
+        image: GuestMemory,
+        initial_block_size: usize,
+        access_adapter_arena_size_bound: usize,
+    ) -> Self {
+        let (meta, min_block_size): (Vec<_>, Vec<_>) =
+            zip_eq(image.memory.get_memory(), &image.memory.config)
+                .map(|(mem, addr_sp)| {
+                    let num_cells = mem.size() / addr_sp.layout.size();
+                    let min_block_size = addr_sp.min_block_size;
+                    let total_metadata_len = num_cells.div_ceil(min_block_size);
+                    (
+                        PagedVec::new(total_metadata_len, PAGE_SIZE),
+                        min_block_size as u32,
+                    )
+                })
+                .unzip();
+        let access_adapter_records =
+            DenseRecordArena::with_byte_capacity(access_adapter_arena_size_bound);
         Self {
-            data: GuestMemory::new(AddressMap::from_mem_config(mem_config)),
+            data: image,
             meta,
             min_block_size,
             timestamp: INITIAL_TIMESTAMP + 1,
             initial_block_size,
-            access_adapter_inventory: AccessAdapterInventory::new(
-                range_checker,
-                memory_bus,
-                mem_config.clk_max_bits,
-                mem_config.max_access_adapter_n,
-            ),
+            access_adapter_records,
         }
-    }
-
-    /// Instantiates a new `Memory` data structure from an image.
-    pub fn with_image(mut self, image: MemoryImage) -> Self {
-        for (i, (mem, cell_size)) in izip!(image.get_memory(), &image.cell_size).enumerate() {
-            let num_cells = mem.size() / cell_size;
-
-            let total_metadata_len = num_cells.div_ceil(self.min_block_size[i] as usize);
-            self.meta[i] = PagedVec::new(total_metadata_len, PAGE_SIZE);
-        }
-        self.data = GuestMemory::new(image);
-        self
     }
 
     #[inline(always)]
@@ -476,36 +492,34 @@ impl<F: PrimeField32> TracingMemory<F> {
         }
         let data_slice = unsafe {
             self.data.memory.get_u8_slice(
-                header.address_space as usize,
+                header.address_space,
                 (header.pointer * header.type_size) as usize,
                 (header.block_size * header.type_size) as usize,
             )
         };
 
         let record_mut = self
-            .access_adapter_inventory
-            .alloc_record(AccessLayout::from_record_header(&header));
+            .access_adapter_records
+            .alloc(AccessLayout::from_record_header(&header));
         *record_mut.header = header;
         record_mut.data.copy_from_slice(data_slice);
         // we don't mind garbage values in prev_*
     }
 
-    pub(crate) fn add_merge_record<T>(
+    /// `data_slice` is the underlying data of the record in raw host memory format.
+    pub(crate) fn add_merge_record(
         &mut self,
         header: AccessRecordHeader,
-        data: &[T],
+        data_slice: &[u8],
         prev_ts: &[u32],
     ) {
         if header.block_size == header.lowest_block_size {
             return;
         }
 
-        let data_slice =
-            unsafe { from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) };
-
         let record_mut = self
-            .access_adapter_inventory
-            .alloc_record(AccessLayout::from_record_header(&header));
+            .access_adapter_records
+            .alloc(AccessLayout::from_record_header(&header));
         *record_mut.header = header;
         record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
         record_mut.data.copy_from_slice(data_slice);
@@ -597,7 +611,7 @@ impl<F: PrimeField32> TracingMemory<F> {
                         } else {
                             debug_assert_eq!(self.initial_block_size, 1);
                             debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                            self.add_merge_record::<u8>(
+                            self.add_merge_record(
                                 AccessRecordHeader {
                                     timestamp_and_mask: INITIAL_TIMESTAMP,
                                     address_space: address_space as u32,
@@ -606,14 +620,14 @@ impl<F: PrimeField32> TracingMemory<F> {
                                     lowest_block_size: self.initial_block_size as u32,
                                     type_size: 1,
                                 },
-                                &vec![0; align], // TODO: not vec maybe
-                                &vec![INITIAL_TIMESTAMP; align], // TODO: not vec maybe
+                                &INITIAL_CELL_BUFFER[..align], // TODO: this assumes cell_size=1
+                                &INITIAL_TIMESTAMP_BUFFER[..align],
                             );
                         }
                         INITIAL_TIMESTAMP
                     }
                 })
-                .collect::<Vec<_>>(); // TODO(AG): small buffer or small vec or something
+                .collect::<Vec<_>>(); // PERF(AG): small buffer or small vec or something
 
             let timestamp = *prev_ts.iter().max().unwrap();
             self.add_merge_record(
@@ -625,7 +639,8 @@ impl<F: PrimeField32> TracingMemory<F> {
                     lowest_block_size: align as u32,
                     type_size: size_of::<T>() as u32,
                 },
-                prev_values,
+                // SAFETY: T is plain old data
+                unsafe { slice_as_bytes(prev_values) },
                 &prev_ts,
             );
             timestamp
@@ -651,7 +666,7 @@ impl<F: PrimeField32> TracingMemory<F> {
     ///
     /// # Safety
     /// The type `T` must be stack-allocated `repr(C)` or `repr(transparent)`,
-    /// and it must be the exact type used to represent a single memory cell in
+    /// plain old data, and it must be the exact type used to represent a single memory cell in
     /// address space `address_space`. For standard usage,
     /// `T` is either `u8` or `F` where `F` is the base field of the ZK backend.
     ///
@@ -736,8 +751,23 @@ impl<F: PrimeField32> TracingMemory<F> {
         self.timestamp
     }
 
+    /// Finalize the boundary and merkle chips.
+    #[instrument(name = "memory_finalize", skip_all)]
+    pub fn finalize<F: Field>(&mut self, is_persistent: bool) -> TouchedMemory<F> {
+        let touched_blocks = self.touched_blocks();
+
+        match is_persistent {
+            false => TouchedMemory::Volatile(
+                self.touched_blocks_to_equipartition::<F, 1>(touched_blocks),
+            ),
+            true => TouchedMemory::Persistent(
+                self.touched_blocks_to_equipartition::<F, CHUNK>(touched_blocks),
+            ),
+        }
+    }
+
     /// Returns the list of all touched blocks. The list is sorted by address.
-    pub fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
+    fn touched_blocks(&self) -> Vec<(Address, AccessMetadata)> {
         assert_eq!(self.meta.len(), self.min_block_size.len());
         self.meta
             .par_iter()
@@ -757,6 +787,163 @@ impl<F: PrimeField32> TracingMemory<F> {
             })
             .collect()
     }
+
+    /// Returns the equipartition of the touched blocks.
+    /// Modifies records and adds new to account for the initial/final segments.
+    fn touched_blocks_to_equipartition<F: Field, const CHUNK: usize>(
+        &mut self,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+    ) -> TimestampedEquipartition<F, CHUNK> {
+        // [perf] We can `.with_capacity()` if we keep track of the number of segments we initialize
+        let mut final_memory = Vec::new();
+
+        debug_assert!(touched_blocks.is_sorted_by_key(|(addr, _)| addr));
+        self.handle_touched_blocks::<F, CHUNK>(&mut final_memory, touched_blocks);
+
+        debug_assert!(final_memory.is_sorted_by_key(|(key, _)| *key));
+        final_memory
+    }
+
+    fn handle_touched_blocks<F: Field, const CHUNK: usize>(
+        &mut self,
+        final_memory: &mut Vec<((u32, u32), TimestampedValues<F, CHUNK>)>,
+        touched_blocks: Vec<((u32, u32), AccessMetadata)>,
+    ) {
+        let mut current_values = vec![0u8; MAX_CELL_BYTE_SIZE * CHUNK];
+        let mut current_cnt = 0;
+        let mut current_address = MemoryAddress::new(0, 0);
+        let mut current_timestamps = vec![0; CHUNK];
+        for ((addr_space, ptr), metadata) in touched_blocks {
+            // SAFETY: addr_space of touched blocks are all in bounds
+            let addr_space_config =
+                unsafe { *self.data.memory.config.get_unchecked(addr_space as usize) };
+            let min_block_size = addr_space_config.min_block_size;
+            let cell_size = addr_space_config.layout.size();
+            let AccessMetadata {
+                start_ptr,
+                timestamp,
+                block_size,
+            } = metadata;
+            assert!(
+                current_cnt == 0
+                    || (current_address.address_space == addr_space
+                        && current_address.pointer + current_cnt as u32 == ptr),
+                "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
+            );
+            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(ptr % min_block_size as u32 == 0);
+
+            if current_cnt == 0 {
+                assert_eq!(
+                    ptr & (CHUNK as u32 - 1),
+                    0,
+                    "The union of all touched blocks must consist of `CHUNK`-aligned blocks"
+                );
+                current_address = MemoryAddress::new(addr_space, ptr);
+            }
+
+            if block_size > min_block_size as u32 {
+                self.add_split_record(AccessRecordHeader {
+                    timestamp_and_mask: timestamp,
+                    address_space: addr_space,
+                    pointer: start_ptr,
+                    block_size,
+                    lowest_block_size: min_block_size as u32,
+                    type_size: cell_size as u32,
+                });
+            }
+            if min_block_size > CHUNK {
+                assert_eq!(current_cnt, 0);
+                for i in (0..block_size).step_by(min_block_size) {
+                    self.add_split_record(AccessRecordHeader {
+                        timestamp_and_mask: timestamp,
+                        address_space: addr_space,
+                        pointer: start_ptr + i,
+                        block_size: min_block_size as u32,
+                        lowest_block_size: CHUNK as u32,
+                        type_size: cell_size as u32,
+                    });
+                }
+                // SAFETY: touched blocks are in bounds
+                let values = unsafe {
+                    self.data.memory.get_u8_slice(
+                        addr_space,
+                        ptr as usize * cell_size,
+                        block_size as usize * cell_size,
+                    )
+                };
+                for i in (0..block_size).step_by(CHUNK) {
+                    final_memory.push((
+                        (addr_space, ptr + i),
+                        TimestampedValues {
+                            timestamp,
+                            values: from_fn(|j| {
+                                let byte_idx = (i as usize + j) * cell_size;
+                                // SAFETY: block_size is multiple of CHUNK and we are reading chunks
+                                // of cells within bounds
+                                unsafe {
+                                    addr_space_config
+                                        .layout
+                                        .to_field(&values[byte_idx..byte_idx + cell_size])
+                                }
+                            }),
+                        },
+                    ));
+                }
+            } else {
+                for i in 0..block_size {
+                    // SAFETY: getting cell data
+                    let cell_data = unsafe {
+                        self.data.memory.get_u8_slice(
+                            addr_space,
+                            (ptr + i) as usize * cell_size,
+                            cell_size,
+                        )
+                    };
+                    current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
+                        .copy_from_slice(cell_data);
+                    if current_cnt & (min_block_size - 1) == 0 {
+                        current_timestamps[current_cnt / min_block_size] = timestamp;
+                    }
+                    current_cnt += 1;
+                    if current_cnt == CHUNK {
+                        let timestamp = *current_timestamps[..CHUNK / min_block_size]
+                            .iter()
+                            .max()
+                            .unwrap();
+                        self.add_merge_record(
+                            AccessRecordHeader {
+                                timestamp_and_mask: timestamp,
+                                address_space: addr_space,
+                                pointer: current_address.pointer,
+                                block_size: CHUNK as u32,
+                                lowest_block_size: min_block_size as u32,
+                                type_size: cell_size as u32,
+                            },
+                            &current_values[..CHUNK * cell_size],
+                            &current_timestamps[..CHUNK / min_block_size],
+                        );
+                        final_memory.push((
+                            (current_address.address_space, current_address.pointer),
+                            TimestampedValues {
+                                timestamp,
+                                values: from_fn(|i| unsafe {
+                                    // SAFETY: cell_size is correct, and alignment is guaranteed
+                                    addr_space_config.layout.to_field(
+                                        &current_values[i * cell_size..i * cell_size + cell_size],
+                                    )
+                                }),
+                            },
+                        ));
+                        current_address.pointer += current_cnt as u32;
+                        current_cnt = 0;
+                    }
+                }
+            }
+        }
+        assert_eq!(current_cnt, 0, "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`");
+    }
+
     pub fn address_space_alignment(&self) -> Vec<u8> {
         self.min_block_size
             .iter()
@@ -770,11 +957,13 @@ mod tests {
     use std::array;
 
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::utils::create_seeded_rng;
-    use p3_baby_bear::BabyBear;
-    use rand::Rng;
+    use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+    use rand::{thread_rng, Rng};
 
-    use crate::arch::{testing::VmChipTestBuilder, MemoryConfig};
+    use crate::{
+        arch::{testing::VmChipTestBuilder, MemoryConfig},
+        system::memory::online::TracingMemory,
+    };
 
     type F = BabyBear;
 
@@ -837,5 +1026,31 @@ mod tests {
     #[test]
     fn test_memory_write_persistent() {
         test_memory_write_by_tester(VmChipTestBuilder::<F>::persistent(MemoryConfig::default()));
+    }
+
+    #[test]
+    fn test_no_adapter_records_for_singleton_accesses() {
+        let memory_config = MemoryConfig::default();
+        let mut memory = TracingMemory::new(&memory_config, 1, 0);
+
+        let mut rng = thread_rng();
+        for _ in 0..1000 {
+            // TODO[jpw]: test other address spaces?
+            let address_space = 4u32;
+            let pointer = rng.gen_range(0..1 << memory_config.pointer_max_bits);
+
+            if rng.gen_bool(0.5) {
+                let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
+                // address space is 4 so cell type is `F`
+                unsafe {
+                    memory.write::<F, 1, 1>(address_space, pointer, [data]);
+                }
+            } else {
+                unsafe {
+                    memory.read::<F, 1, 1>(address_space, pointer);
+                }
+            }
+        }
+        assert_eq!(memory.access_adapter_records.current_size(), 0);
     }
 }

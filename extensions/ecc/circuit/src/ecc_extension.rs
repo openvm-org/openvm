@@ -1,19 +1,26 @@
-use derive_more::derive::From;
+use std::sync::Arc;
+
 use hex_literal::hex;
+use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use once_cell::sync::Lazy;
 use openvm_circuit::{
     arch::{
-        ExecutionBridge, SystemPort, VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
+        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
+        VmExecutionExtension, VmProverExtension,
     },
-    system::phantom::PhantomChip,
+    system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerBus,
 };
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
 use openvm_ecc_guest::{
     algebra::IntMod,
     ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
@@ -21,12 +28,21 @@ use openvm_ecc_guest::{
 use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{
+    config::{StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::PrimeField32,
+    prover::cpu::{CpuBackend, CpuDevice},
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
-use super::{SwAddNeChip, SwDoubleChip, TeAddChip};
+use crate::{
+    get_sw_addne_air, get_sw_addne_chip, get_sw_addne_step, get_sw_double_air, get_sw_double_chip,
+    get_sw_double_step, get_te_add_air, get_te_add_chip, get_te_add_step, EccCpuProverExt,
+    EdwardsAir, SwAddNeStep, SwDoubleStep, TeAddStep, WeierstrassAir,
+};
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
@@ -137,212 +153,416 @@ impl EccExtension {
     }
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1, InsExecutorE2)]
-pub enum EccExtensionExecutor<F: PrimeField32> {
+#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+pub enum EccExtensionExecutor {
     // 32 limbs prime
-    SwEcAddNeRv32_32(SwAddNeChip<F, 2, 32>),
-    SwEcDoubleRv32_32(SwDoubleChip<F, 2, 32>),
+    SwEcAddNeRv32_32(SwAddNeStep<2, 32>),
+    SwEcDoubleRv32_32(SwDoubleStep<2, 32>),
     // 48 limbs prime
-    SwEcAddNeRv32_48(SwAddNeChip<F, 6, 16>),
-    SwEcDoubleRv32_48(SwDoubleChip<F, 6, 16>),
+    SwEcAddNeRv32_48(SwAddNeStep<6, 16>),
+    SwEcDoubleRv32_48(SwDoubleStep<6, 16>),
     // 32 limbs prime
-    TeEcAddRv32_32(TeAddChip<F, 2, 32>),
-    // 48 limbs prime
-    TeEcAddRv32_48(TeAddChip<F, 6, 16>),
+    TeEcAddRv32_32(TeAddStep<2, 32>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum EccExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    // We put this only to get the <F> generic to work
-    Phantom(PhantomChip<F>),
-}
+impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
+    type Executor = EccExtensionExecutor;
 
-impl<F: PrimeField32> VmExtension<F> for EccExtension {
-    type Executor = EccExtensionExecutor<F>;
-    type Periphery = EccExtensionPeriphery<F>;
-
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let mut inventory = VmInventory::new();
+        inventory: &mut ExecutorInventoryBuilder<F, EccExtensionExecutor>,
+    ) -> Result<(), ExecutorInventoryError> {
+        let pointer_max_bits = inventory.pointer_max_bits();
+        // TODO: somehow get the range checker bus from `ExecutorInventory`
+        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
+
+        // add the sw curves
+        for (i, curve) in self.supported_sw_curves.iter().enumerate() {
+            let start_offset =
+                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+                let addne = get_sw_addne_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::SwEcAddNeRv32_32(addne),
+                    ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+
+                let double = get_sw_double_step(
+                    config,
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.coeffs.a.clone(),
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::SwEcDoubleRv32_32(double),
+                    ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+                let addne = get_sw_addne_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::SwEcAddNeRv32_48(addne),
+                    ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+
+                let double = get_sw_double_step(
+                    config,
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.coeffs.a.clone(),
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::SwEcDoubleRv32_48(double),
+                    ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        // add the te curves
+        for (i, curve) in self.supported_te_curves.iter().enumerate() {
+            let start_offset = Rv32EdwardsOpcode::CLASS_OFFSET + i * Rv32EdwardsOpcode::COUNT;
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+                let add = get_te_add_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.coeffs.a.clone(),
+                    curve.coeffs.d.clone(),
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::TeEcAddRv32_32(add),
+                    ((Rv32EdwardsOpcode::TE_ADD as usize)
+                        ..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for EccExtension {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
             program_bus,
             memory_bridge,
-        } = builder.system_port();
+        } = inventory.system().port();
 
-        let execution_bridge = ExecutionBridge::new(execution_bus, program_bus);
-        let range_checker = builder.system_base().range_checker_chip.clone();
-        let pointer_max_bits = builder.system_config().memory_config.pointer_max_bits;
+        let exec_bridge = ExecutionBridge::new(execution_bus, program_bus);
+        let range_checker_bus = inventory.range_checker().bus;
+        let pointer_max_bits = inventory.pointer_max_bits();
 
-        let bitwise_lu_chip = if let Some(&chip) = builder
-            .find_chip::<SharedBitwiseOperationLookupChip<8>>()
-            .first()
-        {
-            chip.clone()
-        } else {
-            let bitwise_lu_bus = BitwiseOperationLookupBus::new(builder.new_bus_idx());
-            let chip = SharedBitwiseOperationLookupChip::new(bitwise_lu_bus);
-            inventory.add_periphery_chip(chip.clone());
-            chip
+        let bitwise_lu = {
+            // A trick to get around Rust's borrow rules
+            let existing_air = inventory.find_air::<BitwiseOperationLookupAir<8>>().next();
+            if let Some(air) = existing_air {
+                air.bus
+            } else {
+                let bus = BitwiseOperationLookupBus::new(inventory.new_bus_idx());
+                let air = BitwiseOperationLookupAir::<8>::new(bus);
+                inventory.add_air(air);
+                air.bus
+            }
         };
 
-        let sw_add_ne_opcodes = (Rv32WeierstrassOpcode::SW_ADD_NE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize);
-        let sw_double_opcodes = (Rv32WeierstrassOpcode::SW_DOUBLE as usize)
-            ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize);
-
-        let te_add_opcodes =
-            (Rv32EdwardsOpcode::TE_ADD as usize)..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize);
-
-        for (sw_idx, curve) in self.supported_sw_curves.iter().enumerate() {
-            // TODO: Better support for different limb sizes. Currently only 32 or 48 limbs are
-            // supported.
-            let sw_start_offset =
-                Rv32WeierstrassOpcode::CLASS_OFFSET + sw_idx * Rv32WeierstrassOpcode::COUNT;
+        for (i, curve) in self.supported_sw_curves.iter().enumerate() {
+            let start_offset =
+                Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
-            let config32 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 32,
-                limb_bits: 8,
-            };
-            let config48 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 48,
-                limb_bits: 8,
-            };
+
             if bytes <= 32 {
-                let sw_add_ne_chip = SwAddNeChip::new(
-                    execution_bridge,
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                let addne = get_sw_addne_air::<2, 32>(
+                    exec_bridge,
                     memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
                     pointer_max_bits,
-                    config32.clone(),
-                    sw_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
+                    start_offset,
                 );
-                inventory.add_executor(
-                    EccExtensionExecutor::SwEcAddNeRv32_32(sw_add_ne_chip),
-                    sw_add_ne_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
-                )?;
-                let sw_double_chip = SwDoubleChip::new(
-                    execution_bridge,
+                inventory.add_air(addne);
+
+                let double = get_sw_double_air::<2, 32>(
+                    exec_bridge,
                     memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
                     pointer_max_bits,
-                    config32.clone(),
-                    sw_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
+                    start_offset,
                     curve.coeffs.a.clone(),
                 );
-                inventory.add_executor(
-                    EccExtensionExecutor::SwEcDoubleRv32_32(sw_double_chip),
-                    sw_double_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
-                )?;
+                inventory.add_air(double);
             } else if bytes <= 48 {
-                let sw_add_ne_chip = SwAddNeChip::new(
-                    execution_bridge,
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                let addne = get_sw_addne_air::<6, 16>(
+                    exec_bridge,
                     memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
                     pointer_max_bits,
-                    config48.clone(),
-                    sw_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
+                    start_offset,
                 );
-                inventory.add_executor(
-                    EccExtensionExecutor::SwEcAddNeRv32_48(sw_add_ne_chip),
-                    sw_add_ne_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
-                )?;
-                let sw_double_chip = SwDoubleChip::new(
-                    execution_bridge,
+                inventory.add_air(addne);
+
+                let double = get_sw_double_air::<6, 16>(
+                    exec_bridge,
                     memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                    config,
+                    range_checker_bus,
+                    bitwise_lu,
                     pointer_max_bits,
-                    config48.clone(),
-                    sw_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
+                    start_offset,
                     curve.coeffs.a.clone(),
                 );
-                inventory.add_executor(
-                    EccExtensionExecutor::SwEcDoubleRv32_48(sw_double_chip),
-                    sw_double_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + sw_start_offset)),
-                )?;
+                inventory.add_air(double);
             } else {
                 panic!("Modulus too large");
             }
         }
 
-        for (te_idx, curve) in self.supported_te_curves.iter().enumerate() {
+        for (i, curve) in self.supported_te_curves.iter().enumerate() {
+            let start_offset = Rv32EdwardsOpcode::CLASS_OFFSET + i * Rv32EdwardsOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
-            let config32 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 32,
-                limb_bits: 8,
-            };
-            let config48 = ExprBuilderConfig {
-                modulus: curve.modulus.clone(),
-                num_limbs: 48,
-                limb_bits: 8,
-            };
-            let te_start_offset =
-                Rv32EdwardsOpcode::CLASS_OFFSET + te_idx * Rv32EdwardsOpcode::COUNT;
+
             if bytes <= 32 {
-                let te_add_chip = TeAddChip::new(
-                    execution_bridge,
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                let add = get_te_add_air::<2, 32>(
+                    exec_bridge,
                     memory_bridge,
-                    builder.system_base().memory_controller.helper(),
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
                     pointer_max_bits,
-                    config32.clone(),
-                    te_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
+                    start_offset,
                     curve.coeffs.a.clone(),
                     curve.coeffs.d.clone(),
                 );
-                inventory.add_executor(
-                    EccExtensionExecutor::TeEcAddRv32_32(te_add_chip),
-                    te_add_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + te_start_offset)),
-                )?;
-            } else if bytes <= 48 {
-                let te_add_chip = TeAddChip::new(
-                    execution_bridge,
-                    memory_bridge,
-                    builder.system_base().memory_controller.helper(),
-                    pointer_max_bits,
-                    config48.clone(),
-                    te_start_offset,
-                    bitwise_lu_chip.clone(),
-                    range_checker.clone(),
-                    curve.coeffs.a.clone(),
-                    curve.coeffs.d.clone(),
-                );
-                inventory.add_executor(
-                    EccExtensionExecutor::TeEcAddRv32_48(te_add_chip),
-                    te_add_opcodes
-                        .clone()
-                        .map(|x| VmOpcode::from_usize(x + te_start_offset)),
-                )?;
+                inventory.add_air(add);
             } else {
                 panic!("Modulus too large");
             }
         }
 
-        Ok(inventory)
+        Ok(())
     }
 }
+
+// This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
+// BitwiseOperationLookupChip) are specific to CpuBackend.
+impl<E, SC, RA> VmProverExtension<E, RA, EccExtension> for EccCpuProverExt
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    RA: RowMajorMatrixArena<Val<SC>>,
+    Val<SC>: PrimeField32,
+{
+    fn extend_prover(
+        &self,
+        extension: &EccExtension,
+        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+    ) -> Result<(), ChipInventoryError> {
+        let range_checker = inventory.range_checker()?.clone();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
+        let bitwise_lu = {
+            let existing_chip = inventory
+                .find_chip::<SharedBitwiseOperationLookupChip<8>>()
+                .next();
+            if let Some(chip) = existing_chip {
+                chip.clone()
+            } else {
+                let air: &BitwiseOperationLookupAir<8> = inventory.next_air()?;
+                let chip = Arc::new(BitwiseOperationLookupChip::new(air.bus));
+                inventory.add_periphery_chip(chip.clone());
+                chip
+            }
+        };
+
+        for curve in extension.supported_sw_curves.iter() {
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
+                let addne = get_sw_addne_chip::<Val<SC>, 2, 32>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addne);
+
+                inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
+                let double = get_sw_double_chip::<Val<SC>, 2, 32>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.coeffs.a.clone(),
+                );
+                inventory.add_executor_chip(double);
+            } else if bytes <= 48 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 48,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
+                let addne = get_sw_addne_chip::<Val<SC>, 6, 16>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                );
+                inventory.add_executor_chip(addne);
+
+                inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
+                let double = get_sw_double_chip::<Val<SC>, 6, 16>(
+                    config,
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.coeffs.a.clone(),
+                );
+                inventory.add_executor_chip(double);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        for curve in extension.supported_te_curves.iter() {
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<EdwardsAir<2, 2, 32>>()?;
+                let add = get_te_add_chip::<Val<SC>, 2, 32>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.coeffs.a.clone(),
+                    curve.coeffs.d.clone(),
+                );
+                inventory.add_executor_chip(add);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Convenience constants for constructors
+lazy_static! {
+    // The constants are taken from: https://en.bitcoin.it/wiki/Secp256k1
+    pub static ref SECP256K1_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    ));
+    pub static ref SECP256K1_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    ));
+}
+
+lazy_static! {
+    // The constants are taken from: https://neuromancer.sk/std/secg/secp256r1
+    pub static ref P256_MODULUS: BigUint = BigUint::from_bytes_be(&hex!(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    ));
+    pub static ref P256_ORDER: BigUint = BigUint::from_bytes_be(&hex!(
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    ));
+}
+// little-endian
+const P256_A: [u8; 32] = hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
+// little-endian
+const P256_B: [u8; 32] = hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
+
+pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
+pub const P256_ECC_STRUCT_NAME: &str = "P256Point";

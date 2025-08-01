@@ -41,7 +41,7 @@ mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
-profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
+perf-metrics = ["openvm-circuit/perf-metrics", "openvm-transpiler/function-span"]
 
 # [[bench]]
 # name = "fibonacci_execute"

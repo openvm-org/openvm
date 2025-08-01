@@ -1,14 +1,12 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
-    arch::{
-        testing::{VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        InstructionExecutor, VmAirWrapper,
-    },
+    arch::testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     utils::i32_to_f,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_rv32im_transpiler::LessThanOpcode::{self, *};
@@ -25,54 +23,62 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{core::run_less_than, LessThanCoreAir, LessThanStep, Rv32LessThanChip};
+use super::{core::run_less_than, LessThanCoreAir, Rv32LessThanChip};
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep, RV32_CELL_BITS,
+        RV32_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
     test_utils::{
         generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
+    LessThanFiller, Rv32LessThanAir, Rv32LessThanStep,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+type Harness = TestChipHarness<F, Rv32LessThanStep, Rv32LessThanAir, Rv32LessThanChip<F>>;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
 ) -> (
-    Rv32LessThanChip<F>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV32_CELL_BITS>,
+        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    ),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
-
-    let mut chip = Rv32LessThanChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32BaseAluAdapterAir::new(
-                tester.execution_bridge(),
-                tester.memory_bridge(),
-                bitwise_bus,
-            ),
-            LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let air = Rv32LessThanAir::new(
+        Rv32BaseAluAdapterAir::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            bitwise_bus,
         ),
-        LessThanStep::new(
-            Rv32BaseAluAdapterStep::new(bitwise_chip.clone()),
+        LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv32LessThanStep::new(Rv32BaseAluAdapterStep, LessThanOpcode::CLASS_OFFSET);
+    let chip = Rv32LessThanChip::<F>::new(
+        LessThanFiller::new(
+            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
             bitwise_chip.clone(),
             LessThanOpcode::CLASS_OFFSET,
         ),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
 
-    (chip, bitwise_chip)
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
+fn set_and_execute(
     tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+    harness: &mut Harness,
     rng: &mut StdRng,
     opcode: LessThanOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -102,7 +108,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(chip, &instruction);
+    tester.execute(harness, &instruction);
 
     let (cmp, _, _, _) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode == SLT, &b, &c);
@@ -123,17 +129,25 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_test_chip(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
     // Test special case where b = c
     let b = [101, 128, 202, 255];
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         Some(b),
@@ -144,7 +158,7 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let b = [36, 0, 0, 0];
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         Some(b),
@@ -152,7 +166,11 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         Some(b),
     );
 
-    let tester = tester.build().load(chip).load(bitwise_chip).finalize();
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -182,11 +200,11 @@ fn run_negative_less_than_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let (mut chip, bitwise_chip) = create_test_chip(&tester);
+    let (mut harness, bitwise) = create_test_chip(&tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness,
         &mut rng,
         opcode,
         Some(b),
@@ -194,7 +212,7 @@ fn run_negative_less_than_test(
         Some(c),
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut LessThanCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -220,8 +238,8 @@ fn run_negative_less_than_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(bitwise_chip)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }

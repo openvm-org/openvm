@@ -1,9 +1,9 @@
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports)]
-use {
-    openvm_pairing::bn254::{Bn254, Bn254G1Affine, Fp, Fp2},
-    openvm_pairing_guest::pairing::PairingCheck,
+use openvm_pairing::{
+    bn254::{Bn254, Bn254G1Affine, Fp, Fp2},
+    PairingCheck,
 };
 
 openvm::init!();

@@ -1,8 +1,11 @@
 use std::{array, borrow::Borrow, cmp::min};
 
 use openvm_circuit::{
-    arch::{ExecutionBridge, SystemPort},
-    system::memory::{offline_checker::MemoryBridge, MemoryAddress},
+    arch::ExecutionBridge,
+    system::{
+        memory::{offline_checker::MemoryBridge, MemoryAddress},
+        SystemPort,
+    },
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::BitwiseOperationLookupBus, encoder::Encoder, utils::not, SubAir,

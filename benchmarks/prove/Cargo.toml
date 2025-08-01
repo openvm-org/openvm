@@ -15,16 +15,6 @@ openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
-openvm-rv32im-circuit.workspace = true
-openvm-rv32im-transpiler.workspace = true
-openvm-keccak256-circuit.workspace = true
-openvm-keccak256-transpiler.workspace = true
-openvm-algebra-circuit.workspace = true
-openvm-algebra-transpiler.workspace = true
-openvm-ecc-circuit.workspace = true
-openvm-ecc-transpiler.workspace = true
-openvm-pairing-circuit.workspace = true
-openvm-pairing-guest.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
@@ -35,19 +25,16 @@ tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
-derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
-num-bigint = { workspace = true, features = ["std", "serde"] }
 rand.workspace = true
-serde.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 
 [features]
-default = ["parallel", "jemalloc", "bench-metrics"]
-bench-metrics = ["openvm-sdk/bench-metrics"]
-profiling = ["openvm-sdk/profiling"]
+default = ["parallel", "jemalloc", "metrics"]
+metrics = ["openvm-sdk/metrics"]
+perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 aggregation = []                                    # runs leaf aggregation benchmarks
 evm = ["openvm-sdk/evm-verify"]
 parallel = ["openvm-sdk/parallel"]

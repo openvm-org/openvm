@@ -244,7 +244,18 @@ pub struct Rv32IsEqualModAdapterRecord<
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-pub struct Rv32IsEqualModeAdapterStep<
+#[derive(Clone, Copy)]
+pub struct Rv32IsEqualModAdapterStep<
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCK_SIZE: usize,
+    const TOTAL_READ_SIZE: usize,
+> {
+    pointer_max_bits: usize,
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32IsEqualModAdapterFiller<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -259,34 +270,27 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
-    pub fn new(
-        pointer_max_bits: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> Self {
+    pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
         assert_eq!(TOTAL_READ_SIZE, BLOCKS_PER_READ * BLOCK_SIZE);
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Self {
-            pointer_max_bits,
-            bitwise_lookup_chip,
-        }
+        Self { pointer_max_bits }
     }
 }
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
-    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > AdapterTraceStep<F>
+    for Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -301,14 +305,14 @@ where
         TOTAL_READ_SIZE,
     >;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -331,9 +335,11 @@ where
 
         // Read memory values
         from_fn(|i| {
-            assert!(record.rs_val[i] as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits));
+            debug_assert!(
+                record.rs_val[i] as usize + TOTAL_READ_SIZE - 1 < (1 << self.pointer_max_bits)
+            );
             from_fn::<_, BLOCKS_PER_READ, _>(|j| {
-                tracing_read::<_, BLOCK_SIZE>(
+                tracing_read::<BLOCK_SIZE>(
                     memory,
                     RV32_MEMORY_AS,
                     record.rs_val[i] + (j * BLOCK_SIZE) as u32,
@@ -348,7 +354,7 @@ where
 
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -368,14 +374,16 @@ where
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
-    for Rv32IsEqualModeAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > AdapterTraceFiller<F>
+    for Rv32IsEqualModAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
+    const WIDTH: usize =
+        Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         let record: &Rv32IsEqualModAdapterRecord<
             NUM_READS,

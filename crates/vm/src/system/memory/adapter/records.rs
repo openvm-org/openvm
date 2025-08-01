@@ -14,7 +14,7 @@ pub struct AccessRecordHeader {
     pub timestamp_and_mask: u32,
     pub address_space: u32,
     pub pointer: u32,
-    // TODO: these three are easily mergeable into a single u32
+    // PERF: these three are easily mergeable into a single u32
     pub block_size: u32,
     pub lowest_block_size: u32,
     pub type_size: u32,
@@ -24,7 +24,7 @@ pub struct AccessRecordHeader {
 #[derive(Debug)]
 pub struct AccessRecordMut<'a> {
     pub header: &'a mut AccessRecordHeader,
-    // TODO(AG): optimize with some `Option` serialization stuff
+    // PERF(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32], // len is block_size / lowest_block_size
     pub data: &'a mut [u8],        // len is block_size * type_size
 }
@@ -117,4 +117,28 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         ));
         <[u8] as CustomBorrow<AccessRecordMut<'a>, AccessLayout>>::custom_borrow(bytes, layout)
     }
+}
+
+/// `trace_heights[i]` is assumed to correspond to `Adapter< 2^(i+1) >`.
+pub fn arena_size_bound(trace_heights: &[u32]) -> usize {
+    // At the very worst, each row in `Adapter<N>`
+    // corresponds to a unique record of `block_size` being `2 * N`,
+    // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
+    let size_bound = trace_heights
+        .iter()
+        .enumerate()
+        .map(|(i, &h)| {
+            size_by_layout(&AccessLayout {
+                block_size: 1 << (i + 1),
+                lowest_block_size: 1,
+                type_size: 4,
+            }) * h as usize
+        })
+        .sum::<usize>();
+    tracing::debug!(
+        "Allocating {} bytes for memory adapters arena from heights {:?}",
+        size_bound,
+        trace_heights
+    );
+    size_bound
 }

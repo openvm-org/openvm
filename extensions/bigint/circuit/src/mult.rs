@@ -1,15 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32Mul256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
-    VmSegmentState,
-};
-use openvm_circuit_derive::{TraceFiller, TraceStep};
-use openvm_circuit_primitives::range_tuple::SharedRangeTupleCheckerChip;
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -17,33 +9,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapAdapterAir, Rv32HeapAdapterStep};
-use openvm_rv32im_circuit::{MultiplicationCoreAir, MultiplicationStep};
+use openvm_rv32_adapters::Rv32HeapAdapterStep;
+use openvm_rv32im_circuit::MultiplicationStep;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{INT256_NUM_LIMBS, RV32_CELL_BITS};
+use crate::{Rv32Multiplication256Step, INT256_NUM_LIMBS};
 
-/// Multiplication256
-pub type Rv32Multiplication256Air = VmAirWrapper<
-    Rv32HeapAdapterAir<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>,
-    MultiplicationCoreAir<INT256_NUM_LIMBS, RV32_CELL_BITS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32Multiplication256Step(BaseStep);
-pub type Rv32Multiplication256Chip<F> =
-    NewVmChipWrapper<F, Rv32Multiplication256Air, Rv32Multiplication256Step, MatrixRecordArena<F>>;
-
-type BaseStep = MultiplicationStep<AdapterStep, INT256_NUM_LIMBS, RV32_CELL_BITS>;
 type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 impl Rv32Multiplication256Step {
-    pub fn new(
-        adapter: AdapterStep,
-        range_tuple_chip: SharedRangeTupleCheckerChip<2>,
-        offset: usize,
-    ) -> Self {
-        Self(BaseStep::new(adapter, range_tuple_chip, offset))
+    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
+        Self(MultiplicationStep::new(adapter, offset))
     }
 }
 
@@ -55,7 +32,7 @@ struct MultPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
+impl<F: PrimeField32> InsExecutorE1<F> for Rv32Multiplication256Step {
     fn pre_compute_size(&self) -> usize {
         size_of::<MultPreCompute>()
     }
@@ -65,7 +42,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E1ExecutionCtx,
     {
@@ -75,7 +52,7 @@ impl<F: PrimeField32> StepExecutorE1<F> for Rv32Multiplication256Step {
     }
 }
 
-impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
+impl<F: PrimeField32> InsExecutorE2<F> for Rv32Multiplication256Step {
     fn e2_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultPreCompute>>()
     }
@@ -86,7 +63,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx,
     {
@@ -100,7 +77,7 @@ impl<F: PrimeField32> StepExecutorE2<F> for Rv32Multiplication256Step {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &MultPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
@@ -116,7 +93,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MultPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -124,7 +101,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MultPreCompute> = pre_compute.borrow();
     vm_state
@@ -139,7 +116,7 @@ impl Rv32Multiplication256Step {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut MultPreCompute,
-    ) -> openvm_circuit::arch::Result<()> {
+    ) -> Result<(), StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -151,7 +128,7 @@ impl Rv32Multiplication256Step {
         } = inst;
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode =
             MulOpcode::from_usize(opcode.local_opcode_idx(Rv32Mul256Opcode::CLASS_OFFSET));

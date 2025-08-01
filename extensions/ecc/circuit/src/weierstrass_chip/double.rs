@@ -1,26 +1,42 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    array::from_fn,
+    borrow::{Borrow, BorrowMut},
+    cell::RefCell,
+    rc::Rc,
+};
 
+use derive_more::derive::{Deref, DerefMut};
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_circuit::{
-    arch::ExecutionBridge,
-    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+    arch::*,
+    system::memory::{
+        offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
+    },
 };
-use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::InstructionExecutor;
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    Chip, ChipUsageGetter,
+    AlignedBytesBorrow,
 };
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
-use openvm_instructions::riscv::RV32_CELL_BITS;
-use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldVariable,
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
+use openvm_mod_circuit_builder::{
+    run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
+    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep, FieldVariable,
+};
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{WeierstrassAir, WeierstrassChip, WeierstrassStep};
+use super::{curves::get_sw_curve_type, WeierstrassAir, WeierstrassChip};
+use crate::weierstrass_chip::curves::{sw_double, SwCurveType};
 
 pub fn sw_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
@@ -34,7 +50,7 @@ pub fn sw_double_ne_expr(
     let mut x1 = ExprBuilder::new_input(builder.clone());
     let mut y1 = ExprBuilder::new_input(builder.clone());
     let a = ExprBuilder::new_const(builder.clone(), a_biguint.clone());
-    let is_double_flag = builder.borrow_mut().new_flag();
+    let is_double_flag = (*builder).borrow_mut().new_flag();
     // We need to prevent divide by zero when not double flag
     // (equivalently, when it is the setup opcode)
     let lambda_denom = FieldVariable::select(
@@ -48,7 +64,7 @@ pub fn sw_double_ne_expr(
     let mut y3 = lambda * (x1 - x3.clone()) - y1;
     y3.save_output();
 
-    let builder = builder.borrow().clone();
+    let builder = (*builder).borrow().clone();
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint])
 }
 
@@ -56,54 +72,396 @@ pub fn sw_double_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
-pub struct SwDoubleChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE>,
+#[derive(Clone, InstructionExecutor, Deref, DerefMut)]
+pub struct SwDoubleStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    FieldExpressionStep<Rv32VecHeapAdapterStep<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    SwDoubleChip<F, BLOCKS, BLOCK_SIZE>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        mem_helper: SharedMemoryHelper<F>,
-        pointer_max_bits: usize,
-        config: ExprBuilderConfig,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker: SharedVariableRangeCheckerChip,
-        a_biguint: BigUint,
-    ) -> Self {
-        let expr = sw_double_ne_expr(config, range_checker.bus(), a_biguint);
+fn gen_base_expr(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    a_biguint: BigUint,
+) -> (FieldExpr, Vec<usize>) {
+    let expr = sw_double_ne_expr(config, range_checker_bus, a_biguint);
 
-        let local_opcode_idx = vec![
-            Rv32WeierstrassOpcode::SW_DOUBLE as usize,
-            Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
-        ];
+    let local_opcode_idx = vec![
+        Rv32WeierstrassOpcode::SW_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
+    ];
 
-        let air = WeierstrassAir::new(
-            Rv32VecHeapAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                pointer_max_bits,
-            ),
-            FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
-        );
+    (expr, local_opcode_idx)
+}
 
-        let step = WeierstrassStep::new(
-            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+#[allow(clippy::too_many_arguments)]
+pub fn get_sw_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pointer_max_bits: usize,
+    offset: usize,
+    a_biguint: BigUint,
+) -> WeierstrassAir<1, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
+    WeierstrassAir::new(
+        Rv32VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            bitwise_lookup_bus,
+            pointer_max_bits,
+        ),
+        FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
+    )
+}
+
+pub fn get_sw_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+    a_biguint: BigUint,
+) -> SwDoubleStep<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
+    SwDoubleStep(FieldExpressionStep::new(
+        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        vec![],
+        "SwDouble",
+    ))
+}
+
+pub fn get_sw_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pointer_max_bits: usize,
+    a_biguint: BigUint,
+) -> WeierstrassChip<F, 1, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus(), a_biguint);
+    WeierstrassChip::new(
+        FieldExpressionFiller::new(
+            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
-            offset,
             local_opcode_idx,
             vec![],
             range_checker,
-            "EcDouble",
             true,
-        );
-        Self(WeierstrassChip::new(air, step, mem_helper))
+        ),
+        mem_helper,
+    )
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct SwDoublePreCompute<'a> {
+    expr: &'a FieldExpr,
+    rs_addrs: [u8; 1],
+    a: u8,
+    flag_idx: u8,
+}
+
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> SwDoubleStep<BLOCKS, BLOCK_SIZE> {
+    fn pre_compute_impl<F: PrimeField32>(
+        &'a self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut SwDoublePreCompute<'a>,
+    ) -> Result<bool, StaticProgramError> {
+        let Instruction {
+            opcode, a, b, d, e, ..
+        } = inst;
+
+        // Validate instruction format
+        let a = a.as_canonical_u32();
+        let b = b.as_canonical_u32();
+        let d = d.as_canonical_u32();
+        let e = e.as_canonical_u32();
+        if d != RV32_REGISTER_AS || e != RV32_MEMORY_AS {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+
+        // Pre-compute flag_idx
+        let needs_setup = self.expr.needs_setup();
+        let mut flag_idx = self.expr.num_flags() as u8;
+        if needs_setup {
+            // Find which opcode this is in our local_opcode_idx list
+            if let Some(opcode_position) = self
+                .local_opcode_idx
+                .iter()
+                .position(|&idx| idx == local_opcode)
+            {
+                // If this is NOT the last opcode (setup), get the corresponding flag_idx
+                if opcode_position < self.opcode_flag_idx.len() {
+                    flag_idx = self.opcode_flag_idx[opcode_position] as u8;
+                }
+            }
+        }
+
+        let rs_addrs = [b as u8];
+        *data = SwDoublePreCompute {
+            expr: &self.expr,
+            rs_addrs,
+            a: a as u8,
+            flag_idx,
+        };
+
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize;
+
+        Ok(is_setup)
     }
+}
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE1<F>
+    for SwDoubleStep<BLOCKS, BLOCK_SIZE>
+{
+    #[inline(always)]
+    fn pre_compute_size(&self) -> usize {
+        std::mem::size_of::<SwDoublePreCompute>()
+    }
+
+    fn pre_compute_e1<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E1ExecutionCtx,
+    {
+        let pre_compute: &mut SwDoublePreCompute = data.borrow_mut();
+
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        if is_setup {
+            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.expr.builder.prime;
+            let a_coeff = &pre_compute.expr.setup_values[0];
+            get_sw_curve_type(modulus, a_coeff)
+        } {
+            match curve_type {
+                SwCurveType::K256 => {
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::K256 as u8 }>)
+                }
+                SwCurveType::P256 => {
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::P256 as u8 }>)
+                }
+                SwCurveType::BN254 => {
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BN254 as u8 }>)
+                }
+                SwCurveType::BLS12_381 => {
+                    Ok(
+                        execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BLS12_381 as u8 }>,
+                    )
+                }
+            }
+        } else {
+            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
+        }
+    }
+}
+
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE2<F>
+    for SwDoubleStep<BLOCKS, BLOCK_SIZE>
+{
+    #[inline(always)]
+    fn e2_pre_compute_size(&self) -> usize {
+        std::mem::size_of::<E2PreCompute<SwDoublePreCompute>>()
+    }
+
+    fn pre_compute_e2<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx,
+    {
+        let pre_compute: &mut E2PreCompute<SwDoublePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        if is_setup {
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
+        } else if let Some(curve_type) = {
+            let modulus = &pre_compute.data.expr.builder.prime;
+            let a_coeff = &pre_compute.data.expr.setup_values[0];
+            get_sw_curve_type(modulus, a_coeff)
+        } {
+            match curve_type {
+                SwCurveType::K256 => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::K256 as u8 }>)
+                }
+                SwCurveType::P256 => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::P256 as u8 }>)
+                }
+                SwCurveType::BN254 => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BN254 as u8 }>)
+                }
+                SwCurveType::BLS12_381 => {
+                    Ok(
+                        execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BLS12_381 as u8 }>,
+                    )
+                }
+            }
+        } else {
+            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
+        }
+    }
+}
+
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &SwDoublePreCompute = pre_compute.borrow();
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e1_setup_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &SwDoublePreCompute = pre_compute.borrow();
+
+    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<SwDoublePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(&pre_compute.data, vm_state);
+}
+
+unsafe fn execute_e2_setup_impl<
+    F: PrimeField32,
+    CTX: E2ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<SwDoublePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, vm_state);
+}
+
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+>(
+    pre_compute: &SwDoublePreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    // Read register values
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+
+    // Read memory values for the point
+    let read_data: [[u8; BLOCK_SIZE]; BLOCKS] = {
+        let address = rs_vals[0];
+        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+        from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    };
+
+    let output_data = if CURVE_TYPE == u8::MAX {
+        let read_data: DynArray<u8> = read_data.into();
+        run_field_expression_precomputed::<true>(
+            pre_compute.expr,
+            pre_compute.flag_idx as usize,
+            &read_data.0,
+        )
+        .into()
+    } else {
+        sw_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+    };
+
+    let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
+    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+
+    // Write output data to memory
+    for (i, block) in output_data.into_iter().enumerate() {
+        vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
+    }
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+}
+
+unsafe fn execute_e12_setup_impl<
+    F: PrimeField32,
+    CTX: E1ExecutionCtx,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+>(
+    pre_compute: &SwDoublePreCompute,
+    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+) {
+    let rs_vals = pre_compute
+        .rs_addrs
+        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+
+    // Read the setup input data
+    let setup_input_data: [[u8; BLOCK_SIZE]; BLOCKS] = {
+        let address = rs_vals[0];
+        from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
+    };
+
+    // Extract first field element as the prime
+    let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
+
+    if input_prime != pre_compute.expr.builder.prime {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
+
+    // Extract second field element as the a coefficient
+    let input_a = BigUint::from_bytes_le(setup_input_data[BLOCKS / 2..].as_flattened());
+    let coeff_a = &pre_compute.expr.setup_values[0];
+    if input_a != *coeff_a {
+        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        return;
+    }
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
 }

@@ -5,9 +5,8 @@ use itertools::Itertools;
 
 use crate::{
     aggregate::{
-        AggregateMetrics, CELLS_USED_LABEL, CYCLES_LABEL, EXECUTE_E3_TIME_LABEL,
-        EXECUTE_METERED_TIME_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL,
-        TRACE_GEN_TIME_LABEL,
+        AggregateMetrics, EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL, INSNS_LABEL,
+        MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
     },
     types::MdTableCell,
 };
@@ -41,7 +40,7 @@ pub struct SingleSummaryMetrics {
     /// Parallel proof time is approximated as the max of proof times within a group
     pub par_proof_time_ms: MdTableCell,
     pub cells_used: MdTableCell,
-    pub cycles: MdTableCell,
+    pub insns: MdTableCell,
 }
 
 impl GithubSummary {
@@ -146,14 +145,14 @@ impl SingleSummaryMetrics {
         write!(
             writer,
             "{} | {} | {} |",
-            self.proof_time_ms, self.cycles, self.cells_used,
+            self.proof_time_ms, self.insns, self.cells_used,
         )?;
         Ok(())
     }
 
     pub fn set_diff(&mut self, prev: &Self) {
         self.cells_used.diff = Some(self.cells_used.val - prev.cells_used.val);
-        self.cycles.diff = Some(self.cycles.val - prev.cycles.val);
+        self.insns.diff = Some(self.insns.val - prev.insns.val);
         self.proof_time_ms.diff = Some(self.proof_time_ms.val - prev.proof_time_ms.val);
     }
 }
@@ -213,13 +212,13 @@ impl AggregateMetrics {
             MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
         };
         let cells_used = stats
-            .get(CELLS_USED_LABEL)
+            .get(MAIN_CELLS_USED_LABEL)
             .map(|s| s.sum)
             .unwrap_or_default();
-        let cycles = stats.get(CYCLES_LABEL).map(|s| s.sum).unwrap_or_default();
+        let insns = stats.get(INSNS_LABEL).map(|s| s.sum).unwrap_or_default();
         Some(SingleSummaryMetrics {
             cells_used,
-            cycles,
+            insns,
             proof_time_ms,
             par_proof_time_ms,
         })

@@ -3,48 +3,49 @@ use std::{path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
+    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
+    ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::{
-            e1::E1Ctx,
-            metered::{ctx::DEFAULT_PAGE_BITS, MeteredCtx},
-        },
+        execution_mode::{e1::E1Ctx, metered::MeteredCtx},
         instructions::exe::VmExe,
         interpreter::InterpretedInstance,
-        InitFileGenerator, SystemConfig, VirtualMachine, VmChipComplex, VmConfig,
+        *,
     },
     derive::VmConfig,
+    system::*,
 };
-use openvm_ecc_circuit::{EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
+use openvm_ecc_circuit::{EccCpuProverExt, EccExtension, EccExtensionExecutor, EccExtensionPeriphery};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256Periphery};
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_pairing_circuit::{
-    PairingCurve, PairingExtension, PairingExtensionExecutor, PairingExtensionPeriphery,
+    PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
 use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
 use openvm_pairing_transpiler::PairingTranspilerExtension;
 use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery, Rv32M,
-    Rv32MExecutor, Rv32MPeriphery,
+    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha256Periphery};
+use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::{
-        default_engine, BabyBearPoseidon2Config, BabyBearPoseidon2Engine,
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::{StarkEngine, StarkFriEngine},
+    openvm_stark_backend::{
+        self,
+        config::{StarkGenericConfig, Val},
+        p3_field::PrimeField32,
+        prover::cpu::{CpuBackend, CpuDevice},
     },
-    openvm_stark_backend::{self, p3_field::PrimeField32},
     p3_baby_bear::BabyBear,
 };
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -65,11 +66,11 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "pairing",
 ];
 
-static SHARED_INTERACTIONS: OnceLock<Vec<usize>> = OnceLock::new();
+static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub rv32i: Rv32I,
@@ -89,7 +90,7 @@ pub struct ExecuteConfig {
     pub fp2: Fp2Extension,
     #[extension]
     pub ecc: EccExtension,
-    #[extension]
+    #[extension(generics = true)]
     pub pairing: PairingExtension,
 }
 
@@ -128,14 +129,60 @@ impl InitFileGenerator for ExecuteConfig {
     }
 }
 
-fn main() {
-    divan::main();
+pub struct ExecuteBuilder;
+impl<E, SC> VmBuilder<E> for ExecuteBuilder
+where
+    SC: StarkGenericConfig,
+    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    Val<SC>: PrimeField32,
+{
+    type VmConfig = ExecuteConfig;
+    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<SC>>;
+
+    fn create_chip_complex(
+        &self,
+        config: &ExecuteConfig,
+        circuit: AirInventory<SC>,
+    ) -> Result<
+        VmChipComplex<SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Int256CpuProverExt,
+            &config.bigint,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Keccak256CpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &AlgebraCpuProverExt,
+            &config.modular,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &EccCpuProverExt,
+            &config.weierstrass,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
+        Ok(chip_complex)
+    }
 }
 
-fn create_default_vm(
-) -> VirtualMachine<BabyBearPoseidon2Config, BabyBearPoseidon2Engine, ExecuteConfig> {
-    let vm_config = ExecuteConfig::default();
-    VirtualMachine::new(default_engine(), vm_config)
+fn main() {
+    divan::main();
 }
 
 fn create_default_transpiler() -> Transpiler<BabyBear> {
@@ -160,12 +207,14 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(elf, transpiler)?)
 }
 
-fn shared_interactions() -> &'static Vec<usize> {
-    SHARED_INTERACTIONS.get_or_init(|| {
-        let vm = create_default_vm();
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
-        vk.num_interactions()
+fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
+    METERED_CTX.get_or_init(|| {
+        let config = ExecuteConfig::default();
+        let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+        let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
+        let ctx = vm.build_metered_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        (ctx, executor_idx_to_air_idx)
     })
 }
 
@@ -175,7 +224,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let interpreter = InterpretedInstance::new(vm_config, exe);
+            let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
             (interpreter, vec![])
         })
         .bench_values(|(interpreter, input)| {
@@ -192,23 +241,14 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
 
-            let chip_complex: VmChipComplex<BabyBear, _, _> =
-                vm_config.create_chip_complex().unwrap();
-            let interactions = shared_interactions();
-            let segmentation_strategy =
-                &<ExecuteConfig as VmConfig<BabyBear>>::system(&vm_config).segmentation_strategy;
+            let (ctx, executor_idx_to_air_idx) = metering_setup();
+            let interpreter = InterpretedInstance::new(vm_config, exe).unwrap();
 
-            let ctx: MeteredCtx<DEFAULT_PAGE_BITS> =
-                MeteredCtx::new(&chip_complex, interactions.to_vec())
-                    .with_max_trace_height(segmentation_strategy.max_trace_height() as u32)
-                    .with_max_cells(segmentation_strategy.max_cells());
-            let interpreter = InterpretedInstance::new(vm_config, exe);
-
-            (interpreter, vec![], ctx)
+            (interpreter, vec![], ctx.clone(), executor_idx_to_air_idx)
         })
-        .bench_values(|(interpreter, input, ctx)| {
+        .bench_values(|(interpreter, input, ctx, executor_idx_to_air_idx)| {
             interpreter
-                .execute_e2(ctx, input)
+                .execute_e2(ctx, input, executor_idx_to_air_idx)
                 .expect("Failed to execute program");
         });
 }

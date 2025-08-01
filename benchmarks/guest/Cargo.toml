@@ -1,0 +1,31 @@
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+
+[workspace]
+members = ["base64_json", "bincode", "bubblesort", "ecrecover", "factorial_iterative_u256", "fibonacci", "fibonacci_iterative", "fibonacci_recursive", "keccak256", "keccak256_iter", "kitchen-sink", "pairing", "quicksort", "regex", "revm_snailtracer", "revm_transfer", "rkyv", "sha256", "sha256_iter"]
+resolver = "2"
+
+[workspace.dependencies]
+openvm = { path = "../../crates/toolchain/openvm" }
+openvm-algebra-guest = { path = "../../extensions/algebra/guest", default-features = false }
+openvm-ecc-guest = { path = "../../extensions/ecc/guest", default-features = false }
+openvm-keccak256 = { path = "../../guest-libs/keccak256/", default-features = false }
+openvm-ruint = { path = "../../guest-libs/ruint/", package = "ruint", default-features = false }
+openvm-pairing = { path = "../../guest-libs/pairing/", default-features = false }
+openvm-sha2 = { path = "../../guest-libs/sha2/", default-features = false }
+openvm-k256 = { path = "../../guest-libs/k256/", package = "k256" }
+openvm-p256 = { path = "../../guest-libs/p256/", package = "p256" }
+
+# patch for ecrecover
+[patch.crates-io]
+k256 = { path = "../../guest-libs/k256/" }
+
+[profile.release]
+panic = "abort"
+lto = "thin"    # faster compile time
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false

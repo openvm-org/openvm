@@ -1,17 +1,11 @@
-[workspace]
 [package]
 name = "openvm-factorial-iterative-u256-program"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-ruint = { path = "../../../guest-libs/ruint/", package = "ruint", default-features = false }
+openvm = { workspace = true, features = ["std"] }
+openvm-ruint.workspace = true
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false
