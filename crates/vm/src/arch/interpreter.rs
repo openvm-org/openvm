@@ -7,7 +7,7 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    exe::VmExe,
+    exe::{SparseMemoryImage, VmExe},
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
@@ -20,22 +20,36 @@ use crate::{
         create_memory_image,
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         ExecuteFunc, ExecutionError, ExecutorInventory, ExecutorInventoryError, ExitCode,
-        InsExecutorE1, InsExecutorE2, PreComputeInstruction, StaticProgramError, Streams,
-        SystemConfig, VmExecutionConfig, VmSegmentState, VmState,
+        InsExecutorE1, InsExecutorE2, StaticProgramError, Streams, SystemConfig, VmExecutionConfig,
+        VmSegmentState, VmState,
     },
     system::memory::online::GuestMemory,
 };
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
-pub struct InterpretedInstance<F, E> {
+///
+/// The generic `Ctx` and constructor determine whether this supported pure execution or metered
+/// execution.
+pub struct InterpretedInstance<F, Ctx> {
     system_config: SystemConfig,
-    // TODO: don't need exe, just precompute handlers
-    exe: VmExe<F>,
-    // TODO: don't clone config or inventory, hold reference
-    inventory: ExecutorInventory<E>,
-    e1_pre_compute_max_size: usize,
-    e2_pre_compute_max_size: usize,
+
+    pre_compute_buf: AlignedBuf,
+    /// Instruction table of function pointers and pointers to the pre-computed buffer. Indexed by
+    /// `pc_index = (pc - pc_base) / DEFAULT_PC_STEP`.
+    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+
+    pc_base: u32,
+    pc_start: u32,
+
+    init_memory: SparseMemoryImage,
+}
+
+struct PreComputeInstruction<F, Ctx> {
+    pub handler: ExecuteFunc<F, Ctx>,
+    // Avoid lifetimes because the borrowed buffer is owned by the same struct
+    // (InterpretedInstance)
+    pub pre_compute: *const [u8],
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -45,14 +59,14 @@ struct TerminatePreCompute {
 }
 
 macro_rules! execute_with_metrics {
-    ($span:literal, $program:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
+    ($span:literal, $pc_base:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
         let start_instret = $vm_state.instret;
 
         info_span!($span).in_scope(|| unsafe {
-            execute_impl($program, $vm_state, $pre_compute_insts);
+            execute_impl($pc_base, $vm_state, $pre_compute_insts);
         });
 
         #[cfg(feature = "metrics")]
@@ -66,89 +80,60 @@ macro_rules! execute_with_metrics {
     }};
 }
 
-impl<F, E> InterpretedInstance<F, E>
+impl<F, Ctx> InterpretedInstance<F, Ctx>
 where
     F: PrimeField32,
-    E: InsExecutorE1<F> + InsExecutorE2<F>,
+    Ctx: E1ExecutionCtx,
 {
-    pub fn new<VC>(vm_config: VC, exe: impl Into<VmExe<F>>) -> Result<Self, ExecutorInventoryError>
+    /// Creates a new interpreter instance for pure execution.
+    // (E1 execution)
+    pub fn new<E>(
+        inventory: &ExecutorInventory<E>,
+        exe: &VmExe<F>,
+    ) -> Result<Self, StaticProgramError>
     where
-        VC: VmExecutionConfig<F, Executor = E> + AsRef<SystemConfig>,
+        E: InsExecutorE1<F>,
     {
-        let exe = exe.into();
         let program = &exe.program;
-        let inventory = vm_config.create_executors()?;
-        let e1_pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
-        let e2_pre_compute_max_size = get_e2_pre_compute_max_size(program, &inventory);
-        Ok(Self {
-            exe,
-            system_config: vm_config.as_ref().clone(),
+        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program.len(), pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
+            program,
             inventory,
-            e1_pre_compute_max_size,
-            e2_pre_compute_max_size,
+            &mut split_pre_compute_buf,
+        )?;
+        let pc_base = program.pc_base;
+        let pc_start = exe.pc_start;
+        let init_memory = exe.init_memory.clone();
+
+        Ok(Self {
+            system_config: inventory.config().clone(),
+            pre_compute_buf,
+            pre_compute_insns,
+            pc_base,
+            pc_start,
+            init_memory,
         })
     }
 
     /// Execute the VM program with the given execution control and inputs. Returns the final VM
     /// state with the `ExecutionControl` context.
-    pub fn execute<Ctx: E1ExecutionCtx>(
+    pub fn execute(
         &self,
         ctx: Ctx,
         inputs: impl Into<Streams<F>>,
     ) -> Result<VmSegmentState<F, GuestMemory, Ctx>, ExecutionError> {
-        // Initialize the chip complex
+        // Initialize the VM state
         let mut vm_state = self.init_vm_state(ctx, inputs);
 
         // Start execution
-        let program = &self.exe.program;
-        let pre_compute_max_size = self.e1_pre_compute_max_size;
-        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
-        let mut split_pre_compute_buf =
-            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
-
-        let pre_compute_insts = get_pre_compute_instructions::<_, _, Ctx>(
-            program,
-            &self.inventory,
-            &mut split_pre_compute_buf,
-        )?;
-        execute_with_metrics!("execute_e1", program, &mut vm_state, &pre_compute_insts);
-        if vm_state.exit_code.is_err() {
-            Err(vm_state.exit_code.err().unwrap())
-        } else {
-            check_exit_code(&vm_state)?;
-            Ok(vm_state)
-        }
-    }
-
-    /// Execute the VM program with the given execution control and inputs. Returns the final VM
-    /// state with the `ExecutionControl` context.
-    pub fn execute_e2<Ctx: E2ExecutionCtx>(
-        &self,
-        ctx: Ctx,
-        inputs: impl Into<Streams<F>>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<VmSegmentState<F, GuestMemory, Ctx>, ExecutionError> {
-        // Initialize the chip complex
-        let mut vm_state = self.init_vm_state(ctx, inputs);
-
-        // Start execution
-        let program = &self.exe.program;
-        let pre_compute_max_size = self.e2_pre_compute_max_size;
-        let mut pre_compute_buf = self.alloc_pre_compute_buf(pre_compute_max_size);
-        let mut split_pre_compute_buf =
-            self.split_pre_compute_buf(&mut pre_compute_buf, pre_compute_max_size);
-
-        let pre_compute_insts = get_e2_pre_compute_instructions::<_, _, Ctx>(
-            program,
-            &self.inventory,
-            executor_idx_to_air_idx,
-            &mut split_pre_compute_buf,
-        )?;
         execute_with_metrics!(
-            "execute_metered",
-            program,
+            "execute_e1",
+            self.pc_base,
             &mut vm_state,
-            &pre_compute_insts
+            &self.pre_compute_insns
         );
         if vm_state.exit_code.is_err() {
             Err(vm_state.exit_code.err().unwrap())
@@ -158,50 +143,115 @@ where
         }
     }
 
-    pub fn init_vm_state<Ctx: E1ExecutionCtx>(
+    // TODO: consolidate with create_initial_state
+    pub fn init_vm_state(
         &self,
         ctx: Ctx,
         inputs: impl Into<Streams<F>>,
     ) -> VmSegmentState<F, GuestMemory, Ctx> {
         let memory_config = &self.system_config.memory_config;
-        let memory = create_memory_image(memory_config, self.exe.init_memory.clone());
+        let memory = create_memory_image(memory_config, self.init_memory.clone());
 
-        let vm_state = VmState::new(0, self.exe.pc_start, memory, inputs.into(), 0);
+        let vm_state = VmState::new(0, self.pc_start, memory, inputs.into(), 0);
         VmSegmentState::new(vm_state, ctx)
-    }
-
-    #[inline(always)]
-    fn alloc_pre_compute_buf(&self, pre_compute_max_size: usize) -> AlignedBuf {
-        let program = &self.exe.program;
-        let program_len = program.instructions_and_debug_infos.len();
-        let buf_len = program_len * pre_compute_max_size;
-        AlignedBuf::uninit(buf_len, pre_compute_max_size)
-    }
-
-    #[inline(always)]
-    fn split_pre_compute_buf<'a>(
-        &self,
-        pre_compute_buf: &'a mut AlignedBuf,
-        pre_compute_max_size: usize,
-    ) -> Vec<&'a mut [u8]> {
-        let program = &self.exe.program;
-        let program_len = program.instructions_and_debug_infos.len();
-        let buf_len = program_len * pre_compute_max_size;
-        let mut pre_compute_buf_ptr =
-            unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
-        let mut split_pre_compute_buf = Vec::with_capacity(program_len);
-        for _ in 0..program_len {
-            let (first, last) = pre_compute_buf_ptr.split_at_mut(pre_compute_max_size);
-            pre_compute_buf_ptr = last;
-            split_pre_compute_buf.push(first);
-        }
-        split_pre_compute_buf
     }
 }
 
+impl<F, Ctx> InterpretedInstance<F, Ctx>
+where
+    F: PrimeField32,
+    Ctx: E2ExecutionCtx,
+{
+    /// Creates a new interpreter instance for pure execution.
+    // (E1 execution)
+    pub fn new_metered<E>(
+        inventory: &ExecutorInventory<E>,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: InsExecutorE2<F>,
+    {
+        let program = &exe.program;
+        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program.len(), pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
+            program,
+            inventory,
+            executor_idx_to_air_idx,
+            &mut split_pre_compute_buf,
+        )?;
+
+        let pc_base = program.pc_base;
+        let pc_start = exe.pc_start;
+        let init_memory = exe.init_memory.clone();
+
+        Ok(Self {
+            system_config: inventory.config().clone(),
+            pre_compute_buf,
+            pre_compute_insns,
+            pc_base,
+            pc_start,
+            init_memory,
+        })
+    }
+
+    /// Execute the VM program with the given execution control and inputs. Returns the final VM
+    /// state with the `ExecutionControl` context.
+    pub fn execute_metered(
+        &self,
+        ctx: Ctx,
+        inputs: impl Into<Streams<F>>,
+    ) -> Result<VmSegmentState<F, GuestMemory, Ctx>, ExecutionError> {
+        // Initialize the chip complex
+        let mut vm_state = self.init_vm_state(ctx, inputs);
+
+        // Start execution
+        execute_with_metrics!(
+            "execute_metered",
+            self.pc_base,
+            &mut vm_state,
+            &self.pre_compute_insns
+        );
+        if vm_state.exit_code.is_err() {
+            Err(vm_state.exit_code.err().unwrap())
+        } else {
+            check_exit_code(&vm_state)?;
+            Ok(vm_state)
+        }
+    }
+}
+
+fn alloc_pre_compute_buf(program_len: usize, pre_compute_max_size: usize) -> AlignedBuf {
+    let buf_len = program_len * pre_compute_max_size;
+    AlignedBuf::uninit(buf_len, pre_compute_max_size)
+}
+
+fn split_pre_compute_buf<'a, F>(
+    program: &Program<F>,
+    pre_compute_buf: &'a mut AlignedBuf,
+    pre_compute_max_size: usize,
+) -> Vec<&'a mut [u8]> {
+    let program_len = program.instructions_and_debug_infos.len();
+    let buf_len = program_len * pre_compute_max_size;
+    let mut pre_compute_buf_ptr =
+        unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
+    let mut split_pre_compute_buf = Vec::with_capacity(program_len);
+    for _ in 0..program_len {
+        let (first, last) = pre_compute_buf_ptr.split_at_mut(pre_compute_max_size);
+        pre_compute_buf_ptr = last;
+        split_pre_compute_buf.push(first);
+    }
+    split_pre_compute_buf
+}
+
+/// # Safety
+/// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[inline(always)]
 unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
-    program: &Program<F>,
+    pc_base: u32,
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
@@ -214,9 +264,15 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
         if Ctx::should_suspend(vm_state) {
             break;
         }
-        let pc_index = get_pc_index(program, vm_state.pc).unwrap();
+        let pc_index = get_pc_index(pc_base, vm_state.pc);
         let inst = &fn_ptrs[pc_index];
-        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
+        // return Err(ExecutionError::PcOutOfBounds {
+        //     pc,
+        //     pc_base,
+        //     program_len: program.len(),
+        // });
+        // SAFETY: pre_compute assumed to live long enough
+        unsafe { (inst.handler)(&*inst.pre_compute, vm_state) };
     }
     if vm_state
         .exit_code
@@ -228,20 +284,14 @@ unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
     // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
-fn get_pc_index<F: Field>(program: &Program<F>, pc: u32) -> Result<usize, ExecutionError> {
-    let pc_base = program.pc_base;
-    let pc_index = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-    if !(0..program.len()).contains(&pc_index) {
-        return Err(ExecutionError::PcOutOfBounds {
-            pc,
-            pc_base,
-            program_len: program.len(),
-        });
-    }
-    Ok(pc_index)
+#[inline(always)]
+fn get_pc_index(pc_base: u32, pc: u32) -> usize {
+    ((pc - pc_base) / DEFAULT_PC_STEP) as usize
 }
 
 /// Bytes allocated according to the given Layout
+// @dev: This is duplicate from the openvm crate, but it doesn't seem worth importing `openvm` here
+// just for this.
 pub struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
@@ -312,7 +362,7 @@ fn get_pre_compute_max_size<F, E: InsExecutorE1<F>>(
         .next_power_of_two()
 }
 
-fn get_e2_pre_compute_max_size<F: PrimeField32, E: InsExecutorE2<F>>(
+fn get_metered_pre_compute_max_size<F, E: InsExecutorE2<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -345,11 +395,16 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
     None
 }
 
-fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E1ExecutionCtx>(
-    program: &'a Program<F>,
-    inventory: &'a ExecutorInventory<E>,
-    pre_compute: &'a mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
+fn get_pre_compute_instructions<F, Ctx, E>(
+    program: &Program<F>,
+    inventory: &ExecutorInventory<E>,
+    pre_compute: &mut [&mut [u8]],
+) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+where
+    F: PrimeField32,
+    Ctx: E1ExecutionCtx,
+    E: InsExecutorE1<F>,
+{
     program
         .instructions_and_debug_infos
         .iter()
@@ -358,7 +413,7 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
         .map(|(i, (inst_opt, buf))| {
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
-                tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
+                tracing::trace!("get_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
@@ -371,16 +426,16 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
                         pre_compute: buf,
                     }
                 } else {
-                    return Err(ExecutionError::DisabledOperation {
+                    return Err(StaticProgramError::DisabledOperation {
                         pc,
                         opcode: inst.opcode,
                     });
                 }
             } else {
+                // Dead instruction at this pc
                 PreComputeInstruction {
                     handler: |_, vm_state| {
-                        vm_state.exit_code =
-                            Err(StaticProgramError::InvalidInstruction(vm_state.pc).into());
+                        vm_state.exit_code = Err(ExecutionError::Unreachable(vm_state.pc));
                     },
                     pre_compute: buf,
                 }
@@ -390,17 +445,17 @@ fn get_pre_compute_instructions<'a, F: PrimeField32, E: InsExecutorE1<F>, Ctx: E
         .collect::<Result<Vec<_>, _>>()
 }
 
-fn get_e2_pre_compute_instructions<
-    'a,
+fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
+    program: &Program<F>,
+    inventory: &ExecutorInventory<E>,
+    executor_idx_to_air_idx: &[usize],
+    pre_compute: &mut [&mut [u8]],
+) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+where
     F: PrimeField32,
-    E: InsExecutorE2<F>,
     Ctx: E2ExecutionCtx,
->(
-    program: &'a Program<F>,
-    inventory: &'a ExecutorInventory<E>,
-    executor_idx_to_air_idx: &'a [usize],
-    pre_compute: &'a mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, ExecutionError> {
+    E: InsExecutorE2<F>,
+{
     program
         .instructions_and_debug_infos
         .iter()
@@ -428,7 +483,7 @@ fn get_e2_pre_compute_instructions<
                         pre_compute: buf,
                     }
                 } else {
-                    return Err(ExecutionError::DisabledOperation {
+                    return Err(StaticProgramError::DisabledOperation {
                         pc,
                         opcode: inst.opcode,
                     });
@@ -436,8 +491,7 @@ fn get_e2_pre_compute_instructions<
             } else {
                 PreComputeInstruction {
                     handler: |_, vm_state| {
-                        vm_state.exit_code =
-                            Err(StaticProgramError::InvalidInstruction(vm_state.pc).into());
+                        vm_state.exit_code = Err(ExecutionError::Unreachable(vm_state.pc));
                     },
                     pre_compute: buf,
                 }
@@ -459,7 +513,7 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
     None
 }
 
-fn check_exit_code<F: PrimeField32, Ctx>(
+fn check_exit_code<F, Ctx>(
     vm_state: &VmSegmentState<F, GuestMemory, Ctx>,
 ) -> Result<(), ExecutionError> {
     if let Ok(Some(exit_code)) = vm_state.exit_code.as_ref() {

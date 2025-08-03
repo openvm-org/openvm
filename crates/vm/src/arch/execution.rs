@@ -32,6 +32,8 @@ pub enum ExecutionError {
         pc_base: u32,
         program_len: usize,
     },
+    #[error("unreachable instruction at pc {0}")]
+    Unreachable(u32),
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
@@ -79,6 +81,8 @@ pub enum StaticProgramError {
     InvalidInstruction(u32),
     #[error("Too many executors")]
     TooManyExecutors,
+    #[error("at pc {pc}, opcode {opcode} was not enabled")]
+    DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
 }
@@ -113,11 +117,6 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
 }
 
 pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, CTX>);
-
-pub struct PreComputeInstruction<'a, F, CTX> {
-    pub handler: ExecuteFunc<F, CTX>,
-    pub pre_compute: &'a [u8],
-}
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
