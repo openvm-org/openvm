@@ -115,12 +115,10 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx();
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let (segments, _) = vm.executor().execute_metered(
-        exe.clone(),
-        input.clone(),
-        &executor_idx_to_air_idx,
-        metered_ctx,
-    )?;
+    let interpreter = vm
+        .executor()
+        .metered_instance(&exe, &executor_idx_to_air_idx)?;
+    let (segments, _) = interpreter.execute_metered(input.clone(), metered_ctx)?;
     let committed_exe = vm.commit_exe(exe);
     let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
     vm.load_program(cached_program_trace);

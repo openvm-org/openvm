@@ -52,9 +52,9 @@ use crate::{
         hasher::poseidon2::vm_poseidon2_hasher,
         interpreter::InterpretedInstance,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, InsExecutorE2, InstructionExecutor, SystemConfig, TraceFiller,
-        VmBuilder, VmCircuitConfig, VmExecutionConfig, VmSegmentExecutor, VmSegmentState,
-        PUBLIC_VALUES_AIR_ID,
+        ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
+        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig,
+        VmSegmentExecutor, VmSegmentState, PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -257,113 +257,40 @@ where
             system_config.segmentation_limits,
         )
     }
+}
 
-    pub fn create_initial_state(
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: InsExecutorE1<F>,
+{
+    /// Creates an instance of the interpreter specialized for pure execution, without metering, of
+    /// the given `exe`.
+    ///
+    /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
+    pub fn instance(
         &self,
         exe: &VmExe<F>,
-        input: impl Into<Streams<F>>,
-    ) -> VmState<F, GuestMemory> {
-        let memory_config = &self.config.as_ref().memory_config;
-        let memory = create_memory_image(memory_config, exe.init_memory.clone());
-        let seed = 0;
-        #[allow(unused_mut)]
-        let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
-        // Add backtrace information for either:
-        // - debugging
-        // - performance metrics
-        #[cfg(all(feature = "metrics", any(feature = "perf-metrics", debug_assertions)))]
-        {
-            state.metrics.fn_bounds = exe.fn_bounds.clone();
-            state.metrics.debug_infos = exe.program.debug_infos();
-        }
-        state
+    ) -> Result<InterpretedInstance<F, E1Ctx>, StaticProgramError> {
+        InterpretedInstance::new(&self.inventory, exe)
     }
 }
 
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
-    VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
-    VC::Executor: Clone + InsExecutorE1<F> + InsExecutorE2<F>,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: InsExecutorE2<F>,
 {
-    // /// Base E1 execution function that operates from a given state
-    // pub fn execute_e1_from_state(
-    //     &self,
-    //     exe: VmExe<F>,
-    //     state: VmState<F>,
-    //     num_insns: Option<u64>,
-    // ) -> Result<VmState<F>, ExecutionError> {
-    //     let instret_end = num_insns.map(|n| state.instret + n);
-
-    //     let handler = ProgramHandler::new(exe.program, &self.inventory)?;
-    //     let mut instance =
-    //         VmSegmentExecutor::<F, VC::Executor, _>::new(handler, E1ExecutionControl);
-    //     #[cfg(feature = "metrics")]
-    //     {
-    //         instance.metrics = state.metrics;
-    //         instance.set_fn_bounds(exe.fn_bounds.clone());
-    //     }
-
-    //     let ctx = E1Ctx::new(instret_end);
-    //     let mut exec_state = VmSegmentState::new(
-    //         state.instret,
-    //         state.pc,
-    //         state.memory,
-    //         state.input,
-    //         state.rng,
-    //         ctx,
-    //     );
-    //     execute_spanned!("execute_e1", instance, &mut exec_state)?;
-
-    //     if let Some(exit_code) = exec_state.exit_code {
-    //         check_exit_code(exit_code)?;
-    //     }
-    //     if let Some(instret_end) = instret_end {
-    //         assert_eq!(exec_state.instret, instret_end);
-    //     }
-
-    //     let state = VmState {
-    //         instret: exec_state.instret,
-    //         pc: exec_state.pc,
-    //         memory: exec_state.memory,
-    //         input: exec_state.streams,
-    //         rng: exec_state.rng,
-    //         #[cfg(feature = "metrics")]
-    //         metrics: instance.metrics.partial_take(),
-    //     };
-
-    //     Ok(state)
-    // }
-
-    // TODO[jpw]: rename to just execute
-    pub fn execute_e1(
+    /// Creates an instance of the interpreter specialized for pure execution, without metering, of
+    /// the given `exe`.
+    pub fn metered_instance(
         &self,
-        exe: impl Into<VmExe<F>>,
-        inputs: impl Into<Streams<F>>,
-        num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let interpreter = InterpretedInstance::new(self.config.clone(), exe)?;
-
-        let ctx = E1Ctx::new(num_insns);
-        let state = interpreter.execute(ctx, inputs)?;
-
-        Ok(state.vm_state)
-    }
-
-    pub fn execute_metered(
-        &self,
-        exe: impl Into<VmExe<F>>,
-        input: impl Into<Streams<F>>,
+        exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, GuestMemory), ExecutionError> {
-        let interpreter = InterpretedInstance::new(self.config.clone(), exe)?;
-
-        let state = interpreter.execute_e2(ctx, input, executor_idx_to_air_idx)?;
-        check_termination(state.exit_code)?;
-
-        let VmSegmentState { vm_state, ctx, .. } = state;
-        Ok((ctx.into_segments(), vm_state.memory))
+    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
 
@@ -408,6 +335,8 @@ pub enum VirtualMachineError {
     AirInventory(#[from] AirInventoryError),
     #[error("chip inventory error: {0}")]
     ChipInventory(#[from] ChipInventoryError),
+    #[error("static program error: {0}")]
+    StaticProgram(#[from] StaticProgramError),
     #[error("execution error: {0}")]
     Execution(#[from] ExecutionError),
     #[error("trace generation error: {0}")]
@@ -592,15 +521,26 @@ where
         })
     }
 
-    /// Same as [`VmExecutor::create_initial_state`] but sets more information for performance
-    /// metrics when feature "perf-metrics" is enabled.
+    /// Same as [`InterpretedInstance::create_initial_state`] but sets more information for
+    /// performance metrics when feature "perf-metrics" is enabled.
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
         input: impl Into<Streams<Val<E::SC>>>,
     ) -> VmState<Val<E::SC>, GuestMemory> {
+        let memory_config = &self.config().as_ref().memory_config;
+        let memory = create_memory_image(memory_config, exe.init_memory.clone());
+        let seed = 0;
         #[allow(unused_mut)]
-        let mut state = self.executor.create_initial_state(exe, input);
+        let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
+        // Add backtrace information for either:
+        // - debugging
+        // - performance metrics
+        #[cfg(all(feature = "metrics", any(feature = "perf-metrics", debug_assertions)))]
+        {
+            state.metrics.fn_bounds = exe.fn_bounds.clone();
+            state.metrics.debug_infos = exe.program.debug_infos();
+        }
         #[cfg(feature = "perf-metrics")]
         state.metrics.set_pk_info(&self.pk);
         state
@@ -947,12 +887,10 @@ where
         let exe = &self.exe;
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let e2_ctx = vm.build_metered_ctx();
-        let (segments, _) = vm.executor().execute_metered(
-            self.exe.clone(),
-            input.clone(),
-            &executor_idx_to_air_idx,
-            e2_ctx,
-        )?;
+        let interpreter = vm
+            .executor()
+            .metered_instance(&self.exe, &executor_idx_to_air_idx)?;
+        let (segments, _) = interpreter.execute_metered(input.clone(), e2_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = Some(vm.create_initial_state(exe, input));
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -1215,21 +1153,6 @@ pub(super) fn create_memory_image(
         memory_config.addr_spaces.clone(),
         init_memory,
     ))
-}
-
-fn check_exit_code(exit_code: u32) -> Result<(), ExecutionError> {
-    if exit_code != ExitCode::Success as u32 {
-        return Err(ExecutionError::FailedWithExitCode(exit_code));
-    }
-    Ok(())
-}
-
-fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
-    let exit_code = exit_code?;
-    match exit_code {
-        Some(code) => check_exit_code(code),
-        None => Err(ExecutionError::DidNotTerminate),
-    }
 }
 
 impl<E, VC> VirtualMachine<E, VC>

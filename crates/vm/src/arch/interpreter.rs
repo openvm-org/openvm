@@ -12,16 +12,19 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::p3_field::PrimeField32;
 use tracing::info_span;
 
 use crate::{
     arch::{
         create_memory_image,
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        ExecuteFunc, ExecutionError, ExecutorInventory, ExecutorInventoryError, ExitCode,
-        InsExecutorE1, InsExecutorE2, StaticProgramError, Streams, SystemConfig, VmExecutionConfig,
-        VmSegmentState, VmState,
+        execution_mode::{
+            e1::E1Ctx,
+            metered::{MeteredCtx, Segment},
+            E1ExecutionCtx, E2ExecutionCtx,
+        },
+        ExecuteFunc, ExecutionError, ExecutorInventory, ExitCode, InsExecutorE1, InsExecutorE2,
+        StaticProgramError, Streams, SystemConfig, VmSegmentState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -33,7 +36,9 @@ use crate::{
 /// execution.
 pub struct InterpretedInstance<F, Ctx> {
     system_config: SystemConfig,
-
+    // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
+    // to this buffer.
+    #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     /// Instruction table of function pointers and pointers to the pre-computed buffer. Indexed by
     /// `pc_index = (pc - pc_base) / DEFAULT_PC_STEP`.
@@ -59,26 +64,39 @@ struct TerminatePreCompute {
 }
 
 macro_rules! execute_with_metrics {
-    ($span:literal, $pc_base:expr, $vm_state:expr, $pre_compute_insts:expr) => {{
+    ($span:literal, $pc_base:expr, $exec_state:expr, $pre_compute_insts:expr) => {{
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
-        let start_instret = $vm_state.instret;
+        let start_instret = $exec_state.instret;
 
         info_span!($span).in_scope(|| unsafe {
-            execute_impl($pc_base, $vm_state, $pre_compute_insts);
+            execute_trampoline($pc_base, $exec_state, $pre_compute_insts);
         });
 
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = $vm_state.instret - start_instret;
+            let insns = $exec_state.instret - start_instret;
             metrics::counter!("insns").absolute(insns);
             metrics::gauge!(concat!($span, "_insn_mi/s"))
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }
     }};
 }
+
+impl<F, Ctx> InterpretedInstance<F, Ctx> {
+    pub fn create_initial_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F, GuestMemory> {
+        let memory_config = &self.system_config.memory_config;
+        let memory = create_memory_image(memory_config, self.init_memory.clone());
+        let seed = 0;
+        VmState::new(0, self.pc_start, memory, inputs.into(), seed)
+    }
+}
+
+// Constructors for E1 and E2 respectively, which generate pre-computed buffers and function
+// pointers
+// - Generic in `Ctx`
 
 impl<F, Ctx> InterpretedInstance<F, Ctx>
 where
@@ -95,7 +113,7 @@ where
         E: InsExecutorE1<F>,
     {
         let program = &exe.program;
-        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
+        let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program.len(), pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
@@ -116,44 +134,6 @@ where
             pc_start,
             init_memory,
         })
-    }
-
-    /// Execute the VM program with the given execution control and inputs. Returns the final VM
-    /// state with the `ExecutionControl` context.
-    pub fn execute(
-        &self,
-        ctx: Ctx,
-        inputs: impl Into<Streams<F>>,
-    ) -> Result<VmSegmentState<F, GuestMemory, Ctx>, ExecutionError> {
-        // Initialize the VM state
-        let mut vm_state = self.init_vm_state(ctx, inputs);
-
-        // Start execution
-        execute_with_metrics!(
-            "execute_e1",
-            self.pc_base,
-            &mut vm_state,
-            &self.pre_compute_insns
-        );
-        if vm_state.exit_code.is_err() {
-            Err(vm_state.exit_code.err().unwrap())
-        } else {
-            check_exit_code(&vm_state)?;
-            Ok(vm_state)
-        }
-    }
-
-    // TODO: consolidate with create_initial_state
-    pub fn init_vm_state(
-        &self,
-        ctx: Ctx,
-        inputs: impl Into<Streams<F>>,
-    ) -> VmSegmentState<F, GuestMemory, Ctx> {
-        let memory_config = &self.system_config.memory_config;
-        let memory = create_memory_image(memory_config, self.init_memory.clone());
-
-        let vm_state = VmState::new(0, self.pc_start, memory, inputs.into(), 0);
-        VmSegmentState::new(vm_state, ctx)
     }
 }
 
@@ -197,30 +177,97 @@ where
             init_memory,
         })
     }
+}
 
-    /// Execute the VM program with the given execution control and inputs. Returns the final VM
-    /// state with the `ExecutionControl` context.
+// Execute functions specialize to relevant Ctx types to provide more streamlines APIs
+
+impl<F> InterpretedInstance<F, E1Ctx>
+where
+    F: PrimeField32,
+{
+    /// Pure execution, without metering, for the given `inputs`. Execution begins from the initial
+    /// state specified by the `VmExe`. This function executes the program until either termination
+    /// if `num_insns` is `None` or for exactly `num_insns` instructions if `num_insns` is `Some`.
+    ///
+    /// Returns the final VM state when execution stops.
+    pub fn execute(
+        &self,
+        inputs: impl Into<Streams<F>>,
+        num_insns: Option<u64>,
+    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+        let vm_state = self.create_initial_state(inputs);
+        self.execute_from_state(vm_state, num_insns)
+    }
+
+    /// Pure execution, without metering, from the given `VmState`. This function executes the
+    /// program until either termination if `num_insns` is `None` or for exactly `num_insns`
+    /// instructions if `num_insns` is `Some`.
+    ///
+    /// Returns the final VM state when execution stops.
+    pub fn execute_from_state(
+        &self,
+        from_state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+        let ctx = E1Ctx::new(num_insns);
+        let mut exec_state = VmSegmentState::new(from_state, ctx);
+        // Start execution
+        execute_with_metrics!(
+            "execute_e1",
+            self.pc_base,
+            &mut exec_state,
+            &self.pre_compute_insns
+        );
+        if num_insns.is_some() {
+            check_exit_code(exec_state.exit_code)?;
+        } else {
+            check_termination(exec_state.exit_code)?;
+        }
+        Ok(exec_state.vm_state)
+    }
+}
+
+impl<F> InterpretedInstance<F, MeteredCtx>
+where
+    F: PrimeField32,
+{
+    /// Metered execution for the given `inputs`. Execution begins from the initial
+    /// state specified by the `VmExe`. This function executes the program until termination.
+    ///
+    /// Returns the segmentation boundary data and the final VM state when execution stops.
     pub fn execute_metered(
         &self,
-        ctx: Ctx,
         inputs: impl Into<Streams<F>>,
-    ) -> Result<VmSegmentState<F, GuestMemory, Ctx>, ExecutionError> {
-        // Initialize the chip complex
-        let mut vm_state = self.init_vm_state(ctx, inputs);
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+        let vm_state = self.create_initial_state(inputs);
+        self.execute_metered_from_state(vm_state, ctx)
+    }
 
+    /// Metered execution for the given `VmState`. This function executes the program until
+    /// termination.
+    ///
+    /// Returns the segmentation boundary data and the final VM state when execution stops.
+    ///
+    /// The [MeteredCtx] can be constructed using either
+    /// [VmExecutor::build_metered_ctx](super::VmExecutor::build_metered_ctx) or
+    /// [VirtualMachine::build_metered_ctx](super::VirtualMachine::build_metered_ctx).
+    pub fn execute_metered_from_state(
+        &self,
+        from_state: VmState<F, GuestMemory>,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+        let mut exec_state = VmSegmentState::new(from_state, ctx);
         // Start execution
         execute_with_metrics!(
             "execute_metered",
             self.pc_base,
-            &mut vm_state,
+            &mut exec_state,
             &self.pre_compute_insns
         );
-        if vm_state.exit_code.is_err() {
-            Err(vm_state.exit_code.err().unwrap())
-        } else {
-            check_exit_code(&vm_state)?;
-            Ok(vm_state)
-        }
+        check_termination(exec_state.exit_code)?;
+        let VmSegmentState { vm_state, ctx, .. } = exec_state;
+        Ok((ctx.into_segments(), vm_state))
     }
 }
 
@@ -247,10 +294,12 @@ fn split_pre_compute_buf<'a, F>(
     split_pre_compute_buf
 }
 
+/// Executes using function pointers with the trampoline (loop) approach.
+///
 /// # Safety
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[inline(always)]
-unsafe fn execute_impl<F: PrimeField32, Ctx: E1ExecutionCtx>(
+unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
     pc_base: u32,
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
@@ -445,7 +494,7 @@ where
         .collect::<Result<Vec<_>, _>>()
 }
 
-fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
+fn get_metered_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
@@ -513,13 +562,22 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
     None
 }
 
-fn check_exit_code<F, Ctx>(
-    vm_state: &VmSegmentState<F, GuestMemory, Ctx>,
-) -> Result<(), ExecutionError> {
-    if let Ok(Some(exit_code)) = vm_state.exit_code.as_ref() {
-        if *exit_code != ExitCode::Success as u32 {
-            return Err(ExecutionError::FailedWithExitCode(*exit_code));
+/// Errors if exit code is either error or terminated with non-successful exit code.
+fn check_exit_code(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+    let exit_code = exit_code?;
+    if let Some(exit_code) = exit_code {
+        // This means execution did terminate
+        if exit_code != ExitCode::Success as u32 {
+            return Err(ExecutionError::FailedWithExitCode(exit_code));
         }
     }
     Ok(())
+}
+
+/// Same as [check_exit_code] but errors if program did not terminate.
+fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+    if !matches!(exit_code.as_ref(), Ok(Some(_))) {
+        return Err(ExecutionError::DidNotTerminate);
+    }
+    check_exit_code(exit_code)
 }

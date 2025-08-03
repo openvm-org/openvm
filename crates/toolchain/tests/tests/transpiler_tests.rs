@@ -9,10 +9,7 @@ use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
 use openvm_circuit::{
-    arch::{
-        execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, InitFileGenerator,
-        SystemConfig,
-    },
+    arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
     system::SystemExecutor,
     utils::air_test,
@@ -77,8 +74,8 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32ImConfig::default();
-    let interpreter = InterpretedInstance::new(config, exe)?;
-    interpreter.execute(E1Ctx::new(None), vec![])?;
+    let interpreter = VmExecutor::new(config)?.instance(&exe)?;
+    interpreter.execute(vec![], None)?;
     Ok(())
 }
 
@@ -140,8 +137,8 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let interpreter = InterpretedInstance::new(config, openvm_exe)?;
-    interpreter.execute(E1Ctx::new(None), vec![])?;
+    let interpreter = VmExecutor::new(config)?.instance(&openvm_exe)?;
+    interpreter.execute(vec![], None)?;
     Ok(())
 }
 

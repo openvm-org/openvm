@@ -98,12 +98,11 @@ pub mod test_utils {
         let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-        let (mut segments, _) = vm.executor().execute_metered(
-            program.clone(),
-            input.clone(),
-            &executor_idx_to_air_idx,
-            ctx,
-        )?;
+        let exe = VmExe::new(program);
+        let interpreter = vm
+            .executor()
+            .metered_instance(&exe, &executor_idx_to_air_idx)?;
+        let (mut segments, _) = interpreter.execute_metered(input.clone(), ctx)?;
         assert_eq!(segments.len(), 1, "test only supports one segment");
         let Segment {
             instret_start,
@@ -111,7 +110,6 @@ pub mod test_utils {
             trace_heights,
         } = segments.pop().unwrap();
         assert_eq!(instret_start, 0);
-        let exe = VmExe::new(program);
         let state = vm.create_initial_state(&exe, input);
         let output = vm.execute_preflight(&exe, state, None, &trace_heights)?;
         assert_eq!(
