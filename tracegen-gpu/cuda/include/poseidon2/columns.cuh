@@ -119,6 +119,7 @@ struct Poseidon2Row {
         }
         return slice.slice_from(COL_INDEX(Cols, ending_full_rounds[round].post));
     }
+    __device__ RowSlice outputs() const { return ending_full_post(HALF_FULL_ROUNDS - 1); }
 
     // Helper to get total size needed for the buffer
     static constexpr size_t get_total_size() { return sizeof(Cols<uint8_t>); }
