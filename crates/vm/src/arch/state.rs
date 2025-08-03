@@ -4,8 +4,11 @@ use std::{
 };
 
 use openvm_stark_backend::p3_field::PrimeField32;
+use rand::{rngs::StdRng, SeedableRng};
 
-use super::{ExecutionError, VmState};
+use super::{ExecutionError, Streams};
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         execution_mode::{
@@ -21,7 +24,40 @@ use crate::{
     },
 };
 
-/// Represents the full execution state of a VM during segment execution.
+/// Represents the core state of a VM.
+pub struct VmState<F, MEM = GuestMemory> {
+    pub instret: u64,
+    pub pc: u32,
+    pub memory: MEM,
+    pub streams: Streams<F>,
+    pub rng: StdRng,
+    #[cfg(feature = "metrics")]
+    pub metrics: VmMetrics,
+}
+
+impl<F, MEM> VmState<F, MEM> {
+    pub fn new(
+        instret: u64,
+        pc: u32,
+        memory: MEM,
+        streams: impl Into<Streams<F>>,
+        seed: u64,
+    ) -> Self {
+        Self {
+            instret,
+            pc,
+            memory,
+            streams: streams.into(),
+            rng: StdRng::seed_from_u64(seed),
+            #[cfg(feature = "metrics")]
+            metrics: VmMetrics::default(),
+        }
+    }
+}
+
+/// Represents the full execution state of a VM during execution.
+/// The global state is generic in guest memory `MEM` and additional context `CTX`.
+/// The host state is execution context specific.
 pub struct VmSegmentState<F, MEM, CTX> {
     /// Core VM state
     pub vm_state: VmState<F, MEM>,

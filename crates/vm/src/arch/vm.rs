@@ -32,7 +32,6 @@ use openvm_stark_backend::{
     verifier::VerificationError,
 };
 use p3_baby_bear::BabyBear;
-use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -41,8 +40,6 @@ use super::{
     execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
     CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
-#[cfg(feature = "metrics")]
-use crate::metrics::VmMetrics;
 use crate::{
     arch::{
         execution_mode::{
@@ -54,7 +51,7 @@ use crate::{
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
         SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig,
-        VmSegmentExecutor, VmSegmentState, PUBLIC_VALUES_AIR_ID,
+        VmSegmentExecutor, VmSegmentState, VmState, PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -170,37 +167,6 @@ pub enum ExitCode {
     Success = 0,
     Error = 1,
     Suspended = -1, // Continuations
-}
-
-/// Represents the core state of a VM.
-pub struct VmState<F, MEM = GuestMemory> {
-    pub instret: u64,
-    pub pc: u32,
-    pub memory: MEM,
-    pub streams: Streams<F>,
-    pub rng: StdRng,
-    #[cfg(feature = "metrics")]
-    pub metrics: VmMetrics,
-}
-
-impl<F, MEM> VmState<F, MEM> {
-    pub fn new(
-        instret: u64,
-        pc: u32,
-        memory: MEM,
-        streams: impl Into<Streams<F>>,
-        seed: u64,
-    ) -> Self {
-        Self {
-            instret,
-            pc,
-            memory,
-            streams: streams.into(),
-            rng: StdRng::seed_from_u64(seed),
-            #[cfg(feature = "metrics")]
-            metrics: VmMetrics::default(),
-        }
-    }
 }
 
 pub struct PreflightExecutionOutput<F, RA> {

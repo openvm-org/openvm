@@ -87,35 +87,6 @@ pub enum StaticProgramError {
     ExecutorNotFound { opcode: VmOpcode },
 }
 
-/// Global VM state accessible during instruction execution.
-/// The state is generic in guest memory `MEM` and additional record arena `RA`.
-/// The host state is execution context specific.
-#[derive(derive_new::new)]
-pub struct VmStateMut<'a, F, MEM, RA> {
-    pub pc: &'a mut u32,
-    pub memory: &'a mut MEM,
-    pub streams: &'a mut Streams<F>,
-    pub rng: &'a mut StdRng,
-    pub ctx: &'a mut RA,
-    #[cfg(feature = "metrics")]
-    pub metrics: &'a mut VmMetrics,
-}
-
-// TODO[jpw]: Avoid Clone by making executors stateless?
-pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &mut self,
-        state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
-    ) -> Result<(), ExecutionError>;
-
-    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
-    /// if it is a supported opcode by the present executor.
-    fn get_opcode_name(&self, opcode: usize) -> String;
-}
-
 /// Function pointer for interpreter execution with function signature `(pre_compute, exec_state)`.
 /// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
 /// The contents of `pre_compute` are determined from the program code as specified by the
@@ -148,6 +119,35 @@ pub trait InsExecutorE2<F> {
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: E2ExecutionCtx;
+}
+
+// TODO[jpw]: Avoid Clone by making executors stateless?
+pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
+    fn execute(
+        &mut self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError>;
+
+    /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode
+    /// if it is a supported opcode by the present executor.
+    fn get_opcode_name(&self, opcode: usize) -> String;
+}
+
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional record arena `RA`.
+/// The host state is execution context specific.
+#[derive(derive_new::new)]
+pub struct VmStateMut<'a, F, MEM, RA> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub streams: &'a mut Streams<F>,
+    pub rng: &'a mut StdRng,
+    pub ctx: &'a mut RA,
+    #[cfg(feature = "metrics")]
+    pub metrics: &'a mut VmMetrics,
 }
 
 /// Wrapper type for metered pre-computed data, which is always an AIR index together with the
