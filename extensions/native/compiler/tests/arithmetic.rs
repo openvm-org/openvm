@@ -397,5 +397,9 @@ fn assert_failed_assertion(
     let config = NativeConfig::aggregation(4, 3);
     let instance = VmExecutor::new(config).unwrap().instance(&exe).unwrap();
     let result = instance.execute(vec![], None);
-    assert!(matches!(result, Err(ExecutionError::Fail { .. })));
+    assert!(
+        matches!(result, Err(ExecutionError::Fail { .. })),
+        "Unexpected result: {:?}",
+        result.err()
+    );
 }

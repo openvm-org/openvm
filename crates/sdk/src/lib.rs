@@ -185,10 +185,13 @@ where
         VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
         VC::Executor: Clone + InsExecutorE1<F> + InsExecutorE2<F>,
     {
-        let vm = VmExecutor::new(vm_config)?;
-        let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
-        let public_values =
-            extract_public_values(vm.config.as_ref().num_public_values, &final_memory.memory);
+        let executor = VmExecutor::new(vm_config)?;
+        let instance = executor.instance(&exe)?;
+        let final_memory = instance.execute(inputs, None)?.memory;
+        let public_values = extract_public_values(
+            executor.config.as_ref().num_public_values,
+            &final_memory.memory,
+        );
         Ok(public_values)
     }
 

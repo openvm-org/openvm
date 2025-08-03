@@ -68,9 +68,7 @@ pub(super) fn compute_root_proof_heights(
     // after tracegen:
     let mut trace_heights = NATIVE_MAX_TRACE_HEIGHTS.to_vec();
     trace_heights[PUBLIC_VALUES_AIR_ID] = num_public_values as u32;
-    let state = root_vm
-        .executor()
-        .create_initial_state(&root_committed_exe.exe, root_input.write());
+    let state = root_vm.create_initial_state(&root_committed_exe.exe, root_input.write());
     let cached_program_trace = root_vm.transport_committed_exe_to_device(root_committed_exe);
     root_vm.load_program(cached_program_trace);
     root_vm.transport_init_memory_to_device(&state.memory);
