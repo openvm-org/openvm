@@ -2,6 +2,7 @@
 #include "poseidon2/tracegen.cuh"
 #include "specific.cuh"
 #include "system/memory/controller.cuh"
+#include "trace_access.h"
 
 using namespace poseidon2;
 
@@ -49,6 +50,139 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
     using Poseidon2Row =
         Poseidon2Row<WIDTH, SBOX_DEGREE, SBOX_REGISTERS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>;
 
+    __device__ static void fill_trace(
+        RowSlice row,
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    ) {
+        if (row[COL_INDEX(Cols, simple)] == Fp::one()) {
+            fill_simple_chunk(row, range_checker, timestamp_max_bits);
+        } else {
+            fill_verify_batch_chunk(row, range_checker, timestamp_max_bits);
+        }
+    }
+
+    __device__ static void fill_simple_chunk(
+        RowSlice row,
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    ) {
+        fill_inner(row);
+        fill_specific(row, range_checker, timestamp_max_bits);
+    }
+
+    __device__ static void fill_verify_batch_chunk(
+        RowSlice row,
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
+    ) {
+        Poseidon2Row first_p2_row(row);
+        uint32_t num_non_inside_rows = first_p2_row.export_col()[0].asUInt32();
+        RowSlice last_non_inside_row = row.shift_row(num_non_inside_rows - 1);
+        Poseidon2Row last_non_inside_p2_row(last_non_inside_row);
+        uint32_t total_num_rows = last_non_inside_p2_row.export_col()[0].asUInt32();
+
+        bool first_round = true;
+        Fp root[CHUNK];
+        uint32_t inside_idx = num_non_inside_rows;
+        uint32_t non_inside_idx = 0;
+        while (inside_idx < total_num_rows || non_inside_idx < num_non_inside_rows) {
+            RowSlice curr_non_inside_row = row.shift_row(non_inside_idx);
+            bool incorporate_sibling =
+                curr_non_inside_row[COL_INDEX(Cols, incorporate_sibling)] == Fp::one();
+            if (!incorporate_sibling) {
+                Fp prev_rolling_hash[WIDTH];
+                // `Fp`'s constructor will set the values to 0s.
+                Fp rolling_hash[WIDTH];
+                do {
+                    RowSlice curr_inside_row = row.shift_row(inside_idx);
+                    uint32_t input_len = 0;
+                    uint32_t start_timestamp_u32 =
+                        curr_inside_row[COL_INDEX(Cols, start_timestamp)].asUInt32();
+
+                    fill_specific(curr_inside_row, range_checker, timestamp_max_bits);
+                    for (uint32_t i = 0; i < CHUNK; i++) {
+                        if (i > 0 &&
+                            curr_inside_row[COL_INDEX(Cols, is_exhausted[i - 1])] == Fp::one()) {
+                            break;
+                        }
+                        input_len += 1;
+                    }
+
+                    Poseidon2Row poseidon2_row(curr_inside_row);
+                    RowSlice inputs = poseidon2_row.inputs();
+
+                    for (uint32_t i = 0; i < input_len; i++) {
+                        rolling_hash[i] = inputs[i];
+                    }
+                    for (size_t i = 0; i < WIDTH; ++i) {
+                        prev_rolling_hash[i] = rolling_hash[i];
+                        inputs[i] = rolling_hash[i];
+                    }
+                    fill_inner(curr_inside_row);
+                    RowSlice outputs = poseidon2_row.outputs();
+                    for (size_t i = 0; i < WIDTH; ++i) {
+                        rolling_hash[i] = outputs[i];
+                    }
+                    inside_idx += 1;
+                    if (curr_inside_row[COL_INDEX(Cols, end_inside_row)] == Fp::one()) {
+                        break;
+                    }
+                } while (true);
+
+                {
+                    RowSlice curr_non_inside_row = row.shift_row(non_inside_idx);
+
+                    Poseidon2Row poseidon2_row(curr_non_inside_row);
+                    RowSlice inputs = poseidon2_row.inputs();
+                    if (first_round) {
+                        for (size_t i = 0; i < WIDTH; ++i) {
+                            inputs[i] = prev_rolling_hash[i];
+                        }
+                        first_round = false;
+                    } else {
+                        for (size_t i = 0; i < CHUNK; ++i) {
+                            inputs[i] = root[i];
+                            inputs[i + CHUNK] = rolling_hash[i];
+                        }
+                    }
+                    fill_inner(curr_non_inside_row);
+                    fill_specific(curr_non_inside_row, range_checker, timestamp_max_bits);
+                    RowSlice outputs = poseidon2_row.outputs();
+                    for (size_t i = 0; i < CHUNK; ++i) {
+                        root[i] = outputs[i];
+                    }
+                    non_inside_idx += 1;
+                }
+            }
+            if (non_inside_idx < num_non_inside_rows) {
+                RowSlice curr_non_inside_row = row.shift_row(non_inside_idx);
+                RowSlice curr_specific = curr_non_inside_row.slice_from(COL_INDEX(Cols, specific));
+                Poseidon2Row poseidon2_row(curr_non_inside_row);
+                RowSlice inputs = poseidon2_row.inputs();
+                if (curr_specific[COL_INDEX(TopLevelSpecificCols, sibling_is_on_right)] ==
+                    Fp::one()) {
+                    for (size_t i = 0; i < CHUNK; ++i) {
+                        // `sibling` is already put in inputs[..CHUNK] during execution.
+                        inputs[i + CHUNK] = root[i];
+                    }
+                } else {
+                    for (size_t i = 0; i < CHUNK; ++i) {
+                        inputs[i + CHUNK] = inputs[i];
+                        inputs[i] = root[i];
+                    }
+                }
+                fill_inner(curr_non_inside_row);
+                fill_specific(curr_non_inside_row, range_checker, timestamp_max_bits);
+                RowSlice outputs = poseidon2_row.outputs();
+                for (size_t i = 0; i < CHUNK; ++i) {
+                    root[i] = outputs[i];
+                }
+                non_inside_idx += 1;
+            }
+        }
+    }
+
     __device__ static void fill_inner(RowSlice row) {
         Poseidon2Row poseidon2_row(row);
         Fp state[WIDTH];
@@ -67,7 +201,9 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
     }
 
     __device__ static void fill_specific(
-        RowSlice row, VariableRangeChecker range_checker, uint32_t timestamp_max_bits
+        RowSlice row,
+        VariableRangeChecker range_checker,
+        uint32_t timestamp_max_bits
     ) {
         RowSlice specific = row.slice_from(COL_INDEX(Cols, specific));
         MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
@@ -82,7 +218,8 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
             mem_fill_base(
                 mem_helper,
                 start_timestamp + 1,
-                specific.slice_from(COL_INDEX(SimplePoseidonSpecificCols, read_input_pointer_1.base)
+                specific.slice_from(
+                    COL_INDEX(SimplePoseidonSpecificCols, read_input_pointer_1.base)
                 )
             );
             mem_fill_base(
@@ -229,55 +366,37 @@ __global__ void cukernel_native_poseidon2_tracegen(
     size_t trace_width,
     Fp *records,
     size_t num_records,
+    uint32_t *d_chunk_start,
+    uint32_t num_chunks,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
-    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    RowSlice row(trace + idx, trace_height);
-    if (idx < num_records) {
-        RowSlice record(records + idx * trace_width, 1);
-        for (uint32_t i = 0; i < trace_width; i++) {
-            row[i] = record[i];
+    uint32_t chunk_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // Each chunk is a contiguous block of rows in the trace. Each empty row is a chunk.
+    // `d_chunk_start` only contains the start indices of non-empty chunks.
+    uint32_t start_idx =
+        chunk_idx < num_chunks ? d_chunk_start[chunk_idx] : (num_records + chunk_idx - num_chunks);
+    RowSlice row(trace + start_idx, trace_height);
+    if (chunk_idx < num_chunks) {
+        Fp *record = records + start_idx * trace_width;
+        uint32_t chunk_height =
+            (chunk_idx + 1 < num_chunks ? d_chunk_start[chunk_idx + 1] : num_records) -
+            d_chunk_start[chunk_idx];
+        // Transpose `record` and copy to `trace`.
+        for (uint32_t r = 0; r < chunk_height; r++) {
+            RowSlice curr_row = row.shift_row(r);
+            for (uint32_t c = 0; c < trace_width; c++) {
+                curr_row[c] = record[r * trace_width + c];
+            }
         }
-        Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
-        Poseidon2Wrapper<SBOX_REGISTERS>::fill_specific(
+        Poseidon2Wrapper<SBOX_REGISTERS>::fill_trace(
             row, VariableRangeChecker(range_checker, range_checker_num_bins), timestamp_max_bits
         );
-    } else {
+    } else if (start_idx < trace_height) {
         row.fill_zero(0, trace_width);
         Poseidon2Wrapper<SBOX_REGISTERS>::fill_inner(row);
     }
-}
-
-extern "C" int _inplace_native_poseidon2_tracegen(
-    Fp *d_trace,
-    size_t height,
-    size_t width,
-    size_t num_records,
-    uint32_t *d_range_checker,
-    uint32_t range_checker_num_bins,
-    size_t sbox_regs,
-    uint32_t timestamp_max_bits
-) {
-    auto [grid, block] = kernel_launch_params(height);
-    switch (sbox_regs) {
-    case 1:
-        assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
-        cukernel_inplace_native_poseidon2_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
-        );
-        break;
-    case 0:
-        assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
-        cukernel_inplace_native_poseidon2_tracegen<0><<<grid, block>>>(
-            d_trace, height, width, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
-        );
-        break;
-    default:
-        return cudaErrorInvalidConfiguration;
-    }
-    return cudaGetLastError();
 }
 
 extern "C" int _native_poseidon2_tracegen(
@@ -286,24 +405,43 @@ extern "C" int _native_poseidon2_tracegen(
     size_t width,
     Fp *d_records,
     size_t num_records,
+    uint32_t *d_chunk_start,
+    uint32_t num_chunks,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     size_t sbox_regs,
     uint32_t timestamp_max_bits
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height - num_records + num_chunks, 256);
     switch (sbox_regs) {
     case 1:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 1>));
         cukernel_native_poseidon2_tracegen<1><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
+            d_trace,
+            height,
+            width,
+            d_records,
+            num_records,
+            d_chunk_start,
+            num_chunks,
+            d_range_checker,
+            range_checker_num_bins,
+            timestamp_max_bits
         );
         break;
     case 0:
         assert(width == sizeof(NativePoseidon2Cols<uint8_t, 0>));
         cukernel_native_poseidon2_tracegen<0><<<grid, block>>>(
-            d_trace, height, width, d_records, num_records,
-            d_range_checker,range_checker_num_bins, timestamp_max_bits
+            d_trace,
+            height,
+            width,
+            d_records,
+            num_records,
+            d_chunk_start,
+            num_chunks,
+            d_range_checker,
+            range_checker_num_bins,
+            timestamp_max_bits
         );
         break;
     default:

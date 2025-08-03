@@ -25,8 +25,11 @@ struct RowSlice {
     }
 
     template <typename T>
-    __device__ __forceinline__ void write_array(size_t column_index, size_t length, const T *values)
-        const {
+    __device__ __forceinline__ void write_array(
+        size_t column_index,
+        size_t length,
+        const T *values
+    ) const {
 #pragma unroll
         for (size_t i = 0; i < length; i++) {
             ptr[(column_index + i) * stride] = values[i];
@@ -34,8 +37,7 @@ struct RowSlice {
     }
 
     template <typename T>
-    __device__ __forceinline__ void write_bits(size_t column_index, const T value)
-        const {
+    __device__ __forceinline__ void write_bits(size_t column_index, const T value) const {
 #pragma unroll
         for (size_t i = 0; i < sizeof(T) * 8; i++) {
             ptr[(column_index + i) * stride] = (value >> i) & 1;
@@ -52,6 +54,10 @@ struct RowSlice {
     __device__ __forceinline__ RowSlice slice_from(size_t column_index) const {
         return RowSlice(ptr + column_index * stride, stride);
     }
+
+    __device__ __forceinline__ RowSlice shift_row(size_t n) const {
+        return RowSlice(ptr + n, stride);
+    }
 };
 
 /// Compute the 0-based column index of member `FIELD` within struct template `STRUCT<T>`,
@@ -59,7 +65,7 @@ struct RowSlice {
 #define COL_INDEX(STRUCT, FIELD) (offsetof(STRUCT<uint8_t>, FIELD))
 
 /// Compute the fixed array length of `FIELD` within `STRUCT<T>`
-#define COL_ARRAY_LEN(STRUCT, FIELD) (sizeof(static_cast<STRUCT<uint8_t>*>(nullptr)->FIELD))
+#define COL_ARRAY_LEN(STRUCT, FIELD) (sizeof(static_cast<STRUCT<uint8_t> *>(nullptr)->FIELD))
 
 /// Write a single value into `FIELD` of struct `STRUCT<T>` at a given row.
 #define COL_WRITE_VALUE(ROW, STRUCT, FIELD, VALUE) (ROW).write(COL_INDEX(STRUCT, FIELD), VALUE)
@@ -73,4 +79,6 @@ struct RowSlice {
 
 /// Fill entire `FIELD` of `STRUCT<T>` with zeros.
 #define COL_FILL_ZERO(ROW, STRUCT, FIELD)                                                          \
-    (ROW).fill_zero(COL_INDEX(STRUCT, FIELD), sizeof(static_cast<STRUCT<uint8_t>*>(nullptr)->FIELD))
+    (ROW).fill_zero(                                                                               \
+        COL_INDEX(STRUCT, FIELD), sizeof(static_cast<STRUCT<uint8_t> *>(nullptr)->FIELD)           \
+    )

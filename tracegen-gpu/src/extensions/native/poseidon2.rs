@@ -1,9 +1,10 @@
-use std::{mem::size_of, sync::Arc};
+use std::{borrow::Borrow, mem::size_of, slice::from_raw_parts, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_native_circuit::columns::NativePoseidon2Cols;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use p3_field::{Field, PrimeField32};
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
@@ -37,6 +38,34 @@ impl<const SBOX_REGISTERS: usize> Chip<DenseRecordArena, GpuBackend>
 
         let height = records.len() / record_size;
         let padded_height = next_power_of_two_or_zero(height);
+
+        let d_chunk_start = {
+            let mut row_idx = 0;
+            let row_slice = unsafe {
+                let raw_ptr = records.as_ptr();
+                from_raw_parts(raw_ptr as *const F, records.len() / size_of::<F>())
+            };
+            let mut chunk_start = Vec::new();
+            // Allocated rows are not empty. Determine the chunk start indices.
+            while row_idx < height {
+                let start = row_idx * width;
+                let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                    row_slice[start..(start + width)].borrow();
+                chunk_start.push(row_idx as u32);
+                if cols.simple.is_one() {
+                    row_idx += 1;
+                } else {
+                    let num_non_inside_row = cols.inner.export.as_canonical_u32() as usize;
+                    let non_inside_start = start + (num_non_inside_row - 1) * width;
+                    let cols: &NativePoseidon2Cols<F, SBOX_REGISTERS> =
+                        row_slice[non_inside_start..(non_inside_start + width)].borrow();
+                    let total_num_row = cols.inner.export.as_canonical_u32() as usize;
+                    row_idx += total_num_row;
+                };
+            }
+            chunk_start.to_device().unwrap()
+        };
+
         let trace = DeviceMatrix::<F>::with_capacity(padded_height, width);
 
         let d_records = records.to_device().unwrap();
@@ -48,6 +77,8 @@ impl<const SBOX_REGISTERS: usize> Chip<DenseRecordArena, GpuBackend>
                 width as u32,
                 &d_records,
                 height as u32,
+                &d_chunk_start,
+                d_chunk_start.len() as u32,
                 &self.range_checker.count,
                 SBOX_REGISTERS as u32,
                 self.timestamp_max_bits as u32,
