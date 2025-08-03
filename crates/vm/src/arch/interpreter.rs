@@ -513,7 +513,7 @@ where
         .map(|(i, (inst_opt, buf))| {
             let buf: &mut [u8] = buf;
             let pre_inst = if let Some((inst, _)) = inst_opt {
-                tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
+                tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
