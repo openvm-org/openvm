@@ -44,16 +44,15 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{MeteredCtx, Segment},
-            tracegen::{TracegenCtx, TracegenExecutionControl},
+            tracegen::TracegenCtx,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
-        interpreter::InterpretedInstance,
+        interpreter::{InterpretedInstance, PreflightInterpretedInstance},
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
-        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig,
-        VmSegmentExecutor, VmSegmentState, VmState, PUBLIC_VALUES_AIR_ID,
+        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig, VmSegmentState,
+        VmState, PUBLIC_VALUES_AIR_ID,
     },
-    execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
         memory::{
@@ -65,7 +64,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             AddressMap, CHUNK,
         },
-        program::{trace::VmCommittedExe, ProgramHandler},
+        program::trace::VmCommittedExe,
         public_values::PublicValuesStep,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
     },
@@ -397,15 +396,17 @@ where
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+            InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        let handler = ProgramHandler::new(&exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         debug_assert!(executor_idx_to_air_idx
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
-        let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
-        let mut instance = VmSegmentExecutor::new(handler, ctrl);
+        let mut instance = PreflightInterpretedInstance::new(
+            &self.executor.inventory,
+            exe,
+            &executor_idx_to_air_idx,
+        )?;
 
         let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
@@ -444,8 +445,8 @@ where
             metrics: state.metrics,
         };
         let mut exec_state = VmSegmentState::new(vm_state, ctx);
-        execute_spanned!("execute_e3", instance, &mut exec_state)?;
-        let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
+        crate::execute_spanned!("execute_e3", instance, &mut exec_state)?;
+        let filtered_exec_frequencies = instance.filtered_execution_frequencies();
         let mut memory = exec_state.vm_state.memory;
         let touched_memory = memory.finalize::<Val<E::SC>>(system_config.continuation_enabled);
 
@@ -453,7 +454,7 @@ where
         let public_values = system_config
             .has_public_values_chip()
             .then(|| {
-                instance.handler.executors[PV_EXECUTOR_IDX]
+                instance.executors[PV_EXECUTOR_IDX]
                     .as_any_kind()
                     .downcast_ref::<PublicValuesStep<Val<E::SC>>>()
                     .unwrap()
@@ -611,7 +612,7 @@ where
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+            InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
     {
         self.transport_init_memory_to_device(&state.memory);
 
@@ -902,7 +903,7 @@ where
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-        InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+        InsExecutorE1<Val<E::SC>> + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
 {
     fn prove(
         &mut self,

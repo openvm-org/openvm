@@ -8,7 +8,10 @@ use itertools::Itertools;
 use openvm_stark_backend::p3_field::Field;
 use serde::{de::Deserializer, Deserialize, Serialize, Serializer};
 
-use crate::instruction::{DebugInfo, Instruction};
+use crate::{
+    instruction::{DebugInfo, Instruction},
+    VmOpcode,
+};
 
 pub const PC_BITS: usize = 30;
 /// We use default PC step of 4 whenever possible for consistency with RISC-V, where 4 comes
@@ -33,7 +36,7 @@ pub struct Program<F> {
 
 #[derive(Clone, Debug, Default)]
 pub struct ProgramDebugInfo {
-    inner: Arc<Vec<Option<DebugInfo>>>,
+    inner: Arc<Vec<Option<(VmOpcode, Option<DebugInfo>)>>>,
     pc_base: u32,
 }
 
@@ -170,7 +173,10 @@ impl<F> Program<F> {
         let debug_infos = self
             .instructions_and_debug_infos
             .iter()
-            .map(|opt| opt.as_ref().and_then(|(_, debug_info)| debug_info.clone()))
+            .map(|opt| {
+                opt.as_ref()
+                    .map(|(insn, debug_info)| (insn.opcode, debug_info.clone()))
+            })
             .collect();
         ProgramDebugInfo {
             inner: Arc::new(debug_infos),
@@ -205,18 +211,12 @@ impl<F: Field> Display for Program<F> {
 impl ProgramDebugInfo {
     /// ## Panics
     /// If `pc` is out of bounds.
-    pub fn get(&self, pc: u32) -> &Option<DebugInfo> {
+    pub fn get(&self, pc: u32) -> &(VmOpcode, Option<DebugInfo>) {
         let pc_base = self.pc_base;
         let pc_idx = ((pc - pc_base) / DEFAULT_PC_STEP) as usize;
-        &self.inner[pc_idx]
-    }
-}
-
-impl Deref for ProgramDebugInfo {
-    type Target = [Option<DebugInfo>];
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+        self.inner[pc_idx]
+            .as_ref()
+            .expect("trying to access unreachable pc={pc}")
     }
 }
 

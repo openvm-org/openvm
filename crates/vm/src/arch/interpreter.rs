@@ -1,10 +1,11 @@
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     ptr::NonNull,
 };
 
-use itertools::Itertools;
+use itertools::{zip_eq, Itertools};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
@@ -12,7 +13,7 @@ use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 use tracing::info_span;
 
 use crate::{
@@ -21,12 +22,14 @@ use crate::{
         execution_mode::{
             e1::E1Ctx,
             metered::{MeteredCtx, Segment},
+            tracegen::TracegenCtx,
             E1ExecutionCtx, E2ExecutionCtx,
         },
-        ExecuteFunc, ExecutionError, ExecutorInventory, ExitCode, InsExecutorE1, InsExecutorE2,
-        StaticProgramError, Streams, SystemConfig, VmSegmentState, VmState,
+        Arena, ExecuteFunc, ExecutionError, ExecutorId, ExecutorInventory, ExitCode, InsExecutorE1,
+        InsExecutorE2, InstructionExecutor, StaticProgramError, Streams, SystemConfig,
+        VmSegmentState, VmState, VmStateMut,
     },
-    system::memory::online::GuestMemory,
+    system::memory::online::{GuestMemory, TracingMemory},
 };
 
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
@@ -271,6 +274,225 @@ where
     }
 }
 
+pub struct PreflightInterpretedInstance<'a, F, E> {
+    pub(crate) executors: &'a [E],
+    executor_idx_to_air_idx: &'a [usize],
+
+    // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
+    // to this buffer.
+    #[allow(dead_code)]
+    pre_compute_buf: AlignedBuf,
+    /// This is a map from (pc - pc_base) / pc_step -> [PreflightInsEntry].
+    /// We will map to `u32::MAX` if the program has no instruction at that pc.
+    // Perf[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the
+    // u32 may be better for cache efficiency.
+    pc_handler: Vec<PreflightInsEntry>,
+
+    execution_frequencies: Vec<u32>,
+    pc_base: u32,
+
+    phantom: PhantomData<F>,
+}
+
+struct PreflightInsEntry {
+    pub pre_compute: *const [u8],
+    pub executor_idx: ExecutorId,
+}
+const UNREACHABLE_ENTRY: u32 = u32::MAX;
+const TERMINATION_ENTRY: u32 = u32::MAX - 1;
+unsafe impl Send for PreflightInsEntry {}
+unsafe impl Sync for PreflightInsEntry {}
+
+impl<'a, F, E> PreflightInterpretedInstance<'a, F, E>
+where
+    F: PrimeField32,
+{
+    pub fn new(
+        inventory: &'a ExecutorInventory<E>,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &'a [usize],
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: InsExecutorE1<F>,
+    {
+        if inventory.executors().len() > u32::MAX as usize - 1 {
+            // This would mean we cannot use u32::MAX - 1 as a termination flag
+            return Err(StaticProgramError::TooManyExecutors);
+        }
+        let program = &exe.program;
+        let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program.len(), pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        // We don't care about the function pointers but we want the pre-computed buffers:
+        let pre_compute_insns = get_pre_compute_instructions::<F, E1Ctx, E>(
+            program,
+            inventory,
+            &mut split_pre_compute_buf,
+        )?;
+        let pc_handler = zip_eq(pre_compute_insns, &program.instructions_and_debug_infos)
+            .map(
+                |(PreComputeInstruction { pre_compute, .. }, insn_and_debug_info)| {
+                    if let Some((insn, _)) = insn_and_debug_info {
+                        let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode()
+                        {
+                            // The execution loop will always branch to terminate before using this
+                            // executor
+                            TERMINATION_ENTRY
+                        } else {
+                            *inventory.instruction_lookup.get(&insn.opcode).ok_or(
+                                StaticProgramError::ExecutorNotFound {
+                                    opcode: insn.opcode,
+                                },
+                            )?
+                        };
+                        assert!(
+                            (executor_idx as usize) < inventory.executors.len(),
+                            "ExecutorInventory ensures executor_idx is in bounds"
+                        );
+                        Ok(PreflightInsEntry {
+                            pre_compute,
+                            executor_idx,
+                        })
+                    } else {
+                        Ok(PreflightInsEntry {
+                            pre_compute,
+                            executor_idx: UNREACHABLE_ENTRY,
+                        })
+                    }
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()?;
+        let pc_base = program.pc_base;
+        let execution_frequencies = vec![0u32; pc_handler.len()];
+
+        Ok(Self {
+            executors: &inventory.executors,
+            executor_idx_to_air_idx,
+            pre_compute_buf,
+            pc_handler,
+            execution_frequencies,
+            pc_base,
+            phantom: PhantomData,
+        })
+    }
+
+    /// Stopping is triggered by should_stop() or if VM is terminated
+    pub fn execute_from_state<RA>(
+        &mut self,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+    ) -> Result<(), ExecutionError>
+    where
+        RA: Arena,
+        E: InstructionExecutor<F, RA>,
+    {
+        loop {
+            if let Ok(Some(_)) = state.exit_code {
+                break;
+            }
+            if state
+                .ctx
+                .instret_end
+                .is_some_and(|instret_end| state.instret >= instret_end)
+            {
+                break;
+            }
+
+            // Fetch, decode and execute single instruction
+            self.execute_instruction(state)?;
+            state.instret += 1;
+        }
+        Ok(())
+    }
+
+    /// Executes a single instruction and updates VM state
+    #[inline(always)]
+    fn execute_instruction<RA>(
+        &mut self,
+        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+    ) -> Result<(), ExecutionError>
+    where
+        RA: Arena,
+        E: InstructionExecutor<F, RA>,
+    {
+        let pc = state.pc;
+        let pc_idx = get_pc_index(self.pc_base, pc);
+        let pc_entry =
+            self.pc_handler
+                .get(pc_idx)
+                .ok_or_else(|| ExecutionError::PcOutOfBounds {
+                    pc,
+                    pc_base: self.pc_base,
+                    program_len: self.pc_handler.len(),
+                })?;
+        // SAFETY: `execution_frequencies` has the same length as `pc_handler` so `get_pc_entry`
+        // already does the bounds check
+        unsafe {
+            *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
+        };
+        tracing::trace!("pc: {pc:#x} | executor_idx={}", pc_entry.executor_idx);
+
+        // Handle termination instruction
+        if pc_entry.executor_idx == TERMINATION_ENTRY {
+            // SAFETY: self.pre_compute_buf outlives the pre_compute pointer
+            let pre_compute: &TerminatePreCompute = unsafe { &*pc_entry.pre_compute }.borrow();
+            state.exit_code = Ok(Some(pre_compute.exit_code));
+            return Ok(());
+        }
+
+        // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
+        // `executor_idx` is within bounds
+        let executor = unsafe { self.executors.get_unchecked(pc_entry.executor_idx as usize) };
+        let arena = unsafe {
+            // SAFETY: executor_idx is guarantee to be within bounds by ProgramHandler constructor
+            let air_idx = *self
+                .executor_idx_to_air_idx
+                .get_unchecked(pc_entry.executor_idx as usize);
+            // SAFETY: air_idx is a valid AIR index in the vkey, and always construct arenas with
+            // length equal to num_airs
+            state.ctx.arenas.get_unchecked_mut(air_idx)
+        };
+        let state_mut = VmStateMut {
+            pc: &mut state.vm_state.pc,
+            memory: &mut state.vm_state.memory,
+            streams: &mut state.vm_state.streams,
+            rng: &mut state.vm_state.rng,
+            ctx: arena,
+            #[cfg(feature = "metrics")]
+            metrics: &mut state.vm_state.metrics,
+        };
+        // SAFETY: pre_compute pointer is a reference to self.pre_compute_buf, which outlives this
+        // function
+        let pre_compute: &[u8] = unsafe { &*pc_entry.pre_compute };
+        executor.execute(pre_compute, state_mut)?;
+
+        #[cfg(feature = "metrics")]
+        {
+            crate::metrics::update_instruction_metrics(state, executor, pc);
+        }
+
+        Ok(())
+    }
+
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
+    where
+        E: Sync,
+    {
+        self.execution_frequencies
+            .par_iter()
+            .zip(self.pc_handler.par_iter())
+            .filter(|(_, entry)| entry.is_some())
+            .map(|(freq, _)| *freq)
+            .collect()
+    }
+}
+
+impl PreflightInsEntry {
+    fn is_some(&self) -> bool {
+        self.executor_idx != u32::MAX
+    }
+}
+
 fn alloc_pre_compute_buf(program_len: usize, pre_compute_max_size: usize) -> AlignedBuf {
     let buf_len = program_len * pre_compute_max_size;
     AlignedBuf::uninit(buf_len, pre_compute_max_size)
@@ -304,7 +526,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    // let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -315,11 +536,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
         }
         let pc_index = get_pc_index(pc_base, vm_state.pc);
         let inst = &fn_ptrs[pc_index];
-        // return Err(ExecutionError::PcOutOfBounds {
-        //     pc,
-        //     pc_base,
-        //     program_len: program.len(),
-        // });
         // SAFETY: pre_compute assumed to live long enough
         unsafe { (inst.handler)(&*inst.pre_compute, vm_state) };
     }
@@ -330,7 +546,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
     {
         Ctx::on_terminate(vm_state);
     }
-    // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
 #[inline(always)]
@@ -582,4 +797,27 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
         true => Ok(()),
         false => Err(ExecutionError::DidNotTerminate),
     }
+}
+
+/// Macro for executing with a compile-time span name for better tracing performance
+#[macro_export]
+macro_rules! execute_spanned {
+    ($name:literal, $executor:expr, $state:expr) => {{
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "metrics")]
+        let start_instret = $state.instret;
+
+        let result = tracing::info_span!($name).in_scope(|| $executor.execute_from_state($state));
+
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = $state.instret - start_instret;
+            metrics::counter!("insns").absolute(insns);
+            metrics::gauge!(concat!($name, "_insn_mi/s"))
+                .set(insns as f64 / elapsed.as_micros() as f64);
+        }
+        result
+    }};
 }

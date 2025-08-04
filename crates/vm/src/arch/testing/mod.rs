@@ -40,9 +40,10 @@ use tracing::Level;
 use super::{ExecutionBridge, ExecutionBus, InstructionExecutor};
 use crate::{
     arch::{
+        execution_mode::e1::E1Ctx,
         testing::{execution::air::ExecutionDummyAir, program::air::ProgramDummyAir},
-        vm_poseidon2_config, Arena, ExecutionState, MatrixRecordArena, MemoryConfig, Streams,
-        VmStateMut,
+        vm_poseidon2_config, Arena, ExecutionState, InsExecutorE1, MatrixRecordArena, MemoryConfig,
+        Streams, VmStateMut,
     },
     system::{
         memory::{
@@ -145,7 +146,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: InsExecutorE1<F> + InstructionExecutor<F, RA>,
     {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(harness, instruction, initial_pc);
@@ -157,7 +158,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         instruction: &Instruction<F>,
         initial_pc: u32,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: InsExecutorE1<F> + InstructionExecutor<F, RA>,
     {
         let initial_state = ExecutionState {
             pc: initial_pc,
@@ -175,9 +176,13 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
             #[cfg(feature = "metrics")]
             metrics: &mut Default::default(),
         };
-        harness
-            .executor
-            .execute(state_mut, instruction)
+        let executor = &harness.executor;
+        let mut pre_compute = vec![0u8; executor.pre_compute_size()];
+        executor
+            .pre_compute_e1::<E1Ctx>(initial_pc, instruction, &mut pre_compute)
+            .unwrap();
+        executor
+            .execute(&pre_compute, state_mut)
             .expect("Expected the execution not to fail");
         let final_state = ExecutionState {
             pc,

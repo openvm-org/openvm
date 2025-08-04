@@ -10,8 +10,7 @@ use std::{
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom,
-    SystemOpcode, VmOpcode,
+    program::DEFAULT_PC_STEP, PhantomDiscriminant, SysPhantom, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -32,7 +31,7 @@ use crate::{
         ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
         TraceFiller, VmChipWrapper, VmStateMut,
     },
-    system::memory::MemoryAuxColsFactory,
+    system::{memory::MemoryAuxColsFactory, phantom::execution::PhantomOperands},
 };
 
 mod execution;
@@ -117,18 +116,18 @@ where
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
 {
     fn execute(
-        &mut self,
+        &self,
+        pre_compute: &[u8],
         state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        let pre_compute: &execution::PhantomPreCompute<F> = pre_compute.borrow();
         let record: &mut PhantomRecord = state.ctx.alloc(EmptyMultiRowLayout::default());
         let pc = *state.pc;
         record.pc = pc;
         record.timestamp = state.memory.timestamp;
-        let [a, b, c] = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
+        let PhantomOperands { a, b, c } = pre_compute.operands;
         record.operands = [a, b, c];
 
-        debug_assert_eq!(instruction.opcode, self.phantom_opcode);
         let discriminant = PhantomDiscriminant(c as u16);
         if let Some(sys) = SysPhantom::from_repr(discriminant.0) {
             tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
@@ -167,7 +166,9 @@ where
                 _ => {}
             }
         } else {
-            let sub_executor = self.phantom_executors.get(&discriminant).unwrap();
+            // SAFETY: sub_executor is a pointer to `self.phantom_executors`, which outlives this
+            // function.
+            let sub_executor = unsafe { &*pre_compute.sub_executor };
             sub_executor
                 .phantom_execute(
                     &state.memory.data,

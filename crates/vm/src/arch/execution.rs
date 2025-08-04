@@ -125,10 +125,18 @@ pub trait InsExecutorE2<F> {
 pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
+    ///
+    /// The `pre_compute` buffer is guaranteed to be populated according to
+    /// [InsExecutorE1::pre_compute_e1] for the given instruction.
+    ///
+    /// The `state` has context `ctx` set to the **single** record arena for this executor.
+    // @dev This is essentially an enum-dispatched version of `ExecuteFunc`. We may consider
+    // switching fully to a function pointer based approach depending on the performance.
+    // @dev Note that `state` has `TracingMemory`
     fn execute(
-        &mut self,
+        &self,
+        pre_compute: &[u8],
         state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
 
     /// For display purposes. From absolute opcode as `usize`, return the string name of the opcode

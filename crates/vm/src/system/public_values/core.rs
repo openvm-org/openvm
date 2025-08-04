@@ -182,10 +182,11 @@ where
     }
 
     fn execute(
-        &mut self,
+        &self,
+        pre_compute: &[u8],
         state: VmStateMut<F, TracingMemory, RA>,
-        instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);

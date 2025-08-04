@@ -16,7 +16,7 @@ use crate::{
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
 
-#[derive(Clone, AlignedBytesBorrow)]
+#[derive(Clone, Copy, AlignedBytesBorrow)]
 #[repr(C)]
 pub(super) struct PhantomOperands {
     pub(super) a: u32,
@@ -26,9 +26,9 @@ pub(super) struct PhantomOperands {
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
-struct PhantomPreCompute<F> {
-    operands: PhantomOperands,
-    sub_executor: *const dyn PhantomSubExecutor<F>,
+pub(super) struct PhantomPreCompute<F> {
+    pub operands: PhantomOperands,
+    pub sub_executor: *const dyn PhantomSubExecutor<F>,
 }
 
 impl<F> InsExecutorE1<F> for PhantomExecutor<F>

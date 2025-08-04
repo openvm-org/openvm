@@ -15,10 +15,7 @@ use crate::{
         execution_mode::tracegen::TracegenCtx, Arena, DenseRecordArena, InstructionExecutor,
         VmSegmentState,
     },
-    system::{
-        memory::{adapter::AccessAdapterInventory, online::TracingMemory},
-        program::PcEntry,
-    },
+    system::memory::{adapter::AccessAdapterInventory, online::TracingMemory},
 };
 
 pub mod cycle_tracker;
@@ -59,8 +56,8 @@ pub struct VmMetrics {
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
     state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
-    executor: &mut Executor,
-    pc_entry: &PcEntry<F>,
+    executor: &Executor,
+    last_pc: u32,
 ) where
     F: Clone + Send + Sync,
     RA: Arena,
@@ -68,21 +65,25 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 {
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
     {
-        let pc = state.pc;
-        state.metrics.update_backtrace(pc);
+        let (opcode, _) = state.metrics.debug_infos.get(last_pc);
+        // Note: this logs the opcode after the instruction has been executed
+        tracing::trace!(
+            "opcode: {} | timestamp: {}",
+            executor.get_opcode_name(opcode.as_usize()),
+            state.memory.timestamp()
+        );
+        state.metrics.update_backtrace(last_pc);
     }
 
     #[cfg(feature = "perf-metrics")]
     {
         use std::iter::zip;
 
-        let pc = state.pc;
-        let opcode = pc_entry.insn.opcode;
-        let opcode_name = executor.get_opcode_name(opcode.as_usize());
-
+        let pc = last_pc;
         let num_sys_airs = state.metrics.num_sys_airs;
         let access_adapter_offset = state.metrics.access_adapter_offset;
-        let debug_info = state.metrics.debug_infos.get(pc);
+        let (opcode, debug_info) = state.metrics.debug_infos.get(pc);
+        let opcode_name = executor.get_opcode_name(opcode.as_usize());
         let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
 
         let now_trace_heights = get_dyn_trace_heights_from_arenas::<F, _>(
@@ -196,7 +197,7 @@ impl VmMetrics {
 
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
     pub fn update_backtrace(&mut self, pc: u32) {
-        if let Some(info) = self.debug_infos.get(pc) {
+        if let (_opcode, Some(info)) = self.debug_infos.get(pc) {
             if let Some(trace) = &info.trace {
                 self.prev_backtrace = Some(trace.clone());
             }

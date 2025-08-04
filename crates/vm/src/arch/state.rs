@@ -3,26 +3,12 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 
 use super::{ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
-use crate::{
-    arch::{
-        execution_mode::{
-            tracegen::{TracegenCtx, TracegenExecutionControl},
-            E1ExecutionCtx,
-        },
-        instructions::*,
-        Arena, InstructionExecutor,
-    },
-    system::{
-        memory::online::{GuestMemory, TracingMemory},
-        program::ProgramHandler,
-    },
-};
+use crate::{arch::execution_mode::E1ExecutionCtx, system::memory::online::GuestMemory};
 
 /// Represents the core state of a VM.
 pub struct VmState<F, MEM = GuestMemory> {
@@ -153,103 +139,4 @@ where
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
-}
-
-// TODO[jpw]: rename. this will essentially be just interpreted instance for preflight(E3)
-pub struct VmSegmentExecutor<F, E> {
-    pub handler: ProgramHandler<F, E>,
-    /// Execution control for determining segmentation and stopping conditions
-    pub ctrl: TracegenExecutionControl<F>,
-}
-
-impl<F, E> VmSegmentExecutor<F, E>
-where
-    F: PrimeField32,
-{
-    /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(handler: ProgramHandler<F, E>, ctrl: TracegenExecutionControl<F>) -> Self {
-        Self { handler, ctrl }
-    }
-
-    /// Stopping is triggered by should_stop() or if VM is terminated
-    pub fn execute_from_state<RA>(
-        &mut self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
-    ) -> Result<(), ExecutionError>
-    where
-        RA: Arena,
-        E: InstructionExecutor<F, RA>,
-    {
-        loop {
-            if let Ok(Some(exit_code)) = state.exit_code {
-                self.ctrl.on_terminate(state, exit_code);
-                break;
-            }
-            if self.ctrl.should_suspend(state) {
-                self.ctrl.on_suspend(state);
-                break;
-            }
-
-            // Fetch, decode and execute single instruction
-            self.execute_instruction(state)?;
-            state.instret += 1;
-        }
-        Ok(())
-    }
-
-    /// Executes a single instruction and updates VM state
-    #[inline(always)]
-    fn execute_instruction<RA>(
-        &mut self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
-    ) -> Result<(), ExecutionError>
-    where
-        RA: Arena,
-        E: InstructionExecutor<F, RA>,
-    {
-        let pc = state.pc;
-        let (executor, pc_entry) = self.handler.get_executor(pc)?;
-        tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
-
-        let opcode = pc_entry.insn.opcode;
-        let c = pc_entry.insn.c;
-        // Handle termination instruction
-        if opcode.as_usize() == SystemOpcode::CLASS_OFFSET + SystemOpcode::TERMINATE as usize {
-            state.exit_code = Ok(Some(c.as_canonical_u32()));
-            return Ok(());
-        }
-
-        // Execute the instruction using the control implementation
-        self.ctrl.execute_instruction(state, executor, pc_entry)?;
-
-        #[cfg(feature = "metrics")]
-        {
-            crate::metrics::update_instruction_metrics(state, executor, pc_entry);
-        }
-
-        Ok(())
-    }
-}
-
-/// Macro for executing with a compile-time span name for better tracing performance
-#[macro_export]
-macro_rules! execute_spanned {
-    ($name:literal, $executor:expr, $state:expr) => {{
-        #[cfg(feature = "metrics")]
-        let start = std::time::Instant::now();
-        #[cfg(feature = "metrics")]
-        let start_instret = $state.instret;
-
-        let result = tracing::info_span!($name).in_scope(|| $executor.execute_from_state($state));
-
-        #[cfg(feature = "metrics")]
-        {
-            let elapsed = start.elapsed();
-            let insns = $state.instret - start_instret;
-            metrics::counter!("insns").absolute(insns);
-            metrics::gauge!(concat!($name, "_insn_mi/s"))
-                .set(insns as f64 / elapsed.as_micros() as f64);
-        }
-        result
-    }};
 }
