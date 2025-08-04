@@ -93,6 +93,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use num_bigint::BigUint;
     use num_traits::Zero;
     use openvm_algebra_circuit::modular_chip::{
@@ -106,6 +108,7 @@ mod tests {
     };
     use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
     use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
+    use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
     use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -243,9 +246,19 @@ mod tests {
         );
 
         let a_limbs = biguint_to_limbs::<NUM_LIMBS>(a, LIMB_BITS).map(F::from_canonical_u32);
-        tester.write(data_as, address1 as usize, a_limbs);
         let b_limbs = biguint_to_limbs::<NUM_LIMBS>(b, LIMB_BITS).map(F::from_canonical_u32);
-        tester.write(data_as, address2 as usize, b_limbs);
+        for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                address1 as usize + i,
+                a_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                address2 as usize + i,
+                b_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+        }
 
         let instruction = Instruction::from_isize(
             VmOpcode::from_usize(offset + op),
@@ -312,7 +325,20 @@ mod tests {
     }
 
     #[test]
-    fn test_modular_muldiv_gpu() {
+    fn test_modular_muldiv_gpu_1x32_small() {
+        run_test_with_config::<1, 32, 32>(
+            BigUint::from_str("357686312646216567629137").unwrap(),
+            50,
+        );
+    }
+
+    #[test]
+    fn test_modular_muldiv_gpu_1x32() {
         run_test_with_config::<1, 32, 32>(secp256k1_coord_prime(), 50);
+    }
+
+    #[test]
+    fn test_modular_muldiv_gpu_3x16() {
+        run_test_with_config::<3, 16, 48>(BLS12_381_MODULUS.clone(), 50);
     }
 }

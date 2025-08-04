@@ -106,6 +106,7 @@ mod tests {
     };
     use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
     use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig};
+    use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
     use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -247,18 +248,31 @@ mod tests {
         let x2_limbs = biguint_to_limbs::<NUM_LIMBS>(x2, LIMB_BITS).map(F::from_canonical_u32);
         let y2_limbs = biguint_to_limbs::<NUM_LIMBS>(y2, LIMB_BITS).map(F::from_canonical_u32);
 
-        tester.write(data_as, p1_base_addr as usize, x1_limbs);
-        tester.write(
-            data_as,
-            (p1_base_addr + NUM_LIMBS as u32) as usize,
-            y1_limbs,
-        );
-        tester.write(data_as, p2_base_addr as usize, x2_limbs);
-        tester.write(
-            data_as,
-            (p2_base_addr + NUM_LIMBS as u32) as usize,
-            y2_limbs,
-        );
+        for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                p1_base_addr as usize + i,
+                x1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                (p1_base_addr + NUM_LIMBS as u32) as usize + i,
+                y1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                p2_base_addr as usize + i,
+                x2_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                (p2_base_addr + NUM_LIMBS as u32) as usize + i,
+                y2_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+        }
 
         let instruction = Instruction::from_isize(
             VmOpcode::from_usize(offset + op_local),
@@ -325,7 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn test_weierstrass_addne_gpu() {
+    fn test_weierstrass_addne_gpu_2x32() {
         run_test_with_config::<2, 32, 32>(secp256k1_coord_prime(), 50);
+    }
+
+    #[test]
+    fn test_weierstrass_addne_gpu_6x16() {
+        run_test_with_config::<6, 16, 48>(BLS12_381_MODULUS.clone(), 50);
     }
 }

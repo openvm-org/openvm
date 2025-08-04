@@ -47,6 +47,7 @@ serde.workspace = true
 num-bigint.workspace = true
 derive_more.workspace = true
 strum.workspace = true
+halo2curves-axiom.workspace = true
 
 [build-dependencies]
 cc = { workspace = true }

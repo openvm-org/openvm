@@ -1,7 +1,7 @@
 #pragma once
 #include "bigint_ops.cuh"
-#include "limb_ops.cuh"
 #include "meta.cuh"
+#include "overflow_ops.cuh"
 
 // 128-bit encoded expression node: 8-bit kind + three 32-bit data fields
 struct DecodedExpr {
@@ -30,20 +30,16 @@ __device__ BigIntGpu evaluate_bigint(
     uint32_t n,
     uint32_t limb_bits
 ) {
-    ExprOp op = expr_ops[root_idx];
-    DecodedExpr node = decode_expr_op(op);
-    BigIntGpu result;
+    DecodedExpr node = decode_expr_op(expr_ops[root_idx]);
 
     switch (node.kind) {
     case EXPR_INPUT: {
         uint32_t idx = node.data0;
-        result = BigIntGpu(inputs + idx * n, n, limb_bits);
-        break;
+        return BigIntGpu(inputs + idx * n, n, limb_bits);
     }
     case EXPR_VAR: {
         uint32_t idx = node.data0;
-        result = BigIntGpu(vars + idx * n, n, limb_bits);
-        break;
+        return BigIntGpu(vars + idx * n, n, limb_bits);
     }
     case EXPR_CONST: {
         uint32_t const_idx = node.data0;
@@ -52,87 +48,147 @@ __device__ BigIntGpu evaluate_bigint(
         for (uint32_t i = 0; i < const_idx; i++) {
             offset += expr_meta->const_limb_counts[i];
         }
-        result =
-            BigIntGpu(const_limbs + offset, expr_meta->const_limb_counts[const_idx], limb_bits);
-
-        break;
+        return BigIntGpu(const_limbs + offset, expr_meta->const_limb_counts[const_idx], limb_bits);
     }
     case EXPR_ADD: {
-        uint32_t left_idx = node.data0;
-        uint32_t right_idx = node.data1;
-
-        BigIntGpu left =
-            evaluate_bigint(expr_ops, left_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        BigIntGpu right =
-            evaluate_bigint(expr_ops, right_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        bigint_add(&result, &left, &right);
-        break;
+        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) +
+               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
     }
     case EXPR_SUB: {
-        uint32_t left_idx = node.data0;
-        uint32_t right_idx = node.data1;
-        BigIntGpu left =
-            evaluate_bigint(expr_ops, left_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        BigIntGpu right =
-            evaluate_bigint(expr_ops, right_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        bigint_sub(&result, &left, &right);
-
-        break;
+        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) -
+               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
     }
     case EXPR_MUL: {
-        uint32_t left_idx = node.data0;
-        uint32_t right_idx = node.data1;
-        BigIntGpu left =
-            evaluate_bigint(expr_ops, left_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        BigIntGpu right =
-            evaluate_bigint(expr_ops, right_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-        bigint_mul(&result, &left, &right);
-        break;
+        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) *
+               evaluate_bigint(expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits);
     }
     case EXPR_INT_ADD: {
-        uint32_t child_idx = node.data0;
-        int32_t scalar = (int32_t)node.data1;
-
-        BigIntGpu child =
-            evaluate_bigint(expr_ops, child_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-
-        BigIntGpu scalar_bigint(scalar, limb_bits);
-
-        bigint_add(&result, &child, &scalar_bigint);
-        break;
+        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) +
+               BigIntGpu((int32_t)node.data1, limb_bits);
     }
     case EXPR_INT_MUL: {
-        uint32_t child_idx = node.data0;
-        int32_t scalar = (int32_t)node.data1;
-
-        BigIntGpu child =
-            evaluate_bigint(expr_ops, child_idx, expr_meta, inputs, vars, flags, n, limb_bits);
-
-        BigIntGpu scalar_bigint(scalar, limb_bits);
-
-        bigint_mul(&result, &child, &scalar_bigint);
-        break;
+        return evaluate_bigint(expr_ops, node.data0, expr_meta, inputs, vars, flags, n, limb_bits) *
+               BigIntGpu((int32_t)node.data1, limb_bits);
     }
     case EXPR_SELECT: {
-        uint32_t flag_idx = node.data0;
-        uint32_t true_idx = node.data1;
-        uint32_t false_idx = node.data2;
-
-        if (flags[flag_idx]) {
-            result =
-                evaluate_bigint(expr_ops, true_idx, expr_meta, inputs, vars, flags, n, limb_bits);
+        if (flags[node.data0]) {
+            return evaluate_bigint(
+                expr_ops, node.data1, expr_meta, inputs, vars, flags, n, limb_bits
+            );
         } else {
-            result =
-                evaluate_bigint(expr_ops, false_idx, expr_meta, inputs, vars, flags, n, limb_bits);
+            return evaluate_bigint(
+                expr_ops, node.data2, expr_meta, inputs, vars, flags, n, limb_bits
+            );
         }
-        break;
     }
-    default:
-        result = BigIntGpu(limb_bits);
-        break;
+    default: {
+        return BigIntGpu(limb_bits);
     }
+    }
+}
 
-    return result;
+__device__ BigUintGpu compute_biguint(
+    const ExprOp *expr_ops,
+    uint32_t expr_idx,
+    const ExprMeta *meta,
+    const uint32_t *inputs,
+    const uint32_t *vars,
+    const bool *flags,
+    uint32_t num_limbs,
+    uint32_t limb_bits,
+    BigUintGpu &prime
+) {
+    DecodedExpr e = decode_expr_op(expr_ops[expr_idx]);
+
+    switch (e.kind) {
+    case EXPR_INPUT: {
+        const uint32_t *in_limbs = inputs + e.data0 * num_limbs;
+        return BigUintGpu(in_limbs, num_limbs, limb_bits).mod_reduce(prime, meta->barrett_mu);
+    }
+    case EXPR_VAR: {
+        const uint32_t *var_limbs = vars + e.data0 * num_limbs;
+        return BigUintGpu(var_limbs, num_limbs, limb_bits);
+    }
+    case EXPR_CONST: {
+        uint32_t idx = e.data0;
+        uint32_t offset = 0;
+        for (uint32_t i = 0; i < idx; i++) {
+            offset += meta->const_limb_counts[i];
+        }
+        return BigUintGpu(meta->constants + offset, meta->const_limb_counts[idx], limb_bits);
+    }
+    case EXPR_ADD: {
+        BigUintGpu sum = compute_biguint(
+            expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+        );
+        sum += compute_biguint(
+            expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+        );
+        return sum.mod_reduce(prime, meta->barrett_mu);
+    }
+    case EXPR_SUB: {
+        return compute_biguint(
+                   expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+        )
+            .mod_sub(
+                compute_biguint(
+                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+                ),
+                prime
+            );
+    }
+    case EXPR_MUL: {
+        return (compute_biguint(
+                    expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+                ) *
+                compute_biguint(
+                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+                ))
+            .mod_reduce(prime, meta->barrett_mu);
+    }
+    case EXPR_DIV: {
+        return compute_biguint(
+                   expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+        )
+            .mod_div(
+                compute_biguint(
+                    expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+                ),
+                prime,
+                meta->barrett_mu
+            );
+    }
+    case EXPR_INT_ADD: {
+        BigIntGpu a = BigIntGpu(
+            compute_biguint(
+                expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+            ),
+            false
+        );
+        BigIntGpu sum = a + BigIntGpu((int32_t)e.data1, limb_bits);
+        return sum.mag.mod_reduce(prime, meta->barrett_mu);
+    }
+    case EXPR_INT_MUL: {
+        BigIntGpu a = BigIntGpu(
+            compute_biguint(
+                expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+            ),
+            false
+        );
+        BigIntGpu prod = a * BigIntGpu((int32_t)e.data1, limb_bits);
+        return prod.mag.mod_reduce(prime, meta->barrett_mu);
+    }
+    case EXPR_SELECT: {
+        bool f = flags[e.data0];
+        uint32_t idx = f ? e.data1 : e.data2;
+        return compute_biguint(
+            expr_ops, idx, meta, inputs, vars, flags, num_limbs, limb_bits, prime
+        );
+    }
+    default: {
+        return BigUintGpu(limb_bits);
+    }
+    }
 }
 
 __device__ void compute(
@@ -145,200 +201,114 @@ __device__ void compute(
     const bool *flags,
     uint32_t num_limbs,
     uint32_t limb_bits,
-    uint32_t *temp_buf
+    BigUintGpu &prime
 ) {
-    DecodedExpr e = decode_expr_op(expr_ops[expr_idx]);
+    BigUintGpu result_big =
+        compute_biguint(expr_ops, expr_idx, meta, inputs, vars, flags, num_limbs, limb_bits, prime);
 
-    switch (e.kind) {
-    case EXPR_INPUT: {
-        const uint32_t *in_limbs = inputs + e.data0 * num_limbs;
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = in_limbs[i];
-        }
-        break;
-    }
-    case EXPR_VAR: {
-        const uint32_t *var_limbs = vars + e.data0 * num_limbs;
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = var_limbs[i];
-        }
-        break;
-    }
-    case EXPR_CONST: {
-        uint32_t idx = e.data0;
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < idx; i++) {
-            offset += meta->const_limb_counts[i];
-        }
-        uint32_t count = meta->const_limb_counts[idx];
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = (i < count) ? meta->constants[offset + i] : 0;
-        }
-        break;
-    }
-    case EXPR_ADD: {
-        uint32_t *a = temp_buf;
-        uint32_t *b = temp_buf + num_limbs;
-        uint32_t *sum = temp_buf + 2 * num_limbs;
-        compute(a, expr_ops, e.data0, meta, inputs, vars, flags, num_limbs, limb_bits, sum);
-        compute(b, expr_ops, e.data1, meta, inputs, vars, flags, num_limbs, limb_bits, sum);
-        limb_add(sum, a, b, num_limbs, limb_bits);
-        limb_mod_reduce(result, sum, meta->prime_limbs, num_limbs, limb_bits, meta->barrett_mu);
-        break;
-    }
-    case EXPR_SUB: {
-        uint32_t *a = temp_buf;
-        uint32_t *b = temp_buf + num_limbs;
-        compute(
-            a,
-            expr_ops,
-            e.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 2 * num_limbs
-        );
-        compute(
-            b,
-            expr_ops,
-            e.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 2 * num_limbs
-        );
-        limb_mod_sub(result, a, b, meta->prime_limbs, num_limbs, limb_bits);
-        break;
-    }
-    case EXPR_MUL: {
-        uint32_t *a = temp_buf;
-        uint32_t *b = temp_buf + num_limbs;
-        uint32_t *prod = temp_buf + 2 * num_limbs;
-        compute(
-            a,
-            expr_ops,
-            e.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 4 * num_limbs
-        );
-        compute(
-            b,
-            expr_ops,
-            e.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 4 * num_limbs
-        );
-        limb_mul(prod, a, b, num_limbs, limb_bits);
-        limb_mod_reduce(result, prod, meta->prime_limbs, num_limbs, limb_bits, meta->barrett_mu);
-        break;
-    }
-    case EXPR_DIV: {
-        uint32_t *a = temp_buf;
-        uint32_t *b = temp_buf + num_limbs;
-        compute(
-            a,
-            expr_ops,
-            e.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 4 * num_limbs
-        );
-        compute(
-            b,
-            expr_ops,
-            e.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 4 * num_limbs
-        );
-        limb_mod_div(
-            result,
-            a,
-            b,
-            meta->prime_limbs,
-            num_limbs,
-            limb_bits,
-            meta->barrett_mu,
-            temp_buf + 2 * num_limbs
-        );
-        break;
-    }
-    case EXPR_INT_ADD: {
-        uint32_t *c = temp_buf;
-        compute(
-            c,
-            expr_ops,
-            e.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + num_limbs
-        );
-        limb_int_add(c, c, (int32_t)e.data1, num_limbs, limb_bits);
-        limb_mod_reduce(result, c, meta->prime_limbs, num_limbs, limb_bits, meta->barrett_mu);
-        break;
-    }
-    case EXPR_INT_MUL: {
-        uint32_t *c = temp_buf;
-        compute(
-            c,
-            expr_ops,
-            e.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            temp_buf + 2 * num_limbs
-        );
-        limb_int_mul(c, c, (int32_t)e.data1, num_limbs, limb_bits, meta->prime_limbs);
-        limb_mod_reduce(result, c, meta->prime_limbs, num_limbs, limb_bits, meta->barrett_mu);
-        break;
-    }
-    case EXPR_SELECT: {
-        bool f = flags[e.data0];
-        uint32_t idx = f ? e.data1 : e.data2;
-        compute(result, expr_ops, idx, meta, inputs, vars, flags, num_limbs, limb_bits, temp_buf);
-        break;
-    }
-    default: {
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = 0;
-        }
-        break;
-    }
+    for (uint32_t i = 0; i < num_limbs; i++) {
+        result[i] = (i < result_big.num_limbs) ? result_big.limbs[i] : 0;
     }
 }
 
 // Raw evaluator: walks op stream, performs no modular reduction
+__device__ OverflowInt evaluate_overflow_int(
+    const ExprOp *expr_ops,
+    uint32_t op_idx,
+    const ExprMeta *meta,
+    const uint32_t *inputs,
+    const uint32_t *vars,
+    const bool *flags,
+    uint32_t num_limbs,
+    uint32_t limb_bits
+) {
+    DecodedExpr d = decode_expr_op(expr_ops[op_idx]);
+
+    switch (d.kind) {
+    case EXPR_INPUT: {
+        const uint32_t *in_limbs = inputs + d.data0 * num_limbs;
+        return OverflowInt(in_limbs, num_limbs, limb_bits);
+        break;
+    }
+    case EXPR_VAR: {
+        const uint32_t *var_limbs = vars + d.data0 * num_limbs;
+        return OverflowInt(var_limbs, num_limbs, limb_bits);
+        break;
+    }
+    case EXPR_CONST: {
+        uint32_t idx = d.data0;
+        uint32_t offset = 0;
+        for (uint32_t i = 0; i < idx; i++) {
+            offset += meta->const_limb_counts[i];
+        }
+        return OverflowInt(meta->constants + offset, meta->const_limb_counts[idx], limb_bits);
+        break;
+    }
+    case EXPR_ADD: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        a += evaluate_overflow_int(
+            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        return a;
+    }
+    case EXPR_SUB: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        a -= evaluate_overflow_int(
+            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        return a;
+    }
+    case EXPR_MUL: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        a *= evaluate_overflow_int(
+            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        return a;
+    }
+    case EXPR_SELECT: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data1, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        OverflowInt b = evaluate_overflow_int(
+            expr_ops, d.data2, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        if (flags[d.data0]) {
+            a.limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
+            a.max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
+            return a;
+        } else {
+            b.limb_max_abs = max(a.limb_max_abs, b.limb_max_abs);
+            b.max_overflow_bits = max(a.max_overflow_bits, b.max_overflow_bits);
+            return b;
+        }
+    }
+    case EXPR_INT_ADD: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        int32_t scalar = (int32_t)d.data1;
+        a += scalar;
+        return a;
+    }
+    case EXPR_INT_MUL: {
+        OverflowInt a = evaluate_overflow_int(
+            expr_ops, d.data0, meta, inputs, vars, flags, num_limbs, limb_bits
+        );
+        int32_t scalar = (int32_t)d.data1;
+        a *= scalar;
+        return a;
+    }
+    default:
+        return OverflowInt(limb_bits);
+    }
+}
+
 __device__ void evaluate_overflow(
     uint32_t *result,
     const ExprOp *expr_ops,
@@ -350,269 +320,16 @@ __device__ void evaluate_overflow(
     uint32_t num_limbs,
     uint32_t limb_bits,
     uint32_t &max_limb_abs,
-    uint32_t &real_num_limbs,
+    uint32_t &max_overflow_bits,
     uint32_t *temp_storage
 ) {
-    DecodedExpr d = decode_expr_op(expr_ops[op_idx]);
-    uint32_t *c1_res = temp_storage;
-    uint32_t *c2_res = temp_storage + 2 * num_limbs;
+    OverflowInt result_overflow =
+        evaluate_overflow_int(expr_ops, op_idx, meta, inputs, vars, flags, num_limbs, limb_bits);
 
-    switch (d.kind) {
-    case EXPR_INPUT:
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = inputs[d.data0 * num_limbs + i];
-            result[i + num_limbs] = 0;
-        }
-        max_limb_abs = (1 << limb_bits) - 1;
-        real_num_limbs = num_limbs;
-        break;
-    case EXPR_VAR:
-        for (uint32_t i = 0; i < num_limbs; i++) {
-            result[i] = vars[d.data0 * num_limbs + i];
-            result[i + num_limbs] = 0;
-        }
-        max_limb_abs = (1 << limb_bits) - 1;
-        real_num_limbs = num_limbs;
-        break;
-    case EXPR_CONST: {
-        uint32_t idx = d.data0;
-        uint32_t offset = 0;
-        for (uint32_t i = 0; i < idx; i++) {
-            offset += meta->const_limb_counts[i];
-        }
-        uint32_t count = meta->const_limb_counts[idx];
-        for (uint32_t i = 0; i < 2 * num_limbs; i++) {
-            result[i] = (i < count) ? meta->constants[offset + i] : 0;
-        }
-        max_limb_abs = (1 << limb_bits) - 1;
-        real_num_limbs = count;
-        break;
+    for (uint32_t i = 0; i < 2 * num_limbs; i++) {
+        result[i] = (i < result_overflow.num_limbs) ? result_overflow.limbs[i] : 0;
     }
-    case EXPR_ADD: {
-        uint32_t max_limb_abs_0, max_limb_abs_1;
-        uint32_t real_num_limbs_0, real_num_limbs_1;
-        evaluate_overflow(
-            c1_res,
-            expr_ops,
-            d.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_0,
-            real_num_limbs_0,
-            temp_storage + 4 * num_limbs
-        );
-        evaluate_overflow(
-            c2_res,
-            expr_ops,
-            d.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_1,
-            real_num_limbs_1,
-            temp_storage + 4 * num_limbs
-        );
-        limb_add_raw(result, c1_res, c2_res, num_limbs);
-        max_limb_abs = max_limb_abs_0 + max_limb_abs_1;
-        real_num_limbs = max(real_num_limbs_0, real_num_limbs_1);
-        break;
-    }
-    case EXPR_SUB: {
-        uint32_t max_limb_abs_0, max_limb_abs_1;
-        uint32_t real_num_limbs_0, real_num_limbs_1;
-        evaluate_overflow(
-            c1_res,
-            expr_ops,
-            d.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_0,
-            real_num_limbs_0,
-            temp_storage + 4 * num_limbs
-        );
-        evaluate_overflow(
-            c2_res,
-            expr_ops,
-            d.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_1,
-            real_num_limbs_1,
-            temp_storage + 4 * num_limbs
-        );
-        limb_sub_raw(result, c1_res, c2_res, num_limbs);
-        max_limb_abs = max_limb_abs_0 + max_limb_abs_1;
-        real_num_limbs = max(real_num_limbs_0, real_num_limbs_1);
-        break;
-    }
-    case EXPR_MUL: {
-        uint32_t max_limb_abs_0, max_limb_abs_1;
-        uint32_t real_num_limbs_0, real_num_limbs_1;
-        evaluate_overflow(
-            c1_res,
-            expr_ops,
-            d.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_0,
-            real_num_limbs_0,
-            temp_storage + 4 * num_limbs
-        );
-        evaluate_overflow(
-            c2_res,
-            expr_ops,
-            d.data1,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_1,
-            real_num_limbs_1,
-            temp_storage + 4 * num_limbs
-        );
-        limb_mul_raw(result, c1_res, c2_res, num_limbs);
-        max_limb_abs = max_limb_abs_0 * max_limb_abs_1 * min(real_num_limbs_0, real_num_limbs_1);
-        real_num_limbs = real_num_limbs_0 + real_num_limbs_1 - 1;
-        break;
-    }
-    case EXPR_SELECT: {
-        uint32_t max_limb_abs_0, max_limb_abs_1;
-        uint32_t real_num_limbs_0, real_num_limbs_1;
-        if (flags[d.data0]) {
-            evaluate_overflow(
-                result,
-                expr_ops,
-                d.data2,
-                meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits,
-                max_limb_abs_1,
-                real_num_limbs_1,
-                temp_storage
-            );
-            evaluate_overflow(
-                result,
-                expr_ops,
-                d.data1,
-                meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits,
-                max_limb_abs_0,
-                real_num_limbs_0,
-                temp_storage
-            );
-        } else {
-            evaluate_overflow(
-                result,
-                expr_ops,
-                d.data1,
-                meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits,
-                max_limb_abs_0,
-                real_num_limbs_0,
-                temp_storage
-            );
-            evaluate_overflow(
-                result,
-                expr_ops,
-                d.data2,
-                meta,
-                inputs,
-                vars,
-                flags,
-                num_limbs,
-                limb_bits,
-                max_limb_abs_1,
-                real_num_limbs_1,
-                temp_storage
-            );
-        }
-        max_limb_abs = max(max_limb_abs_0, max_limb_abs_1);
-        real_num_limbs = max(real_num_limbs_0, real_num_limbs_1);
-        break;
-    }
-    case EXPR_INT_ADD: {
-        uint32_t max_limb_abs_0, real_num_limbs_0;
-        evaluate_overflow(
-            c1_res,
-            expr_ops,
-            d.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_0,
-            real_num_limbs_0,
-            temp_storage + 4 * num_limbs
-        );
-        for (uint32_t i = 0; i < 2 * num_limbs; i++) {
-            result[i] = c1_res[i];
-        }
-        int32_t scalar = (int32_t)d.data1;
-        result[0] = (uint32_t)((int32_t)result[0] + scalar);
-        max_limb_abs = max_limb_abs_0 + abs(scalar);
-        real_num_limbs = real_num_limbs_0;
-        break;
-    }
-    case EXPR_INT_MUL: {
-        uint32_t max_limb_abs_0, real_num_limbs_0;
-        evaluate_overflow(
-            c1_res,
-            expr_ops,
-            d.data0,
-            meta,
-            inputs,
-            vars,
-            flags,
-            num_limbs,
-            limb_bits,
-            max_limb_abs_0,
-            real_num_limbs_0,
-            temp_storage + 4 * num_limbs
-        );
-        int32_t scalar = (int32_t)d.data1;
-        for (uint32_t i = 0; i < 2 * num_limbs; i++) {
-            result[i] = (uint32_t)((int32_t)c1_res[i] * scalar);
-        }
-        max_limb_abs = max_limb_abs_0 * abs(scalar);
-        real_num_limbs = real_num_limbs_0;
-        break;
-    }
-    default:
-        assert(false);
-        break;
-    }
+
+    max_limb_abs = result_overflow.limb_max_abs;
+    max_overflow_bits = result_overflow.max_overflow_bits;
 }

@@ -13,7 +13,10 @@ use openvm_mod_circuit_builder::{
 use openvm_stark_backend::p3_air::BaseAir;
 use stark_backend_gpu::{
     base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
+    cuda::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+    },
     prelude::F,
 };
 
@@ -58,19 +61,28 @@ impl FieldExpressionChipGPU {
             .iter()
             .map(|&x| x as u8)
             .collect::<Vec<_>>();
-        let prime_limbs_buf = air
+
+        // Pad prime_limbs to next valid size (32 or 48)
+        let padded_limbs_len = if air.expr.builder.prime_limbs.len() <= 32 {
+            32
+        } else {
+            48
+        };
+        let mut padded_prime_limbs = air
             .expr
             .builder
             .prime_limbs
             .iter()
             .map(|&x| x as u32)
-            .collect::<Vec<_>>()
-            .to_device()
-            .unwrap();
+            .collect::<Vec<_>>();
+        padded_prime_limbs.resize(padded_limbs_len, 0u32);
+
+        let prime_limbs_buf = padded_prime_limbs.to_device().unwrap();
 
         // Compute Barrett mu constant
         let p_big: BigUint = BigUint::from_le_bytes(&prime_limbs);
-        let two_n_bits = 2 * num_limbs as usize * limb_bits as usize;
+        let actual_limbs = air.expr.builder.prime_limbs.len();
+        let two_n_bits = 2 * actual_limbs * limb_bits as usize;
         let b2n = BigUint::one() << two_n_bits;
         let mu_big = &b2n / &p_big;
         let mu_limbs = biguint_to_limbs_vec(&mu_big, 2 * MAX_LIMBS);
@@ -441,6 +453,27 @@ impl FieldExpressionChipGPU {
     pub fn generate_field_trace(&self) -> DeviceMatrix<F> {
         let padded_height = next_power_of_two_or_zero(self.num_records);
         let mat = DeviceMatrix::with_capacity(padded_height, self.total_trace_width);
+
+        let meta_host = self.meta.to_host().unwrap()[0].clone();
+        let input_size = meta_host.num_inputs * meta_host.num_limbs;
+        let var_size = meta_host.expr_meta.num_vars * meta_host.num_limbs;
+        let carry_counts = self.carry_limb_counts_buf.to_host().unwrap();
+        let total_carry_count: u32 = carry_counts.iter().sum::<u32>();
+
+        // size in bytes
+        let workspace_per_thread = (input_size + var_size + total_carry_count)
+            * (size_of::<u32>() as u32)
+            + meta_host.num_u32_flags;
+
+        // Align workspace size to 16 bytes for CUDA alignment requirements
+        let workspace_per_thread = workspace_per_thread.next_multiple_of(16);
+
+        // Allocate workspace for all threads
+        let total_workspace_size = (workspace_per_thread as usize)
+            .checked_mul(padded_height)
+            .unwrap();
+        let workspace = DeviceBuffer::<u8>::with_capacity(total_workspace_size);
+
         unsafe {
             cudaDeviceSetLimit(cudaLimit::cudaLimitStackSize, 32 * 1024);
             tracegen(
@@ -456,6 +489,8 @@ impl FieldExpressionChipGPU {
                 LIMB_BITS as u32,
                 self.pointer_max_bits,
                 self.timestamp_max_bits,
+                workspace.as_ptr(),
+                workspace_per_thread,
             )
             .unwrap();
         }
