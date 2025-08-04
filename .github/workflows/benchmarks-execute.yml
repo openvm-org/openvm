@@ -25,6 +25,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
 
 jobs:
   codspeed-walltime-benchmarks:
@@ -45,6 +46,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/* benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -82,6 +93,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/* benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
