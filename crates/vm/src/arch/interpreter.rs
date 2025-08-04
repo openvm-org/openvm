@@ -55,8 +55,6 @@ pub struct InterpretedInstance<'a, F, Ctx> {
 
 struct PreComputeInstruction<'a, F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,
-    // Avoid lifetimes because the borrowed buffer is owned by the same struct
-    // (InterpretedInstance)
     pub pre_compute: &'a [u8],
 }
 
@@ -307,7 +305,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
     vm_state: &mut VmSegmentState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    // let start = std::time::Instant::now();
     while vm_state
         .exit_code
         .as_ref()
@@ -317,14 +314,16 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
             break;
         }
         let pc_index = get_pc_index(pc_base, vm_state.pc);
-        let inst = &fn_ptrs[pc_index];
-        // return Err(ExecutionError::PcOutOfBounds {
-        //     pc,
-        //     pc_base,
-        //     program_len: program.len(),
-        // });
-        // SAFETY: pre_compute assumed to live long enough
-        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
+        if let Some(inst) = fn_ptrs.get(pc_index) {
+            // SAFETY: pre_compute assumed to live long enough
+            unsafe { (inst.handler)(inst.pre_compute, vm_state) };
+        } else {
+            vm_state.exit_code = Err(ExecutionError::PcOutOfBounds {
+                pc: vm_state.pc,
+                pc_base,
+                program_len: fn_ptrs.len(),
+            });
+        }
     }
     if vm_state
         .exit_code
@@ -333,7 +332,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
     {
         Ctx::on_terminate(vm_state);
     }
-    // println!("execute time: {}ms", start.elapsed().as_millis());
 }
 
 #[inline(always)]
