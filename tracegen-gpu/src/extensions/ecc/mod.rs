@@ -1,10 +1,7 @@
 mod extension;
-// TEMP: delete this once gpu is fixed
-mod hybrid;
 pub mod weierstrass_chip;
 
 pub use extension::*;
-pub use hybrid::*;
 use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
 use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 pub use weierstrass_chip::*;

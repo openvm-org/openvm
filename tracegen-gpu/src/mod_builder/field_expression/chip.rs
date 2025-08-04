@@ -475,7 +475,7 @@ impl FieldExpressionChipGPU {
         let workspace = DeviceBuffer::<u8>::with_capacity(total_workspace_size);
 
         unsafe {
-            cudaDeviceSetLimit(cudaLimit::cudaLimitStackSize, 32 * 1024);
+            cudaDeviceSetLimit(cudaLimit::cudaLimitStackSize, 48 * 1024);
             tracegen(
                 &self.records,
                 mat.buffer(),
