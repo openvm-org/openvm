@@ -62,5 +62,9 @@ perf-metrics = [
 name = "execute"
 harness = false
 
+[[bin]]
+name = "preflight-leaf-verifier"
+path = "src/preflight-leaf-verifier.rs"
+
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]
