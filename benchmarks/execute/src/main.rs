@@ -1,5 +1,14 @@
+use std::fs;
+
 use eyre::Result;
+use openvm_benchmarks_utils::get_fixtures_dir;
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VirtualMachine};
+use openvm_continuations::{
+    verifier::{common::types::VmVerifierPvs, leaf::types::LeafVmVerifierInput},
+    SC,
+};
+use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_sdk::config::{DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
@@ -7,21 +16,16 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
-use openvm_continuations::{
-    verifier::common::types::VmVerifierPvs, verifier::leaf::types::LeafVmVerifierInput, SC,
-};
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_sdk::config::{DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE};
-
 fn main() -> Result<()> {
-    let app_proof_bytes = include_bytes!("../../fixtures/kitchen-sink.app.proof");
-    let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(app_proof_bytes)?;
+    let fixtures_dir = get_fixtures_dir();
+    let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
+    let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
-    let leaf_exe_bytes = include_bytes!("../../fixtures/kitchen-sink.leaf.exe");
-    let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(leaf_exe_bytes)?;
+    let leaf_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.exe")).unwrap();
+    let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
-    let leaf_pk_bytes = include_bytes!("../../fixtures/kitchen-sink.leaf.pk");
-    let leaf_pk = bitcode::deserialize(leaf_pk_bytes)?;
+    let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
+    let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
     let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
     let leaf_input = leaf_inputs.first().expect("No leaf input available");

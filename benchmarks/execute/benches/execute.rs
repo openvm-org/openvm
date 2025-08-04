@@ -1,4 +1,4 @@
-use std::{path::Path, sync::OnceLock};
+use std::{fs, path::Path, sync::OnceLock};
 
 use divan::Bencher;
 use eyre::Result;
@@ -7,17 +7,17 @@ use openvm_algebra_circuit::{
     ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
+use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
-use openvm_circuit::arch::ContinuationVmProof;
 use openvm_circuit::{
-    arch::{execution_mode::metered::MeteredCtx, instructions::exe::VmExe, *},
+    arch::{execution_mode::metered::MeteredCtx, instructions::exe::VmExe, ContinuationVmProof, *},
     derive::VmConfig,
     system::*,
 };
 use openvm_continuations::{
-    verifier::common::types::VmVerifierPvs, verifier::leaf::types::LeafVmVerifierInput, SC,
+    verifier::{common::types::VmVerifierPvs, leaf::types::LeafVmVerifierInput},
+    SC,
 };
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
@@ -38,7 +38,6 @@ use openvm_rv32im_transpiler::{
 use openvm_sdk::config::{DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE};
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
-use openvm_stark_sdk::openvm_stark_backend::prover::hal::DeviceDataTransporter;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::{StarkEngine, StarkFriEngine},
@@ -46,7 +45,10 @@ use openvm_stark_sdk::{
         self,
         config::{StarkGenericConfig, Val},
         p3_field::PrimeField32,
-        prover::cpu::{CpuBackend, CpuDevice},
+        prover::{
+            cpu::{CpuBackend, CpuDevice},
+            hal::DeviceDataTransporter,
+        },
     },
     p3_baby_bear::BabyBear,
 };
@@ -265,14 +267,16 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
     bencher
         .with_inputs(|| {
-            let app_proof_bytes = include_bytes!("../../fixtures/kitchen-sink.app.proof");
-            let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(app_proof_bytes).unwrap();
+            let fixtures_dir = get_fixtures_dir();
+            let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
+            let app_proof: ContinuationVmProof<SC> =
+                bitcode::deserialize(&app_proof_bytes).unwrap();
 
-            let leaf_exe_bytes = include_bytes!("../../fixtures/kitchen-sink.leaf.exe");
-            let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(leaf_exe_bytes).unwrap();
+            let leaf_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.exe")).unwrap();
+            let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
-            let leaf_pk_bytes = include_bytes!("../../fixtures/kitchen-sink.leaf.pk");
-            let leaf_pk = bitcode::deserialize(leaf_pk_bytes).unwrap();
+            let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
+            let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
             let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
             let leaf_input = leaf_inputs.first().expect("No leaf input available");
