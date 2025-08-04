@@ -62,6 +62,7 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
 ];
 
 static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
+static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
@@ -213,14 +214,19 @@ fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
     })
 }
 
+fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
+    EXECUTOR.get_or_init(|| {
+        let vm_config = ExecuteConfig::default();
+        VmExecutor::<BabyBear, _>::new(vm_config).unwrap()
+    })
+}
+
 #[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=10)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let executor = VmExecutor::<BabyBear, _>::new(vm_config).unwrap();
-            let interpreter = executor.instance(&exe).unwrap();
+            let interpreter = executor().instance(&exe).unwrap();
             (interpreter, vec![])
         })
         .bench_values(|(interpreter, input)| {
@@ -234,15 +240,11 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let vm_config = ExecuteConfig::default();
             let exe = load_program_executable(program).expect("Failed to load program executable");
-
             let (ctx, executor_idx_to_air_idx) = metering_setup();
-            let executor = VmExecutor::<BabyBear, _>::new(vm_config).unwrap();
-            let interpreter = executor
+            let interpreter = executor()
                 .metered_instance(&exe, executor_idx_to_air_idx)
                 .unwrap();
-
             (interpreter, vec![], ctx.clone())
         })
         .bench_values(|(interpreter, input, ctx)| {

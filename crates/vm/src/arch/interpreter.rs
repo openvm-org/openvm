@@ -34,7 +34,10 @@ use crate::{
 ///
 /// The generic `Ctx` and constructor determine whether this supported pure execution or metered
 /// execution.
-pub struct InterpretedInstance<F, Ctx> {
+// @dev: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
+// the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
+// executors.
+pub struct InterpretedInstance<'a, F, Ctx> {
     system_config: SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
@@ -42,7 +45,7 @@ pub struct InterpretedInstance<F, Ctx> {
     pre_compute_buf: AlignedBuf,
     /// Instruction table of function pointers and pointers to the pre-computed buffer. Indexed by
     /// `pc_index = (pc - pc_base) / DEFAULT_PC_STEP`.
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
 
     pc_base: u32,
     pc_start: u32,
@@ -50,11 +53,11 @@ pub struct InterpretedInstance<F, Ctx> {
     init_memory: SparseMemoryImage,
 }
 
-struct PreComputeInstruction<F, Ctx> {
+struct PreComputeInstruction<'a, F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,
     // Avoid lifetimes because the borrowed buffer is owned by the same struct
     // (InterpretedInstance)
-    pub pre_compute: *const [u8],
+    pub pre_compute: &'a [u8],
 }
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -85,7 +88,7 @@ macro_rules! execute_with_metrics {
     }};
 }
 
-impl<F, Ctx> InterpretedInstance<F, Ctx> {
+impl<F, Ctx> InterpretedInstance<'_, F, Ctx> {
     pub fn create_initial_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F, GuestMemory> {
         let memory_config = &self.system_config.memory_config;
         let memory = create_memory_image(memory_config, self.init_memory.clone());
@@ -98,7 +101,7 @@ impl<F, Ctx> InterpretedInstance<F, Ctx> {
 // pointers
 // - Generic in `Ctx`
 
-impl<F, Ctx> InterpretedInstance<F, Ctx>
+impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: E1ExecutionCtx,
@@ -106,7 +109,7 @@ where
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
     pub fn new<E>(
-        inventory: &ExecutorInventory<E>,
+        inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
@@ -137,7 +140,7 @@ where
     }
 }
 
-impl<F, Ctx> InterpretedInstance<F, Ctx>
+impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: E2ExecutionCtx,
@@ -145,7 +148,7 @@ where
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
     pub fn new_metered<E>(
-        inventory: &ExecutorInventory<E>,
+        inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
@@ -181,7 +184,7 @@ where
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<F> InterpretedInstance<F, E1Ctx>
+impl<F> InterpretedInstance<'_, F, E1Ctx>
 where
     F: PrimeField32,
 {
@@ -227,7 +230,7 @@ where
     }
 }
 
-impl<F> InterpretedInstance<F, MeteredCtx>
+impl<F> InterpretedInstance<'_, F, MeteredCtx>
 where
     F: PrimeField32,
 {
@@ -321,7 +324,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
         //     program_len: program.len(),
         // });
         // SAFETY: pre_compute assumed to live long enough
-        unsafe { (inst.handler)(&*inst.pre_compute, vm_state) };
+        unsafe { (inst.handler)(inst.pre_compute, vm_state) };
     }
     if vm_state
         .exit_code
@@ -444,11 +447,11 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
     None
 }
 
-fn get_pre_compute_instructions<F, Ctx, E>(
+fn get_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
-    inventory: &ExecutorInventory<E>,
+    inventory: &'a ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: E1ExecutionCtx,
@@ -460,7 +463,10 @@ where
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
-            let buf: &mut [u8] = buf;
+            // SAFETY: we cast to raw pointer and then borrow to remove the lifetime. This is safe
+            // only in the current context because `buf` comes from `pre_compute_buf` which will
+            // outlive the returned `PreComputeInstruction`s.
+            let buf: &mut [u8] = unsafe { &mut *(*buf as *mut [u8]) };
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
@@ -494,12 +500,12 @@ where
         .collect::<Result<Vec<_>, _>>()
 }
 
-fn get_metered_pre_compute_instructions<F, Ctx, E>(
+fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
-    inventory: &ExecutorInventory<E>,
+    inventory: &'a ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: E2ExecutionCtx,
@@ -511,7 +517,10 @@ where
         .zip_eq(pre_compute.iter_mut())
         .enumerate()
         .map(|(i, (inst_opt, buf))| {
-            let buf: &mut [u8] = buf;
+            // SAFETY: we cast to raw pointer and then borrow to remove the lifetime. This is safe
+            // only in the current context because `buf` comes from `pre_compute_buf` which will
+            // outlive the returned `PreComputeInstruction`s.
+            let buf: &mut [u8] = unsafe { &mut *(*buf as *mut [u8]) };
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_e2_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;

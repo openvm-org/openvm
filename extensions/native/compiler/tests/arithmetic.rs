@@ -395,7 +395,8 @@ fn assert_failed_assertion(
     let exe = VmExe::new(program);
 
     let config = NativeConfig::aggregation(4, 3);
-    let instance = VmExecutor::new(config).unwrap().instance(&exe).unwrap();
+    let executor = VmExecutor::new(config).unwrap();
+    let instance = executor.instance(&exe).unwrap();
     let result = instance.execute(vec![], None);
     assert!(
         matches!(result, Err(ExecutionError::Fail { .. })),

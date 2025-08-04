@@ -738,11 +738,8 @@ fn test_vm_pure_execution_non_continuation() {
     ];
 
     let exe = VmExe::new(Program::from_instructions(&instructions));
-
-    let instance = VmExecutor::new(test_native_config())
-        .unwrap()
-        .instance(&exe)
-        .unwrap();
+    let executor = VmExecutor::new(test_native_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
     instance.execute(vec![], None).expect("Failed to execute");
 }
 
@@ -767,10 +764,8 @@ fn test_vm_pure_execution_continuation() {
     ];
 
     let exe = VmExe::new(Program::from_instructions(&instructions));
-    let instance = VmExecutor::new(test_native_continuations_config())
-        .unwrap()
-        .instance(&exe)
-        .unwrap();
+    let executor = VmExecutor::new(test_native_continuations_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
     instance.execute(vec![], None).expect("Failed to execute");
 }
 
@@ -877,10 +872,8 @@ fn test_vm_e1_native_chips() {
     let exe = VmExe::new(Program::from_instructions(&instructions));
     let input_stream: Vec<Vec<F>> = vec![vec![]];
 
-    let instance = VmExecutor::new(test_rv32_with_kernels_config())
-        .unwrap()
-        .instance(&exe)
-        .unwrap();
+    let executor = VmExecutor::new(test_rv32_with_kernels_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
     instance
         .execute(input_stream, None)
         .expect("Failed to execute");

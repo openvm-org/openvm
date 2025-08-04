@@ -174,7 +174,8 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
 
-        let instance = VmExecutor::new(config.clone())?.instance(&exe)?;
+        let executor = VmExecutor::new(config.clone())?;
+        let instance = executor.instance(&exe)?;
         let state = instance.execute(vec![], None)?;
         let final_memory = state.memory.memory;
         let hasher = vm_poseidon2_hasher::<F>();
@@ -230,7 +231,8 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
 
-        let instance = VmExecutor::new(config)?.instance(&exe)?;
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&exe)?;
         let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
         match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
@@ -292,10 +294,8 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        let instance = VmExecutor::<F, _>::new(config.clone())
-            .unwrap()
-            .instance(&exe)
-            .unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![], None).unwrap();
     }
 

@@ -74,7 +74,8 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32ImConfig::default();
-    let interpreter = VmExecutor::new(config)?.instance(&exe)?;
+    let executor = VmExecutor::new(config)?;
+    let interpreter = executor.instance(&exe)?;
     interpreter.execute(vec![], None)?;
     Ok(())
 }
@@ -137,7 +138,8 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let interpreter = VmExecutor::new(config)?.instance(&openvm_exe)?;
+    let executor = VmExecutor::new(config)?;
+    let interpreter = executor.instance(&openvm_exe)?;
     interpreter.execute(vec![], None)?;
     Ok(())
 }

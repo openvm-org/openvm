@@ -39,7 +39,8 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
                 )?;
-                let interpreter = VmExecutor::new(config.clone())?.instance(&exe)?;
+                let executor = VmExecutor::new(config.clone())?;
+                let interpreter = executor.instance(&exe)?;
                 let _state = interpreter.execute(vec![], None)?;
                 Ok(())
             });
