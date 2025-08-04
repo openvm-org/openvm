@@ -55,7 +55,7 @@ jobs:
       - name: Pull fixtures from S3
         run: |
           mkdir -p benchmarks/fixtures
-          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/* benchmarks/fixtures/ || echo "No fixtures found in S3"
+          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/ benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -102,7 +102,7 @@ jobs:
       - name: Pull fixtures from S3
         run: |
           mkdir -p benchmarks/fixtures
-          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/* benchmarks/fixtures/ || echo "No fixtures found in S3"
+          s5cmd cp ${{ env.S3_FIXTURES_PATH }}/ benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
