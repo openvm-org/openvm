@@ -5105,6 +5105,7 @@ dependencies = [
 name = "openvm-benchmarks-execute"
 version = "1.4.0-rc.0"
 dependencies = [
+ "bitcode",
  "codspeed-divan-compat",
  "derive_more 1.0.0",
  "eyre",
@@ -5114,15 +5115,18 @@ dependencies = [
  "openvm-bigint-circuit",
  "openvm-bigint-transpiler",
  "openvm-circuit",
+ "openvm-continuations",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-native-circuit",
  "openvm-pairing-circuit",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
+ "openvm-sdk",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",
  "openvm-stark-sdk",
@@ -5160,10 +5164,17 @@ dependencies = [
 name = "openvm-benchmarks-utils"
 version = "1.4.0-rc.0"
 dependencies = [
+ "bitcode",
  "cargo_metadata",
  "clap",
  "eyre",
  "openvm-build",
+ "openvm-circuit",
+ "openvm-continuations",
+ "openvm-native-circuit",
+ "openvm-native-recursion",
+ "openvm-sdk",
+ "openvm-stark-sdk",
  "openvm-transpiler",
  "tempfile",
  "tracing",

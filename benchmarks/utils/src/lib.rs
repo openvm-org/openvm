@@ -9,6 +9,10 @@ use openvm_build::{build_guest_package, get_package, guest_methods, GuestOptions
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 use tempfile::tempdir;
 
+pub fn get_fixtures_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures")
+}
+
 pub fn get_programs_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../guest")
 }
