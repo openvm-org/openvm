@@ -1,6 +1,9 @@
 name: "Upload benchmark fixtures"
 
 on:
+  push:
+    # TODO(ayush): remove
+    branches: ["feat/new-exec-e3-bench"]
   workflow_dispatch:
 
 env:
