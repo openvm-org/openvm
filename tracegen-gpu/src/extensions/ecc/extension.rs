@@ -1,7 +1,8 @@
 use openvm_circuit::arch::{
-    ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
+    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
+    VmProverExtension,
 };
-use openvm_ecc_circuit::{WeierstrassAir, WeierstrassExtension};
+use openvm_ecc_circuit::{Rv32WeierstrassConfig, WeierstrassAir, WeierstrassExtension};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -10,8 +11,14 @@ use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuB
 use strum::EnumCount;
 
 use crate::{
-    extensions::ecc::{WeierstrassAddNeChipGpu, WeierstrassDoubleChipGpu},
-    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+    extensions::{
+        algebra::Rv32ModularGpuBuilder,
+        ecc::{WeierstrassAddNeChipGpu, WeierstrassDoubleChipGpu},
+    },
+    system::{
+        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+        SystemChipInventoryGPU,
+    },
 };
 
 #[derive(Clone)]
@@ -104,5 +111,41 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
         }
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Rv32WeierstrassGpuBuilder;
+
+type E = GpuBabyBearPoseidon2Engine;
+
+impl VmBuilder<E> for Rv32WeierstrassGpuBuilder {
+    type VmConfig = Rv32WeierstrassConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32WeierstrassConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularGpuBuilder, &config.modular, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &EccGpuProverExt,
+            &config.weierstrass,
+            inventory,
+        )?;
+
+        Ok(chip_complex)
     }
 }

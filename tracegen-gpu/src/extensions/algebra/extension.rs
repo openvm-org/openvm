@@ -1,11 +1,12 @@
 use openvm_algebra_circuit::{
     fp2_chip::Fp2Air,
     modular_chip::{ModularAir, ModularIsEqualAir},
-    Fp2Extension, ModularExtension,
+    Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
 };
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
 use openvm_circuit::arch::{
-    ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
+    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
+    VmProverExtension,
 };
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -14,11 +15,19 @@ use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuB
 use strum::EnumCount;
 
 use crate::{
-    extensions::algebra::{
-        Fp2AddSubChipGpu, Fp2MulDivChipGpu, ModularAddSubChipGpu, ModularIsEqualChipGpu,
-        ModularMulDivChipGpu,
+    extensions::{
+        algebra::{
+            Fp2AddSubChipGpu, Fp2MulDivChipGpu, ModularAddSubChipGpu, ModularIsEqualChipGpu,
+            ModularMulDivChipGpu,
+        },
+        rv32im::Rv32ImGpuProverExt,
     },
-    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+    system::{
+        extensions::{
+            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
+        },
+        SystemChipInventoryGPU,
+    },
 };
 
 #[derive(Clone)]
@@ -215,5 +224,72 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
         }
 
         Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct Rv32ModularGpuBuilder;
+
+type E = GpuBabyBearPoseidon2Engine;
+
+impl VmBuilder<E> for Rv32ModularGpuBuilder {
+    type VmConfig = Rv32ModularConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32ModularConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.base, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.mul, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &AlgebraGpuProverExt,
+            &config.modular,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+#[derive(Clone)]
+pub struct Rv32ModularWithFp2CpuBuilder;
+
+impl VmBuilder<E> for Rv32ModularWithFp2CpuBuilder {
+    type VmConfig = Rv32ModularWithFp2Config;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32ModularWithFp2Config,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularGpuBuilder, &config.modular, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, &config.fp2, inventory)?;
+        Ok(chip_complex)
     }
 }
