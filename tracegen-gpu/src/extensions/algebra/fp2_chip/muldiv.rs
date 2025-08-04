@@ -93,6 +93,8 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use num_bigint::BigUint;
     use num_traits::{One, Zero};
     use openvm_algebra_circuit::fp2_chip::{
@@ -105,6 +107,7 @@ mod tests {
     };
     use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
     use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig};
+    use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
     use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -261,18 +264,31 @@ mod tests {
         let b_c0_limbs = biguint_to_limbs::<NUM_LIMBS>(b_c0, LIMB_BITS).map(F::from_canonical_u32);
         let b_c1_limbs = biguint_to_limbs::<NUM_LIMBS>(b_c1, LIMB_BITS).map(F::from_canonical_u32);
 
-        tester.write(data_as, a_base_addr as usize, a_c0_limbs);
-        tester.write(
-            data_as,
-            (a_base_addr + NUM_LIMBS as u32) as usize,
-            a_c1_limbs,
-        );
-        tester.write(data_as, b_base_addr as usize, b_c0_limbs);
-        tester.write(
-            data_as,
-            (b_base_addr + NUM_LIMBS as u32) as usize,
-            b_c1_limbs,
-        );
+        for i in (0..NUM_LIMBS).step_by(BLOCK_SIZE) {
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                a_base_addr as usize + i,
+                a_c0_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                (a_base_addr + NUM_LIMBS as u32) as usize + i,
+                a_c1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                b_base_addr as usize + i,
+                b_c0_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+
+            tester.write::<BLOCK_SIZE>(
+                data_as,
+                (b_base_addr + NUM_LIMBS as u32) as usize + i,
+                b_c1_limbs[i..i + BLOCK_SIZE].try_into().unwrap(),
+            );
+        }
 
         let instruction = Instruction::from_isize(
             VmOpcode::from_usize(offset + op_local),
@@ -339,7 +355,20 @@ mod tests {
     }
 
     #[test]
-    fn test_fp2_muldiv_gpu() {
+    fn test_fp2_muldiv_gpu_2x32_small() {
+        run_test_with_config::<2, 32, 32>(
+            BigUint::from_str("357686312646216567629137").unwrap(),
+            50,
+        );
+    }
+
+    #[test]
+    fn test_fp2_muldiv_gpu_2x32() {
         run_test_with_config::<2, 32, 32>(secp256k1_coord_prime(), 50);
+    }
+
+    #[test]
+    fn test_fp2_muldiv_gpu_6x16() {
+        run_test_with_config::<6, 16, 48>(BLS12_381_MODULUS.clone(), 50);
     }
 }

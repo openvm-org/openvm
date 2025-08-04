@@ -20,6 +20,8 @@ pub mod field_expression {
             bitwise_num_bits: u32,
             pointer_max_bits: u32,
             timestamp_max_bits: u32,
+            d_workspace: *const u8,
+            workspace_per_thread: u32,
         ) -> i32;
     }
 
@@ -36,6 +38,8 @@ pub mod field_expression {
         bitwise_num_bits: u32,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
+        d_workspace: *const u8,
+        workspace_per_thread: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_field_expression_tracegen(
             d_records.as_ptr(),
@@ -51,6 +55,8 @@ pub mod field_expression {
             bitwise_num_bits,
             pointer_max_bits,
             timestamp_max_bits,
+            d_workspace,
+            workspace_per_thread,
         ))
     }
 }

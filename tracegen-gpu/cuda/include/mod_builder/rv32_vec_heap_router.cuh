@@ -2,7 +2,6 @@
 
 #include "../../src/extensions/rv32_adapters/vec_heap.cuh"
 #include "mod_builder/meta.cuh"
-#include "mod_builder/records.cuh"
 #include "trace_access.h"
 
 struct Rv32VecHeapConfig {
@@ -30,6 +29,12 @@ __device__ inline Rv32VecHeapConfig get_rv32_vec_heap_config(const FieldExprMeta
         }
     } else if (meta->adapter_blocks == 3) {
         return Rv32VecHeapConfig(2, 3, 3, 16, 16);
+    } else if (meta->adapter_blocks == 6) {
+        if (meta->num_inputs == 2) {
+            return Rv32VecHeapConfig(1, 6, 6, 16, 16);
+        } else {
+            return Rv32VecHeapConfig(2, 6, 6, 16, 16);
+        }
     }
 
     return Rv32VecHeapConfig(2, 1, 1, 32, 32);
@@ -122,7 +127,33 @@ __device__ inline void route_rv32_vec_heap_adapter(
             timestamp_max_bits,
             adapter_size
         );
+    } else if (config.num_reads == 2 && config.blocks_per_read == 6 &&
+               config.blocks_per_write == 6 && config.read_size == 16 && config.write_size == 16) {
+        instantiate_rv32_vec_heap_adapter<2, 6, 6, 16, 16>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
+    } else if (config.num_reads == 1 && config.blocks_per_read == 6 &&
+               config.blocks_per_write == 6 && config.read_size == 16 && config.write_size == 16) {
+        instantiate_rv32_vec_heap_adapter<1, 6, 6, 16, 16>(
+            row,
+            rec_bytes,
+            pointer_max_bits,
+            range_checker,
+            bitwise_lookup,
+            timestamp_max_bits,
+            adapter_size
+        );
     } else {
+        assert(
+            config.num_reads == 2 && config.blocks_per_read == 1 && config.blocks_per_write == 1 &&
+            config.read_size == 32 && config.write_size == 32
+        );
         instantiate_rv32_vec_heap_adapter<2, 1, 1, 32, 32>(
             row,
             rec_bytes,
