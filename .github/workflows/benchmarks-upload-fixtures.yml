@@ -38,7 +38,7 @@ jobs:
       - name: Upload fixtures to S3
         run: |
           if [ -d "benchmarks/fixtures" ]; then
-            s5cmd cp benchmarks/fixtures/* ${{ env.S3_FIXTURES_PATH }}/
+            s5cmd cp benchmarks/fixtures/ ${{ env.S3_FIXTURES_PATH }}/
           else
             echo "No fixtures directory found"
             exit 1
