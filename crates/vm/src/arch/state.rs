@@ -3,10 +3,11 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use openvm_instructions::exe::SparseMemoryImage;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, SeedableRng};
 
-use super::{ExecutionError, Streams};
+use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -16,7 +17,7 @@ use crate::{
             E1ExecutionCtx,
         },
         instructions::*,
-        Arena, InstructionExecutor,
+        Arena, InstructionExecutor, MemoryConfig,
     },
     system::{
         memory::online::{GuestMemory, TracingMemory},
@@ -52,6 +53,19 @@ impl<F, MEM> VmState<F, MEM> {
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
+    }
+}
+
+impl<F> VmState<F, GuestMemory> {
+    pub fn initial(
+        memory_config: &MemoryConfig,
+        init_memory: SparseMemoryImage,
+        pc_start: u32,
+        inputs: impl Into<Streams<F>>,
+    ) -> Self {
+        let memory = create_memory_image(memory_config, init_memory);
+        let seed = 0;
+        VmState::new(0, pc_start, memory, inputs.into(), seed)
     }
 }
 

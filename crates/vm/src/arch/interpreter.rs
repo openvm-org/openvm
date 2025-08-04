@@ -17,7 +17,6 @@ use tracing::info_span;
 
 use crate::{
     arch::{
-        create_memory_image,
         execution_mode::{
             e1::E1Ctx,
             metered::{MeteredCtx, Segment},
@@ -84,15 +83,6 @@ macro_rules! execute_with_metrics {
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }
     }};
-}
-
-impl<F, Ctx> InterpretedInstance<'_, F, Ctx> {
-    pub fn create_initial_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F, GuestMemory> {
-        let memory_config = &self.system_config.memory_config;
-        let memory = create_memory_image(memory_config, self.init_memory.clone());
-        let seed = 0;
-        VmState::new(0, self.pc_start, memory, inputs.into(), seed)
-    }
 }
 
 // Constructors for E1 and E2 respectively, which generate pre-computed buffers and function
@@ -196,7 +186,12 @@ where
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let vm_state = self.create_initial_state(inputs);
+        let vm_state = VmState::initial(
+            &self.system_config.memory_config,
+            self.init_memory.clone(),
+            self.pc_start,
+            inputs,
+        );
         self.execute_from_state(vm_state, num_insns)
     }
 
@@ -241,7 +236,12 @@ where
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = self.create_initial_state(inputs);
+        let vm_state = VmState::initial(
+            &self.system_config.memory_config,
+            self.init_memory.clone(),
+            self.pc_start,
+            inputs,
+        );
         self.execute_metered_from_state(vm_state, ctx)
     }
 

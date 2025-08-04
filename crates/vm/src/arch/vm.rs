@@ -487,18 +487,17 @@ where
         })
     }
 
-    /// Same as [`InterpretedInstance::create_initial_state`] but sets more information for
+    /// Calls [`VmState::initial`] but sets more information for
     /// performance metrics when feature "perf-metrics" is enabled.
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
-        input: impl Into<Streams<Val<E::SC>>>,
+        inputs: impl Into<Streams<Val<E::SC>>>,
     ) -> VmState<Val<E::SC>, GuestMemory> {
         let memory_config = &self.config().as_ref().memory_config;
-        let memory = create_memory_image(memory_config, exe.init_memory.clone());
-        let seed = 0;
         #[allow(unused_mut)]
-        let mut state = VmState::new(0, exe.pc_start, memory, input, seed);
+        let mut state =
+            VmState::initial(memory_config, exe.init_memory.clone(), exe.pc_start, inputs);
         // Add backtrace information for either:
         // - debugging
         // - performance metrics
