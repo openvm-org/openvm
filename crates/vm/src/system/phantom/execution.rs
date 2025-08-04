@@ -119,7 +119,10 @@ fn execute_impl<F>(
     // to handle here is DebugPanic.
     if let Some(discr) = SysPhantom::from_repr(discriminant.0) {
         if discr == SysPhantom::DebugPanic {
-            return Err(ExecutionError::Fail { pc: *state.pc });
+            return Err(ExecutionError::Fail {
+                pc: *state.pc,
+                msg: "DebugPanic",
+            });
         }
     }
     sub_executor

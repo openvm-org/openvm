@@ -24,8 +24,8 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
-    #[error("execution failed at pc {pc}")]
-    Fail { pc: u32 },
+    #[error("execution failed at pc {pc}, err: {msg}")]
+    Fail { pc: u32, msg: &'static str },
     #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
     PcOutOfBounds {
         pc: u32,

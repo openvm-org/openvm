@@ -486,7 +486,10 @@ unsafe fn execute_e12_impl<
         3 => {
             // DIV
             if c_val.is_zero() {
-                vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+                vm_state.exit_code = Err(ExecutionError::Fail {
+                    pc: vm_state.pc,
+                    msg: "DivF divide by zero",
+                });
                 return;
             }
             b_val * c_val.inverse()

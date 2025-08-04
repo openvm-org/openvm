@@ -496,7 +496,10 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
         // The range of `b`,`c` had already been checked in `pre_compute_e1`.
         if !(x < (1 << b) && y < (1 << c)) {
-            vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "NativeRangeCheck",
+            });
             return;
         }
     }

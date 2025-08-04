@@ -474,7 +474,10 @@ unsafe fn execute_e12_setup_impl<
     let input_prime = BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened());
 
     if input_prime != pre_compute.expr.prime {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        vm_state.exit_code = Err(ExecutionError::Fail {
+            pc: vm_state.pc,
+            msg: "EcAddNe: mismatched prime",
+        });
         return;
     }
 

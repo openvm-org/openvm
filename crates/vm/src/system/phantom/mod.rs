@@ -148,7 +148,10 @@ where
                             eprintln!("openvm program failure; no backtrace");
                         }
                     }
-                    return Err(ExecutionError::Fail { pc });
+                    return Err(ExecutionError::Fail {
+                        pc,
+                        msg: "DebugPanic",
+                    });
                 }
                 #[cfg(feature = "perf-metrics")]
                 SysPhantom::CtStart => {

@@ -595,7 +595,10 @@ unsafe fn execute_e12_setup_impl<
     };
 
     if input_prime != pre_compute.expr.prime {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        vm_state.exit_code = Err(ExecutionError::Fail {
+            pc: vm_state.pc,
+            msg: "ModularSetup: mismatched prime",
+        });
         return;
     }
 

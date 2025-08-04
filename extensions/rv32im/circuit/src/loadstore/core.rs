@@ -507,7 +507,10 @@ unsafe fn execute_e12_impl<
     };
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        vm_state.exit_code = Err(ExecutionError::Fail {
+            pc: vm_state.pc,
+            msg: "Invalid LoadStoreOp",
+        });
         return;
     }
 

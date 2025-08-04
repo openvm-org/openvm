@@ -399,7 +399,10 @@ unsafe fn execute_e12_impl<
         sign_extended.to_le_bytes()
     } else {
         if shift_amount != 0 && shift_amount != 2 {
-            vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "LoadSignExtend invalid shift amount",
+            });
             return;
         }
         let half: [u8; 2] = array::from_fn(|i| read_data[shift_amount as usize + i]);
