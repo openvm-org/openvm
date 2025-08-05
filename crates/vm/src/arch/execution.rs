@@ -93,7 +93,10 @@ pub enum StaticProgramError {
 /// [InsExecutorE1] and [InsExecutorE2] traits.
 pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmExecState<F, GuestMemory, CTX>);
 
-/// Trait for E1 execution
+/// Trait for pure execution via a host interpreter. The trait methods provide the methods to
+/// pre-process the program code into function pointers which operate on `pre_compute` instruction
+/// data.
+// @dev: In the codebase this is sometimes referred to as (E1).
 pub trait InsExecutorE1<F> {
     fn pre_compute_size(&self) -> usize;
 
@@ -107,6 +110,10 @@ pub trait InsExecutorE1<F> {
         Ctx: E1ExecutionCtx;
 }
 
+/// Trait for metered execution via a host interpreter. The trait methods provide the methods to
+/// pre-process the program code into function pointers which operate on `pre_compute` instruction
+/// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
+// @dev: In the codebase this is sometimes referred to as (E2).
 pub trait InsExecutorE2<F> {
     fn e2_pre_compute_size(&self) -> usize;
 
@@ -122,6 +129,11 @@ pub trait InsExecutorE2<F> {
 }
 
 // TODO[jpw]: Avoid Clone by making executors stateless?
+/// Trait for preflight execution via a host interpreter. The trait methods allow execution of
+/// instructions via enum dispatch within an interpreter. This execution is specialized to record
+/// "records" of execution which will be ingested later for trace matrix generation. The records are
+/// stored in a record arena, which is provided in the [VmStateMut] argument.
+// @dev: In the codebase this is sometimes referred to as (E3).
 pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
