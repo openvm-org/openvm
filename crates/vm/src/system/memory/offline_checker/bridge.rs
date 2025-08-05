@@ -144,6 +144,33 @@ impl<F: FieldAlgebra, V: Copy + Into<F>, const N: usize> MemoryReadOperation<'_,
             enabled,
         );
     }
+    /// Evaluate constraints and send/receive interactions.
+    pub fn extra_eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = F>,
+    {
+        let enabled = enabled.into();
+
+        // NOTE: We do not need to constrain `address_space != 0` since this is done implicitly by
+        // the memory interactions argument together with initial/final memory chips.
+
+        self.offline_checker.extra_eval_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
+
+        self.offline_checker.eval_bulk_access(
+            builder,
+            self.address,
+            &self.data,
+            &self.data,
+            self.timestamp.clone(),
+            self.aux.base.prev_timestamp,
+            enabled,
+        );
+    }
 }
 
 /// Constraints and interactions for a logical memory read of `(address, data)` at time `timestamp`,
@@ -210,6 +237,45 @@ impl<F: FieldAlgebra, V: Copy + Into<F>> MemoryReadOrImmediateOperation<'_, F, V
             enabled * not(self.aux.is_immediate),
         );
     }
+    /// Evaluate constraints and send/receive interactions.
+    pub fn extra_eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = F>,
+    {
+        let enabled = enabled.into();
+
+        // `is_immediate` should be an indicator for `address_space == 0` (when `enabled`).
+        {
+            let is_zero_io = IsZeroIo::new(
+                self.address.address_space.clone(),
+                self.aux.is_immediate.into(),
+                enabled.clone(),
+            );
+            IsZeroSubAir.eval(builder, (is_zero_io, self.aux.is_zero_aux));
+        }
+        // When `is_immediate`, the data should be the pointer value.
+        builder
+            .when(self.aux.is_immediate)
+            .assert_eq(self.data.clone(), self.address.pointer.clone());
+
+        // Timestamps should be increasing (when enabled).
+        self.offline_checker.extra_eval_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
+
+        self.offline_checker.eval_bulk_access(
+            builder,
+            self.address,
+            &[self.data.clone()],
+            &[self.data],
+            self.timestamp,
+            self.aux.base.prev_timestamp,
+            enabled * not(self.aux.is_immediate),
+        );
+    }
 }
 
 /// Constraints and interactions for a logical memory write of `(address, data)` at time
@@ -254,6 +320,28 @@ impl<T: FieldAlgebra, V: Copy + Into<T>, const N: usize> MemoryWriteOperation<'_
             enabled,
         );
     }
+    pub fn extra_eval<AB>(self, builder: &mut AB, enabled: impl Into<AB::Expr>)
+    where
+        AB: InteractionBuilder<Var = V, Expr = T>,
+    {
+        let enabled = enabled.into();
+        self.offline_checker.extra_eval_timestamps(
+            builder,
+            self.timestamp.clone(),
+            &self.aux.base,
+            enabled.clone(),
+        );
+
+        self.offline_checker.eval_bulk_access(
+            builder,
+            self.address,
+            &self.data,
+            &self.aux.prev_data.map(Into::into),
+            self.timestamp,
+            self.aux.base.prev_timestamp,
+            enabled,
+        );
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -274,6 +362,18 @@ impl MemoryOfflineChecker {
     /// deg(enabled) + max(1, deg(timestamp))
     /// Note: deg(prev_timestamp) = 1 since prev_timestamp is Var
     fn eval_timestamps<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        timestamp: AB::Expr,
+        base: &MemoryBaseAuxCols<AB::Var>,
+        enabled: AB::Expr,
+    ) {
+        let lt_io = AssertLessThanIo::new(base.prev_timestamp, timestamp.clone(), enabled);
+        self.timestamp_lt_air
+            .eval(builder, (lt_io, &base.timestamp_lt_aux.lower_decomp[..1]));
+    }
+
+    fn extra_eval_timestamps<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
         timestamp: AB::Expr,

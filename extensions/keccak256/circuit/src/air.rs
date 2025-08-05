@@ -567,7 +567,7 @@ impl KeccakVmAir {
                     timestamp.clone(),
                     mem_aux,
                 )
-                .eval(builder, count);
+                .extra_eval(builder, count);
 
             timestamp += AB::Expr::ONE;
         }
@@ -622,7 +622,7 @@ impl KeccakVmAir {
                     timestamp,
                     &mem_aux[i],
                 )
-                .eval(builder, local.inner.export)
+                .extra_eval(builder, local.inner.export)
         }
     }
 

@@ -334,7 +334,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32LoadStoreAdapterAir {
                 timestamp_pp(),
                 &write_aux_cols,
             )
-            .eval(builder, write_count);
+            .extra_eval(builder, write_count);
 
         let to_pc = ctx
             .to_pc
