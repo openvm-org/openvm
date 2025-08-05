@@ -1,21 +1,38 @@
 use std::{env, process::Command};
 
+// Glob helper to watch multiple files
+fn watch_glob(pattern: &str) {
+    for path in glob::glob(pattern).expect("Invalid glob pattern").flatten() {
+        if path.is_file() {
+            println!("cargo:rerun-if-changed={}", path.display());
+        }
+    }
+}
+
+// Detect optimal NVCC parallel jobs
+fn nvcc_parallel_jobs() -> String {
+    // Try to detect CPU count from std
+    let threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+
+    // Allow override from NVCC_THREADS env var
+    let threads = std::env::var("NVCC_THREADS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(threads);
+
+    format!("-t{}", threads)
+}
+
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../backend/cuda/include");
     println!("cargo:rerun-if-changed=cuda");
     println!("cargo:rerun-if-env-changed=CUDA_ARCH");
     println!("cargo:rerun-if-env-changed=CUDA_OPT_LEVEL");
-    println!("cargo:rerun-if-changed=build.rs");
-    // The line below is intentionally removed.
-    // println!("cargo:rerun-if-changed=src");
-    // Add a recursive search for files either in 'cuda' directory or named 'cuda*.rs' within 'src'
-    if let Ok(paths) = glob::glob("src/**/cuda*") {
-        for path in paths.filter_map(Result::ok) {
-            if path.is_file() {
-                println!("cargo:rerun-if-changed={}", path.display());
-            }
-        }
-    }
+    println!("cargo:rerun-if-env-changed=CUDA_DEBUG");
+    watch_glob("src/**/cuda*");
 
     let cuda_arch = env::var("CUDA_ARCH").unwrap_or_else(|_| {
         let output = Command::new("nvidia-smi")
@@ -33,6 +50,15 @@ fn main() {
         println!("cargo:rustc-env=CUDA_ARCH={}", arch);
         arch
     });
+
+    // CUDA_DEBUG shortcut
+    if env::var("CUDA_DEBUG").map(|v| v == "1").unwrap_or(false) {
+        env::set_var("CUDA_OPT_LEVEL", "0");
+        env::set_var("CUDA_LAUNCH_BLOCKING", "1");
+        env::set_var("CUDA_MEMCHECK", "1");
+        env::set_var("RUST_BACKTRACE", "1");
+        println!("cargo:warning=CUDA_DEBUG=1 → forcing CUDA_OPT_LEVEL=0, CUDA_LAUNCH_BLOCKING=1, CUDA_MEMCHECK=1,RUST_BACKTRACE=1");
+    }
 
     // Get CUDA_OPT_LEVEL from environment or use default value
     // 0 → No optimization (fast compile, debug-friendly)
@@ -54,9 +80,10 @@ fn main() {
         .flag("-Xfatbin=-compress-all")
         .flag("--expt-relaxed-constexpr")
         // .flag("--device-link")
-        // Compute capability for T4
+        // Compute capability
         .flag("-gencode")
-        .flag(format!("arch=compute_{},code=sm_{}", cuda_arch, cuda_arch));
+        .flag(format!("arch=compute_{},code=sm_{}", cuda_arch, cuda_arch))
+        .flag(nvcc_parallel_jobs());
 
     if cuda_opt_level == "0" {
         common.debug(true);
@@ -116,13 +143,11 @@ fn main() {
             .file("cuda/src/extensions/keccak256/keccakf.cu")
             .compile("tracegen_gpu_keccak");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/bigint.cu")
             .compile("tracegen_gpu_bigint");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/primitives/bitwise_op_lookup.cu")
@@ -130,7 +155,6 @@ fn main() {
             .file("cuda/src/primitives/range_tuple.cu")
             .compile("tracegen_gpu_primitives");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/dummy/bitwise_op_lookup.cu")
@@ -144,7 +168,6 @@ fn main() {
             .file("cuda/src/dummy/var_range.cu")
             .compile("tracegen_gpu_dummy");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/system/access_adapters.cu")
@@ -156,7 +179,6 @@ fn main() {
             .file("cuda/src/system/memory/merkle_tree.cu")
             .compile("tracegen_gpu_system");
     }
-
     {
         let mut b = common.clone();
         b.file("cuda/src/testing/execution.cu")
