@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::alloc::{alloc_zeroed, Layout};
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
@@ -18,10 +19,30 @@ impl<T: Copy + Default> PagedVec<T> {
     /// `total_size` is the capacity of elements of type `T`.
     pub fn new(total_size: usize) -> Self {
         let num_pages = total_size.div_ceil(PAGE_SIZE);
-        Self {
-            pages: vec![T::default(); total_size].into_boxed_slice(),
-            flags: vec![false; num_pages].into_boxed_slice(),
-        }
+        
+        // Allocate and zero-initialize pages using unsafe for performance
+        let pages = unsafe {
+            let layout = Layout::array::<T>(total_size).expect("Layout creation failed");
+            let ptr = alloc_zeroed(layout) as *mut T;
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            let slice = std::slice::from_raw_parts_mut(ptr, total_size);
+            Box::from_raw(slice)
+        };
+        
+        // Allocate and zero-initialize flags (already false by default for bool)
+        let flags = unsafe {
+            let layout = Layout::array::<bool>(num_pages).expect("Layout creation failed");
+            let ptr = alloc_zeroed(layout) as *mut bool;
+            if ptr.is_null() {
+                std::alloc::handle_alloc_error(layout);
+            }
+            let slice = std::slice::from_raw_parts_mut(ptr, num_pages);
+            Box::from_raw(slice)
+        };
+        
+        Self { pages, flags }
     }
 
     /// Panics if the index is out of bounds. Creates a new page with default values if no page
