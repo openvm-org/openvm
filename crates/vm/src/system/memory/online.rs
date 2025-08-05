@@ -44,6 +44,7 @@ pub type MemoryBackend = basic::BasicMemory;
 pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
 pub const PAGE_SIZE: usize = 4096;
+pub const PAGE_SIZE_LOG2: usize = 12;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);
@@ -431,7 +432,7 @@ impl TracingMemory {
                     let min_block_size = addr_sp.min_block_size;
                     let total_metadata_len = num_cells.div_ceil(min_block_size);
                     (
-                        PagedVec::new(total_metadata_len, PAGE_SIZE),
+                        PagedVec::new(total_metadata_len),
                         min_block_size as u32,
                     )
                 })

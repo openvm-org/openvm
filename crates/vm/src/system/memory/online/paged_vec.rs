@@ -2,10 +2,11 @@ use std::fmt::Debug;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
+use crate::system::memory::online::{PAGE_SIZE, PAGE_SIZE_LOG2};
+
 #[derive(Debug, Clone)]
 pub struct PagedVec<T> {
     pages: Vec<Option<Box<[T]>>>,
-    page_size: usize,
 }
 
 unsafe impl<T: Send> Send for PagedVec<T> {}
@@ -14,11 +15,10 @@ unsafe impl<T: Sync> Sync for PagedVec<T> {}
 impl<T: Copy + Default> PagedVec<T> {
     #[inline]
     /// `total_size` is the capacity of elements of type `T`.
-    pub fn new(total_size: usize, page_size: usize) -> Self {
-        let num_pages = total_size.div_ceil(page_size);
+    pub fn new(total_size: usize) -> Self {
+        let num_pages = total_size.div_ceil(PAGE_SIZE);
         Self {
-            pages: vec![Some(vec![T::default(); page_size].into_boxed_slice()); num_pages],
-            page_size,
+            pages: vec![Some(vec![T::default(); PAGE_SIZE].into_boxed_slice()); num_pages],
         }
     }
 
@@ -26,20 +26,8 @@ impl<T: Copy + Default> PagedVec<T> {
     /// exists.
     #[inline]
     pub fn get(&mut self, index: usize) -> &T {
-        let page_idx = index / self.page_size;
-        let offset = index % self.page_size;
-
-        // assert!(
-        //     page_idx < self.pages.len(),
-        //     "PagedVec::get index out of bounds: {} >= {}",
-        //     index,
-        //     self.pages.len() * self.page_size
-        // );
-
-        // if self.pages[page_idx].is_none() {
-        //     let page = vec![T::default(); self.page_size];
-        //     self.pages[page_idx] = Some(page.into_boxed_slice());
-        // }
+        let page_idx = index >> PAGE_SIZE_LOG2;
+        let offset = index & (PAGE_SIZE - 1);
 
         unsafe {
             // SAFETY:
@@ -56,28 +44,15 @@ impl<T: Copy + Default> PagedVec<T> {
     /// Panics if the index is out of bounds. Creates new page before write when necessary.
     #[inline]
     pub fn set(&mut self, index: usize, value: T) {
-        let page_idx = index / self.page_size;
-        let offset = index % self.page_size;
-
-        assert!(
-            page_idx < self.pages.len(),
-            "PagedVec::set index out of bounds: {} >= {}",
-            index,
-            self.pages.len() * self.page_size
-        );
+        let page_idx = index >> PAGE_SIZE_LOG2;
+        let offset = index & (PAGE_SIZE - 1);
 
         let page = self.pages[page_idx].as_mut().unwrap();
-        // if let Some(page) = &mut self.pages[page_idx] {
         // SAFETY:
         // - If page exists, then it has size `page_size`
         unsafe {
             *page.get_unchecked_mut(offset) = value;
         }
-        // } else {
-        //     let mut page = vec![T::default(); self.page_size];
-        //     page[offset] = value;
-        //     self.pages[page_idx] = Some(page.into_boxed_slice());
-        // }
     }
 
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_
@@ -91,7 +66,7 @@ impl<T: Copy + Default> PagedVec<T> {
                 page.as_ref().map(move |p| {
                     p.par_iter()
                         .enumerate()
-                        .map(move |(offset, &value)| (page_idx * self.page_size + offset, value))
+                        .map(move |(offset, &value)| (page_idx * PAGE_SIZE + offset, value))
                 })
             })
             .flatten()
@@ -108,7 +83,7 @@ impl<T: Copy + Default> PagedVec<T> {
                 page.as_ref().map(move |p| {
                     p.iter()
                         .enumerate()
-                        .map(move |(offset, &value)| (page_idx * self.page_size + offset, value))
+                        .map(move |(offset, &value)| (page_idx * PAGE_SIZE + offset, value))
                 })
             })
             .flatten()
