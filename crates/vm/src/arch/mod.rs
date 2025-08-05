@@ -17,8 +17,10 @@ mod state;
 pub mod vm;
 
 pub mod hasher;
-/// Interpreter for VM execution
+/// Interpreter for pure and metered VM execution
 pub mod interpreter;
+/// Interpreter for preflight VM execution, for trace generation purposes.
+pub mod interpreter_preflight;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;

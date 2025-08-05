@@ -44,14 +44,15 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{MeteredCtx, Segment},
-            tracegen::{TracegenCtx, TracegenExecutionControl},
+            tracegen::TracegenCtx,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
         interpreter::InterpretedInstance,
+        interpreter_preflight::PreflightInterpretedInstance,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
-        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig,
-        VmSegmentExecutor, VmExecState, VmState, PUBLIC_VALUES_AIR_ID,
+        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig,
+        VmState, PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -404,8 +405,7 @@ where
         debug_assert!(executor_idx_to_air_idx
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
-        let ctrl = TracegenExecutionControl::new(executor_idx_to_air_idx);
-        let mut instance = VmSegmentExecutor::new(handler, ctrl);
+        let mut instance = PreflightInterpretedInstance::new(handler, executor_idx_to_air_idx);
 
         let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
