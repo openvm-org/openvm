@@ -53,6 +53,7 @@ where
             self.execute_instruction(state)?;
             state.instret += 1;
         }
+
         Ok(())
     }
 
@@ -106,7 +107,7 @@ where
 
         #[cfg(feature = "metrics")]
         {
-            crate::metrics::update_instruction_metrics(state, executor, pc_entry);
+            crate::metrics::update_instruction_metrics(state, executor, pc, pc_entry);
         }
 
         Ok(())

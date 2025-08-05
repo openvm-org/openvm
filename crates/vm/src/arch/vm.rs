@@ -446,9 +446,14 @@ where
         let mut exec_state = VmExecState::new(vm_state, ctx);
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
         let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
-        let mut memory = exec_state.vm_state.memory;
-        let touched_memory = memory.finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        let touched_memory = exec_state
+            .vm_state
+            .memory
+            .finalize::<Val<E::SC>>(system_config.continuation_enabled);
+        #[cfg(feature = "perf-metrics")]
+        crate::metrics::update_memory_metrics(&mut exec_state);
 
+        let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(exec_state.vm_state.pc, memory.timestamp());
         let public_values = system_config
             .has_public_values_chip()
@@ -1195,16 +1200,19 @@ mod vm_metrics {
     use metrics::counter;
 
     use super::*;
-    use crate::metrics::get_dyn_trace_heights_from_arenas;
+    use crate::{arch::Arena, system::memory::adapter::AccessAdapterInventory};
 
     impl<E, VB> VirtualMachine<E, VB>
     where
         E: StarkEngine,
         VB: VmBuilder<E>,
     {
-        /// See [`metrics::get_trace_heights_from_arenas`](crate::metrics::get_trace_heights_from_arenas).
-        /// In addition, this function includes the constant trace heights and the used height of
-        /// the program trace.
+        /// Assumed that `record_arenas` has length equal to number of AIRs.
+        ///
+        /// Best effort calculation of the used trace heights per chip without padding to powers of
+        /// two. This is best effort because some periphery chips may not have record arenas to
+        /// instrument. This function includes the memory access adapter trace heights, constant
+        /// trace heights, and the used height of the program trace.
         pub(crate) fn get_trace_heights_from_arenas(
             &self,
             system_records: &SystemRecords<Val<E::SC>>,
@@ -1215,11 +1223,15 @@ mod vm_metrics {
             let sys_config = self.config().as_ref();
             let num_sys_airs = sys_config.num_airs();
             let access_adapter_offset = sys_config.access_adapter_air_id_offset();
-            let mut heights = get_dyn_trace_heights_from_arenas::<Val<E::SC>, _>(
-                num_sys_airs,
-                access_adapter_offset,
+            let mut heights: Vec<usize> = record_arenas
+                .iter()
+                .map(|arena| arena.current_trace_height())
+                .collect();
+            // Memory is special case, so extract the memory AIR's trace heights from the special
+            // arena
+            AccessAdapterInventory::<Val<E::SC>>::compute_heights_from_arena(
                 &system_records.access_adapter_records,
-                record_arenas,
+                &mut heights[access_adapter_offset..num_sys_airs],
             );
             // If there are any constant trace heights, set them
             for (pk, height) in zip(&self.pk.per_air, &mut heights) {
@@ -1250,7 +1262,8 @@ mod vm_metrics {
             counter!("main_cells_used").absolute(main_cells_used as u64);
             counter!("total_cells_used").absolute(total_cells_used as u64);
 
-            if self.config().as_ref().profiling {
+            #[cfg(feature = "perf-metrics")]
+            {
                 for (name, value) in zip(self.air_names(), heights) {
                     let labels = [("air_name", name.to_string())];
                     counter!("rows_used", &labels).absolute(*value as u64);

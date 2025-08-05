@@ -11,14 +11,8 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
 
 use crate::{
-    arch::{
-        execution_mode::tracegen::TracegenCtx, Arena, DenseRecordArena, PreflightExecutor,
-        VmExecState,
-    },
-    system::{
-        memory::{adapter::AccessAdapterInventory, online::TracingMemory},
-        program::PcEntry,
-    },
+    arch::{execution_mode::tracegen::TracegenCtx, Arena, PreflightExecutor, VmExecState},
+    system::{memory::online::TracingMemory, program::PcEntry},
 };
 
 pub mod cycle_tracker;
@@ -60,6 +54,7 @@ pub struct VmMetrics {
 pub fn update_instruction_metrics<F, RA, Executor>(
     state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
     executor: &mut Executor,
+    prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
 ) where
     F: Clone + Send + Sync,
@@ -80,59 +75,56 @@ pub fn update_instruction_metrics<F, RA, Executor>(
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
 
-        let num_sys_airs = state.metrics.num_sys_airs;
-        let access_adapter_offset = state.metrics.access_adapter_offset;
-        let debug_info = state.metrics.debug_infos.get(pc);
+        let debug_info = state.metrics.debug_infos.get(prev_pc);
         let dsl_instr = debug_info.as_ref().map(|info| info.dsl_instruction.clone());
 
-        let now_trace_heights = get_dyn_trace_heights_from_arenas::<F, _>(
-            num_sys_airs,
-            access_adapter_offset,
-            &state.memory.access_adapter_records,
-            &state.ctx.arenas,
-        );
-        let mut now_trace_cells = now_trace_heights;
+        let now_trace_heights: Vec<usize> = state
+            .ctx
+            .arenas
+            .iter()
+            .map(|arena| arena.current_trace_height())
+            .collect();
+        let now_trace_cells = zip(&state.metrics.main_widths, &now_trace_heights)
+            .map(|(main_width, h)| main_width * h)
+            .collect_vec();
+        state
+            .metrics
+            .update_trace_cells(now_trace_cells, opcode_name, dsl_instr);
 
-        let metrics = &mut state.metrics;
-        for (main_width, cell_count) in zip(&metrics.main_widths, &mut now_trace_cells) {
-            *cell_count *= main_width;
-        }
-        metrics.update_trace_cells(now_trace_cells, opcode_name, dsl_instr);
-
-        metrics.update_current_fn(pc);
+        state.metrics.update_current_fn(pc);
     }
 }
 
-/// Assumed that `record_arenas` has length equal to number of AIRs.
-///
-/// Best effort calculation of the used trace heights per chip without padding to powers of
-/// two. This is best effort because some periphery chips may not have record arenas
-/// to instrument.
-///
-/// Does not include constant trace heights or the used program trace height.
-pub(crate) fn get_dyn_trace_heights_from_arenas<F, RA>(
-    num_sys_airs: usize,
-    access_adapter_offset: usize,
-    access_adapter_records: &DenseRecordArena,
-    record_arenas: &[RA],
-) -> Vec<usize>
+// Memory access adapter height calculation is slow, so only do it if this is the end of
+// execution:
+#[cfg(feature = "perf-metrics")]
+pub fn update_memory_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>)
 where
     F: Clone + Send + Sync,
     RA: Arena,
 {
-    // First, get used heights from record arenas
-    let mut heights: Vec<usize> = record_arenas
+    use std::iter::zip;
+
+    use crate::system::memory::adapter::AccessAdapterInventory;
+
+    let access_adapter_offset = state.metrics.access_adapter_offset;
+    let num_sys_airs = state.metrics.num_sys_airs;
+    let mut now_trace_heights: Vec<usize> = state
+        .ctx
+        .arenas
         .iter()
         .map(|arena| arena.current_trace_height())
         .collect();
-    // Memory is special case, so extract the memory AIR's trace heights from the special
-    // arena
     AccessAdapterInventory::<F>::compute_heights_from_arena(
-        access_adapter_records,
-        &mut heights[access_adapter_offset..num_sys_airs],
+        &state.memory.access_adapter_records,
+        &mut now_trace_heights[access_adapter_offset..num_sys_airs],
     );
-
-    heights
+    let now_trace_cells = zip(&state.metrics.main_widths, &now_trace_heights)
+        .map(|(main_width, h)| main_width * h)
+        .collect_vec();
+    state
+        .metrics
+        .update_trace_cells(now_trace_cells, "MEMORY_ACCESS_ADAPTERS".to_string(), None);
 }
 
 impl VmMetrics {
