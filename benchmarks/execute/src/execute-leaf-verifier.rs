@@ -75,12 +75,12 @@ fn main() -> Result<()> {
 
     match cli.mode {
         ExecutionMode::Normal => {
-            tracing::debug!("Running normal execute mode...");
+            tracing::info!("Running normal execute...");
             let interpreter = vm.executor().instance(&leaf_exe)?;
             interpreter.execute(input_stream, None)?;
         }
         ExecutionMode::Metered => {
-            tracing::debug!("Running metered execute mode...");
+            tracing::info!("Running metered execute...");
             let ctx = vm.build_metered_ctx();
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             let interpreter = vm
@@ -89,7 +89,7 @@ fn main() -> Result<()> {
             interpreter.execute_metered(input_stream, ctx)?;
         }
         ExecutionMode::Preflight => {
-            tracing::debug!("Running preflight execute mode...");
+            tracing::info!("Running preflight execute...");
             let state = vm.create_initial_state(&leaf_exe, input_stream);
             let _out = vm
                 .execute_preflight(&leaf_exe, state, None, NATIVE_MAX_TRACE_HEIGHTS)
