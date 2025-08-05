@@ -1,7 +1,53 @@
+use openvm_stark_backend::p3_field::{ExtensionField, PrimeField32};
+
 pub(crate) const CASTF_MAX_BITS: usize = 30;
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
     [a, b][(a < b) as usize]
+}
+
+#[inline(always)]
+pub fn transmute_array_to_ext<F, EF, const EXT_DEG: usize>(array: &[F; EXT_DEG]) -> EF
+where
+    F: PrimeField32,
+    EF: ExtensionField<F>,
+{
+    debug_assert_eq!(
+        std::mem::size_of::<[F; EXT_DEG]>(),
+        std::mem::size_of::<EF>(),
+        "Array [F; EXT_DEG] must have the same size as EF"
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<[F; EXT_DEG]>(),
+        std::mem::align_of::<EF>(),
+        "Array [F; EXT_DEG] must have the same alignment as EF"
+    );
+    // SAFETY: This assumes that [F; EXT_DEG] has the same memory layout as EF.
+    // This is only safe for extension field types that are guaranteed to be represented
+    // as an array of base field elements internally
+    unsafe { *(array as *const [F; EXT_DEG] as *const EF) }
+}
+
+#[inline(always)]
+pub fn transmute_ext_to_array<F, EF, const EXT_DEG: usize>(ext: &EF) -> [F; EXT_DEG]
+where
+    F: PrimeField32,
+    EF: ExtensionField<F>,
+{
+    debug_assert_eq!(
+        std::mem::size_of::<EF>(),
+        std::mem::size_of::<[F; EXT_DEG]>(),
+        "EF must have the same size as array [F; EXT_DEG]"
+    );
+    debug_assert_eq!(
+        std::mem::align_of::<EF>(),
+        std::mem::align_of::<[F; EXT_DEG]>(),
+        "EF must have the same alignment as array [F; EXT_DEG]"
+    );
+    // SAFETY: This assumes that EF has the same memory layout as [F; EXT_DEG].
+    // This is only safe for extension field types that are guaranteed to be represented
+    // as an array of base field elements internally
+    unsafe { *(ext as *const EF as *const [F; EXT_DEG]) }
 }
 
 /// Testing framework

@@ -26,7 +26,10 @@ use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{
+        extension::{BinomialExtensionField, BinomiallyExtendable},
+        Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
+    },
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -35,11 +38,14 @@ use static_assertions::const_assert_eq;
 
 use crate::{
     field_extension::{FieldExtension, EXT_DEG},
+    transmute_array_to_ext, transmute_ext_to_array,
     utils::const_max,
 };
 
 #[cfg(test)]
 mod tests;
+
+type EF<F> = BinomialExtensionField<F, EXT_DEG>;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -1140,7 +1146,7 @@ impl FriReducedOpeningExecutor {
 
 impl<F> Executor<F> for FriReducedOpeningExecutor
 where
-    F: PrimeField32,
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -1165,7 +1171,7 @@ where
 
 impl<F> MeteredExecutor<F> for FriReducedOpeningExecutor
 where
-    F: PrimeField32,
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
@@ -1190,18 +1196,24 @@ where
     }
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e1_impl<F, CTX>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    CTX: E1ExecutionCtx,
+{
     let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
 }
 
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_e2_impl<F, CTX>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    CTX: E2ExecutionCtx,
+{
     let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl(&pre_compute.data, vm_state);
     vm_state
@@ -1210,11 +1222,16 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e12_impl<F, CTX>(
     pre_compute: &FriReducedOpeningPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> u32 {
+) -> u32
+where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    CTX: E1ExecutionCtx,
+{
     let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
+    let alpha = transmute_array_to_ext::<F, EF<F>, EXT_DEG>(&alpha);
 
     let [length]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
     let length = length.as_canonical_u32() as usize;
@@ -1235,7 +1252,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
         vec![]
     };
 
-    let mut as_and_bs = Vec::with_capacity(length);
+    let mut as_and_bs: Vec<(F, EF<F>)> = Vec::with_capacity(length);
     #[allow(clippy::needless_range_loop)]
     for i in 0..length {
         let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
@@ -1247,19 +1264,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
         };
         let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
         let b = vm_state.vm_read(AS::Native as u32, b_ptr_i);
+        let b = transmute_array_to_ext::<F, EF<F>, EXT_DEG>(&b);
 
         as_and_bs.push((a, b));
     }
 
-    let mut result = [F::ZERO; EXT_DEG];
+    let mut result = EF::<F>::ZERO;
     for (a, b) in as_and_bs.into_iter().rev() {
         // result = result * alpha + (b - a)
-        result = FieldExtension::add(
-            FieldExtension::multiply(result, alpha),
-            FieldExtension::subtract(b, elem_to_ext(a)),
-        );
+        result = result * alpha + (b - EF::<F>::from_base(a));
     }
 
+    let result = transmute_ext_to_array::<F, EF<F>, EXT_DEG>(&result);
     vm_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
