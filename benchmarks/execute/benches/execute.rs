@@ -263,7 +263,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(sample_count = 3)]
+#[divan::bench(sample_count = 20)]
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
     bencher
         .with_inputs(|| {
