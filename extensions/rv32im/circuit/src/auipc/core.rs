@@ -327,7 +327,7 @@ where
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &AuiPcPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rd = run_auipc(vm_state.pc, pre_compute.imm);
     vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);

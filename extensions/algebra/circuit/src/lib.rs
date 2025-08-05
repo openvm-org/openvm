@@ -399,7 +399,7 @@ unsafe fn execute_e1_setup_impl<
     const IS_FP2: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
     execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, vm_state);
@@ -413,7 +413,7 @@ unsafe fn execute_e2_setup_impl<
     const IS_FP2: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
     vm_state
@@ -432,7 +432,7 @@ unsafe fn execute_e1_impl<
     const OP: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, vm_state);
@@ -448,7 +448,7 @@ unsafe fn execute_e2_impl<
     const OP: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
     vm_state
@@ -468,7 +468,7 @@ unsafe fn execute_e1_generic_impl<
     const IS_FP2: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
@@ -482,7 +482,7 @@ unsafe fn execute_e2_generic_impl<
     const IS_FP2: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
     vm_state
@@ -501,7 +501,7 @@ unsafe fn execute_e12_impl<
     const OP: u8,
 >(
     pre_compute: &FieldExpressionPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs_vals = pre_compute
         .rs_addrs
@@ -536,7 +536,7 @@ unsafe fn execute_e12_generic_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &FieldExpressionPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs_vals = pre_compute
         .rs_addrs
@@ -574,7 +574,7 @@ unsafe fn execute_e12_setup_impl<
     const IS_FP2: bool,
 >(
     pre_compute: &FieldExpressionPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read the first input (which should be the prime)
     let rs_vals = pre_compute

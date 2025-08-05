@@ -411,7 +411,7 @@ unsafe fn execute_e12_impl<
     const IS_U32: bool,
 >(
     pre_compute: &LessThanPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if E_IS_IMM {
@@ -439,7 +439,7 @@ unsafe fn execute_e1_impl<
     const IS_U32: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LessThanPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(pre_compute, vm_state);
@@ -451,7 +451,7 @@ unsafe fn execute_e2_impl<
     const IS_U32: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LessThanPreCompute> = pre_compute.borrow();
     vm_state

@@ -51,7 +51,7 @@ use crate::{
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
         SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecutionConfig,
-        VmSegmentExecutor, VmSegmentState, VmState, PUBLIC_VALUES_AIR_ID,
+        VmSegmentExecutor, VmExecState, VmState, PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -443,7 +443,7 @@ where
             #[cfg(feature = "metrics")]
             metrics: state.metrics,
         };
-        let mut exec_state = VmSegmentState::new(vm_state, ctx);
+        let mut exec_state = VmExecState::new(vm_state, ctx);
         execute_spanned!("execute_e3", instance, &mut exec_state)?;
         let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
         let mut memory = exec_state.vm_state.memory;

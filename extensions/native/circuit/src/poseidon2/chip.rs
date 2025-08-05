@@ -1197,7 +1197,7 @@ unsafe fn execute_pos2_e1_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
@@ -1210,7 +1210,7 @@ unsafe fn execute_pos2_e2_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     let height =
@@ -1226,7 +1226,7 @@ unsafe fn execute_verify_batch_e1_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(pre_compute, vm_state);
@@ -1238,7 +1238,7 @@ unsafe fn execute_verify_batch_e2_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(&pre_compute.data, vm_state);
@@ -1255,7 +1255,7 @@ unsafe fn execute_pos2_e12_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
 
@@ -1309,7 +1309,7 @@ unsafe fn execute_verify_batch_e12_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     // TODO: Add a flag `optimistic_execution`. When the flag is true, we trust all inputs
     // and skip all input validation computation during E1 execution.

@@ -324,7 +324,7 @@ unsafe fn execute_e1_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
@@ -337,7 +337,7 @@ unsafe fn execute_e1_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
 
@@ -352,7 +352,7 @@ unsafe fn execute_e2_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
     vm_state
@@ -368,7 +368,7 @@ unsafe fn execute_e2_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
     vm_state
@@ -385,7 +385,7 @@ unsafe fn execute_e12_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &EcDoublePreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
     let rs_vals = pre_compute
@@ -430,7 +430,7 @@ unsafe fn execute_e12_setup_impl<
     const BLOCK_SIZE: usize,
 >(
     pre_compute: &EcDoublePreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs_vals = pre_compute
         .rs_addrs

@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::{
-    arch::{Arena, ExecutionError, InstructionExecutor, VmSegmentState, VmStateMut},
+    arch::{Arena, ExecutionError, InstructionExecutor, VmExecState, VmStateMut},
     system::{memory::online::TracingMemory, program::PcEntry},
 };
 
@@ -46,7 +46,7 @@ impl<F> TracegenExecutionControl<F> {
     #[inline(always)]
     pub fn should_suspend<RA>(
         &self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> bool {
         state
             .ctx
@@ -57,20 +57,20 @@ impl<F> TracegenExecutionControl<F> {
     #[inline(always)]
     pub fn on_suspend_or_terminate<RA>(
         &self,
-        _state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        _state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
         _exit_code: Option<u32>,
     ) {
     }
 
     #[inline(always)]
-    pub fn on_suspend<RA>(&self, state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>) {
+    pub fn on_suspend<RA>(&self, state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>) {
         self.on_suspend_or_terminate(state, None);
     }
 
     #[inline(always)]
     pub fn on_terminate<RA>(
         &self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
         exit_code: u32,
     ) {
         self.on_suspend_or_terminate(state, Some(exit_code));
@@ -80,7 +80,7 @@ impl<F> TracegenExecutionControl<F> {
     #[inline(always)]
     pub fn execute_instruction<RA, Executor>(
         &self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
         executor: &mut Executor,
         pc_entry: &PcEntry<F>,
     ) -> Result<(), ExecutionError>

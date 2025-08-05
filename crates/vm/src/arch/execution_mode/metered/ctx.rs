@@ -14,7 +14,7 @@ use crate::{
         execution_mode::{
             metered::segment_ctx::SegmentationLimits, E1ExecutionCtx, E2ExecutionCtx,
         },
-        VmSegmentState,
+        VmExecState,
     },
     system::memory::{dimensions::MemoryDimensions, online::GuestMemory},
 };
@@ -232,7 +232,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) -> bool {
+    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
         vm_state.ctx.check_and_segment(vm_state.instret);
@@ -240,7 +240,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn on_terminate<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) {
+    fn on_terminate<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) {
         vm_state
             .ctx
             .memory_ctx

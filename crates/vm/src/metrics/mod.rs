@@ -13,7 +13,7 @@ use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkPr
 use crate::{
     arch::{
         execution_mode::tracegen::TracegenCtx, Arena, DenseRecordArena, InstructionExecutor,
-        VmSegmentState,
+        VmExecState,
     },
     system::{
         memory::{adapter::AccessAdapterInventory, online::TracingMemory},
@@ -58,7 +58,7 @@ pub struct VmMetrics {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+    state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
     executor: &mut Executor,
     pc_entry: &PcEntry<F>,
 ) where

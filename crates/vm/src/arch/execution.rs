@@ -11,7 +11,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+use super::{execution_mode::E1ExecutionCtx, Streams, VmExecState};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -91,7 +91,7 @@ pub enum StaticProgramError {
 /// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
 /// The contents of `pre_compute` are determined from the program code as specified by the
 /// [InsExecutorE1] and [InsExecutorE2] traits.
-pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmExecState<F, GuestMemory, CTX>);
 
 /// Trait for E1 execution
 pub trait InsExecutorE1<F> {

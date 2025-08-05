@@ -11,7 +11,7 @@ use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
         E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
-        PhantomSubExecutor, StaticProgramError, Streams, VmSegmentState,
+        PhantomSubExecutor, StaticProgramError, Streams, VmExecState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
@@ -65,7 +65,7 @@ pub(super) struct PhantomStateMut<'a, F> {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &PhantomPreCompute<F>,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let sub_executor = &*pre_compute.sub_executor;
     if let Err(e) = execute_impl(
@@ -88,7 +88,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -97,7 +97,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
     vm_state

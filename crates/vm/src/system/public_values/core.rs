@@ -25,7 +25,7 @@ use crate::{
         get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
         BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
         InsExecutorE1, InsExecutorE2, InstructionExecutor, MinimalInstruction, RecordArena,
-        StaticProgramError, TraceFiller, VmCoreAir, VmSegmentState, VmStateMut,
+        StaticProgramError, TraceFiller, VmCoreAir, VmExecState, VmStateMut,
     },
     system::{
         memory::{
@@ -319,7 +319,7 @@ where
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: E1ExecutionCtx,
 {
@@ -330,7 +330,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: E2ExecutionCtx,
 {
@@ -342,7 +342,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &PublicValuesPreCompute<F>,
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: E1ExecutionCtx,
 {

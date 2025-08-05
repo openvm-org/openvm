@@ -72,7 +72,8 @@ impl<F> VmState<F, GuestMemory> {
 /// Represents the full execution state of a VM during execution.
 /// The global state is generic in guest memory `MEM` and additional context `CTX`.
 /// The host state is execution context specific.
-pub struct VmSegmentState<F, MEM, CTX> {
+// @dev: Do not confuse with `ExecutionState` struct.
+pub struct VmExecState<F, MEM, CTX> {
     /// Core VM state
     pub vm_state: VmState<F, MEM>,
     /// Execution-specific fields
@@ -80,7 +81,7 @@ pub struct VmSegmentState<F, MEM, CTX> {
     pub ctx: CTX,
 }
 
-impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
+impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
     pub fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
         Self {
             vm_state,
@@ -90,7 +91,7 @@ impl<F, MEM, CTX> VmSegmentState<F, MEM, CTX> {
     }
 }
 
-impl<F, MEM, CTX> Deref for VmSegmentState<F, MEM, CTX> {
+impl<F, MEM, CTX> Deref for VmExecState<F, MEM, CTX> {
     type Target = VmState<F, MEM>;
 
     fn deref(&self) -> &Self::Target {
@@ -98,13 +99,13 @@ impl<F, MEM, CTX> Deref for VmSegmentState<F, MEM, CTX> {
     }
 }
 
-impl<F, MEM, CTX> DerefMut for VmSegmentState<F, MEM, CTX> {
+impl<F, MEM, CTX> DerefMut for VmExecState<F, MEM, CTX> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.vm_state
     }
 }
 
-impl<F, CTX> VmSegmentState<F, GuestMemory, CTX>
+impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
     CTX: E1ExecutionCtx,
 {
@@ -188,7 +189,7 @@ where
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
@@ -215,7 +216,7 @@ where
     #[inline(always)]
     fn execute_instruction<RA>(
         &mut self,
-        state: &mut VmSegmentState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,

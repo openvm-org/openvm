@@ -433,7 +433,7 @@ unsafe fn execute_e1_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, vm_state);
@@ -447,7 +447,7 @@ unsafe fn execute_e2_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
     vm_state
@@ -465,7 +465,7 @@ unsafe fn execute_e12_impl<
     const OPCODE: u8,
 >(
     pre_compute: &FieldArithmeticPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read values based on the adapter logic
     let b_val = if A_IS_IMM {
