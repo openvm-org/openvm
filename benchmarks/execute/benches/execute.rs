@@ -11,7 +11,10 @@ use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, 
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
-    arch::{execution_mode::metered::MeteredCtx, instructions::exe::VmExe, ContinuationVmProof, *},
+    arch::{
+        execution_mode::metered::MeteredCtx, instructions::exe::VmExe,
+        interpreter::InterpretedInstance, ContinuationVmProof, *,
+    },
     derive::VmConfig,
     system::*,
 };
@@ -263,34 +266,93 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
+fn setup_leaf_verifier() -> (
+    VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>,
+    VmExe<BabyBear>,
+    Vec<Vec<BabyBear>>,
+) {
+    let fixtures_dir = get_fixtures_dir();
+    let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
+    let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
+
+    let leaf_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.exe")).unwrap();
+    let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
+
+    let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
+    let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
+
+    let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
+    let leaf_input = leaf_inputs.first().expect("No leaf input available");
+
+    let config = NativeConfig::aggregation(
+        VmVerifierPvs::<u8>::width(),
+        SBOX_SIZE.min(FriParameters::standard_fast().max_constraint_degree()),
+    );
+    let fri_params =
+        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_LEAF_LOG_BLOWUP);
+    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let d_pk = engine.device().transport_pk_to_device(&leaf_pk);
+    let vm = VirtualMachine::new(engine, NativeCpuBuilder, config, d_pk).unwrap();
+    let input_stream = leaf_input.write_to_stream();
+
+    (vm, leaf_exe, input_stream)
+}
+
+#[divan::bench(sample_count = 3)]
+fn benchmark_leaf_verifier_execute(bencher: Bencher) {
+    bencher
+        .with_inputs(|| {
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+            let interpreter = vm.executor().instance(&leaf_exe).unwrap();
+
+            // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
+            // This is safe because the vm is moved into the tuple and will remain
+            // alive for the entire duration that the interpreter is used.
+            #[allow(clippy::missing_transmute_annotations)]
+            let interpreter =
+                unsafe { std::mem::transmute::<_, InterpretedInstance<'_, _, _>>(interpreter) };
+
+            (vm, interpreter, input_stream)
+        })
+        .bench_values(|(_vm, interpreter, input_stream)| {
+            interpreter
+                .execute(input_stream, None)
+                .expect("Failed to execute program in interpreted mode");
+        });
+}
+#[divan::bench(sample_count = 3)]
+fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
+    bencher
+        .with_inputs(|| {
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+            let ctx = vm.build_metered_ctx();
+            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+            let interpreter = vm
+                .executor()
+                .metered_instance(&leaf_exe, &executor_idx_to_air_idx)
+                .unwrap();
+
+            // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
+            // This is safe because the vm is moved into the tuple and will remain
+            // alive for the entire duration that the interpreter is used.
+            #[allow(clippy::missing_transmute_annotations)]
+            let interpreter =
+                unsafe { std::mem::transmute::<_, InterpretedInstance<'_, _, _>>(interpreter) };
+
+            (vm, interpreter, input_stream, ctx)
+        })
+        .bench_values(|(_vm, interpreter, input_stream, ctx)| {
+            interpreter
+                .execute_metered(input_stream, ctx)
+                .expect("Failed to execute program");
+        });
+}
+
 #[divan::bench(sample_count = 3)]
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
     bencher
         .with_inputs(|| {
-            let fixtures_dir = get_fixtures_dir();
-            let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
-            let app_proof: ContinuationVmProof<SC> =
-                bitcode::deserialize(&app_proof_bytes).unwrap();
-
-            let leaf_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.exe")).unwrap();
-            let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
-
-            let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
-            let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
-
-            let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
-            let leaf_input = leaf_inputs.first().expect("No leaf input available");
-
-            let config = NativeConfig::aggregation(
-                VmVerifierPvs::<u8>::width(),
-                SBOX_SIZE.min(FriParameters::standard_fast().max_constraint_degree()),
-            );
-            let fri_params =
-                FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_LEAF_LOG_BLOWUP);
-            let engine = BabyBearPoseidon2Engine::new(fri_params);
-            let d_pk = engine.device().transport_pk_to_device(&leaf_pk);
-            let vm = VirtualMachine::new(engine, NativeCpuBuilder, config, d_pk).unwrap();
-            let input_stream = leaf_input.write_to_stream();
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
             let state = vm.create_initial_state(&leaf_exe, input_stream);
 
             (vm, leaf_exe, state)
