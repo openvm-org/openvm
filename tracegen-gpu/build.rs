@@ -34,8 +34,12 @@ fn main() {
         arch
     });
 
-    let opt_level = env::var("CUDA_OPT_LEVEL").unwrap_or_else(|_| "3".to_string());
-    let is_debug = env::var("DEBUG").unwrap_or_default() == "true";
+    // Get CUDA_OPT_LEVEL from environment or use default value
+    // 0 → No optimization (fast compile, debug-friendly)
+    // 1 → Minimal optimization
+    // 2 → Balanced optimization (often same as -O3 for some kernels)
+    // 3 → Maximum optimization (usually default for release builds)
+    let cuda_opt_level = env::var("CUDA_OPT_LEVEL").unwrap_or_else(|_| "3".to_string());
 
     // Common CUDA settings
     let mut common = cc::Build::new();
@@ -54,11 +58,12 @@ fn main() {
         .flag("-gencode")
         .flag(format!("arch=compute_{},code=sm_{}", cuda_arch, cuda_arch));
 
-    if is_debug {
-        println!("cargo:warning=Building in debug mode with -O1 -g");
-        common.flag("-O1").flag("-g");
+    if cuda_opt_level == "0" {
+        common.debug(true);
+        common.flag("-O0");
     } else {
-        common.flag(format!("--ptxas-options=-O{}", opt_level));
+        common.debug(false);
+        common.flag(format!("--ptxas-options=-O{}", cuda_opt_level));
     }
 
     if let Ok(cuda_path) = env::var("CUDA_PATH") {
