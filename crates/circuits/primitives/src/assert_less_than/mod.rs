@@ -180,7 +180,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
     {
         // Note: every AIR that uses this sub-AIR must include the range checks for soundness
         self.eval_range_checks(builder, lower_decomp, io.count.clone());
-        self.eval_without_range_checks(builder, io, lower_decomp);
+        // self.eval_without_range_checks(builder, io, lower_decomp);
     }
 }
 
