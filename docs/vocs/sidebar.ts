@@ -1,20 +1,70 @@
 import { SidebarItem } from "vocs";
 
-export const sidebar: SidebarItem[] = [
+export const specsSidebar: SidebarItem[] = [
+    {
+        text: "OpenVM Design",
+        items: [
+            {
+                text: "Overview",
+                link: "/specs/openvm/overview"
+            },
+            {
+                text: "Modular ISA Design",
+                link: "/specs/openvm/isa"
+            },
+        ]
+    },
+    {
+        text: "VM Architecture",
+        items: [
+            {
+                text: "Circuit Architecture",
+                link: "/specs/architecture/circuit-architecture"
+            },
+            {
+                text: "Memory Design",
+                link: "/specs/architecture/memory"
+            },
+            {
+                text: "Continuations Design",
+                link: "/specs/architecture/continuations"
+            }
+        ]
+    },
+    {
+        text: "OpenVM Reference",
+        items: [
+            {
+                text: "Instruction Reference",
+                link: "/specs/reference/instruction-reference"
+            },
+            {
+                text: "RISC-V Custom Code",
+                link: "/specs/reference/riscv-custom-code"
+            },
+            {
+                text: "RISC-V Transpiler",
+                link: "/specs/reference/transpiler"
+            }
+        ]
+    }
+]
+
+export const bookSidebar: SidebarItem[] = [
     {
         text: "Getting Started",
         items: [
             {
                 text: "Introduction",
-                link: "/getting-started/introduction"
+                link: "/book/getting-started/introduction"
             },
             {
                 text: "Install",
-                link: "/getting-started/install"
+                link: "/book/getting-started/install"
             },
             {
                 text: "Quickstart",
-                link: "/getting-started/quickstart"
+                link: "/book/getting-started/quickstart"
             }
         ]
     },
@@ -23,31 +73,31 @@ export const sidebar: SidebarItem[] = [
         items: [
             {
                 text: "Overview",
-                link: "/writing-apps/overview"
+                link: "/book/writing-apps/overview"
             },
             {
                 text: "Writing a Program",
-                link: "/writing-apps/writing-a-program"
+                link: "/book/writing-apps/writing-a-program"
             },
             {
                 text: "Compiling",
-                link: "/writing-apps/compiling"
+                link: "/book/writing-apps/compiling"
             },
             {
                 text: "Running a Program",
-                link: "/writing-apps/running-a-program"
+                link: "/book/writing-apps/running-a-program"
             },
             {
                 text: "Generating Proofs",
-                link: "/writing-apps/generating-proofs"
+                link: "/book/writing-apps/generating-proofs"
             },
             {
                 text: "Verifying Proofs",
-                link: "/writing-apps/verifying-proofs"
+                link: "/book/writing-apps/verifying-proofs"
             },
             {
                 text: "Solidity SDK",
-                link: "/writing-apps/solidity-sdk"
+                link: "/book/writing-apps/solidity-sdk"
             }
         ]
     },
@@ -56,31 +106,31 @@ export const sidebar: SidebarItem[] = [
         items: [
             {
                 text: "Overview",
-                link: "/acceleration-using-extensions/overview"
+                link: "/book/acceleration-using-extensions/overview"
             },
             {
                 text: "Keccak",
-                link: "/acceleration-using-extensions/keccak"
+                link: "/book/acceleration-using-extensions/keccak"
             },
             {
                 text: "SHA-256",
-                link: "/acceleration-using-extensions/sha-256"
+                link: "/book/acceleration-using-extensions/sha-256"
             },
             {
                 text: "Big Integer",
-                link: "/acceleration-using-extensions/big-integer"
+                link: "/book/acceleration-using-extensions/big-integer"
             },
             {
                 text: "Algebra (Modular Arithmetic)",
-                link: "/acceleration-using-extensions/algebra"
+                link: "/book/acceleration-using-extensions/algebra"
             },
             {
                 text: "Elliptic Curve Cryptography",
-                link: "/acceleration-using-extensions/elliptic-curve-cryptography"
+                link: "/book/acceleration-using-extensions/elliptic-curve-cryptography"
             },
             {
                 text: "Elliptic Curve Pairing",
-                link: "/acceleration-using-extensions/elliptic-curve-pairing"
+                link: "/book/acceleration-using-extensions/elliptic-curve-pairing"
             }
         ]
     },
@@ -89,31 +139,31 @@ export const sidebar: SidebarItem[] = [
         items: [
             {
                 text: "Keccak256",
-                link: "/guest-libraries/keccak256"
+                link: "/book/guest-libraries/keccak256"
             },
             {
                 text: "SHA2",
-                link: "/guest-libraries/sha2"
+                link: "/book/guest-libraries/sha2"
             },
             {
                 text: "Ruint",
-                link: "/guest-libraries/ruint"
+                link: "/book/guest-libraries/ruint"
             },
             {
                 text: "K256",
-                link: "/guest-libraries/k256"
+                link: "/book/guest-libraries/k256"
             },
             {
                 text: "P256",
-                link: "/guest-libraries/p256"
+                link: "/book/guest-libraries/p256"
             },
             {
                 text: "Pairing",
-                link: "/guest-libraries/pairing"
+                link: "/book/guest-libraries/pairing"
             },
             {
                 text: "Verify STARK",
-                link: "/guest-libraries/verify-stark"
+                link: "/book/guest-libraries/verify-stark"
             }
         ]
     },
@@ -122,15 +172,15 @@ export const sidebar: SidebarItem[] = [
         items: [
             {
                 text: "SDK",
-                link: "/advanced-usage/sdk"
+                link: "/book/advanced-usage/sdk"
             },
             {
                 text: "Creating a New Extension",
-                link: "/advanced-usage/creating-a-new-extension"
+                link: "/book/advanced-usage/creating-a-new-extension"
             },
             {
                 text: "Recursive Verification",
-                link: "/advanced-usage/recursive-verification"
+                link: "/book/advanced-usage/recursive-verification"
             }
         ]
     },

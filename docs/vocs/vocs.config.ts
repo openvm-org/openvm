@@ -3,18 +3,21 @@ import { defineConfig } from 'vocs'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 
-import { sidebar } from './sidebar'
+import { bookSidebar, specsSidebar } from './sidebar'
 
 export default defineConfig({
   title: 'OpenVM',
   logoUrl: '/OpenVM-horizontal.svg',
   iconUrl: '/OpenVM-favicon.svg',
   ogImageUrl: '/OpenVM-horizontal.svg',
-  sidebar,
+  sidebar: {
+    '/book/': bookSidebar,
+    '/specs/': specsSidebar
+  },
   basePath: '/docs',
   topNav: [
-    { text: 'Book', link: '/getting-started/install' },
-    { text: 'Specs', link: '/sdk' },
+    { text: 'Book', link: '/book/getting-started/introduction' },
+    { text: 'Specs', link: '/specs/openvm/overview' },
     {
       element: React.createElement('a', { href: '/docs', target: '_self' }, 'Rustdocs')
     },
