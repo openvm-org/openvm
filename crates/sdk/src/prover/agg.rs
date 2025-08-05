@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver, VirtualMachineError,
-    VmBuilder, VmExecutionConfig, VmLocalProver,
+    ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
+    VmExecutionConfig, VmLocalProver,
 };
 #[cfg(feature = "evm-prove")]
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;

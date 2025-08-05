@@ -9,7 +9,7 @@ use openvm_circuit::{
         testing::{
             TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        PreflightExecutor, MatrixRecordArena,
+        MatrixRecordArena, PreflightExecutor,
     },
     utils::generate_long_number,
 };

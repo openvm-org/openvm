@@ -3,7 +3,7 @@ use std::{array, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
+        Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
     },
     utils::get_random_message,
 };

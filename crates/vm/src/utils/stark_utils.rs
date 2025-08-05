@@ -16,8 +16,8 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::metered::Segment, vm::VirtualMachine, Executor,
-        ExitCode, PreflightExecutor, MatrixRecordArena, MeteredExecutor,
-        PreflightExecutionOutput, Streams, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        ExitCode, MatrixRecordArena, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor,
+        Streams, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };

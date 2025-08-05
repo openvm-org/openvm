@@ -6,7 +6,7 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
+    Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},

@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
+    Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,

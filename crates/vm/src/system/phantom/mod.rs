@@ -29,7 +29,7 @@ use super::memory::online::{GuestMemory, TracingMemory};
 use crate::{
     arch::{
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, PreflightExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
+        ExecutionState, PcIncOrSet, PhantomSubExecutor, PreflightExecutor, RecordArena, Streams,
         TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::memory::MemoryAuxColsFactory,
