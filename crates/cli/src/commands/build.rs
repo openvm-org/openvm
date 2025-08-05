@@ -14,8 +14,12 @@ use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
 use openvm_sdk::{fs::write_exe_to_file, Sdk};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
 
-use crate::util::{
-    get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
+use crate::{
+    get_rustup_toolchain_name,
+    util::{
+        get_manifest_path_and_dir, get_target_dir, get_target_output_dir,
+        read_config_toml_or_default,
+    },
 };
 
 #[derive(Parser)]
@@ -289,6 +293,10 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     // Find manifest_path, manifest_dir, and target_dir
     let (manifest_path, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
+
+    // The toolchain will be determined by openvm-build from OPENVM_RUST_TOOLCHAIN env var
+    let toolchain = get_rustup_toolchain_name();
+    println!("[openvm] Using Rust toolchain: {}", toolchain);
 
     // Set guest options using build arguments; use found manifest directory for consistency
     let mut guest_options = GuestOptions::default()

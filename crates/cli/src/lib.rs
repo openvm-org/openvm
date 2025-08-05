@@ -3,11 +3,19 @@ pub mod default;
 pub mod input;
 pub mod util;
 
-use std::process::{Command, Stdio};
+use std::{
+    env,
+    process::{Command, Stdio},
+};
 
 use eyre::{Context, Result};
 
-pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+
+/// Get the Rust toolchain name from environment variable or default
+pub fn get_rustup_toolchain_name() -> String {
+    env::var("OPENVM_RUST_TOOLCHAIN").unwrap_or_else(|_| DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string())
+}
 
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     "v",
