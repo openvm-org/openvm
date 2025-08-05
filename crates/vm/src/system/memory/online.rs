@@ -43,8 +43,8 @@ pub type MemoryBackend = basic::BasicMemory;
 
 pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
-pub const PAGE_SIZE: usize = 1 << 29;
-pub const PAGE_SIZE_LOG2: usize = 29;
+pub const PAGE_SIZE: usize = 1 << 20;
+pub const PAGE_SIZE_LOG2: usize = 20;
 
 /// (address_space, pointer)
 pub type Address = (u32, u32);

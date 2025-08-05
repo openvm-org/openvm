@@ -29,6 +29,13 @@ impl<T: Copy + Default> PagedVec<T> {
         let page_idx = index >> PAGE_SIZE_LOG2;
         let offset = index & (PAGE_SIZE - 1);
 
+        assert!(
+            page_idx < self.pages.len(),
+            "PagedVec::get index out of bounds: {} >= {}",
+            index,
+            self.pages.len() << PAGE_SIZE_LOG2
+        );
+
         unsafe {
             // SAFETY:
             // - We just ensured the page exists and has size `page_size`
@@ -46,6 +53,13 @@ impl<T: Copy + Default> PagedVec<T> {
     pub fn set(&mut self, index: usize, value: T) {
         let page_idx = index >> PAGE_SIZE_LOG2;
         let offset = index & (PAGE_SIZE - 1);
+
+        assert!(
+            page_idx < self.pages.len(),
+            "PagedVec::set index out of bounds: {} >= {}",
+            index,
+            self.pages.len() << PAGE_SIZE_LOG2
+        );
 
         let page = self.pages[page_idx].as_mut().unwrap();
         // SAFETY:
