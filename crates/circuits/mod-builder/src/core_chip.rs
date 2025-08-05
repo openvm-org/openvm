@@ -376,7 +376,7 @@ impl<A> FieldExpressionFiller<A> {
     }
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for FieldExpressionStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for FieldExpressionStep<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,

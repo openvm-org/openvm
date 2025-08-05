@@ -144,7 +144,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
     }
 }
 
-impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> InstructionExecutor<F, RA>
+impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> PreflightExecutor<F, RA>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 where
     for<'buf> RA: RecordArena<
@@ -1106,7 +1106,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -1118,7 +1118,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -1145,11 +1145,11 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE1<F>
     }
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE2<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
     for NativePoseidon2Step<F, SBOX_REGISTERS>
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::cmp::max(
             size_of::<E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>>>(),
             size_of::<E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>>>(),
@@ -1157,7 +1157,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> InsExecutorE2<F>
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,

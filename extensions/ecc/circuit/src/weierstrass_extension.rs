@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -92,7 +92,7 @@ impl WeierstrassExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
     EcAddNeRv32_32(EcAddNeStep<2, 32>),

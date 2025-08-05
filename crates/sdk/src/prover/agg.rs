@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    ContinuationVmProof, InstructionExecutor, SingleSegmentVmProver, VirtualMachineError,
+    ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver, VirtualMachineError,
     VmBuilder, VmExecutionConfig, VmLocalProver,
 };
 #[cfg(feature = "evm-prove")]
@@ -47,7 +47,7 @@ where
     E: StarkFriEngine<SC = SC>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     pub fn new(
         native_builder: NativeBuilder,
@@ -268,7 +268,7 @@ impl LeafProvingController {
         E: StarkFriEngine<SC = SC>,
         NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
         <NativeConfig as VmExecutionConfig<F>>::Executor:
-            InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+            PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
         #[cfg(feature = "metrics")]
         {

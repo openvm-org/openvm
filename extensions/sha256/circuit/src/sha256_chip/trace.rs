@@ -135,7 +135,7 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     }
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for Sha256VmStep
+impl<F, RA> PreflightExecutor<F, RA> for Sha256VmStep
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, Sha256VmRecordLayout, Sha256VmRecordMut<'buf>>,

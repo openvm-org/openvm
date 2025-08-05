@@ -3,7 +3,7 @@ use std::{array, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, DenseRecordArena, InstructionExecutor, MatrixRecordArena,
+        Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
     },
     utils::get_random_message,
 };
@@ -66,7 +66,7 @@ fn set_and_execute<RA: Arena>(
     message: Option<&[u8]>,
     len: Option<usize>,
 ) where
-    Sha256VmStep: InstructionExecutor<F, RA>,
+    Sha256VmStep: PreflightExecutor<F, RA>,
 {
     let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);

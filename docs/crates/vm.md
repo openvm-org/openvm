@@ -1,12 +1,12 @@
 # VM Architecture and Chips
 
-### `InstructionExecutor` Trait
+### `PreflightExecutor` Trait
 
 We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Running the instrumented
 runtime for an opcode is encapsulated in the following trait:
 
 ```rust
-pub trait InstructionExecutor<F> {
+pub trait PreflightExecutor<F> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
@@ -26,14 +26,14 @@ Opcodes are partitioned into groups, each of which is handled by a single **chip
 type `C` and associated Air of type `A` which satisfy the following trait bounds:
 
 ```rust
-C: Chip<SC> + InstructionExecutor<F>
+C: Chip<SC> + PreflightExecutor<F>
 A: Air<AB> + BaseAir<F> + BaseAirWithPublicValues<F>
 ```
 
 Together, these provide the following functionalities:
 
 - **Keygen:** Performed via the `Air::<AB>::eval()` function.
-- **Trace Generation:** This is done by calling `InstructionExecutor::<F>::execute()` which computes and stores
+- **Trace Generation:** This is done by calling `PreflightExecutor::<F>::execute()` which computes and stores
   execution records and then `Chip::<SC>::generate_air_proof_input()` which generates the trace using the corresponding
   records.
 
@@ -89,7 +89,7 @@ The engine type `E` should be `openvm_stark_backend::engine::StarkEngine<SC> `an
 
 ```rust
 pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
-  type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+  type Executor: PreflightExecutor<F> + AnyEnum + ChipUsageGetter;
   type Periphery: AnyEnum + ChipUsageGetter;
 
   /// Must contain system config
@@ -319,7 +319,7 @@ pub struct VmAirWrapper<A, C> {
 
 They implement the following traits:
 
-- `InstructionExecutor<F>` is implemented on `VmChipWrapper<F, A, C>`, where the `execute()` function:
+- `PreflightExecutor<F>` is implemented on `VmChipWrapper<F, A, C>`, where the `execute()` function:
   - calls `preprocess()` on `A` with `memory` and the raw `instruction`
   - calls `execute_instruction()` on `C` with the raw `instruction`, `from_pc`, and `reads` from `preprocess()`
   - calls `postprocess()` on `A` with the raw `instruction`, `from_state`, the `output: AdapterRuntimeContext` from `execute_instruction()`, and the `read_record`

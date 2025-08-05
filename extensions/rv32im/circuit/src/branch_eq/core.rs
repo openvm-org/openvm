@@ -157,7 +157,7 @@ pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     pub pc_step: u32,
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize> InstructionExecutor<F, RA> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
@@ -248,7 +248,7 @@ struct BranchEqualPreCompute {
     b: u8,
 }
 
-impl<F, A, const NUM_LIMBS: usize> InsExecutorE1<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> Executor<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -258,7 +258,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -275,15 +275,15 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> InsExecutorE2<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualStep<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqualPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

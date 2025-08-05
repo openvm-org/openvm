@@ -4,7 +4,7 @@ use hex::FromHex;
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, DenseRecordArena, InstructionExecutor,
+        Arena, DenseRecordArena, PreflightExecutor,
     },
     utils::get_random_message,
 };
@@ -78,7 +78,7 @@ fn set_and_execute<RA: Arena>(
     len: Option<usize>,
     expected_output: Option<[u8; 32]>,
 ) where
-    KeccakVmStep: InstructionExecutor<F, RA>,
+    KeccakVmStep: PreflightExecutor<F, RA>,
 {
     let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);

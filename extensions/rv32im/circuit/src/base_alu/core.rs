@@ -197,7 +197,7 @@ pub struct BaseAluFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
     for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -303,7 +303,7 @@ struct BaseAluPreCompute {
     b: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
+impl<F, A, const LIMB_BITS: usize> Executor<F>
     for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -314,7 +314,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -387,18 +387,18 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bo
     execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, vm_state);
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
+impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
     for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

@@ -123,7 +123,7 @@ pub struct NativeLoadStoreCoreFiller<A, const NUM_CELLS: usize> {
     adapter: A,
 }
 
-impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA>
+impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA>
     for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
@@ -250,7 +250,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> Executor<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -260,7 +260,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -280,17 +280,17 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE2<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<NativeLoadStorePreCompute<F>>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,

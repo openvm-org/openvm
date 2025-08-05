@@ -165,7 +165,7 @@ pub struct Rv32JalLuiFiller<A = Rv32CondRdWriteAdapterFiller> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for Rv32JalLuiStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
     A: 'static
@@ -247,7 +247,7 @@ struct JalLuiPreCompute {
     a: u8,
 }
 
-impl<F, A> InsExecutorE1<F> for Rv32JalLuiStep<A>
+impl<F, A> Executor<F> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
 {
@@ -256,7 +256,7 @@ where
         size_of::<JalLuiPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
@@ -274,15 +274,15 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for Rv32JalLuiStep<A>
+impl<F, A> MeteredExecutor<F> for Rv32JalLuiStep<A>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalLuiPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         _pc: u32,

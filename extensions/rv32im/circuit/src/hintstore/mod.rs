@@ -355,7 +355,7 @@ pub struct Rv32HintStoreFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for Rv32HintStoreStep
+impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreStep
 where
     F: PrimeField32,
     for<'buf> RA:
@@ -588,7 +588,7 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl<F> InsExecutorE1<F> for Rv32HintStoreStep
+impl<F> Executor<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
@@ -597,7 +597,7 @@ where
         size_of::<HintStorePreCompute>()
     }
 
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -613,15 +613,15 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for Rv32HintStoreStep
+impl<F> MeteredExecutor<F> for Rv32HintStoreStep
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

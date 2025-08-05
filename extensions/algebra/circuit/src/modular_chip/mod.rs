@@ -1,5 +1,5 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::PreflightExecutor;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{
@@ -42,7 +42,7 @@ pub type ModularIsEqualAir<
     ModularIsEqualCoreAir<TOTAL_LIMBS, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
 >;
 
-#[derive(Clone, InstructionExecutor)]
+#[derive(Clone, PreflightExecutor)]
 pub struct VmModularIsEqualStep<
     const NUM_LANES: usize,
     const LANE_SIZE: usize,

@@ -22,7 +22,7 @@ use crate::{
             metered::{MeteredCtx, Segment},
             E1ExecutionCtx, E2ExecutionCtx,
         },
-        ExecuteFunc, ExecutionError, ExecutorInventory, ExitCode, InsExecutorE1, InsExecutorE2,
+        ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
@@ -101,7 +101,7 @@ where
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
-        E: InsExecutorE1<F>,
+        E: Executor<F>,
     {
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
@@ -141,7 +141,7 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
-        E: InsExecutorE2<F>,
+        E: MeteredExecutor<F>,
     {
         let program = &exe.program;
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
@@ -386,7 +386,7 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
 }
 
-fn get_pre_compute_max_size<F, E: InsExecutorE1<F>>(
+fn get_pre_compute_max_size<F, E: Executor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -412,7 +412,7 @@ fn get_pre_compute_max_size<F, E: InsExecutorE1<F>>(
         .next_power_of_two()
 }
 
-fn get_metered_pre_compute_max_size<F, E: InsExecutorE2<F>>(
+fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -426,7 +426,7 @@ fn get_metered_pre_compute_max_size<F, E: InsExecutorE2<F>>(
                 } else {
                     inventory
                         .get_executor(inst.opcode)
-                        .map(|executor| executor.e2_pre_compute_size())
+                        .map(|executor| executor.metered_pre_compute_size())
                         .unwrap()
                 }
             } else {
@@ -453,7 +453,7 @@ fn get_pre_compute_instructions<'a, F, Ctx, E>(
 where
     F: PrimeField32,
     Ctx: E1ExecutionCtx,
-    E: InsExecutorE1<F>,
+    E: Executor<F>,
 {
     program
         .instructions_and_debug_infos
@@ -475,7 +475,7 @@ where
                     }
                 } else if let Some(executor) = inventory.get_executor(inst.opcode) {
                     PreComputeInstruction {
-                        handler: executor.pre_compute_e1(pc, inst, buf)?,
+                        handler: executor.pre_compute(pc, inst, buf)?,
                         pre_compute: buf,
                     }
                 } else {
@@ -507,7 +507,7 @@ fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
 where
     F: PrimeField32,
     Ctx: E2ExecutionCtx,
-    E: InsExecutorE2<F>,
+    E: MeteredExecutor<F>,
 {
     program
         .instructions_and_debug_infos
@@ -535,7 +535,7 @@ where
                         .expect("ExecutorInventory ensures executor_idx is in bounds");
                     let air_idx = executor_idx_to_air_idx[executor_idx];
                     PreComputeInstruction {
-                        handler: executor.pre_compute_e2(air_idx, pc, inst, buf)?,
+                        handler: executor.metered_pre_compute(air_idx, pc, inst, buf)?,
                         pre_compute: buf,
                     }
                 } else {

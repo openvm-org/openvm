@@ -5,9 +5,9 @@ use openvm_circuit::{
         instructions::{
             instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
         },
-        ContinuationVmProof, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
-        PreflightExecutionOutput, SingleSegmentVmProver, SystemConfig, VirtualMachine,
-        VirtualMachineError, VmBuilder, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
+        ContinuationVmProof, Executor, MatrixRecordArena, MeteredExecutor,
+        PreflightExecutionOutput, PreflightExecutor, SingleSegmentVmProver, SystemConfig,
+        VirtualMachine, VirtualMachineError, VmBuilder, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -192,8 +192,7 @@ fn dummy_app_proof<VB, VC>(
 where
     VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
     VC: VmExecutionConfig<F>,
-    <VC as VmExecutionConfig<F>>::Executor:
-        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
+    <VC as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
 {
     let fri_params = app_vm_pk.fri_params;
     let dummy_exe = dummy_app_committed_exe(fri_params);

@@ -132,7 +132,7 @@ pub struct FieldArithmeticCoreFiller<A> {
     adapter: A,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for FieldArithmeticCoreStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceStep<F, ReadData = [F; 2], WriteData = [F; 1]>,
@@ -272,7 +272,7 @@ impl<A> FieldArithmeticCoreStep<A> {
     }
 }
 
-impl<F, A> InsExecutorE1<F> for FieldArithmeticCoreStep<A>
+impl<F, A> Executor<F> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
 {
@@ -282,7 +282,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -347,17 +347,17 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for FieldArithmeticCoreStep<A>
+impl<F, A> MeteredExecutor<F> for FieldArithmeticCoreStep<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<FieldArithmeticPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,

@@ -29,7 +29,7 @@ use super::memory::online::{GuestMemory, TracingMemory};
 use crate::{
     arch::{
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
+        ExecutionState, PreflightExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
         TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::memory::MemoryAuxColsFactory,
@@ -111,7 +111,7 @@ pub struct PhantomExecutor<F> {
 pub struct PhantomFiller;
 pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
 
-impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
+impl<F, RA> PreflightExecutor<F, RA> for PhantomExecutor<F>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,

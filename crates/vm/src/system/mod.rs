@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use derive_more::derive::From;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,
@@ -133,7 +133,7 @@ pub enum TouchedMemory<F> {
     Volatile(TimestampedEquipartition<F, 1>),
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, From)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 pub enum SystemExecutor<F: Field> {
     PublicValues(PublicValuesStep<F>),
     Phantom(PhantomExecutor<F>),

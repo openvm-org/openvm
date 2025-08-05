@@ -320,7 +320,7 @@ pub struct ModularIsEqualFiller<
 }
 
 impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    InstructionExecutor<F, RA> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+    PreflightExecutor<F, RA> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -523,8 +523,8 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
     }
 }
 
-impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    InsExecutorE1<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> Executor<F>
+    for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -533,7 +533,7 @@ where
         std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
     }
 
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -553,16 +553,16 @@ where
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    InsExecutorE2<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    MeteredExecutor<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>()
     }
 
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,

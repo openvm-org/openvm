@@ -15,8 +15,8 @@ use openvm_stark_sdk::{
 
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::metered::Segment, vm::VirtualMachine, ExitCode,
-        InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
+        debug_proving_ctx, execution_mode::metered::Segment, vm::VirtualMachine, Executor,
+        ExitCode, PreflightExecutor, MatrixRecordArena, MeteredExecutor,
         PreflightExecutionOutput, Streams, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
@@ -35,9 +35,9 @@ where
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: InsExecutorE1<BabyBear>
-        + InsExecutorE2<BabyBear>
-        + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
+        + MeteredExecutor<BabyBear>
+        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -59,9 +59,9 @@ where
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: InsExecutorE1<BabyBear>
-        + InsExecutorE2<BabyBear>
-        + InstructionExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
+        + MeteredExecutor<BabyBear>
+        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -102,9 +102,9 @@ where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
-        + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     setup_tracing();

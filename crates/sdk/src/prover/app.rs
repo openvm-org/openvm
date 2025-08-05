@@ -3,8 +3,8 @@ use std::sync::Arc;
 use getset::Getters;
 use openvm_circuit::{
     arch::{
-        verify_segments, ContinuationVmProof, ContinuationVmProver, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
+        verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
+        PreflightExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
         VmExecutionConfig, VmLocalProver,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
@@ -71,9 +71,9 @@ where
         input: StdIn<Val<E::SC>>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
-            + InsExecutorE2<Val<E::SC>>
-            + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+            + MeteredExecutor<Val<E::SC>>
+            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
         assert!(
             self.vm_config().as_ref().continuation_enabled,
@@ -109,7 +109,7 @@ where
     ) -> Result<Proof<E::SC>, VirtualMachineError>
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
         assert!(
             !self.vm_config().as_ref().continuation_enabled,

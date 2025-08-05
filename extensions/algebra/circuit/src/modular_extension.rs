@@ -12,7 +12,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{
@@ -68,7 +68,7 @@ impl ModularExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularStep<1, 32>), // ModularAddSub

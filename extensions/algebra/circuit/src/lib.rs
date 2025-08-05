@@ -10,7 +10,7 @@ use openvm_circuit::{
     arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -93,7 +93,7 @@ pub mod fields;
 
 pub struct AlgebraCpuProverExt;
 
-#[derive(Clone, InstructionExecutor, Deref, DerefMut)]
+#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct FieldExprVecHeapStep<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>(
     FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
@@ -198,15 +198,15 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InsExecutorE1<F> for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> Executor<F>
+    for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<FieldExpressionPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -295,14 +295,14 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    InsExecutorE2<F> for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
+    MeteredExecutor<F> for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<FieldExpressionPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -54,7 +54,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
     [1 << 8, 32 * (1 << 8)]
 }
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Int256Executor {
     BaseAlu256(Rv32BaseAlu256Step),
     LessThan256(Rv32LessThan256Step),

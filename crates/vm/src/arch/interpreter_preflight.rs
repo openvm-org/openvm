@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::ExecutionError;
 use crate::{
     arch::{
-        execution_mode::tracegen::TracegenCtx, instructions::*, Arena, InstructionExecutor,
+        execution_mode::tracegen::TracegenCtx, instructions::*, Arena, PreflightExecutor,
         VmExecState, VmStateMut,
     },
     system::{memory::online::TracingMemory, program::ProgramHandler},
@@ -33,7 +33,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         loop {
             if let Ok(Some(_)) = state.exit_code {
@@ -64,7 +64,7 @@ where
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         let pc = state.pc;
         let (executor, pc_entry) = self.handler.get_executor(pc)?;

@@ -125,7 +125,7 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for KeccakVmStep
+impl<F, RA> PreflightExecutor<F, RA> for KeccakVmStep
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, KeccakVmRecordLayout, KeccakVmRecordMut<'buf>>,

@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, DenseRecordArena, EmptyAdapterCoreLayout, InstructionExecutor, VmAirWrapper,
+    Arena, DenseRecordArena, EmptyAdapterCoreLayout, PreflightExecutor, VmAirWrapper,
     VmChipWrapper,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -74,7 +74,7 @@ fn set_and_execute<RA: Arena>(
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) where
-    Rv32AuipcStep: InstructionExecutor<F, RA>,
+    Rv32AuipcStep: PreflightExecutor<F, RA>,
 {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;

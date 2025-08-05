@@ -37,7 +37,7 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::e1::E1Ctx, ExecutionError, InsExecutorE1, MemoryConfig, VmChipComplex,
+    execution_mode::e1::E1Ctx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
     CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
@@ -50,7 +50,7 @@ use crate::{
         interpreter::InterpretedInstance,
         interpreter_preflight::PreflightInterpretedInstance,
         AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, InsExecutorE2, InstructionExecutor, StaticProgramError,
+        ExecutorInventoryError, MeteredExecutor, PreflightExecutor, StaticProgramError,
         SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig,
         VmState, PUBLIC_VALUES_AIR_ID,
     },
@@ -230,7 +230,7 @@ impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmExecutionConfig<F>,
-    VC::Executor: InsExecutorE1<F>,
+    VC::Executor: Executor<F>,
 {
     /// Creates an instance of the interpreter specialized for pure execution, without metering, of
     /// the given `exe`.
@@ -248,7 +248,7 @@ impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
     VC: VmExecutionConfig<F>,
-    VC::Executor: InsExecutorE2<F>,
+    VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for pure execution, without metering, of
     /// the given `exe`.
@@ -398,7 +398,7 @@ where
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
         let handler = ProgramHandler::new(&exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
@@ -610,7 +610,7 @@ where
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-            InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
         self.transport_init_memory_to_device(&state.memory);
 
@@ -815,9 +815,9 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
-        + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
     /// First performs metered execution (E2) to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
@@ -835,9 +835,9 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InsExecutorE1<Val<E::SC>>
-        + InsExecutorE2<Val<E::SC>>
-        + InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
     /// For internal use to resize trace matrices before proving.
     ///
@@ -901,7 +901,7 @@ where
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
-        InstructionExecutor<Val<E::SC>, VB::RecordArena>,
+        PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
     fn prove(
         &mut self,

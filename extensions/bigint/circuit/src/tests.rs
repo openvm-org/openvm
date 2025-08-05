@@ -9,7 +9,7 @@ use openvm_circuit::{
         testing::{
             TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
         },
-        InstructionExecutor, MatrixRecordArena,
+        PreflightExecutor, MatrixRecordArena,
     },
     utils::generate_long_number,
 };
@@ -61,7 +61,7 @@ fn set_and_execute_rand<STEP, AIR, CHIP>(
     opcode: usize,
     branch_fn: Option<fn(usize, &[u32; INT256_NUM_LIMBS], &[u32; INT256_NUM_LIMBS]) -> bool>,
 ) where
-    STEP: InstructionExecutor<F, MatrixRecordArena<F>>,
+    STEP: PreflightExecutor<F, MatrixRecordArena<F>>,
 {
     let branch = branch_fn.is_some();
 

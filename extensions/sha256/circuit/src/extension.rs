@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::memory::SharedMemoryHelper,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
@@ -31,7 +31,7 @@ use crate::*;
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Sha256;
 
-#[derive(Clone, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Sha256Executor {
     Sha256(Sha256VmStep),
 }

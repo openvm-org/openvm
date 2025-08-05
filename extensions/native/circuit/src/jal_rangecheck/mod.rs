@@ -155,7 +155,7 @@ pub struct JalRangeCheckFiller {
 }
 pub type NativeJalRangeCheckChip<F> = VmChipWrapper<F, JalRangeCheckFiller>;
 
-impl<F, RA> InstructionExecutor<F, RA> for JalRangeCheckStep
+impl<F, RA> PreflightExecutor<F, RA> for JalRangeCheckStep
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut JalRangeCheckRecord<F>>,
@@ -355,7 +355,7 @@ impl JalRangeCheckStep {
     }
 }
 
-impl<F> InsExecutorE1<F> for JalRangeCheckStep
+impl<F> Executor<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
@@ -368,7 +368,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -390,12 +390,12 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for JalRangeCheckStep
+impl<F> MeteredExecutor<F> for JalRangeCheckStep
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::cmp::max(
             size_of::<E2PreCompute<JalPreCompute<F>>>(),
             size_of::<E2PreCompute<RangeCheckPreCompute>>(),
@@ -403,7 +403,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,

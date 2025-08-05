@@ -10,8 +10,8 @@ use rand::rngs::StdRng;
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        E2PreCompute, ExecuteFunc, ExecutionError, InsExecutorE1, InsExecutorE2,
-        PhantomSubExecutor, StaticProgramError, Streams, VmExecState,
+        E2PreCompute, ExecuteFunc, ExecutionError, Executor, MeteredExecutor, PhantomSubExecutor,
+        StaticProgramError, Streams, VmExecState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
@@ -31,7 +31,7 @@ struct PhantomPreCompute<F> {
     sub_executor: *const dyn PhantomSubExecutor<F>,
 }
 
-impl<F> InsExecutorE1<F> for PhantomExecutor<F>
+impl<F> Executor<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -40,7 +40,7 @@ where
         size_of::<PhantomPreCompute<F>>()
     }
     #[inline(always)]
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
@@ -166,15 +166,15 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for PhantomExecutor<F>
+impl<F> MeteredExecutor<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<PhantomPreCompute<F>>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         _pc: u32,

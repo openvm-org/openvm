@@ -210,7 +210,7 @@ pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -364,7 +364,7 @@ struct BranchLePreCompute {
     b: u8,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -375,7 +375,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -392,16 +392,16 @@ where
         Ok(fn_ptr)
     }
 }
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE2<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
     for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

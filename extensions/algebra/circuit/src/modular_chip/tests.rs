@@ -6,7 +6,7 @@ use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, DenseRecordArena, InstructionExecutor, MatrixRecordArena,
+    Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
 };
 use openvm_circuit_primitives::{
     bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256k1_scalar_prime},
@@ -104,7 +104,7 @@ mod addsubtests {
         is_setup: bool,
         offset: usize,
     ) where
-        ModularStep<1, NUM_LIMBS>: InstructionExecutor<F, RA>,
+        ModularStep<1, NUM_LIMBS>: PreflightExecutor<F, RA>,
     {
         let mut rng = create_seeded_rng();
 

@@ -37,7 +37,7 @@ use program::ProgramTester;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use tracing::Level;
 
-use super::{ExecutionBridge, ExecutionBus, InstructionExecutor};
+use super::{ExecutionBridge, ExecutionBus, PreflightExecutor};
 use crate::{
     arch::{
         testing::{execution::air::ExecutionDummyAir, program::air::ProgramDummyAir},
@@ -145,7 +145,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(harness, instruction, initial_pc);
@@ -157,7 +157,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         instruction: &Instruction<F>,
         initial_pc: u32,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         let initial_state = ExecutionState {
             pc: initial_pc,

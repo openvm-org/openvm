@@ -2,7 +2,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-    Arena, DenseRecordArena, InstructionExecutor, MatrixRecordArena,
+    Arena, DenseRecordArena, PreflightExecutor, MatrixRecordArena,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -71,7 +71,7 @@ fn set_and_execute<RA: Arena>(
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) where
-    Rv32HintStoreStep: InstructionExecutor<F, RA>,
+    Rv32HintStoreStep: PreflightExecutor<F, RA>,
 {
     let num_words = match opcode {
         HINT_STOREW => 1,

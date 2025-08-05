@@ -12,7 +12,7 @@ use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkPr
 
 use crate::{
     arch::{
-        execution_mode::tracegen::TracegenCtx, Arena, DenseRecordArena, InstructionExecutor,
+        execution_mode::tracegen::TracegenCtx, Arena, DenseRecordArena, PreflightExecutor,
         VmExecState,
     },
     system::{
@@ -64,7 +64,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 ) where
     F: Clone + Send + Sync,
     RA: Arena,
-    Executor: InstructionExecutor<F, RA>,
+    Executor: PreflightExecutor<F, RA>,
 {
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
     {

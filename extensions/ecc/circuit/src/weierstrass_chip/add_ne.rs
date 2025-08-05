@@ -14,7 +14,7 @@ use openvm_circuit::{
         offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
     },
 };
-use openvm_circuit_derive::InstructionExecutor;
+use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -66,7 +66,7 @@ pub fn ec_add_ne_expr(
 /// BLOCKS: how many blocks do we need to represent one input or output
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
-#[derive(Clone, InstructionExecutor, Deref, DerefMut)]
+#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
@@ -214,7 +214,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE1<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     for EcAddNeStep<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -222,7 +222,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
         std::mem::size_of::<EcAddNePreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -278,15 +278,15 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE2<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
     for EcAddNeStep<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<EcAddNePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

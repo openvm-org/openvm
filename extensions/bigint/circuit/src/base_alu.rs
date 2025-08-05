@@ -34,12 +34,12 @@ struct BaseAluPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> InsExecutorE1<F> for Rv32BaseAlu256Step {
+impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Step {
     fn pre_compute_size(&self) -> usize {
         size_of::<BaseAluPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -61,12 +61,12 @@ impl<F: PrimeField32> InsExecutorE1<F> for Rv32BaseAlu256Step {
     }
 }
 
-impl<F: PrimeField32> InsExecutorE2<F> for Rv32BaseAlu256Step {
-    fn e2_pre_compute_size(&self) -> usize {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32BaseAlu256Step {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,

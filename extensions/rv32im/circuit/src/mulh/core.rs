@@ -238,7 +238,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHFiller<A, NUM_LIMBS,
     }
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
     for MulHStep<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
@@ -356,7 +356,7 @@ struct MulHPreCompute {
     c: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
+impl<F, A, const LIMB_BITS: usize> Executor<F>
     for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -367,7 +367,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         _pc: u32,
         inst: &Instruction<F>,
@@ -384,16 +384,16 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
+impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
     for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MulHPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         _pc: u32,

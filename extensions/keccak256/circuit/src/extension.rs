@@ -13,7 +13,7 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
@@ -101,7 +101,7 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Keccak256Executor {
     Keccak256(KeccakVmStep),
 }

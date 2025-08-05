@@ -9,7 +9,7 @@ use openvm_circuit::{
     },
     system::phantom::PhantomExecutor,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -64,7 +64,7 @@ pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum PairingExtensionExecutor<F: Field> {
     Phantom(PhantomExecutor<F>),
 }

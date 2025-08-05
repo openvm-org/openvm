@@ -268,7 +268,7 @@ pub struct LoadStoreFiller<
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
@@ -382,7 +382,7 @@ struct LoadStorePreCompute {
     e: u8,
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -392,7 +392,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -426,15 +426,15 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE2<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreStep<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LoadStorePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
