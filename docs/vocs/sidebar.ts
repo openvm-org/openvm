@@ -5,6 +5,10 @@ export const sidebar: SidebarItem[] = [
         text: "Getting Started",
         items: [
             {
+                text: "Introduction",
+                link: "/getting-started/introduction"
+            },
+            {
                 text: "Install",
                 link: "/getting-started/install"
             },
