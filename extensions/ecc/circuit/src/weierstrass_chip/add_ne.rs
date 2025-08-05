@@ -504,7 +504,7 @@ unsafe fn execute_e12_impl<
         }
     }
 
-    let output_data = if FIELD_TYPE == u8::MAX {
+    let output_data = if FIELD_TYPE == u8::MAX || is_setup {
         let read_data: DynArray<u8> = read_data.into();
         run_field_expression_precomputed::<true>(
             pre_compute.expr,
