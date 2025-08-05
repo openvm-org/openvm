@@ -30,11 +30,15 @@ openvm-sha256-circuit.workspace = true
 openvm-sha256-transpiler.workspace = true
 openvm-continuations = { workspace = true }
 openvm-sdk = { workspace = true }
+
+clap.workspace = true
 eyre.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
-bitcode = { workspace = true }
+bitcode.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 divan = { package = "codspeed-divan-compat", version = "3.0.2" }
@@ -63,8 +67,8 @@ name = "execute"
 harness = false
 
 [[bin]]
-name = "preflight-leaf-verifier"
-path = "src/preflight-leaf-verifier.rs"
+name = "execute-leaf-verifier"
+path = "src/execute-leaf-verifier.rs"
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]

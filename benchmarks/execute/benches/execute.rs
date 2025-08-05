@@ -320,6 +320,7 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher) {
                 .expect("Failed to execute program in interpreted mode");
         });
 }
+
 #[divan::bench(sample_count = 3)]
 fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
     bencher

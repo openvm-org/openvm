@@ -5106,6 +5106,7 @@ name = "openvm-benchmarks-execute"
 version = "1.4.0-rc.0"
 dependencies = [
  "bitcode",
+ "clap",
  "codspeed-divan-compat",
  "derive_more 1.0.0",
  "eyre",
@@ -5133,6 +5134,8 @@ dependencies = [
  "openvm-transpiler",
  "rand 0.8.5",
  "serde",
+ "tracing",
+ "tracing-subscriber 0.3.19",
 ]
 
 [[package]]

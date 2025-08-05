@@ -16,7 +16,7 @@ clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
-tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
+tracing-subscriber.workspace = true
 
 bitcode = { workspace = true, optional = true }
 openvm-circuit = { workspace = true, optional = true }

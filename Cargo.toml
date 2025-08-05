@@ -227,6 +227,7 @@ hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
 dashmap = "6.1.0"
 memmap2 = "0.9.5"
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
