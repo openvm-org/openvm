@@ -185,11 +185,11 @@ p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539b
 p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
 
 zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9" }
-snark-verifier-sdk = { version = "0.2.0", default-features = false, features = [
+snark-verifier-sdk = { version = "0.2.3", default-features = false, features = [
     "loader_halo2",
     "halo2-axiom",
 ] }
-snark-verifier = { version = "0.2.0", default-features = false }
+snark-verifier = { version = "0.2.3", default-features = false }
 halo2curves-axiom = "0.7.0"
 
 forge-fmt = "0.2.0"
