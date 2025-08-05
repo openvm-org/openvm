@@ -17,7 +17,7 @@ impl<T: Copy + Default> PagedVec<T> {
     pub fn new(total_size: usize, page_size: usize) -> Self {
         let num_pages = total_size.div_ceil(page_size);
         Self {
-            pages: vec![None; num_pages],
+            pages: vec![Some(vec![T::default(); page_size].into_boxed_slice()); num_pages],
             page_size,
         }
     }
@@ -29,17 +29,17 @@ impl<T: Copy + Default> PagedVec<T> {
         let page_idx = index / self.page_size;
         let offset = index % self.page_size;
 
-        assert!(
-            page_idx < self.pages.len(),
-            "PagedVec::get index out of bounds: {} >= {}",
-            index,
-            self.pages.len() * self.page_size
-        );
+        // assert!(
+        //     page_idx < self.pages.len(),
+        //     "PagedVec::get index out of bounds: {} >= {}",
+        //     index,
+        //     self.pages.len() * self.page_size
+        // );
 
-        if self.pages[page_idx].is_none() {
-            let page = vec![T::default(); self.page_size];
-            self.pages[page_idx] = Some(page.into_boxed_slice());
-        }
+        // if self.pages[page_idx].is_none() {
+        //     let page = vec![T::default(); self.page_size];
+        //     self.pages[page_idx] = Some(page.into_boxed_slice());
+        // }
 
         unsafe {
             // SAFETY:
@@ -66,17 +66,18 @@ impl<T: Copy + Default> PagedVec<T> {
             self.pages.len() * self.page_size
         );
 
-        if let Some(page) = &mut self.pages[page_idx] {
-            // SAFETY:
-            // - If page exists, then it has size `page_size`
-            unsafe {
-                *page.get_unchecked_mut(offset) = value;
-            }
-        } else {
-            let mut page = vec![T::default(); self.page_size];
-            page[offset] = value;
-            self.pages[page_idx] = Some(page.into_boxed_slice());
+        let page = self.pages[page_idx].as_mut().unwrap();
+        // if let Some(page) = &mut self.pages[page_idx] {
+        // SAFETY:
+        // - If page exists, then it has size `page_size`
+        unsafe {
+            *page.get_unchecked_mut(offset) = value;
         }
+        // } else {
+        //     let mut page = vec![T::default(); self.page_size];
+        //     page[offset] = value;
+        //     self.pages[page_idx] = Some(page.into_boxed_slice());
+        // }
     }
 
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_

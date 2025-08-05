@@ -556,6 +556,85 @@ impl TracingMemory {
         });
     }
 
+    #[cold]
+    fn merge_prev_access_time<T: Copy, const BLOCK_SIZE: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        align: usize,
+        prev_values: &[T; BLOCK_SIZE],
+        begin: usize,
+        num_segs: usize,
+    ) -> u32 {
+        let mut i = 0;
+        while i < num_segs {
+            let meta = self.meta[address_space].get(begin + i);
+            if meta.block_size == 0 {
+                i += 1;
+                continue;
+            }
+            let meta = *meta;
+            self.split_by_meta::<T>(&meta, address_space, align);
+            i = (meta.start_ptr + meta.block_size) as usize / align - begin;
+        }
+
+        let prev_ts = (0..num_segs)
+            .map(|i| {
+                let meta = self.meta[address_space].get(begin + i);
+                if meta.block_size > 0 {
+                    meta.timestamp
+                } else {
+                    // Initialize
+                    if self.initial_block_size >= align {
+                        // We need to split the initial block into chunks
+                        let block_start = (begin + i) & !(self.initial_block_size / align - 1);
+                        self.split_by_meta::<T>(
+                            &AccessMetadata {
+                                start_ptr: (block_start * align) as u32,
+                                block_size: self.initial_block_size as u32,
+                                timestamp: INITIAL_TIMESTAMP,
+                            },
+                            address_space,
+                            align,
+                        );
+                    } else {
+                        debug_assert_eq!(self.initial_block_size, 1);
+                        debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
+                        self.add_merge_record(
+                            AccessRecordHeader {
+                                timestamp_and_mask: INITIAL_TIMESTAMP,
+                                address_space: address_space as u32,
+                                pointer: (pointer + i * align) as u32,
+                                block_size: align as u32,
+                                lowest_block_size: self.initial_block_size as u32,
+                                type_size: 1,
+                            },
+                            &INITIAL_CELL_BUFFER[..align], // TODO: this assumes cell_size=1
+                            &INITIAL_TIMESTAMP_BUFFER[..align],
+                        );
+                    }
+                    INITIAL_TIMESTAMP
+                }
+            })
+            .collect::<Vec<_>>(); // PERF(AG): small buffer or small vec or something
+
+        let timestamp = *prev_ts.iter().max().unwrap();
+        self.add_merge_record(
+            AccessRecordHeader {
+                timestamp_and_mask: timestamp,
+                address_space: address_space as u32,
+                pointer: pointer as u32,
+                block_size: BLOCK_SIZE as u32,
+                lowest_block_size: align as u32,
+                type_size: size_of::<T>() as u32,
+            },
+            // SAFETY: T is plain old data
+            unsafe { slice_as_bytes(prev_values) },
+            &prev_ts,
+        );
+        timestamp
+    }
+
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`
     /// and the offset of the record in bytes.
     ///
@@ -577,73 +656,7 @@ impl TracingMemory {
         let result = if need_to_merge {
             // Then we need to split everything we touched there
             // And add a merge record in the end
-            let mut i = 0;
-            while i < num_segs {
-                let meta = self.meta[address_space].get(begin + i);
-                if meta.block_size == 0 {
-                    i += 1;
-                    continue;
-                }
-                let meta = *meta;
-                self.split_by_meta::<T>(&meta, address_space, align);
-                i = (meta.start_ptr + meta.block_size) as usize / align - begin;
-            }
-
-            let prev_ts = (0..num_segs)
-                .map(|i| {
-                    let meta = self.meta[address_space].get(begin + i);
-                    if meta.block_size > 0 {
-                        meta.timestamp
-                    } else {
-                        // Initialize
-                        if self.initial_block_size >= align {
-                            // We need to split the initial block into chunks
-                            let block_start = (begin + i) & !(self.initial_block_size / align - 1);
-                            self.split_by_meta::<T>(
-                                &AccessMetadata {
-                                    start_ptr: (block_start * align) as u32,
-                                    block_size: self.initial_block_size as u32,
-                                    timestamp: INITIAL_TIMESTAMP,
-                                },
-                                address_space,
-                                align,
-                            );
-                        } else {
-                            debug_assert_eq!(self.initial_block_size, 1);
-                            debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                            self.add_merge_record(
-                                AccessRecordHeader {
-                                    timestamp_and_mask: INITIAL_TIMESTAMP,
-                                    address_space: address_space as u32,
-                                    pointer: (pointer + i * align) as u32,
-                                    block_size: align as u32,
-                                    lowest_block_size: self.initial_block_size as u32,
-                                    type_size: 1,
-                                },
-                                &INITIAL_CELL_BUFFER[..align], // TODO: this assumes cell_size=1
-                                &INITIAL_TIMESTAMP_BUFFER[..align],
-                            );
-                        }
-                        INITIAL_TIMESTAMP
-                    }
-                })
-                .collect::<Vec<_>>(); // PERF(AG): small buffer or small vec or something
-
-            let timestamp = *prev_ts.iter().max().unwrap();
-            self.add_merge_record(
-                AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
-                    address_space: address_space as u32,
-                    pointer: pointer as u32,
-                    block_size: BLOCK_SIZE as u32,
-                    lowest_block_size: align as u32,
-                    type_size: size_of::<T>() as u32,
-                },
-                // SAFETY: T is plain old data
-                unsafe { slice_as_bytes(prev_values) },
-                &prev_ts,
-            );
-            timestamp
+            self.merge_prev_access_time(address_space, pointer, align, prev_values, begin, num_segs)
         } else {
             first_meta.timestamp
         };
