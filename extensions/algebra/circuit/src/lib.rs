@@ -576,7 +576,6 @@ unsafe fn execute_e12_setup_impl<
     pre_compute: &FieldExpressionPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    // TODO :dedup code
     // Read the first input (which should be the prime)
     let rs_vals = pre_compute
         .rs_addrs
