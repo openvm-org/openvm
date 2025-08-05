@@ -52,21 +52,16 @@ export const specsSidebar: SidebarItem[] = [
 
 export const bookSidebar: SidebarItem[] = [
     {
-        text: "Getting Started",
-        items: [
-            {
-                text: "Introduction",
-                link: "/book/getting-started/introduction"
-            },
-            {
-                text: "Install",
-                link: "/book/getting-started/install"
-            },
-            {
-                text: "Quickstart",
-                link: "/book/getting-started/quickstart"
-            }
-        ]
+        text: "Introduction",
+        link: "/book/getting-started/introduction"
+    },
+    {
+        text: "Install",
+        link: "/book/getting-started/install"
+    },
+    {
+        text: "Quickstart",
+        link: "/book/getting-started/quickstart"
     },
     {
         text: "Writing Apps",
