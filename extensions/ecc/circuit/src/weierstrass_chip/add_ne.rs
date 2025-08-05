@@ -306,12 +306,10 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
                 >),
                 _ => panic!("Unsupported field type"),
             }
+        } else if is_setup {
+            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
         } else {
-            if is_setup {
-                Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
-            } else {
-                Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
-            }
+            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
         }
     }
 }
@@ -408,6 +406,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
                     _ => panic!("Unsupported field type"),
                 }
             }
+        } else if is_setup {
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         } else {
             Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         }
@@ -428,7 +428,13 @@ unsafe fn execute_e2_impl<
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, false>(&pre_compute[4..], vm_state);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<EcAddNePreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, false>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e2_setup_impl<
@@ -445,7 +451,13 @@ unsafe fn execute_e2_setup_impl<
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, true>(&pre_compute[4..], vm_state);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<EcAddNePreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, true>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e12_impl<
