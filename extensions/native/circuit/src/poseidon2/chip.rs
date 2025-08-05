@@ -1229,7 +1229,8 @@ unsafe fn execute_verify_batch_e1_impl<
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
-    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(pre_compute, vm_state);
+    // NOTE: using optimistic execution
+    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state);
 }
 
 unsafe fn execute_verify_batch_e2_impl<
@@ -1241,7 +1242,9 @@ unsafe fn execute_verify_batch_e2_impl<
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
-    let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS>(&pre_compute.data, vm_state);
+    // NOTE: using optimistic execution
+    let height =
+        execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(&pre_compute.data, vm_state);
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -1307,13 +1310,11 @@ unsafe fn execute_verify_batch_e12_impl<
     F: PrimeField32,
     CTX: E1ExecutionCtx,
     const SBOX_REGISTERS: usize,
+    const OPTIMISTIC: bool,
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    // TODO: Add a flag `optimistic_execution`. When the flag is true, we trust all inputs
-    // and skip all input validation computation during E1 execution.
-
     let subchip = pre_compute.subchip;
     let opened_element_size = pre_compute.opened_element_size;
 
@@ -1402,7 +1403,9 @@ unsafe fn execute_verify_batch_e12_impl<
                     break;
                 }
                 height += 1;
-                subchip.permute_mut(&mut rolling_hash);
+                if !OPTIMISTIC {
+                    subchip.permute_mut(&mut rolling_hash);
+                }
                 if cells_len < CHUNK {
                     break;
                 }
@@ -1420,15 +1423,17 @@ unsafe fn execute_verify_batch_e12_impl<
             );
             assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
 
-            let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
+            if !OPTIMISTIC {
+                let hash: [F; CHUNK] = std::array::from_fn(|i| rolling_hash[i]);
 
-            let new_root = if log_height as u32 == initial_log_height {
-                hash
-            } else {
-                let (_, new_root) = compress(subchip, root, hash);
-                new_root
-            };
-            root = new_root;
+                let new_root = if log_height as u32 == initial_log_height {
+                    hash
+                } else {
+                    let (_, new_root) = compress(subchip, root, hash);
+                    new_root
+                };
+                root = new_root;
+            }
             height += 1;
         }
 
@@ -1439,12 +1444,14 @@ unsafe fn execute_verify_batch_e12_impl<
             );
             let sibling_is_on_right = sibling_is_on_right == F::ONE;
             let sibling = sibling_proof[sibling_index];
-            let (_, new_root) = if sibling_is_on_right {
-                compress(subchip, sibling, root)
-            } else {
-                compress(subchip, root, sibling)
-            };
-            root = new_root;
+            if !OPTIMISTIC {
+                let (_, new_root) = if sibling_is_on_right {
+                    compress(subchip, sibling, root)
+                } else {
+                    compress(subchip, root, sibling)
+                };
+                root = new_root;
+            }
             height += 1;
         }
 
@@ -1452,7 +1459,9 @@ unsafe fn execute_verify_batch_e12_impl<
         sibling_index += 1;
     }
 
-    assert_eq!(commit, root);
+    if !OPTIMISTIC {
+        assert_eq!(commit, root);
+    }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
