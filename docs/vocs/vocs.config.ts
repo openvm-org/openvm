@@ -19,7 +19,8 @@ export default defineConfig({
     { text: 'Book', link: '/book/getting-started/introduction' },
     { text: 'Specs', link: '/specs/openvm/overview' },
     {
-      element: React.createElement('a', { href: '/docs', target: '_self' }, 'Rustdocs')
+      text: 'Rustdocs',
+      link: 'https://docs.openvm.dev/'
     },
     { text: 'GitHub', link: 'https://github.com/openvm-org/openvm' },
     {
