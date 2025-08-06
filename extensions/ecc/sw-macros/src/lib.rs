@@ -494,7 +494,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                     // p1 should be (p, a)
                     let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
                     // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
-                    let p2 = [one.as_ref(), one.as_ref()].concat();
+                    let p2 = [one, one].concat();
                     let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_ecc_guest::OPCODE,
