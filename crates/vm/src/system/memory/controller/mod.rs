@@ -78,7 +78,7 @@ pub struct MemoryController<F: Field> {
     pub range_checker: SharedVariableRangeCheckerChip,
     // Store separately to avoid smart pointer reference each time
     range_checker_bus: VariableRangeCheckerBus,
-    access_adapter_inventory: AccessAdapterInventory<F>,
+    pub(crate) access_adapter_inventory: AccessAdapterInventory<F>,
     pub(crate) hasher_chip: Option<Arc<Poseidon2PeripheryChip<F>>>,
 }
 

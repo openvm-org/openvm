@@ -580,18 +580,16 @@ unsafe fn execute_e12_setup_impl<
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
-
-    // Read the first point's data as the setup input
-    let setup_input_data: [[u8; BLOCK_SIZE]; BLOCKS] = {
-        let address = rs_vals[0];
+    let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
+        debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
-    };
+    });
 
     // Extract first field element as the prime
     let input_prime = if IS_FP2 {
-        BigUint::from_bytes_le(setup_input_data[..BLOCKS / 2].as_flattened())
+        BigUint::from_bytes_le(read_data[0][..BLOCKS / 2].as_flattened())
     } else {
-        BigUint::from_bytes_le(setup_input_data.as_flattened())
+        BigUint::from_bytes_le(read_data[0].as_flattened())
     };
 
     if input_prime != pre_compute.expr.prime {
@@ -600,6 +598,22 @@ unsafe fn execute_e12_setup_impl<
             msg: "ModularSetup: mismatched prime",
         });
         return;
+    }
+
+    let read_data_dyn: DynArray<u8> = read_data.into();
+
+    let writes = run_field_expression_precomputed::<true>(
+        pre_compute.expr,
+        pre_compute.flag_idx as usize,
+        &read_data_dyn.0,
+    );
+
+    let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
+    debug_assert!(rd_val as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
+
+    let data: [[u8; BLOCK_SIZE]; BLOCKS] = writes.into();
+    for (i, block) in data.into_iter().enumerate() {
+        vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);

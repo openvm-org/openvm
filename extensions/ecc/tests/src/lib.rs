@@ -68,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ec_nonzero_a() -> Result<()> {
+    fn test_nonzero_a() -> Result<()> {
         let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
@@ -90,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ec_two_curves() -> Result<()> {
+    fn test_two_curves() -> Result<()> {
         let config =
             test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         let elf = build_example_program_at_path_with_features(
