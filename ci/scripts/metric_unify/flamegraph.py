@@ -60,6 +60,9 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
                     function_symbols = [get_function_symbol(string_table, offset) for offset in symbol_offsets]
                     stack_values.extend(function_symbols)
             else:
+                # don't make a stack frame for empty label
+                if labels[key] == '':
+                    continue
                 stack_values.append(labels[key])
         if filter:
             continue
