@@ -38,8 +38,6 @@ pub struct VmMetrics {
     pub cycle_tracker: CycleTracker,
 
     pub(crate) current_trace_cells: Vec<usize>,
-    #[cfg(feature = "perf-metrics")]
-    pub(crate) current_access_adapter_cells: Vec<usize>,
 
     /// Backtrace for guest debug panic display
     pub prev_backtrace: Option<Backtrace>,
@@ -98,9 +96,11 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 }
 
 // Memory access adapter height calculation is slow, so only do it if this is the end of
-// execution:
+// execution.
+// We also clear the current trace cell counts so there aren't negative diffs at the start of the
+// next segment.
 #[cfg(feature = "perf-metrics")]
-pub fn update_memory_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>)
+pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>)
 where
     F: Clone + Send + Sync,
     RA: Arena,
@@ -122,26 +122,21 @@ where
     )
     .map(|(main_width, h)| main_width * h)
     .collect_vec();
-    state
-        .metrics
-        .current_access_adapter_cells
-        .resize(num_sys_airs - access_adapter_offset, 0);
-    for (air_name, now_value, prev_value) in itertools::izip!(
+    for (air_name, &now_value) in itertools::izip!(
         &state.metrics.air_names[access_adapter_offset..],
         &now_trace_cells,
-        &state.metrics.current_access_adapter_cells
     ) {
-        if prev_value != now_value {
+        if now_value != 0 {
             let labels = [
                 ("air_name", air_name.clone()),
                 ("opcode", String::default()),
                 ("dsl_ir", String::default()),
                 ("cycle_tracker_span", "memory_access_adapters".to_owned()),
             ];
-            counter!("cells_used", &labels).increment((now_value - prev_value) as u64);
+            counter!("cells_used", &labels).increment(now_value as u64);
         }
     }
-    state.metrics.current_access_adapter_cells = now_trace_cells;
+    state.metrics.current_trace_cells.fill(0);
 }
 
 impl VmMetrics {

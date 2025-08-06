@@ -451,7 +451,7 @@ where
             .memory
             .finalize::<Val<E::SC>>(system_config.continuation_enabled);
         #[cfg(feature = "perf-metrics")]
-        crate::metrics::update_memory_metrics(&mut exec_state);
+        crate::metrics::end_segment_metrics(&mut exec_state);
 
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(exec_state.vm_state.pc, memory.timestamp());
@@ -512,7 +512,12 @@ where
             state.metrics.debug_infos = exe.program.debug_infos();
         }
         #[cfg(feature = "perf-metrics")]
-        state.metrics.set_pk_info(&self.pk);
+        {
+            state.metrics.set_pk_info(&self.pk);
+            state.metrics.num_sys_airs = self.config().as_ref().num_airs();
+            state.metrics.access_adapter_offset =
+                self.config().as_ref().access_adapter_air_id_offset();
+        }
         state
     }
 
