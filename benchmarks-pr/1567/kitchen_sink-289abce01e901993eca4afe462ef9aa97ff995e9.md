@@ -1,18 +1,18 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) |
 |:---|---:|---:|
-| Total |  213.50 |  213.50 |
-| kitchen_sink |  14.39 |  14.39 |
-| leaf |  21.45 |  21.45 |
-| internal.0 |  4.88 |  4.88 |
-| root |  38.68 |  38.68 |
-| halo2_outer |  89.46 |  89.46 |
-| halo2_wrapper |  44.63 |  44.63 |
+| Total |  213.39 |  213.39 |
+| kitchen_sink |  14.40 |  14.40 |
+| leaf |  21.50 |  21.50 |
+| internal.0 |  4.82 |  4.82 |
+| root |  38.63 |  38.63 |
+| halo2_outer |  89.51 |  89.51 |
+| halo2_wrapper |  44.52 |  44.52 |
 
 
 | kitchen_sink |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  14,389 |  14,389 |  14,389 |  14,389 |
+| `total_proof_time_ms ` |  14,401 |  14,401 |  14,401 |  14,401 |
 | `main_cells_used     ` |  904,774,168 |  904,774,168 |  904,774,168 |  904,774,168 |
 | `total_cells_used    ` |  1,227,056,610 |  1,227,056,610 |  1,227,056,610 |  1,227,056,610 |
 | `insns               ` |  154,596 |  309,192 |  154,596 |  154,596 |
@@ -20,88 +20,88 @@
 | `execute_metered_insn_mi/s` |  14.71 | -          |  14.71 |  14.71 |
 | `execute_e3_time_ms  ` |  33 |  33 |  33 |  33 |
 | `execute_e3_insn_mi/s` |  4.61 | -          |  4.61 |  4.61 |
-| `trace_gen_time_ms   ` |  207 |  207 |  207 |  207 |
+| `trace_gen_time_ms   ` |  211 |  211 |  211 |  211 |
 | `memory_finalize_time_ms` |  2 |  2 |  2 |  2 |
 | `boundary_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `merkle_finalize_time_ms` |  60 |  60 |  60 |  60 |
-| `stark_prove_excluding_trace_time_ms` |  14,149 |  14,149 |  14,149 |  14,149 |
-| `main_trace_commit_time_ms` |  4,488 |  4,488 |  4,488 |  4,488 |
-| `generate_perm_trace_time_ms` |  461 |  461 |  461 |  461 |
-| `perm_trace_commit_time_ms` |  1,359 |  1,359 |  1,359 |  1,359 |
-| `quotient_poly_compute_time_ms` |  6,257 |  6,257 |  6,257 |  6,257 |
-| `quotient_poly_commit_time_ms` |  287 |  287 |  287 |  287 |
-| `pcs_opening_time_ms ` |  1,251 |  1,251 |  1,251 |  1,251 |
+| `merkle_finalize_time_ms` |  62 |  62 |  62 |  62 |
+| `stark_prove_excluding_trace_time_ms` |  14,157 |  14,157 |  14,157 |  14,157 |
+| `main_trace_commit_time_ms` |  4,499 |  4,499 |  4,499 |  4,499 |
+| `generate_perm_trace_time_ms` |  455 |  455 |  455 |  455 |
+| `perm_trace_commit_time_ms` |  1,364 |  1,364 |  1,364 |  1,364 |
+| `quotient_poly_compute_time_ms` |  6,306 |  6,306 |  6,306 |  6,306 |
+| `quotient_poly_commit_time_ms` |  284 |  284 |  284 |  284 |
+| `pcs_opening_time_ms ` |  1,205 |  1,205 |  1,205 |  1,205 |
 
 | leaf |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  21,446 |  21,446 |  21,446 |  21,446 |
-| `main_cells_used     ` |  772,081,280 |  772,081,280 |  772,081,280 |  772,081,280 |
-| `total_cells_used    ` |  2,057,382,226 |  2,057,382,226 |  2,057,382,226 |  2,057,382,226 |
-| `insns               ` |  7,952,461 |  7,952,461 |  7,952,461 |  7,952,461 |
-| `execute_e3_time_ms  ` |  1,567 |  1,567 |  1,567 |  1,567 |
-| `execute_e3_insn_mi/s` |  5.07 | -          |  5.07 |  5.07 |
-| `trace_gen_time_ms   ` |  1,577 |  1,577 |  1,577 |  1,577 |
-| `memory_finalize_time_ms` |  17 |  17 |  17 |  17 |
+| `total_proof_time_ms ` |  21,495 |  21,495 |  21,495 |  21,495 |
+| `main_cells_used     ` |  772,081,724 |  772,081,724 |  772,081,724 |  772,081,724 |
+| `total_cells_used    ` |  2,057,383,706 |  2,057,383,706 |  2,057,383,706 |  2,057,383,706 |
+| `insns               ` |  7,952,498 |  7,952,498 |  7,952,498 |  7,952,498 |
+| `execute_e3_time_ms  ` |  1,572 |  1,572 |  1,572 |  1,572 |
+| `execute_e3_insn_mi/s` |  5.06 | -          |  5.06 |  5.06 |
+| `trace_gen_time_ms   ` |  1,651 |  1,651 |  1,651 |  1,651 |
+| `memory_finalize_time_ms` |  16 |  16 |  16 |  16 |
 | `boundary_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  18,302 |  18,302 |  18,302 |  18,302 |
-| `main_trace_commit_time_ms` |  3,753 |  3,753 |  3,753 |  3,753 |
-| `generate_perm_trace_time_ms` |  1,677 |  1,677 |  1,677 |  1,677 |
-| `perm_trace_commit_time_ms` |  4,812 |  4,812 |  4,812 |  4,812 |
-| `quotient_poly_compute_time_ms` |  2,147 |  2,147 |  2,147 |  2,147 |
-| `quotient_poly_commit_time_ms` |  1,312 |  1,312 |  1,312 |  1,312 |
-| `pcs_opening_time_ms ` |  4,597 |  4,597 |  4,597 |  4,597 |
+| `stark_prove_excluding_trace_time_ms` |  18,272 |  18,272 |  18,272 |  18,272 |
+| `main_trace_commit_time_ms` |  3,755 |  3,755 |  3,755 |  3,755 |
+| `generate_perm_trace_time_ms` |  1,674 |  1,674 |  1,674 |  1,674 |
+| `perm_trace_commit_time_ms` |  4,816 |  4,816 |  4,816 |  4,816 |
+| `quotient_poly_compute_time_ms` |  2,153 |  2,153 |  2,153 |  2,153 |
+| `quotient_poly_commit_time_ms` |  1,304 |  1,304 |  1,304 |  1,304 |
+| `pcs_opening_time_ms ` |  4,566 |  4,566 |  4,566 |  4,566 |
 
 | internal.0 |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  4,884 |  4,884 |  4,884 |  4,884 |
-| `main_cells_used     ` |  79,527,195 |  79,527,195 |  79,527,195 |  79,527,195 |
-| `total_cells_used    ` |  143,464,225 |  143,464,225 |  143,464,225 |  143,464,225 |
-| `insns               ` |  1,197,762 |  1,197,762 |  1,197,762 |  1,197,762 |
-| `execute_e3_time_ms  ` |  380 |  380 |  380 |  380 |
-| `execute_e3_insn_mi/s` |  3.15 | -          |  3.15 |  3.15 |
-| `trace_gen_time_ms   ` |  193 |  193 |  193 |  193 |
-| `memory_finalize_time_ms` |  9 |  9 |  9 |  9 |
+| `total_proof_time_ms ` |  4,823 |  4,823 |  4,823 |  4,823 |
+| `main_cells_used     ` |  79,526,487 |  79,526,487 |  79,526,487 |  79,526,487 |
+| `total_cells_used    ` |  143,462,573 |  143,462,573 |  143,462,573 |  143,462,573 |
+| `insns               ` |  1,197,703 |  1,197,703 |  1,197,703 |  1,197,703 |
+| `execute_e3_time_ms  ` |  387 |  387 |  387 |  387 |
+| `execute_e3_insn_mi/s` |  3.09 | -          |  3.09 |  3.09 |
+| `trace_gen_time_ms   ` |  182 |  182 |  182 |  182 |
+| `memory_finalize_time_ms` |  12 |  12 |  12 |  12 |
 | `boundary_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  4,311 |  4,311 |  4,311 |  4,311 |
-| `main_trace_commit_time_ms` |  916 |  916 |  916 |  916 |
+| `stark_prove_excluding_trace_time_ms` |  4,254 |  4,254 |  4,254 |  4,254 |
+| `main_trace_commit_time_ms` |  915 |  915 |  915 |  915 |
 | `generate_perm_trace_time_ms` |  193 |  193 |  193 |  193 |
-| `perm_trace_commit_time_ms` |  682 |  682 |  682 |  682 |
-| `quotient_poly_compute_time_ms` |  613 |  613 |  613 |  613 |
-| `quotient_poly_commit_time_ms` |  680 |  680 |  680 |  680 |
-| `pcs_opening_time_ms ` |  1,223 |  1,223 |  1,223 |  1,223 |
+| `perm_trace_commit_time_ms` |  655 |  655 |  655 |  655 |
+| `quotient_poly_compute_time_ms` |  601 |  601 |  601 |  601 |
+| `quotient_poly_commit_time_ms` |  669 |  669 |  669 |  669 |
+| `pcs_opening_time_ms ` |  1,216 |  1,216 |  1,216 |  1,216 |
 
 | root |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  38,683 |  38,683 |  38,683 |  38,683 |
-| `main_cells_used     ` |  41,517,918 |  41,517,918 |  41,517,918 |  41,517,918 |
-| `total_cells_used    ` |  64,200,364 |  64,200,364 |  64,200,364 |  64,200,364 |
-| `insns               ` |  772,549 |  772,549 |  772,549 |  772,549 |
-| `execute_e3_time_ms  ` |  173 |  173 |  173 |  173 |
-| `execute_e3_insn_mi/s` |  4.46 | -          |  4.46 |  4.46 |
-| `trace_gen_time_ms   ` |  115 |  115 |  115 |  115 |
-| `memory_finalize_time_ms` |  7 |  7 |  7 |  7 |
+| `total_proof_time_ms ` |  38,632 |  38,632 |  38,632 |  38,632 |
+| `main_cells_used     ` |  41,518,758 |  41,518,758 |  41,518,758 |  41,518,758 |
+| `total_cells_used    ` |  64,202,044 |  64,202,044 |  64,202,044 |  64,202,044 |
+| `insns               ` |  772,619 |  772,619 |  772,619 |  772,619 |
+| `execute_e3_time_ms  ` |  174 |  174 |  174 |  174 |
+| `execute_e3_insn_mi/s` |  4.42 | -          |  4.42 |  4.42 |
+| `trace_gen_time_ms   ` |  118 |  118 |  118 |  118 |
+| `memory_finalize_time_ms` |  8 |  8 |  8 |  8 |
 | `boundary_finalize_time_ms` |  0 |  0 |  0 |  0 |
-| `stark_prove_excluding_trace_time_ms` |  38,395 |  38,395 |  38,395 |  38,395 |
-| `main_trace_commit_time_ms` |  12,323 |  12,323 |  12,323 |  12,323 |
-| `generate_perm_trace_time_ms` |  91 |  91 |  91 |  91 |
-| `perm_trace_commit_time_ms` |  7,580 |  7,580 |  7,580 |  7,580 |
-| `quotient_poly_compute_time_ms` |  730 |  730 |  730 |  730 |
-| `quotient_poly_commit_time_ms` |  13,661 |  13,661 |  13,661 |  13,661 |
-| `pcs_opening_time_ms ` |  3,975 |  3,975 |  3,975 |  3,975 |
+| `stark_prove_excluding_trace_time_ms` |  38,340 |  38,340 |  38,340 |  38,340 |
+| `main_trace_commit_time_ms` |  12,305 |  12,305 |  12,305 |  12,305 |
+| `generate_perm_trace_time_ms` |  102 |  102 |  102 |  102 |
+| `perm_trace_commit_time_ms` |  7,680 |  7,680 |  7,680 |  7,680 |
+| `quotient_poly_compute_time_ms` |  712 |  712 |  712 |  712 |
+| `quotient_poly_commit_time_ms` |  13,635 |  13,635 |  13,635 |  13,635 |
+| `pcs_opening_time_ms ` |  3,896 |  3,896 |  3,896 |  3,896 |
 
 | halo2_outer |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  89,463 |  89,463 |  89,463 |  89,463 |
+| `total_proof_time_ms ` |  89,511 |  89,511 |  89,511 |  89,511 |
 | `main_cells_used     ` |  65,627,358 |  65,627,358 |  65,627,358 |  65,627,358 |
 
 | halo2_wrapper |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  44,629 |  44,629 |  44,629 |  44,629 |
+| `total_proof_time_ms ` |  44,519 |  44,519 |  44,519 |  44,519 |
 
 
 
@@ -110,15 +110,15 @@
 
 |  | trace_gen_time_ms | total_cells_used | system_trace_gen_time_ms | single_trace_gen_time_ms | prove_time_ms | prove_for_evm_time_ms | memory_finalize_time_ms | main_cells_used | insns | execute_e3_time_ms | execute_e3_insn_mi/s | boundary_finalize_time_ms | app proof_time_ms | agg_layer_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  | 114 | 64,200,364 | 114 | 2 | 89,478 | 44,629 | 7 | 41,517,918 | 772,549 | 171 | 4.50 | 0 | 14,770 | 39,730 | 
+|  | 118 | 64,202,044 | 118 | 2 | 89,525 | 44,519 | 8 | 41,518,758 | 772,619 | 172 | 4.48 | 0 | 14,782 | 39,662 | 
 
 | group | total_proof_time_ms | single_leaf_agg_time_ms | single_internal_agg_time_ms | prove_segment_time_ms | num_children | memory_to_vec_partition_time_ms | main_cells_used | insns | fri.log_blowup | execute_metered_time_ms | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| halo2_outer | 89,463 |  |  |  |  |  | 65,627,358 |  |  |  |  |  | 
-| halo2_wrapper | 44,629 |  |  |  |  |  |  |  |  |  |  |  | 
-| internal.0 |  |  | 6,066 |  | 3 |  |  |  | 2 |  |  |  | 
-| kitchen_sink |  |  |  | 14,718 |  | 6 |  | 154,596 | 1 | 10 | 14.71 | 36 | 
-| leaf |  | 22,695 |  |  | 1 |  |  |  | 1 |  |  |  | 
+| halo2_outer | 89,511 |  |  |  |  |  | 65,627,358 |  |  |  |  |  | 
+| halo2_wrapper | 44,519 |  |  |  |  |  |  |  |  |  |  |  | 
+| internal.0 |  |  | 5,994 |  | 3 |  |  |  | 2 |  |  |  | 
+| kitchen_sink |  |  |  | 14,730 |  | 6 |  | 154,596 | 1 | 10 | 14.71 | 37 | 
+| leaf |  | 22,758 |  |  | 1 |  |  |  | 1 |  |  |  | 
 
 | group | air_name | idx | rows | prep_cols | perm_cols | main_cols | cells |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -215,9 +215,9 @@
 
 | group | idx | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | insns | generate_perm_trace_time_ms | fri.log_blowup | execute_e3_time_ms | execute_e3_insn_mi/s | boundary_finalize_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| internal.0 | 0 | 193 | 4,884 | 143,464,225 | 224,975,330 | 193 | 4,311 | 2 | 613 | 680 | 682 | 1,223 | 9 | 916 | 79,527,195 | 1,197,762 | 193 |  | 380 | 3.15 | 0 | 
-| leaf | 0 | 1,577 | 21,446 | 2,057,382,226 | 2,500,267,498 | 1,577 | 18,302 | 2 | 2,147 | 1,312 | 4,812 | 4,597 | 17 | 3,753 | 772,081,280 | 7,952,461 | 1,677 |  | 1,567 | 5.07 | 0 | 
-| root | 0 | 115 | 38,683 | 64,200,364 | 80,435,354 | 115 | 38,395 | 2 | 730 | 13,661 | 7,580 | 3,975 | 7 | 12,323 | 41,517,918 | 772,549 | 91 | 3 | 173 | 4.46 | 0 | 
+| internal.0 | 0 | 182 | 4,823 | 143,462,573 | 224,975,330 | 182 | 4,254 | 2 | 601 | 669 | 655 | 1,216 | 12 | 915 | 79,526,487 | 1,197,703 | 193 |  | 387 | 3.09 | 0 | 
+| leaf | 0 | 1,651 | 21,495 | 2,057,383,706 | 2,500,267,498 | 1,651 | 18,272 | 2 | 2,153 | 1,304 | 4,816 | 4,566 | 16 | 3,755 | 772,081,724 | 7,952,498 | 1,674 |  | 1,572 | 5.06 | 0 | 
+| root | 0 | 118 | 38,632 | 64,202,044 | 80,435,354 | 118 | 38,340 | 2 | 712 | 13,635 | 7,680 | 3,896 | 8 | 12,305 | 41,518,758 | 772,619 | 102 | 3 | 174 | 4.42 | 0 | 
 
 | group | idx | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -242,7 +242,7 @@
 
 | group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | merkle_finalize_time_ms | memory_to_vec_partition_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | insns | generate_perm_trace_time_ms | execute_e3_time_ms | execute_e3_insn_mi/s | boundary_finalize_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| kitchen_sink | 0 | 207 | 14,389 | 1,227,056,610 | 1,481,195,122 | 207 | 14,149 | 2 | 6,257 | 287 | 1,359 | 1,251 | 60 | 6 | 2 | 4,488 | 904,774,168 | 154,596 | 461 | 33 | 4.61 | 0 | 
+| kitchen_sink | 0 | 211 | 14,401 | 1,227,056,610 | 1,481,195,122 | 211 | 14,157 | 2 | 6,306 | 284 | 1,364 | 1,205 | 62 | 6 | 2 | 4,499 | 904,774,168 | 154,596 | 455 | 33 | 4.61 | 0 | 
 
 | group | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- |
@@ -268,4 +268,4 @@ Instance Type: 64cpu-linux-arm64
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/16779867517)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/16782413318)
