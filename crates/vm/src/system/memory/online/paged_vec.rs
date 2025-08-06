@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
+use crate::utils::get_zeroed_array;
+
 #[derive(Debug, Clone)]
 pub struct PagedVec<T> {
     pages: Vec<Option<Box<[T]>>>,
@@ -37,8 +39,8 @@ impl<T: Copy + Default> PagedVec<T> {
         );
 
         if self.pages[page_idx].is_none() {
-            let page = vec![T::default(); self.page_size];
-            self.pages[page_idx] = Some(page.into_boxed_slice());
+            let page = get_zeroed_array(self.page_size);
+            self.pages[page_idx] = Some(page);
         }
 
         unsafe {
@@ -73,9 +75,9 @@ impl<T: Copy + Default> PagedVec<T> {
                 *page.get_unchecked_mut(offset) = value;
             }
         } else {
-            let mut page = vec![T::default(); self.page_size];
+            let mut page = get_zeroed_array(self.page_size);
             page[offset] = value;
-            self.pages[page_idx] = Some(page.into_boxed_slice());
+            self.pages[page_idx] = Some(page);
         }
     }
 
