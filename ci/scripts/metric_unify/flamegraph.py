@@ -54,17 +54,21 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
                 break
             if key == 'cycle_tracker_span':
                 if labels[key] == '' or string_table is None:
-                    stack_values.append(labels[key])
+                    # stack_values.append('unknown')
+                    continue
+                elif labels[key] == 'memory_access_adapters':
+                    # stack_values.append(labels[key])
+                    continue
                 else:
                     symbol_offsets = labels[key].split(';')
                     function_symbols = [get_function_symbol(string_table, offset) for offset in symbol_offsets]
                     stack_values.extend(function_symbols)
             else:
                 # don't make a stack frame for empty label
-                if labels[key] == '':
-                    continue
-                stack_values.append(labels[key])
-        if filter:
+                # if labels[key] == '':
+                continue
+                # stack_values.append(labels[key])
+        if filter or len(stack_values) == 0:
             continue
 
         stack = ';'.join(stack_values)
@@ -74,7 +78,7 @@ def get_stack_lines(metrics_dict, group_by_kvs, stack_keys, metric_name, sum_met
         if value != 0:
             non_zero = True
 
-    lines = [f"{stack} {value}" for stack, value in stack_sums.items() if value != 0]
+    lines = [f"{stack} {value}" for stack, value in sorted(stack_sums.items()) if value != 0]
 
     # Currently cycle tracker does not use gauge
     return lines if non_zero else []
