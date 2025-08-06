@@ -38,6 +38,8 @@ pub struct VmMetrics {
     pub cycle_tracker: CycleTracker,
 
     pub(crate) current_trace_cells: Vec<usize>,
+    #[cfg(feature = "perf-metrics")]
+    pub(crate) current_access_adapter_cells: Vec<usize>,
 
     /// Backtrace for guest debug panic display
     pub prev_backtrace: Option<Backtrace>,
@@ -109,22 +111,37 @@ where
 
     let access_adapter_offset = state.metrics.access_adapter_offset;
     let num_sys_airs = state.metrics.num_sys_airs;
-    let mut now_trace_heights: Vec<usize> = state
-        .ctx
-        .arenas
-        .iter()
-        .map(|arena| arena.current_trace_height())
-        .collect();
+    let mut now_heights = vec![0; num_sys_airs - access_adapter_offset];
     AccessAdapterInventory::<F>::compute_heights_from_arena(
         &state.memory.access_adapter_records,
-        &mut now_trace_heights[access_adapter_offset..num_sys_airs],
+        &mut now_heights,
     );
-    let now_trace_cells = zip(&state.metrics.main_widths, &now_trace_heights)
-        .map(|(main_width, h)| main_width * h)
-        .collect_vec();
+    let now_trace_cells = zip(
+        &state.metrics.main_widths[access_adapter_offset..],
+        &now_heights,
+    )
+    .map(|(main_width, h)| main_width * h)
+    .collect_vec();
     state
         .metrics
-        .update_trace_cells(now_trace_cells, "MEMORY_ACCESS_ADAPTERS".to_string(), None);
+        .current_access_adapter_cells
+        .resize(num_sys_airs - access_adapter_offset, 0);
+    for (air_name, now_value, prev_value) in itertools::izip!(
+        &state.metrics.air_names[access_adapter_offset..],
+        &now_trace_cells,
+        &state.metrics.current_access_adapter_cells
+    ) {
+        if prev_value != now_value {
+            let labels = [
+                ("air_name", air_name.clone()),
+                ("opcode", String::default()),
+                ("dsl_ir", String::default()),
+                ("cycle_tracker_span", "memory_access_adapters".to_owned()),
+            ];
+            counter!("cells_used", &labels).increment((now_value - prev_value) as u64);
+        }
+    }
+    state.metrics.current_access_adapter_cells = now_trace_cells;
 }
 
 impl VmMetrics {
@@ -143,6 +160,7 @@ impl VmMetrics {
         self.air_names = air_names;
         self.main_widths = main_widths;
         self.total_widths = total_widths;
+        self.current_trace_cells = vec![0; self.air_names.len()];
     }
 
     pub fn update_trace_cells(
