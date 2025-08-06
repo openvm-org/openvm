@@ -477,6 +477,7 @@ where
         use crate::system::memory::interface::MemoryInterface;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values_chip.is_some());
+        let mut access_adapter_offset = boundary_idx + 1;
         match &self.memory_controller.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let boundary_height = boundary_chip
@@ -494,6 +495,7 @@ where
                 let boundary_height = 2 * boundary_chip.touched_labels.len();
                 heights[boundary_idx] = boundary_height;
                 heights[boundary_idx + 1] = merkle_chip.current_height;
+                access_adapter_offset += 1;
 
                 // Poseidon2Periphery height also varies based on memory, so set it now even though
                 // it's not a system chip:
@@ -505,6 +507,12 @@ where
                 heights[poseidon_idx] = poseidon_height;
             }
         }
+        let access_heights = &self
+            .memory_controller
+            .access_adapter_inventory
+            .trace_heights;
+        heights[access_adapter_offset..access_adapter_offset + access_heights.len()]
+            .copy_from_slice(access_heights);
     }
 }
 

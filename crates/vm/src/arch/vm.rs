@@ -1205,7 +1205,7 @@ mod vm_metrics {
     use metrics::counter;
 
     use super::*;
-    use crate::{arch::Arena, system::memory::adapter::AccessAdapterInventory};
+    use crate::arch::Arena;
 
     impl<E, VB> VirtualMachine<E, VB>
     where
@@ -1216,8 +1216,9 @@ mod vm_metrics {
         ///
         /// Best effort calculation of the used trace heights per chip without padding to powers of
         /// two. This is best effort because some periphery chips may not have record arenas to
-        /// instrument. This function includes the memory access adapter trace heights, constant
-        /// trace heights, and the used height of the program trace.
+        /// instrument. This function includes the constant trace heights, and the used height of
+        /// the program trace. It does not include the memory access adapter trace heights,
+        /// which is included in `SystemChipComplex::finalize_trace_heights`.
         pub(crate) fn get_trace_heights_from_arenas(
             &self,
             system_records: &SystemRecords<Val<E::SC>>,
@@ -1225,19 +1226,10 @@ mod vm_metrics {
         ) -> Vec<usize> {
             let num_airs = self.num_airs();
             assert_eq!(num_airs, record_arenas.len());
-            let sys_config = self.config().as_ref();
-            let num_sys_airs = sys_config.num_airs();
-            let access_adapter_offset = sys_config.access_adapter_air_id_offset();
             let mut heights: Vec<usize> = record_arenas
                 .iter()
                 .map(|arena| arena.current_trace_height())
                 .collect();
-            // Memory is special case, so extract the memory AIR's trace heights from the special
-            // arena
-            AccessAdapterInventory::<Val<E::SC>>::compute_heights_from_arena(
-                &system_records.access_adapter_records,
-                &mut heights[access_adapter_offset..num_sys_airs],
-            );
             // If there are any constant trace heights, set them
             for (pk, height) in zip(&self.pk.per_air, &mut heights) {
                 if let Some(constant_height) =
