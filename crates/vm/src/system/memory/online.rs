@@ -393,7 +393,8 @@ pub struct TracingMemory {
     pub data: GuestMemory,
     /// Maps addr_space to (ptr / min_block_size[addr_space] -> AccessMetadata) for latest access
     /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
-    /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start == 0).
+    /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
+    /// 0).
     pub(super) meta: Vec<PagedVec<AccessMetadata>>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
@@ -684,9 +685,8 @@ impl TracingMemory {
             let mut max_timestamp = INITIAL_TIMESTAMP;
             let mut prev_ts = Vec::with_capacity(num_segs); // PERF(AG): small buffer or small vec or something
 
-            let base_index = merge_ptr / ALIGN;
             for i in 0..num_segs {
-                let ptr_index = base_index + i;
+                let ptr_index = begin + i;
                 let (_, block_metadata) =
                     self.get_block_metadata::<ALIGN>(address_space, ptr_index * ALIGN);
 
