@@ -28,7 +28,8 @@ use openvm_stark_backend::{
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{
         extension::{BinomialExtensionField, BinomiallyExtendable},
-        Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32,
+        ExtensionField, Field, FieldAlgebra, FieldExtensionAlgebra, PackedField, PackedValue,
+        PrimeField32,
     },
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
@@ -37,15 +38,16 @@ use openvm_stark_backend::{
 use static_assertions::const_assert_eq;
 
 use crate::{
-    field_extension::{FieldExtension, EXT_DEG},
+    field_extension::{FieldExtension, BETA, EXT_DEG},
     transmute_array_to_ext, transmute_ext_to_array,
     utils::const_max,
 };
 
+type EF<F> = BinomialExtensionField<F, EXT_DEG>;
+type ExtPacked<F> = <EF<F> as ExtensionField<F>>::ExtensionPacking;
+
 #[cfg(test)]
 mod tests;
-
-type EF<F> = BinomialExtensionField<F, EXT_DEG>;
 
 #[repr(C)]
 #[derive(Debug, AlignedBorrow)]
@@ -1269,11 +1271,7 @@ where
         as_and_bs.push((a, b));
     }
 
-    let mut result = EF::<F>::ZERO;
-    for (a, b) in as_and_bs.into_iter().rev() {
-        // result = result * alpha + (b - a)
-        result = result * alpha + (b - EF::<F>::from_base(a));
-    }
+    let result = compute_polynomial_evaluation(&as_and_bs, alpha);
 
     let result = transmute_ext_to_array::<F, EF<F>, EXT_DEG>(&result);
     vm_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
@@ -1282,4 +1280,147 @@ where
     vm_state.instret += 1;
 
     length as u32 + 2
+}
+
+fn compute_polynomial_evaluation<F>(as_and_bs: &[(F, EF<F>)], alpha: EF<F>) -> EF<F>
+where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    F::Packing: PackedField<Scalar = F>,
+    EF<F>: ExtensionField<F>,
+{
+    let length = as_and_bs.len();
+
+    if length >= F::Packing::WIDTH {
+        match F::Packing::WIDTH {
+            4 => packed_polynomial_evaluation::<F, 4>(as_and_bs, alpha),
+            8 => packed_polynomial_evaluation::<F, 8>(as_and_bs, alpha),
+            16 => packed_polynomial_evaluation::<F, 16>(as_and_bs, alpha),
+            _ => scalar_polynomial_evaluation(as_and_bs, alpha),
+        }
+    } else {
+        scalar_polynomial_evaluation(as_and_bs, alpha)
+    }
+}
+
+#[inline]
+fn scalar_polynomial_evaluation<F>(as_and_bs: &[(F, EF<F>)], alpha: EF<F>) -> EF<F>
+where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+{
+    let mut result = EF::<F>::ZERO;
+    for (a, b) in as_and_bs.iter().rev() {
+        result = result * alpha + (*b - EF::<F>::from_base(*a));
+    }
+    result
+}
+
+#[inline]
+fn packed_polynomial_evaluation<F, const WIDTH: usize>(
+    as_and_bs: &[(F, EF<F>)],
+    alpha: EF<F>,
+) -> EF<F>
+where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    F::Packing: PackedField<Scalar = F>,
+    EF<F>: ExtensionField<F>,
+{
+    let mut result = EF::<F>::ZERO;
+    let alpha_coeffs = alpha.as_base_slice();
+
+    let chunks = as_and_bs.len() / WIDTH;
+
+    for chunk_idx in 0..chunks {
+        let start = as_and_bs.len() - (chunk_idx + 1) * WIDTH;
+        let chunk = &as_and_bs[start..start + WIDTH];
+
+        let mut a_vals = [F::ZERO; WIDTH];
+        let mut b_coeffs = [[F::ZERO; WIDTH]; EXT_DEG];
+
+        for (lane, &(a, b)) in chunk.iter().enumerate() {
+            a_vals[lane] = a;
+            let b_slice = b.as_base_slice();
+            for coeff in 0..EXT_DEG {
+                b_coeffs[coeff][lane] = b_slice[coeff];
+            }
+        }
+
+        let a_packed = F::Packing::from_fn(|lane| a_vals[lane]);
+        let b_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            F::Packing::from_fn(|lane| b_coeffs[coeff_idx][lane])
+        });
+        let a_ext_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            if coeff_idx == 0 {
+                a_packed
+            } else {
+                F::Packing::ZERO
+            }
+        });
+
+        let diff_packed = b_packed - a_ext_packed;
+
+        let result_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            F::Packing::from_f(result.as_base_slice()[coeff_idx])
+        });
+        let alpha_packed =
+            ExtPacked::<F>::from_base_fn(|coeff_idx| F::Packing::from_f(alpha_coeffs[coeff_idx]));
+
+        let mult_result = quartic_multiply_packed(result_packed, alpha_packed);
+        let new_result_packed = mult_result + diff_packed;
+
+        let mut lane_sum = EF::<F>::ZERO;
+        for lane in 0..WIDTH {
+            let lane_result = EF::<F>::from_base_fn(|coeff_idx| {
+                new_result_packed.as_base_slice()[coeff_idx].as_slice()[lane]
+            });
+            lane_sum += lane_result;
+        }
+
+        result = lane_sum;
+    }
+
+    let remainder_start = chunks * WIDTH;
+    for &(a, b) in as_and_bs[remainder_start..].iter().rev() {
+        result = result * alpha + (b - EF::<F>::from_base(a));
+    }
+
+    result
+}
+
+#[inline]
+fn quartic_multiply_packed<F>(
+    result: <EF<F> as ExtensionField<F>>::ExtensionPacking,
+    alpha: <EF<F> as ExtensionField<F>>::ExtensionPacking,
+) -> <EF<F> as ExtensionField<F>>::ExtensionPacking
+where
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
+    F::Packing: PackedField<Scalar = F>,
+    EF<F>: ExtensionField<F>,
+{
+    let result_coeffs = result.as_base_slice();
+    let alpha_coeffs = alpha.as_base_slice();
+    let beta_packed = F::Packing::from_f(F::from_canonical_usize(BETA));
+
+    let mut product_coeffs = [F::Packing::ZERO; EXT_DEG];
+
+    product_coeffs[0] = result_coeffs[0] * alpha_coeffs[0]
+        + beta_packed
+            * (result_coeffs[1] * alpha_coeffs[3]
+                + result_coeffs[2] * alpha_coeffs[2]
+                + result_coeffs[3] * alpha_coeffs[1]);
+
+    product_coeffs[1] = result_coeffs[0] * alpha_coeffs[1]
+        + result_coeffs[1] * alpha_coeffs[0]
+        + beta_packed * (result_coeffs[2] * alpha_coeffs[3] + result_coeffs[3] * alpha_coeffs[2]);
+
+    product_coeffs[2] = result_coeffs[0] * alpha_coeffs[2]
+        + result_coeffs[1] * alpha_coeffs[1]
+        + result_coeffs[2] * alpha_coeffs[0]
+        + beta_packed * result_coeffs[3] * alpha_coeffs[3];
+
+    product_coeffs[3] = result_coeffs[0] * alpha_coeffs[3]
+        + result_coeffs[1] * alpha_coeffs[2]
+        + result_coeffs[2] * alpha_coeffs[1]
+        + result_coeffs[3] * alpha_coeffs[0];
+
+    ExtPacked::<F>::from_base_fn(|coeff_idx| product_coeffs[coeff_idx])
 }
