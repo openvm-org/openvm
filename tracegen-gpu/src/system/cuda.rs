@@ -267,6 +267,7 @@ pub mod access_adapters {
             d_record_offsets: *mut u32,
             d_range_checker: *mut u32,
             range_checker_bins: u32,
+            timestamp_max_bits: u32,
         ) -> i32;
     }
 
@@ -279,6 +280,7 @@ pub mod access_adapters {
         d_records: &DeviceBuffer<u8>,
         d_record_offsets: &DeviceBuffer<OffsetInfo>,
         d_range_checker: &DeviceBuffer<T>,
+        timestamp_max_bits: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_access_adapters_tracegen(
             d_trace_ptrs.as_ptr(),
@@ -290,6 +292,7 @@ pub mod access_adapters {
             d_record_offsets.as_mut_ptr() as *mut u32,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
+            timestamp_max_bits as u32,
         ))
     }
 }

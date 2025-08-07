@@ -49,7 +49,8 @@ __device__ void _fill_trace_row(
     uint32_t type_size,
     uint32_t unpadded_trace_height,
     uint32_t *d_range_checker,
-    size_t range_checker_bins
+    size_t range_checker_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t const padded_height = next_power_of_two_or_zero(unpadded_trace_height);
     if (auto back_idx = padded_height - 1 - row_idx; back_idx >= unpadded_trace_height) {
@@ -80,10 +81,9 @@ __device__ void _fill_trace_row(
     Fp *out = &row[COL_INDEX(typename Cols<N>::template type, is_right_larger)];
     Fp *decomp = &row[COL_INDEX(typename Cols<N>::template type, lt_aux)];
 
-    // TODO: replace 29 with `timestamp_max_bits` that we send here?
     IsLessThan::generate_subrow(
         range_checker,
-        29,
+        timestamp_max_bits,
         left_timestamp,
         right_timestamp,
         AUX_LEN,
@@ -147,7 +147,8 @@ __global__ void access_adapters_tracegen(
     uint8_t const *d_records,
     uint32_t *d_record_offsets,
     uint32_t *d_range_checker,
-    size_t range_checker_bins
+    size_t range_checker_bins,
+    uint32_t timestamp_max_bits
 ) {
     uint32_t const idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= num_records) {
@@ -197,7 +198,8 @@ __global__ void access_adapters_tracegen(
                     header->type_size,
                     d_unpadded_heights[i],
                     d_range_checker,
-                    range_checker_bins
+                    range_checker_bins,
+                    timestamp_max_bits
                 );
             }
         }
@@ -218,7 +220,8 @@ __global__ void access_adapters_tracegen(
                     header->type_size,
                     d_unpadded_heights[i],
                     d_range_checker,
-                    range_checker_bins
+                    range_checker_bins,
+                    timestamp_max_bits
                 );
             }
         }
@@ -234,7 +237,8 @@ extern "C" int _access_adapters_tracegen(
     uint8_t const *d_records,
     uint32_t *d_record_offsets,
     uint32_t *d_range_checker,
-    uint32_t range_checker_bins
+    uint32_t range_checker_bins,
+    uint32_t timestamp_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(num_records, 512);
     access_adapters_tracegen<<<grid, block>>>(
@@ -246,7 +250,8 @@ extern "C" int _access_adapters_tracegen(
         d_records,
         d_record_offsets,
         d_range_checker,
-        range_checker_bins
+        range_checker_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

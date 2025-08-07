@@ -54,6 +54,7 @@ impl MemoryInventoryGPU {
             access_adapters: AccessAdapterInventoryGPU::new(
                 range_checker,
                 config.max_access_adapter_n,
+                config.timestamp_max_bits,
             ),
             persistent: None,
         }
@@ -72,6 +73,7 @@ impl MemoryInventoryGPU {
             access_adapters: AccessAdapterInventoryGPU::new(
                 range_checker,
                 config.max_access_adapter_n,
+                config.timestamp_max_bits,
             ),
             persistent: Some(PersistentMemoryInventoryGPU {
                 merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
