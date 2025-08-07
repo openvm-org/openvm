@@ -10,8 +10,8 @@ use openvm_circuit::{
             EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
             READ_INSTRUCTION_BUS,
         },
-        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState,
-        InstructionExecutor, MatrixRecordArena, MemoryConfig, Streams, VmStateMut,
+        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut,
     },
     system::{
         memory::{
@@ -224,7 +224,7 @@ impl GpuChipTestBuilder {
 
     pub fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
     where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         let initial_pc = self.next_elem_size_u32();
         self.execute_with_pc(executor, arena, instruction, initial_pc);
@@ -235,7 +235,7 @@ impl GpuChipTestBuilder {
         harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         self.execute(&mut harness.executor, &mut harness.arena, instruction);
     }
@@ -247,7 +247,7 @@ impl GpuChipTestBuilder {
         instruction: &Instruction<F>,
         initial_pc: u32,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         let initial_state = ExecutionState {
             pc: initial_pc,
@@ -284,7 +284,7 @@ impl GpuChipTestBuilder {
         instruction: &Instruction<F>,
         initial_pc: u32,
     ) where
-        E: InstructionExecutor<F, RA>,
+        E: PreflightExecutor<F, RA>,
     {
         self.execute_with_pc(
             &mut harness.executor,

@@ -4,7 +4,7 @@ use openvm_bigint_circuit::*;
 use openvm_circuit::{
     arch::{
         testing::RANGE_TUPLE_CHECKER_BUS, DenseRecordArena, EmptyAdapterCoreLayout,
-        InstructionExecutor, VmAirWrapper, VmChipWrapper,
+        PreflightExecutor, VmAirWrapper, VmChipWrapper,
     },
     utils::generate_long_number,
 };
@@ -105,7 +105,7 @@ fn set_and_execute_rand<STEP, AIR, GpuChip, CpuChip>(
     opcode: usize,
     branch_fn: Option<fn(usize, &[u32; INT256_NUM_LIMBS], &[u32; INT256_NUM_LIMBS]) -> bool>,
 ) where
-    STEP: InstructionExecutor<F, DenseRecordArena>,
+    STEP: PreflightExecutor<F, DenseRecordArena>,
 {
     let branch = branch_fn.is_some();
 
