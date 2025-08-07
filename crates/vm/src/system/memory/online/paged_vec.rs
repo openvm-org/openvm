@@ -37,13 +37,10 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
-        match self.pages[page_idx].as_ref() {
-            Some(page) => {
-                // SAFETY: offset < PAGE_SIZE by construction
-                unsafe { *page.get_unchecked(offset) }
-            }
-            None => T::default(),
-        }
+        self.pages[page_idx]
+            .as_ref()
+            .map(|page| unsafe { *page.get_unchecked(offset) })
+            .unwrap_or_default()
     }
 
     /// Panics if the index is out of bounds. Creates new page before write when necessary.
