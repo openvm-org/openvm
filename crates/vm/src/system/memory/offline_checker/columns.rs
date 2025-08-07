@@ -20,6 +20,7 @@ pub struct MemoryBaseAuxCols<T> {
 }
 
 impl<F: PrimeField32> MemoryBaseAuxCols<F> {
+    #[inline(always)]
     pub fn set_prev(&mut self, prev_timestamp: F) {
         self.prev_timestamp = prev_timestamp;
     }
@@ -37,15 +38,18 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
         Self { base, prev_data }
     }
 
+    #[inline(always)]
     pub fn get_base(self) -> MemoryBaseAuxCols<T> {
         self.base
     }
 
+    #[inline(always)]
     pub fn prev_data(&self) -> &[T; N] {
         &self.prev_data
     }
 
     /// Sets the previous data **without** updating the less than auxiliary columns.
+    #[inline(always)]
     pub fn set_prev_data(&mut self, data: [T; N]) {
         self.prev_data = data;
     }
@@ -71,11 +75,13 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
         }
     }
 
+    #[inline(always)]
     pub fn get_base(self) -> MemoryBaseAuxCols<F> {
         self.base
     }
 
     /// Sets the previous timestamp **without** updating the less than auxiliary columns.
+    #[inline(always)]
     pub fn set_prev(&mut self, timestamp: F) {
         self.base.prev_timestamp = timestamp;
     }
