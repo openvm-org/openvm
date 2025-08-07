@@ -21,6 +21,7 @@ pub(crate) const NUM_ADAPTERS: usize = 5;
 
 pub struct AccessAdapterInventoryGPU {
     max_access_adapter_n: usize,
+    timestamp_max_bits: usize,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
 }
 
@@ -34,6 +35,7 @@ pub(crate) fn generate_traces_from_records(
     records: &[u8],
     range_checker: Arc<VariableRangeCheckerChipGPU>,
     max_access_adapter_n: usize,
+    timestamp_max_bits: usize,
 ) -> Vec<Option<DeviceMatrix<F>>> {
     assert!(max_access_adapter_n.is_power_of_two());
     let cnt_adapters = max_access_adapter_n.ilog2() as usize;
@@ -111,6 +113,7 @@ pub(crate) fn generate_traces_from_records(
             &d_records,
             &d_record_offsets,
             &range_checker.count,
+            timestamp_max_bits,
         )
         .unwrap();
     }
@@ -122,10 +125,12 @@ impl AccessAdapterInventoryGPU {
     pub fn new(
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         max_access_adapter_n: usize,
+        timestamp_max_bits: usize,
     ) -> Self {
         Self {
             range_checker,
             max_access_adapter_n,
+            timestamp_max_bits,
         }
     }
 
@@ -138,6 +143,7 @@ impl AccessAdapterInventoryGPU {
             records,
             self.range_checker.clone(),
             self.max_access_adapter_n,
+            self.timestamp_max_bits,
         )
         .into_iter()
         .map(|trace| AirProvingContext {
@@ -226,6 +232,7 @@ mod tests {
             allocated,
             tester.range_checker(),
             mem_config.max_access_adapter_n,
+            mem_config.timestamp_max_bits,
         )
         .into_iter()
         .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
