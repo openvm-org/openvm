@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug};
+use std::{array::from_fn, fmt::Debug, mem::size_of};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -392,10 +392,10 @@ pub struct TracingMemory {
     #[getset(get = "pub")]
     pub data: GuestMemory,
     /// Maps addr_space to (ptr / min_block_size[addr_space] -> AccessMetadata) for latest access
-    /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
+    /// metadata. Uses linear memory for cache efficiency. AccessMetadata stores offset_to_start
     /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
     /// 0).
-    pub(super) meta: Vec<PagedVec<AccessMetadata, PAGE_SIZE>>,
+    pub(super) meta: Vec<MemoryBackend>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -429,7 +429,8 @@ impl TracingMemory {
                     let num_cells = mem.size() / addr_sp.layout.size();
                     let min_block_size = addr_sp.min_block_size;
                     let total_metadata_len = num_cells.div_ceil(min_block_size);
-                    (PagedVec::new(total_metadata_len), min_block_size as u32)
+                    let metadata_size = total_metadata_len * size_of::<AccessMetadata>();
+                    (MemoryBackend::new(metadata_size), min_block_size as u32)
                 })
                 .unzip();
         let access_adapter_records =
@@ -466,14 +467,17 @@ impl TracingMemory {
         pointer: usize,
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-        let current_meta = meta_page.get(ptr_index);
+        let meta_memory = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let current_meta: AccessMetadata =
+            unsafe { meta_memory.read(ptr_index * size_of::<AccessMetadata>()) };
 
         let (block_start_index, block_metadata) = match current_meta.offset_to_start {
-            0 => (ptr_index, *current_meta),
+            0 => (ptr_index, current_meta),
             offset => {
                 let start_idx = ptr_index - offset as usize;
-                (start_idx, *meta_page.get(start_idx))
+                let start_meta: AccessMetadata =
+                    unsafe { meta_memory.read(start_idx * size_of::<AccessMetadata>()) };
+                (start_idx, start_meta)
             }
         };
 
@@ -485,14 +489,17 @@ impl TracingMemory {
     #[inline(always)]
     fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-        let current_meta = meta_page.get(ptr_index);
+        let meta_memory = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let current_meta: AccessMetadata =
+            unsafe { meta_memory.read(ptr_index * size_of::<AccessMetadata>()) };
 
         match current_meta.offset_to_start {
             0 => current_meta.timestamp,
             offset => {
                 let block_start_index = ptr_index - offset as usize;
-                meta_page.get(block_start_index).timestamp
+                let start_meta: AccessMetadata =
+                    unsafe { meta_memory.read(block_start_index * size_of::<AccessMetadata>()) };
+                start_meta.timestamp
             }
         }
     }
@@ -508,28 +515,28 @@ impl TracingMemory {
     ) {
         let ptr = pointer / ALIGN;
         // SAFETY: address_space is assumed to be valid and within bounds
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let meta_memory = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         // Store full metadata at the block start
-        meta_page.set(
-            ptr,
-            AccessMetadata {
-                offset_to_start: 0,
-                block_size: BLOCK_SIZE as u8,
-                timestamp,
-            },
-        );
+        let start_metadata = AccessMetadata {
+            offset_to_start: 0,
+            block_size: BLOCK_SIZE as u8,
+            timestamp,
+        };
+        unsafe {
+            meta_memory.write(ptr * size_of::<AccessMetadata>(), start_metadata);
+        }
 
         // Store offsets for other positions in the block
         for i in 1..(BLOCK_SIZE / ALIGN) {
-            meta_page.set(
-                ptr + i,
-                AccessMetadata {
-                    offset_to_start: i as u8,
-                    block_size: 0, // Not used for non-start positions
-                    timestamp: 0,  // Not used for non-start positions
-                },
-            );
+            let offset_metadata = AccessMetadata {
+                offset_to_start: i as u8,
+                block_size: 0, // Not used for non-start positions
+                timestamp: 0,  // Not used for non-start positions
+            };
+            unsafe {
+                meta_memory.write((ptr + i) * size_of::<AccessMetadata>(), offset_metadata);
+            }
         }
     }
 
@@ -628,18 +635,18 @@ impl TracingMemory {
             return;
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let meta_memory = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         for i in 0..(block_metadata.block_size as usize / MIN_BLOCK_SIZE) {
             // Each split piece becomes its own block start
-            meta_page.set(
-                begin + i,
-                AccessMetadata {
-                    offset_to_start: 0,
-                    block_size: MIN_BLOCK_SIZE as u8,
-                    timestamp: block_metadata.timestamp,
-                },
-            );
+            let split_metadata = AccessMetadata {
+                offset_to_start: 0,
+                block_size: MIN_BLOCK_SIZE as u8,
+                timestamp: block_metadata.timestamp,
+            };
+            unsafe {
+                meta_memory.write((begin + i) * size_of::<AccessMetadata>(), split_metadata);
+            }
         }
         self.add_split_record(AccessRecordHeader {
             timestamp_and_mask: block_metadata.timestamp,
@@ -884,10 +891,15 @@ impl TracingMemory {
             .par_iter()
             .zip(self.min_block_size.par_iter())
             .enumerate()
-            .flat_map(|(addr_space, (meta_page, &align))| {
-                meta_page
-                    .par_iter()
-                    .filter_map(move |(idx, metadata)| {
+            .flat_map(|(addr_space, (meta_memory, &align))| {
+                let metadata_size = meta_memory.size();
+                let num_entries = metadata_size / size_of::<AccessMetadata>();
+
+                (0..num_entries)
+                    .into_par_iter()
+                    .filter_map(move |idx| {
+                        let metadata: AccessMetadata =
+                            unsafe { meta_memory.read(idx * size_of::<AccessMetadata>()) };
                         let ptr = idx as u32 * align;
                         if metadata.offset_to_start == 0 && metadata.block_size != 0 {
                             Some(((addr_space as u32, ptr), metadata))
