@@ -5,8 +5,7 @@ use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, ExprPath, Token,
-    LitStr,
+    parse_macro_input, ExprPath, LitStr, Token,
 };
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it
@@ -71,11 +70,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         macro_rules! create_extern_func {
             ($name:ident) => {
                 let $name = syn::Ident::new(
-                    &format!(
-                        "{}_{}",
-                        stringify!($name),
-                        struct_name_str
-                    ),
+                    &format!("{}_{}", stringify!($name), struct_name_str),
                     span.into(),
                 );
             };
@@ -204,7 +199,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                         // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
                         let p2 = [one.as_ref(), one.as_ref()].concat();
                         let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
- 
+
                         unsafe { #sw_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
                         <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
@@ -425,7 +420,7 @@ impl Parse for SwDefine {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let items = input.parse_terminated(<LitStr as Parse>::parse, Token![,])?;
         Ok(Self {
-            items: items.into_iter().map(|e| e.value()).collect()
+            items: items.into_iter().map(|e| e.value()).collect(),
         })
     }
 }
@@ -499,7 +494,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         rs1 = In p1,
                         rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
                     );
- 
+
 
                 }
             }
