@@ -1,6 +1,7 @@
 #include "launcher.cuh"
 #include "less_than.cuh"
 #include "poseidon2/fp_array.cuh"
+#include "poseidon2/params.cuh"
 #include "shared_buffer.cuh"
 #include "trace_access.h"
 
@@ -38,11 +39,12 @@ template <typename T> struct VolatileBoundaryCols {
     LessThanArrayAuxCols<T, ADDR_ELTS, AUX_LEN> addr_lt_aux;
 };
 
-template <size_t SBOX_DEGREE, size_t SBOX_REGS, size_t HALF_FULL_ROUNDS, size_t PARTIAL_ROUNDS>
+template <typename PoseidonParams>
 __global__ void cukernel_persistent_boundary_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
+    uint8_t const* const* initial_mem,
     BoundaryRecord<PERSISTENT_CHUNK> *records,
     size_t num_records,
     FpArray<16> *poseidon2_buffer,
@@ -55,30 +57,34 @@ __global__ void cukernel_persistent_boundary_tracegen(
 
     if (record_idx < num_records) {
         BoundaryRecord<PERSISTENT_CHUNK> record = records[record_idx];
-        Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
+        Poseidon2Buffer<PoseidonParams> poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
         if (row_idx % 2 == 0) {
-            // TODO[INT-4453]: init values should be read from MemoryImage
-            FpArray<8> init_values = FpArray<8>({0, 0, 0, 0, 0, 0, 0, 0});
+            // TODO better address space handling
+            FpArray<8> init_values = record.address_space == 4
+                ? FpArray<8>::from_raw_array(
+                    reinterpret_cast<uint32_t const*>(initial_mem[record.address_space - 1]) + record.ptr)
+                : FpArray<8>::from_u8_array(
+                    initial_mem[record.address_space - 1] + record.ptr);
             FpArray<8> init_hash =
-                poseidon2.hash_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(
+                poseidon2.hash_and_record(
                     init_values
                 );
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::one());
             COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, Fp::zero());
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, init_values.v);
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, init_hash.v);
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, reinterpret_cast<Fp const*>(init_values.v));
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const*>(init_hash.v));
         } else {
             FpArray<8> final_values = FpArray<8>::from_raw_array(record.values);
             FpArray<8> final_hash =
-                poseidon2.hash_and_record<SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>(
+                poseidon2.hash_and_record(
                     final_values
                 );
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::neg_one());
             COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, record.timestamp);
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, final_values.v);
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, final_hash.v);
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, reinterpret_cast<Fp const*>(final_values.v));
+            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const*>(final_hash.v));
         }
     } else {
         row.fill_zero(0, width);
@@ -165,6 +171,7 @@ extern "C" int _persistent_boundary_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
+    uint8_t const* const* d_initial_mem,
     uint32_t *d_raw_records,
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,
@@ -179,10 +186,11 @@ extern "C" int _persistent_boundary_tracegen(
 
     switch (sbox_regs) {
     case 1:
-        cukernel_persistent_boundary_tracegen<7, 1, 4, 13><<<grid, block>>>(
+        cukernel_persistent_boundary_tracegen<Poseidon2ParamsS1><<<grid, block>>>(
             d_trace,
             height,
             width,
+            d_initial_mem,
             d_records,
             num_records,
             d_poseidon2_buffer,
@@ -191,10 +199,11 @@ extern "C" int _persistent_boundary_tracegen(
         );
         break;
     case 0:
-        cukernel_persistent_boundary_tracegen<7, 0, 4, 13><<<grid, block>>>(
+        cukernel_persistent_boundary_tracegen<Poseidon2ParamsS0><<<grid, block>>>(
             d_trace,
             height,
             width,
+            d_initial_mem,
             d_records,
             num_records,
             d_poseidon2_buffer,

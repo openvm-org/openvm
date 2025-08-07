@@ -1,6 +1,7 @@
 #include "launcher.cuh"
 #include "poseidon2/fp_array.cuh"
 #include "poseidon2/tracegen.cuh"
+#include "poseidon2/params.cuh"
 #include "trace_access.h"
 #include "utils.cuh"
 #include <cstdint>
@@ -8,10 +9,7 @@
 
 template <
     size_t WIDTH,
-    size_t SBOX_DEGREE,
-    size_t SBOX_REGS,
-    size_t HALF_FULL_ROUNDS,
-    size_t PARTIAL_ROUNDS>
+    typename PoseidonParams>
 __global__ void cukernel_system_poseidon2_tracegen(
     Fp *d_trace,
     size_t trace_height,
@@ -21,25 +19,29 @@ __global__ void cukernel_system_poseidon2_tracegen(
     size_t num_records
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx < num_records) {
-        using Poseidon2Row = poseidon2::
-            Poseidon2Row<WIDTH, SBOX_DEGREE, SBOX_REGS, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>;
-        assert(Poseidon2Row::get_total_size() + 1 == trace_width);
-
-        Poseidon2Row row(d_trace + idx, trace_height);
-        RowSlice state(d_records + idx * WIDTH, 1);
-        poseidon2::generate_trace_row_for_perm<
+    using Poseidon2Row = poseidon2::
+        Poseidon2Row<
             WIDTH,
-            SBOX_DEGREE,
-            SBOX_REGS,
-            HALF_FULL_ROUNDS,
-            PARTIAL_ROUNDS>(row, state);
+            PoseidonParams::SBOX_DEGREE,
+            PoseidonParams::SBOX_REGS,
+            PoseidonParams::HALF_FULL_ROUNDS,
+            PoseidonParams::PARTIAL_ROUNDS>;
+#ifdef DEBUG
+    assert(Poseidon2Row::get_total_size() + 1 == trace_width);
+#endif
+    if (idx < trace_height) {
+        Poseidon2Row row(d_trace + idx, trace_height);
+        if (idx < num_records) {
+            RowSlice state(d_records + idx * WIDTH, 1);
+            poseidon2::generate_trace_row_for_perm(row, state);
 
-        d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = d_counts[idx];
-    } else if (idx < trace_height) {
-        RowSlice row(d_trace + idx, trace_height);
-        for (size_t i = 0; i < trace_width; ++i) {
-            row[i] = Fp::zero();
+            d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = d_counts[idx];
+        } else {
+            Fp dummy[Poseidon2Row::get_total_size()] = {0};
+            RowSlice dummy_row(dummy, 1);
+            poseidon2::generate_trace_row_for_perm(row, dummy_row);
+
+            d_trace[idx + Poseidon2Row::get_total_size() * trace_height] = 0;
         }
     }
 }
@@ -57,13 +59,13 @@ extern "C" int _system_poseidon2_tracegen(
 
     switch (sbox_regs) {
     case 1:
-        cukernel_system_poseidon2_tracegen<16, 7, 1, 4, 13>
+        cukernel_system_poseidon2_tracegen<16, Poseidon2ParamsS1>
             <<<grid, block, 0, cudaStreamPerThread>>>(
                 d_trace, height, width, d_records, d_counts, num_records
             );
         break;
     case 0:
-        cukernel_system_poseidon2_tracegen<16, 7, 0, 4, 13>
+        cukernel_system_poseidon2_tracegen<16, Poseidon2ParamsS0>
             <<<grid, block, 0, cudaStreamPerThread>>>(
                 d_trace, height, width, d_records, d_counts, num_records
             );
@@ -139,8 +141,7 @@ extern "C" int _system_poseidon2_deduplicate_records(
 
     // Removes duplicate values from d_records, and stores the number of times
     // they occur in d_counts. The number of unique values is stored into
-    // d_num_records. We allow cub to use d_trace as temporary storage, which
-    // in release we assume to be much more than the space required.
+    // d_num_records.
     cub::DeviceReduce::ReduceByKey(
         d_temp_storage,
         temp_storage_bytes,

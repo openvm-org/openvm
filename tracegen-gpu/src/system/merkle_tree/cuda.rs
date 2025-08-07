@@ -1,4 +1,10 @@
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t};
+use stark_backend_gpu::{
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t},
+    types::F,
+};
+
+use crate::system::{merkle_tree::TIMESTAMPED_BLOCK_WIDTH, poseidon2::SharedBuffer, DIGEST_WIDTH};
 
 pub mod merkle_tree {
     use super::*;
@@ -28,6 +34,25 @@ pub mod merkle_tree {
             d_out: *mut std::ffi::c_void,
             num_roots: usize,
             stream: cudaStream_t,
+        ) -> i32;
+
+        fn _update_merkle_tree(
+            num_leaves: usize,
+            layer: *mut u32, // are actually `(u32, u32, u32, H)`s
+            subtree_height: usize,
+            child_buf: *mut u32,
+            tmp_buf: *mut u32,
+            merkle_trace: *mut u32,
+            trace_height: usize,
+            num_subtrees: usize,
+            subtrees: *mut usize,        // is actually H**
+            top_roots: *mut u32,         // are actually `H`s
+            zero_hashes_end: *const u32, // are actually `H`s
+            actual_subtree_heights: *const usize,
+            d_poseidon2_raw_buffer: *mut std::ffi::c_void,
+            d_poseidon2_buffer_idx: *mut u32,
+            poseidon2_capacity: usize,
+            sbox_regs: usize,
         ) -> i32;
     }
 
@@ -83,6 +108,43 @@ pub mod merkle_tree {
             d_out.as_mut_raw_ptr(),
             num_roots,
             stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn update_merkle_tree<T>(
+        trace: &DeviceMatrix<T>,
+        subtree_ptrs: &DeviceBuffer<usize>,
+        top_roots: &DeviceBuffer<[T; DIGEST_WIDTH]>,
+        zero_hash: &DeviceBuffer<[T; DIGEST_WIDTH]>,
+        touched_blocks: &DeviceBuffer<u32>,
+        subtree_height: usize,
+        actual_heights: &[usize],
+        unpadded_height: usize,
+        hasher_buffer: &SharedBuffer<F>,
+        sbox_regs: usize,
+    ) -> Result<(), CudaError> {
+        let num_leaves = touched_blocks.len() / TIMESTAMPED_BLOCK_WIDTH;
+        let num_subtrees = subtree_ptrs.len();
+        let tmp_buffer = DeviceBuffer::<u32>::with_capacity(4 * num_leaves);
+        let actual_heights = actual_heights.to_device().unwrap();
+        CudaError::from_result(_update_merkle_tree(
+            num_leaves,
+            touched_blocks.as_mut_ptr(),
+            subtree_height,
+            tmp_buffer.as_mut_ptr(),
+            tmp_buffer.as_mut_ptr().add(2 * num_leaves),
+            trace.buffer().as_ptr() as *mut u32,
+            unpadded_height,
+            num_subtrees,
+            subtree_ptrs.as_mut_ptr(),
+            top_roots.as_mut_ptr() as *mut u32,
+            zero_hash.as_ptr() as *mut u32,
+            actual_heights.as_ptr(),
+            hasher_buffer.buffer.as_mut_raw_ptr(),
+            hasher_buffer.idx.as_mut_ptr(),
+            hasher_buffer.buffer.len(),
+            sbox_regs,
         ))
     }
 }

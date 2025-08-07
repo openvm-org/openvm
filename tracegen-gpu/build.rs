@@ -28,6 +28,7 @@ fn nvcc_parallel_jobs() -> String {
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../backend/cuda/include");
+    println!("cargo:rerun-if-changed=../backend/src/cuda");
     println!("cargo:rerun-if-changed=cuda");
     println!("cargo:rerun-if-env-changed=CUDA_ARCH");
     println!("cargo:rerun-if-env-changed=CUDA_OPT_LEVEL");

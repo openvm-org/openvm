@@ -17,20 +17,10 @@ use crate::{
     primitives::var_range::VariableRangeCheckerChipGPU, system::cuda::access_adapters::tracegen,
 };
 
-pub struct AccessAdapterChipGPU<const N: usize>;
-
 pub(crate) const NUM_ADAPTERS: usize = 5;
 
-pub enum GenericAccessAdapterChipGPU {
-    N2(AccessAdapterChipGPU<2>),
-    N4(AccessAdapterChipGPU<4>),
-    N8(AccessAdapterChipGPU<8>),
-    N16(AccessAdapterChipGPU<16>),
-    N32(AccessAdapterChipGPU<32>),
-}
-
 pub struct AccessAdapterInventoryGPU {
-    _chips: [GenericAccessAdapterChipGPU; NUM_ADAPTERS],
+    max_access_adapter_n: usize,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
 }
 
@@ -43,9 +33,12 @@ pub struct OffsetInfo {
 pub(crate) fn generate_traces_from_records(
     records: &[u8],
     range_checker: Arc<VariableRangeCheckerChipGPU>,
-) -> [Option<DeviceMatrix<F>>; NUM_ADAPTERS] {
+    max_access_adapter_n: usize,
+) -> Vec<Option<DeviceMatrix<F>>> {
+    assert!(max_access_adapter_n.is_power_of_two());
+    let cnt_adapters = max_access_adapter_n.ilog2() as usize;
     if records.is_empty() {
-        return [const { None }; NUM_ADAPTERS];
+        return vec![None; cnt_adapters];
     }
     // TODO: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a
     // parameter **SAFETY**: `records` should be non-empty at this point
@@ -81,19 +74,30 @@ pub(crate) fn generate_traces_from_records(
         4 => size_of::<AccessAdapterCols<u8, 32>>(),
         _ => panic!(),
     });
-    let unpadded_heights: [_; NUM_ADAPTERS] = std::array::from_fn(|i| row_ids[i] as usize);
-    let traces = std::array::from_fn(|i| match unpadded_heights[i] {
-        0 => None,
-        h => Some(DeviceMatrix::<F>::with_capacity(
-            next_power_of_two_or_zero(h),
-            widths[i],
-        )),
-    });
-    let trace_ptrs: [_; NUM_ADAPTERS] = std::array::from_fn(|i| {
-        traces[i]
-            .as_ref()
-            .map_or_else(null_mut, |t| t.buffer().as_mut_raw_ptr())
-    });
+    let unpadded_heights = row_ids
+        .iter()
+        .take(cnt_adapters)
+        .map(|&x| x as usize)
+        .collect::<Vec<_>>();
+    let traces = unpadded_heights
+        .iter()
+        .enumerate()
+        .map(|(i, &h)| match h {
+            0 => None,
+            h => Some(DeviceMatrix::<F>::with_capacity(
+                next_power_of_two_or_zero(h),
+                widths[i],
+            )),
+        })
+        .collect::<Vec<_>>();
+    let trace_ptrs = traces
+        .iter()
+        .map(|trace| {
+            trace
+                .as_ref()
+                .map_or_else(null_mut, |t| t.buffer().as_mut_raw_ptr())
+        })
+        .collect::<Vec<_>>();
     let d_trace_ptrs = trace_ptrs.to_device().unwrap();
     let d_unpadded_heights = unpadded_heights.to_device().unwrap();
     let d_widths = widths.to_device().unwrap();
@@ -115,31 +119,33 @@ pub(crate) fn generate_traces_from_records(
 }
 
 impl AccessAdapterInventoryGPU {
-    pub fn new(range_checker: Arc<VariableRangeCheckerChipGPU>) -> Self {
+    pub fn new(
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
+        max_access_adapter_n: usize,
+    ) -> Self {
         Self {
-            _chips: [
-                GenericAccessAdapterChipGPU::N2(AccessAdapterChipGPU),
-                GenericAccessAdapterChipGPU::N4(AccessAdapterChipGPU),
-                GenericAccessAdapterChipGPU::N8(AccessAdapterChipGPU),
-                GenericAccessAdapterChipGPU::N16(AccessAdapterChipGPU),
-                GenericAccessAdapterChipGPU::N32(AccessAdapterChipGPU),
-            ],
             range_checker,
+            max_access_adapter_n,
         }
     }
 
     pub fn generate_air_proving_ctxs(
         &self,
         arena: &DenseRecordArena,
-    ) -> [AirProvingContext<GpuBackend>; NUM_ADAPTERS] {
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let records = arena.allocated();
-        generate_traces_from_records(records, self.range_checker.clone()).map(|trace| {
-            AirProvingContext {
-                cached_mains: vec![],
-                common_main: trace,
-                public_values: vec![],
-            }
+        generate_traces_from_records(
+            records,
+            self.range_checker.clone(),
+            self.max_access_adapter_n,
+        )
+        .into_iter()
+        .map(|trace| AirProvingContext {
+            cached_mains: vec![],
+            common_main: trace,
+            public_values: vec![],
         })
+        .collect()
     }
 }
 
@@ -216,10 +222,14 @@ mod tests {
 
         let touched = tester.memory.memory.finalize(false);
         let allocated = tester.memory.memory.access_adapter_records.allocated();
-        let gpu_traces = generate_traces_from_records(allocated, tester.range_checker())
-            .into_iter()
-            .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
-            .collect::<Vec<_>>();
+        let gpu_traces = generate_traces_from_records(
+            allocated,
+            tester.range_checker(),
+            mem_config.max_access_adapter_n,
+        )
+        .into_iter()
+        .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
+        .collect::<Vec<_>>();
 
         let mut controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),
