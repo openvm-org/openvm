@@ -69,7 +69,7 @@ use crate::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
         var_range::VariableRangeCheckerChipGPU,
     },
-    system::poseidon2::Poseidon2PeripheryChipGPU,
+    system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
     testing::{
         execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
     },
@@ -159,6 +159,33 @@ impl GpuChipTestBuilder {
         Self {
             memory: DeviceMemoryTester::volatile(
                 default_tracing_memory(&mem_config, 1),
+                mem_bus,
+                mem_config,
+                range_checker.clone(),
+            ),
+            execution: DeviceExecutionTester::new(ExecutionBus::new(EXECUTION_BUS)),
+            program: DeviceProgramTester::new(ProgramBus::new(READ_INSTRUCTION_BUS)),
+            streams: Default::default(),
+            var_range_checker: range_checker,
+            bitwise_op_lookup: None,
+            range_tuple_checker: None,
+            rng: StdRng::seed_from_u64(0),
+            default_register: 0,
+            default_pointer: 0,
+            #[cfg(feature = "metrics")]
+            metrics: VmMetrics::default(),
+        }
+    }
+
+    pub fn persistent(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
+        setup_tracing_with_log_level(Level::INFO);
+        let mem_bus = MemoryBus::new(MEMORY_BUS);
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+            VariableRangeCheckerChip::new(bus),
+        )));
+        Self {
+            memory: DeviceMemoryTester::persistent(
+                default_tracing_memory(&mem_config, DIGEST_WIDTH),
                 mem_bus,
                 mem_config,
                 range_checker.clone(),

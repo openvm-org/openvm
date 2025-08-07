@@ -4,12 +4,7 @@ use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
         connector::VmConnectorChip,
-        memory::{
-            interface::{MemoryInterface, MemoryInterfaceAirs},
-            online::GuestMemory,
-            MemoryAirInventory, MemoryController,
-        },
-        poseidon2::Poseidon2PeripheryChip,
+        memory::{interface::MemoryInterfaceAirs, online::GuestMemory, MemoryAirInventory},
         SystemChipComplex, SystemRecords,
     },
 };
@@ -18,16 +13,18 @@ use openvm_stark_backend::{
     Chip,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_baby_bear::BabyBear;
 use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
 
 use crate::{
-    cpu_proving_ctx_to_gpu,
     primitives::var_range::VariableRangeCheckerChipGPU,
     system::{
-        connector::VmConnectorChipGPU, program::ProgramChipGPU, public_values::PublicValuesChipGPU,
+        connector::VmConnectorChipGPU, memory::MemoryInventoryGPU,
+        poseidon2::Poseidon2PeripheryChipGPU, program::ProgramChipGPU,
+        public_values::PublicValuesChipGPU,
     },
 };
+
+pub(crate) const DIGEST_WIDTH: usize = 8;
 
 pub mod access_adapters;
 pub mod boundary;
@@ -44,8 +41,7 @@ pub mod public_values;
 pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
     pub connector: VmConnectorChipGPU,
-    // TODO[arayi]: Switch to [MemoryInventoryGPU] once persistent memory is implemented
-    pub memory_controller: MemoryController<BabyBear>,
+    pub memory_inventory: MemoryInventoryGPU,
     pub public_values: Option<PublicValuesChipGPU>,
 }
 
@@ -54,7 +50,7 @@ impl SystemChipInventoryGPU {
         config: &SystemConfig,
         mem_inventory: &MemoryAirInventory<BabyBearPoseidon2Config>,
         range_checker: Arc<VariableRangeCheckerChipGPU>,
-        hasher_chip: Option<Arc<Poseidon2PeripheryChip<BabyBear>>>,
+        hasher_chip: Option<Arc<Poseidon2PeripheryChipGPU>>,
     ) -> Self {
         let cpu_range_checker = range_checker.cpu_chip.clone().unwrap();
 
@@ -66,29 +62,18 @@ impl SystemChipInventoryGPU {
             config.memory_config.timestamp_max_bits,
         ));
 
-        let memory_bus = mem_inventory.bridge.memory_bus();
-        let memory_controller = match &mem_inventory.interface {
-            MemoryInterfaceAirs::Persistent {
-                boundary: _,
-                merkle,
-            } => {
+        let memory_inventory = match &mem_inventory.interface {
+            MemoryInterfaceAirs::Persistent { .. } => {
                 assert!(config.continuation_enabled);
-                MemoryController::<BabyBear>::with_persistent_memory(
-                    memory_bus,
+                MemoryInventoryGPU::persistent(
                     config.memory_config.clone(),
-                    cpu_range_checker,
-                    merkle.merkle_bus,
-                    merkle.compression_bus,
+                    range_checker.clone(),
                     hasher_chip.unwrap(),
                 )
             }
-            MemoryInterfaceAirs::Volatile { boundary: _ } => {
+            MemoryInterfaceAirs::Volatile { .. } => {
                 assert!(!config.continuation_enabled);
-                MemoryController::with_volatile_memory(
-                    memory_bus,
-                    config.memory_config.clone(),
-                    cpu_range_checker,
-                )
+                MemoryInventoryGPU::volatile(config.memory_config.clone(), range_checker.clone())
             }
         };
 
@@ -104,7 +89,7 @@ impl SystemChipInventoryGPU {
         Self {
             program: program_chip,
             connector: connector_chip,
-            memory_controller,
+            memory_inventory,
             public_values: public_values_chip,
         }
     }
@@ -116,13 +101,8 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
     }
 
     fn transport_init_memory_to_device(&mut self, memory: &GuestMemory) {
-        match &mut self.memory_controller.interface_chip {
-            MemoryInterface::Volatile { .. } => {
-                // Skip initialization for volatile memory
-            }
-            MemoryInterface::Persistent { initial_memory, .. } => {
-                *initial_memory = memory.memory.clone();
-            }
+        if self.memory_inventory.persistent.is_some() {
+            self.memory_inventory.set_initial_memory(&memory.memory);
         }
     }
 
@@ -153,14 +133,9 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             chip.generate_proving_ctx(arena)
         });
 
-        let memory_ctx = self
-            .memory_controller
-            .generate_proving_ctx(access_adapter_records, touched_memory);
-
-        let memory_ctxs = memory_ctx
-            .into_iter()
-            .map(cpu_proving_ctx_to_gpu)
-            .collect::<Vec<_>>();
+        let memory_ctxs = self
+            .memory_inventory
+            .generate_proving_ctxs(access_adapter_records, touched_memory);
 
         [program_ctx, connector_ctx]
             .into_iter()

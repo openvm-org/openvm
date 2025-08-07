@@ -8,7 +8,10 @@ use openvm_stark_backend::{
     Chip,
 };
 use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::d_buffer::DeviceBuffer, prelude::F, prover_backend::GpuBackend,
+    base::DeviceMatrix,
+    cuda::{copy::MemCopyD2H, d_buffer::DeviceBuffer},
+    prelude::F,
+    prover_backend::GpuBackend,
 };
 
 use crate::system::cuda::poseidon2;
@@ -26,11 +29,11 @@ pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
     pub fn new(max_buffer_size: usize) -> Self {
-        let idx = DeviceBuffer::<u32>::with_capacity(1);
+        let idx = Arc::new(DeviceBuffer::<u32>::with_capacity(1));
         idx.fill_zero().unwrap();
         Self {
             records: Arc::new(DeviceBuffer::<F>::with_capacity(max_buffer_size)),
-            idx: Arc::new(idx),
+            idx,
         }
     }
 
@@ -48,7 +51,7 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
 
 impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<SBOX_REGISTERS> {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
-        let mut num_records = self.records.len();
+        let mut num_records = self.idx.to_host().unwrap()[0] as usize;
         let counts = DeviceBuffer::<u32>::with_capacity(num_records);
         unsafe {
             poseidon2::deduplicate_records(&self.records, &counts, &mut num_records)

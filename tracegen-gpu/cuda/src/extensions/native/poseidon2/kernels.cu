@@ -1,5 +1,6 @@
 #include "poseidon2/columns.cuh"
 #include "poseidon2/tracegen.cuh"
+#include "poseidon2/params.cuh"
 #include "specific.cuh"
 #include "system/memory/controller.cuh"
 #include "trace_access.h"
@@ -7,9 +8,9 @@
 using namespace poseidon2;
 
 static const size_t WIDTH = 16;
-static const size_t SBOX_DEGREE = 7;
-static const size_t HALF_FULL_ROUNDS = 4;
-static const size_t PARTIAL_ROUNDS = 13;
+static const size_t SBOX_DEGREE = Poseidon2DefaultParams::SBOX_DEGREE;
+static const size_t HALF_FULL_ROUNDS = Poseidon2DefaultParams::HALF_FULL_ROUNDS;
+static const size_t PARTIAL_ROUNDS = Poseidon2DefaultParams::PARTIAL_ROUNDS;
 
 static const uint32_t NUM_INITIAL_READS = 6;
 // static const uint32_t NUM_SIMPLE_ACCESSES = 7;
@@ -192,12 +193,7 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
                 state[i] = inputs[i];
             }
         }
-        generate_trace_row_for_perm<
-            WIDTH,
-            SBOX_DEGREE,
-            SBOX_REGISTERS,
-            HALF_FULL_ROUNDS,
-            PARTIAL_ROUNDS>(poseidon2_row, RowSlice(state, 1));
+        generate_trace_row_for_perm(poseidon2_row, RowSlice(state, 1));
     }
 
     __device__ static void fill_specific(

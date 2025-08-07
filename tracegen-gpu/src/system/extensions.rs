@@ -2,10 +2,10 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        vm_poseidon2_config, AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena,
-        SystemConfig, VmBuilder, VmChipComplex, PUBLIC_VALUES_AIR_ID,
+        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, SystemConfig, VmBuilder,
+        VmChipComplex, PUBLIC_VALUES_AIR_ID,
     },
-    system::poseidon2::{air::Poseidon2PeripheryAir, Poseidon2PeripheryChip},
+    system::poseidon2::air::Poseidon2PeripheryAir,
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChip},
@@ -19,8 +19,9 @@ use crate::{
     primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
     },
-    system::{phantom::PhantomChipGPU, SystemChipInventoryGPU},
-    HybridChip,
+    system::{
+        phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInventoryGPU, DIGEST_WIDTH,
+    },
 };
 
 /// A utility method to get the `VariableRangeCheckerChipGPU` from [ChipInventory].
@@ -112,9 +113,17 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
         inventory.add_periphery_chip(range_checker.clone());
 
         let hasher_chip = if config.continuation_enabled {
+            let max_buffer_size = (config.segmentation_limits.max_trace_height as usize)
+                .next_power_of_two() * 2 // seems like a reliable estimate
+                * (DIGEST_WIDTH * 2); // size of one record
             assert_eq!(inventory.chips().len(), POSEIDON2_INSERTION_IDX);
+            let sbox_registers = if config.max_constraint_degree >= 7 {
+                0
+            } else {
+                1
+            };
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
-            let direct_bus = if config.max_constraint_degree >= 7 {
+            let _direct_bus = if sbox_registers == 0 {
                 inventory
                     .next_air::<Poseidon2PeripheryAir<BabyBear, 0>>()?
                     .bus
@@ -123,14 +132,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
                     .next_air::<Poseidon2PeripheryAir<BabyBear, 1>>()?
                     .bus
             };
-            let chip = HybridChip::new(Arc::new(Poseidon2PeripheryChip::new(
-                vm_poseidon2_config(),
-                direct_bus.index,
-                config.max_constraint_degree,
-            )));
-            let cpu_chip = chip.cpu_chip.clone();
-            inventory.add_periphery_chip(Arc::new(chip));
-            Some(cpu_chip)
+            let chip = Arc::new(Poseidon2PeripheryChipGPU::new(
+                max_buffer_size,
+                sbox_registers,
+            ));
+            inventory.add_periphery_chip(chip.clone());
+            Some(chip)
         } else {
             None
         };

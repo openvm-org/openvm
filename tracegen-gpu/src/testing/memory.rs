@@ -63,6 +63,40 @@ impl DeviceMemoryTester {
         }
     }
 
+    pub fn persistent(
+        memory: TracingMemory,
+        mem_bus: MemoryBus,
+        mem_config: MemoryConfig,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
+    ) -> Self {
+        let mut chip_for_block = HashMap::new();
+        for log_block_size in 0..6 {
+            let block_size = 1 << log_block_size;
+            chip_for_block.insert(block_size, FixedSizeMemoryTester::new(mem_bus, block_size));
+        }
+        let range_bus = range_checker.cpu_chip.as_ref().unwrap().bus();
+        let sbox_regs = 1;
+        let poseidon2_periphery = Arc::new(Poseidon2PeripheryChipGPU::new(
+            1 << 20, // probably enough for our tests
+            sbox_regs,
+        ));
+        let mut inventory = MemoryInventoryGPU::persistent(
+            mem_config.clone(),
+            range_checker,
+            poseidon2_periphery.clone(),
+        );
+        inventory.set_initial_memory(&memory.data.memory);
+        Self {
+            chip_for_block,
+            memory,
+            inventory,
+            hasher_chip: Some(poseidon2_periphery),
+            config: mem_config,
+            mem_bus,
+            range_bus,
+        }
+    }
+
     pub fn memory_bridge(&self) -> MemoryBridge {
         MemoryBridge::new(self.mem_bus, self.config.timestamp_max_bits, self.range_bus)
     }
