@@ -373,12 +373,12 @@ impl GuestMemory {
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, derive_new::new)]
 pub struct AccessMetadata {
-    /// Offset to block start (in ALIGN units). If 0, this IS the block start.
-    pub offset_to_start: u8,
-    /// The block size (only valid when offset_to_start == 0)
-    pub block_size: u8,
     /// The timestamp (only valid when offset_to_start == 0)
     pub timestamp: u32,
+    /// The block size (only valid when offset_to_start == 0)
+    pub block_size: u8,
+    /// Offset to block start (in ALIGN units).
+    pub offset_to_start: u8,
 }
 
 /// Online memory that stores additional information for trace generation purposes.
