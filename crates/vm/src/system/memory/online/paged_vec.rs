@@ -22,28 +22,19 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
-    /// Panics if the index is out of bounds. Creates a new page with default values if no page
-    /// exists.
+    /// Get value at index without allocating new pages.
+    /// Panics if index is out of bounds. Returns default value if page doesn't exist.
     #[inline]
-    pub fn get(&mut self, index: usize) -> &T {
+    pub fn get(&self, index: usize) -> T {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
-        let page_slot = &mut self.pages[page_idx];
-        if page_slot.is_none() {
-            let new_page = get_zeroed_array::<_, PAGE_SIZE>();
-            *page_slot = Some(Box::new(new_page));
-        }
-
-        unsafe {
-            // SAFETY:
-            // - We just ensured the page exists and has size `PAGE_SIZE`
-            // - offset < PAGE_SIZE by construction
-            self.pages
-                .get_unchecked(page_idx)
-                .as_ref()
-                .unwrap()
-                .get_unchecked(offset)
+        match self.pages[page_idx].as_ref() {
+            Some(page) => {
+                // SAFETY: offset < PAGE_SIZE by construction
+                unsafe { *page.get_unchecked(offset) }
+            }
+            None => T::default(),
         }
     }
 
@@ -64,18 +55,6 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             new_page[offset] = value;
             *page_slot = Some(Box::new(new_page));
         }
-    }
-
-    /// Get value at index without allocating.
-    #[inline]
-    pub fn get_unchecked(&self, index: usize) -> Option<&T> {
-        let page_idx = index / PAGE_SIZE;
-        let offset = index % PAGE_SIZE;
-
-        self.pages.get(page_idx)?.as_ref().map(|page| {
-            // SAFETY: offset < PAGE_SIZE by construction
-            unsafe { page.get_unchecked(offset) }
-        })
     }
 
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_

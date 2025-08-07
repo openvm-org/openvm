@@ -45,6 +45,11 @@ pub const INITIAL_TIMESTAMP: u32 = 0;
 /// Default mmap page size. Change this if using THB.
 pub const PAGE_SIZE: usize = 4096;
 
+// Memory access constraints
+const MAX_BLOCK_SIZE: usize = 32;
+const MIN_ALIGN: usize = 1;
+const MAX_SEGMENTS: usize = MAX_BLOCK_SIZE / MIN_ALIGN;
+
 /// (address_space, pointer)
 pub type Address = (u32, u32);
 
@@ -384,8 +389,9 @@ impl AccessMetadata {
     pub fn new(timestamp: u32, block_size: u8, offset_to_start: u8) -> Self {
         debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
         debug_assert!(
-            block_size == 0 || (block_size.is_power_of_two() && block_size <= 32),
-            "Block size must be 0 or power of 2 and <= 32"
+            block_size == 0 || (block_size.is_power_of_two() && block_size <= MAX_BLOCK_SIZE as u8),
+            "Block size must be 0 or power of 2 and <= {}",
+            MAX_BLOCK_SIZE
         );
 
         let encoded_block_size = if block_size == 0 {
@@ -505,10 +511,11 @@ impl TracingMemory {
         let current_meta = meta_page.get(ptr_index);
 
         let (block_start_index, block_metadata) = match current_meta.offset_to_start {
-            0 => (ptr_index, *current_meta),
+            0 => (ptr_index, current_meta),
             offset => {
                 let start_idx = ptr_index - offset as usize;
-                (start_idx, *meta_page.get(start_idx))
+                let start_meta = meta_page.get(start_idx);
+                (start_idx, start_meta)
             }
         };
 
@@ -609,10 +616,9 @@ impl TracingMemory {
             return None;
         }
 
-        let num_segs = BLOCK_SIZE / ALIGN;
-
         // Split intersecting blocks to align bytes
-        let mut splits = Vec::with_capacity(num_segs);
+        let mut splits_buf = [(0usize, 0usize); MAX_SEGMENTS];
+        let mut splits_count = 0;
         let mut current_ptr = pointer;
         let end_ptr = pointer + BLOCK_SIZE;
 
@@ -626,7 +632,9 @@ impl TracingMemory {
             }
 
             if block_metadata.block_size() > ALIGN as u8 {
-                splits.push((start_ptr as usize, block_metadata.block_size() as usize));
+                splits_buf[splits_count] =
+                    (start_ptr as usize, block_metadata.block_size() as usize);
+                splits_count += 1;
             }
 
             // Skip to the next segment after this block ends
@@ -635,7 +643,7 @@ impl TracingMemory {
 
         let merge = (pointer, BLOCK_SIZE);
 
-        Some((splits, merge))
+        Some((splits_buf[..splits_count].to_vec(), merge))
     }
 
     #[inline(always)]
@@ -697,13 +705,13 @@ impl TracingMemory {
             }
 
             // Process merge
-            let num_segs = BLOCK_SIZE / ALIGN;
-            let mut prev_ts = Vec::with_capacity(num_segs); // PERF(AG): small buffer or small vec or something
+            let mut prev_ts_buf = [0u32; MAX_SEGMENTS];
 
             let mut max_timestamp = INITIAL_TIMESTAMP;
 
             let mut ptr = merge_ptr;
             let end_ptr = merge_ptr + merge_size;
+            let mut seg_idx = 0;
             while ptr < end_ptr {
                 let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
 
@@ -713,9 +721,11 @@ impl TracingMemory {
                     self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
                     INITIAL_TIMESTAMP
                 };
-                prev_ts.push(timestamp);
+
+                prev_ts_buf[seg_idx] = timestamp;
                 max_timestamp = max_timestamp.max(timestamp);
                 ptr += ALIGN;
+                seg_idx += 1;
             }
 
             // Create the merge record
@@ -730,7 +740,7 @@ impl TracingMemory {
                 },
                 // SAFETY: T is plain old data
                 unsafe { slice_as_bytes(prev_values) },
-                &prev_ts,
+                &prev_ts_buf[..seg_idx],
             );
 
             max_timestamp
