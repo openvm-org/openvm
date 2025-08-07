@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug};
+use std::{array::from_fn, fmt::Debug, num::NonZero};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -384,7 +384,6 @@ pub struct AccessMetadata {
 impl AccessMetadata {
     const TIMESTAMP_MASK: u32 = (1 << 29) - 1;
     const LOG_BLOCK_SIZE_SHIFT: u32 = 29;
-    const LOG_BLOCK_SIZE_MASK: u32 = 0b111;
 
     pub fn new(timestamp: u32, block_size: u8, offset_to_start: u8) -> Self {
         debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
@@ -397,7 +396,8 @@ impl AccessMetadata {
         let encoded_block_size = if block_size == 0 {
             0
         } else {
-            block_size.ilog2() + 1
+            // SAFETY: We already asserted that block_size is non-zero in this branch
+            unsafe { NonZero::new_unchecked(block_size) }.ilog2() + 1
         };
         let packed = timestamp | (encoded_block_size << Self::LOG_BLOCK_SIZE_SHIFT);
 
@@ -412,8 +412,7 @@ impl AccessMetadata {
     }
 
     pub fn block_size(&self) -> u8 {
-        let encoded = (self.timestamp_and_log_block_size >> Self::LOG_BLOCK_SIZE_SHIFT)
-            & Self::LOG_BLOCK_SIZE_MASK;
+        let encoded = self.timestamp_and_log_block_size >> Self::LOG_BLOCK_SIZE_SHIFT;
         if encoded == 0 {
             0
         } else {
@@ -632,8 +631,12 @@ impl TracingMemory {
             }
 
             if block_metadata.block_size() > ALIGN as u8 {
-                splits_buf[splits_count] =
-                    (start_ptr as usize, block_metadata.block_size() as usize);
+                // SAFETY: splits_count < MAX_SEGMENTS by construction since we iterate over
+                // at most BLOCK_SIZE/ALIGN segments and BLOCK_SIZE <= MAX_BLOCK_SIZE
+                unsafe {
+                    *splits_buf.get_unchecked_mut(splits_count) =
+                        (start_ptr as usize, block_metadata.block_size() as usize);
+                }
                 splits_count += 1;
             }
 
@@ -722,7 +725,11 @@ impl TracingMemory {
                     INITIAL_TIMESTAMP
                 };
 
-                prev_ts_buf[seg_idx] = timestamp;
+                // SAFETY: seg_idx < MAX_SEGMENTS since we iterate at most merge_size/ALIGN times
+                // and merge_size <= BLOCK_SIZE <= MAX_BLOCK_SIZE
+                unsafe {
+                    *prev_ts_buf.get_unchecked_mut(seg_idx) = timestamp;
+                }
                 max_timestamp = max_timestamp.max(timestamp);
                 ptr += ALIGN;
                 seg_idx += 1;
@@ -1038,7 +1045,11 @@ impl TracingMemory {
                     current_values[current_cnt * cell_size..current_cnt * cell_size + cell_size]
                         .copy_from_slice(cell_data);
                     if current_cnt & (min_block_size - 1) == 0 {
-                        current_timestamps[current_cnt / min_block_size] = timestamp;
+                        // SAFETY: current_cnt / min_block_size < CHUNK / min_block_size <= CHUNK
+                        unsafe {
+                            *current_timestamps.get_unchecked_mut(current_cnt / min_block_size) =
+                                timestamp;
+                        }
                     }
                     current_cnt += 1;
                     if current_cnt == CHUNK {
