@@ -509,13 +509,13 @@ impl TracingMemory {
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
-        let (block_start_index, block_metadata) = match current_meta.offset_to_start {
-            0 => (ptr_index, current_meta),
-            offset => {
-                let start_idx = ptr_index - offset as usize;
-                let start_meta = meta_page.get(start_idx);
-                (start_idx, start_meta)
-            }
+        let (block_start_index, block_metadata) = if current_meta.offset_to_start == 0 {
+            (ptr_index, current_meta)
+        } else {
+            let offset = current_meta.offset_to_start;
+            let start_idx = ptr_index - offset as usize;
+            let start_meta = meta_page.get(start_idx);
+            (start_idx, start_meta)
         };
 
         let block_start_pointer = (block_start_index * ALIGN) as u32;
@@ -529,12 +529,12 @@ impl TracingMemory {
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
-        match current_meta.offset_to_start {
-            0 => current_meta.timestamp(),
-            offset => {
-                let block_start_index = ptr_index - offset as usize;
-                meta_page.get(block_start_index).timestamp()
-            }
+        if current_meta.offset_to_start == 0 {
+            current_meta.timestamp()
+        } else {
+            let offset = current_meta.offset_to_start;
+            let block_start_index = ptr_index - offset as usize;
+            meta_page.get(block_start_index).timestamp()
         }
     }
 
