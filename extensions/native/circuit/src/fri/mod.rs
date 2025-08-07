@@ -609,17 +609,15 @@ pub struct FriReducedOpeningCommonRecord<F> {
     pub is_init_aux: MemoryReadAuxRecord,
 }
 
-// Part of record for each workload row that calculates the partial `result`
+// Part of record for each workload row - stores a,b values directly
 // NOTE: Order for fields is important here to prevent overwriting.
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
 pub struct FriReducedOpeningWorkloadRowRecord<F> {
     pub a: F,
     pub a_aux: MemoryReadAuxRecord,
-    // The result of this workload row
-    // b can be computed from a, alpha, result, and previous result:
-    // b = result + a - prev_result * alpha
-    pub result: [F; EXT_DEG],
+    // Store b values directly for vectorized computation
+    pub b: [F; EXT_DEG],
     pub b_aux: MemoryReadAuxRecord,
 }
 
@@ -712,7 +710,7 @@ impl Default for FriReducedOpeningExecutor {
 
 impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningExecutor
 where
-    F: PrimeField32,
+    F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
     for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -812,7 +810,7 @@ where
             vec![]
         };
 
-        let mut as_and_bs = Vec::with_capacity(length);
+        let mut as_and_bs: Vec<(F, EF<F>)> = Vec::with_capacity(length);
         #[allow(clippy::needless_range_loop)]
         for i in 0..length {
             let workload_row = &mut record.workload[length - i - 1];
@@ -843,21 +841,19 @@ where
                 &mut workload_row.b_aux.prev_timestamp,
             );
 
-            as_and_bs.push((a, b));
-        }
-
-        let mut result = [F::ZERO; EXT_DEG];
-        for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
-            let workload_row = &mut record.workload[i];
-
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
+            // Store a and b values directly in record for fill_trace
             workload_row.a = a;
-            workload_row.result = result;
+            workload_row.b = b;
+
+            // Convert b to extension field for vectorized computation
+            let b_ext = transmute_array_to_ext::<F, EF<F>, EXT_DEG>(&b);
+            as_and_bs.push((a, b_ext));
         }
+
+        // Use vectorized polynomial evaluation like execute_e12
+        let alpha_ext = transmute_array_to_ext::<F, EF<F>, EXT_DEG>(&alpha);
+        let result_ext = compute_polynomial_evaluation(&as_and_bs, alpha_ext);
+        let result = transmute_ext_to_array::<F, EF<F>, EXT_DEG>(&result_ext);
 
         let result_ptr = e.as_canonical_u32();
         tracing_write_native(
@@ -875,7 +871,7 @@ where
     }
 }
 
-impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
+impl<F: PrimeField32 + BinomiallyExtendable<EXT_DEG>> TraceFiller<F> for FriReducedOpeningFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -919,6 +915,24 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
 
             let (workload_chunk, rest) = chunk.split_at_mut(length * OVERALL_WIDTH);
             let (ins1_chunk, ins2_chunk) = rest.split_at_mut(OVERALL_WIDTH);
+
+            // Pre-compute results array by computing rolling polynomial result
+            let mut results: Vec<[F; EXT_DEG]> =
+                std::iter::once([F::ZERO; EXT_DEG])
+                    .chain(record.workload.iter().scan(
+                        [F::ZERO; EXT_DEG],
+                        |result, workload_row| {
+                            let a = workload_row.a;
+                            let b = workload_row.b;
+
+                            *result = FieldExtension::add(
+                                FieldExtension::multiply(*result, alpha),
+                                FieldExtension::subtract(b, elem_to_ext(a)),
+                            );
+                            Some(*result)
+                        },
+                    ))
+                    .collect();
 
             {
                 // ins2 row
@@ -990,7 +1004,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                 cols.pc = F::from_canonical_u32(record.common.from_pc);
 
                 cols.prefix.data.alpha = alpha;
-                cols.prefix.data.result = record.workload.last().unwrap().result;
+                cols.prefix.data.result = results.pop().unwrap();
                 cols.prefix.data.idx = F::from_canonical_usize(length);
                 cols.prefix.data.b_ptr = F::from_canonical_u32(b_ptr);
                 cols.prefix.data.write_a = write_a;
@@ -1037,9 +1051,8 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     cols.b_aux.as_mut(),
                 );
 
-                // We temporarily store the result here
-                // the correct value of b is computed during the serial pass below
-                cols.b = record.workload[i].result;
+                // Store the actual b values directly
+                cols.b = workload_row.b;
 
                 mem_helper.fill(
                     workload_row.a_aux.prev_timestamp,
@@ -1047,10 +1060,6 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     cols.a_aux.as_mut(),
                 );
                 cols.prefix.a_or_is_first = workload_row.a;
-
-                if i > 0 {
-                    cols.prefix.data.result = record.workload[i - 1].result;
-                }
             }
 
             workload_chunk
@@ -1071,9 +1080,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     cols.prefix.data.b_ptr =
                         F::from_canonical_u32(b_ptr + ((length - i) * EXT_DEG) as u32);
                     cols.prefix.data.idx = F::from_canonical_usize(i);
-                    if i == 0 {
-                        cols.prefix.data.result = [F::ZERO; EXT_DEG];
-                    }
+                    cols.prefix.data.result = results[i];
                     cols.prefix.data.alpha = alpha;
 
                     // GeneralCols
@@ -1083,10 +1090,6 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     // WorkloadCols
                     cols.prefix.general.timestamp = F::from_canonical_u32(timestamp);
 
-                    cols.b = FieldExtension::subtract(
-                        FieldExtension::add(cols.b, elem_to_ext(cols.prefix.a_or_is_first)),
-                        FieldExtension::multiply(cols.prefix.data.result, alpha),
-                    );
                     row_chunk[WL_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
                 });
         });
@@ -1271,6 +1274,7 @@ where
         as_and_bs.push((a, b));
     }
 
+    // Use vectorized polynomial evaluation
     let result = compute_polynomial_evaluation(&as_and_bs, alpha);
 
     let result = transmute_ext_to_array::<F, EF<F>, EXT_DEG>(&result);
@@ -1308,8 +1312,8 @@ where
     F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
 {
     let mut result = EF::<F>::ZERO;
-    for (a, b) in as_and_bs.iter().rev() {
-        result = result * alpha + (*b - EF::<F>::from_base(*a));
+    for &(a, b) in as_and_bs.iter().rev() {
+        result = result * alpha + (b - EF::<F>::from_base(a));
     }
     result
 }
@@ -1327,22 +1331,17 @@ where
     let mut result = EF::<F>::ZERO;
     let len = as_and_bs.len();
 
-    // Process in chunks, but maintain the correct mathematical ordering
     let chunks = len / WIDTH;
-    let _remainder = len % WIDTH;
 
-    // First process remainder elements at the beginning (highest indices)
     let remainder_start = chunks * WIDTH;
     for &(a, b) in as_and_bs[remainder_start..].iter().rev() {
         result = result * alpha + (b - EF::<F>::from_base(a));
     }
 
-    // Now process full chunks from high to low indices
     for chunk_idx in 0..chunks {
-        let start = (chunks - 1 - chunk_idx) * WIDTH; // Start from the highest chunk
+        let start = (chunks - 1 - chunk_idx) * WIDTH;
         let chunk = &as_and_bs[start..start + WIDTH];
 
-        // Vectorize the subtraction: compute (b_i - a_i) for all elements in this chunk
         let mut a_vals = [F::ZERO; WIDTH];
         let mut b_coeffs = [[F::ZERO; WIDTH]; EXT_DEG];
 
@@ -1354,7 +1353,6 @@ where
             }
         }
 
-        // Vectorized subtraction
         let a_packed = F::Packing::from_fn(|lane| a_vals[lane]);
         let b_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
             F::Packing::from_fn(|lane| b_coeffs[coeff_idx][lane])
@@ -1369,7 +1367,6 @@ where
 
         let diff_packed = b_packed - a_ext_packed;
 
-        // Now process lanes in reverse order within the chunk to match scalar
         for lane in (0..WIDTH).rev() {
             let diff_lane = EF::<F>::from_base_fn(|coeff_idx| {
                 diff_packed.as_base_slice()[coeff_idx].as_slice()[lane]

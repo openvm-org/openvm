@@ -21,7 +21,7 @@ use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{
-    CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
+    CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor, EXT_DEG,
 };
 use openvm_native_transpiler::LongFormTranspilerExtension;
 use openvm_pairing_circuit::{PairingExtension, PairingExtensionExecutor, PairingProverExt};
@@ -37,7 +37,7 @@ use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
-    p3_field::{Field, PrimeField32},
+    p3_field::{extension::BinomiallyExtendable, Field, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_transpiler::transpiler::Transpiler;
@@ -229,7 +229,7 @@ impl<E, SC> VmBuilder<E> for SdkVmCpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
 {
     type VmConfig = SdkVmConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
