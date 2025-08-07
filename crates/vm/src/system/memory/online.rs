@@ -462,7 +462,7 @@ impl TracingMemory {
     }
 
     /// Updates the metadata with the given block.
-    #[inline]
+    #[inline(always)]
     fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
@@ -524,6 +524,46 @@ impl TracingMemory {
         record_mut.timestamps.copy_from_slice(prev_ts);
     }
 
+    /// Calculate splits and merges needed for a memory access.
+    /// Returns Some((splits, merge)) or None if no operations needed.
+    #[inline(always)]
+    #[allow(clippy::type_complexity)]
+    fn calculate_splits_and_merges<const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+    ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
+        // Skip adapters if this is a repeated access to the same location with same size
+        let first_meta = self.meta[address_space].get(pointer / ALIGN);
+        if first_meta.block_size == BLOCK_SIZE as u8 && first_meta.start_ptr == pointer as u32 {
+            return None;
+        }
+
+        let num_segs = BLOCK_SIZE / ALIGN;
+        let begin = pointer / ALIGN;
+
+        // Split intersecting blocks to align bytes
+        let mut splits = Vec::with_capacity(num_segs);
+        let mut i = 0;
+        while i < num_segs {
+            let meta = self.meta[address_space].get(begin + i);
+            if meta.block_size == 0 {
+                i += 1;
+                continue;
+            }
+
+            if meta.block_size > ALIGN as u8 {
+                splits.push((meta.start_ptr as usize, meta.block_size as usize));
+            }
+
+            i = (meta.start_ptr + meta.block_size as u32) as usize / ALIGN - begin;
+        }
+
+        let merge = (pointer, BLOCK_SIZE);
+
+        Some((splits, merge))
+    }
+
     fn split_by_meta<T: Copy, const MIN_BLOCK_SIZE: usize>(
         &mut self,
         meta: &AccessMetadata,
@@ -553,97 +593,114 @@ impl TracingMemory {
         });
     }
 
-    /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`
-    /// and the offset of the record in bytes.
+    /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
+    #[inline(always)]
     fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
-        let num_segs = BLOCK_SIZE / ALIGN;
-
-        let begin = pointer / ALIGN;
-
-        let first_meta = self.meta[address_space].get(begin);
-        let need_to_merge =
-            first_meta.block_size != BLOCK_SIZE as u8 || first_meta.start_ptr != pointer as u32;
-        let result = if need_to_merge {
-            // Then we need to split everything we touched there
-            // And add a merge record in the end
-            let mut i = 0;
-            while i < num_segs {
-                let meta = self.meta[address_space].get(begin + i);
-                if meta.block_size == 0 {
-                    i += 1;
-                    continue;
-                }
-                let meta = *meta;
+        // Calculate what splits and merges are needed for this memory access
+        let result = if let Some((splits, (merge_ptr, merge_size))) =
+            self.calculate_splits_and_merges::<BLOCK_SIZE, ALIGN>(address_space, pointer)
+        {
+            // Process all splits first
+            for (split_ptr, split_size) in splits {
+                let meta = AccessMetadata {
+                    start_ptr: split_ptr as u32,
+                    block_size: split_size as u8,
+                    timestamp: self.meta[address_space].get(split_ptr / ALIGN).timestamp,
+                };
                 self.split_by_meta::<T, ALIGN>(&meta, address_space);
-                i = (meta.start_ptr + meta.block_size as u32) as usize / ALIGN - begin;
             }
 
-            let prev_ts = (0..num_segs)
-                .map(|i| {
-                    let meta = self.meta[address_space].get(begin + i);
-                    if meta.block_size > 0 {
-                        meta.timestamp
-                    } else {
-                        // Initialize
-                        if self.initial_block_size >= ALIGN {
-                            // We need to split the initial block into chunks
-                            let block_start = (begin + i) & !(self.initial_block_size / ALIGN - 1);
-                            self.split_by_meta::<T, ALIGN>(
-                                &AccessMetadata {
-                                    start_ptr: (block_start * ALIGN) as u32,
-                                    block_size: self.initial_block_size as u8,
-                                    timestamp: INITIAL_TIMESTAMP,
-                                },
-                                address_space,
-                            );
-                        } else {
-                            debug_assert_eq!(self.initial_block_size, 1);
-                            debug_assert!((address_space as u32) < NATIVE_AS); // TODO: normal way
-                            self.add_merge_record(
-                                AccessRecordHeader {
-                                    timestamp_and_mask: INITIAL_TIMESTAMP,
-                                    address_space: address_space as u32,
-                                    pointer: (pointer + i * ALIGN) as u32,
-                                    block_size: ALIGN as u32,
-                                    lowest_block_size: self.initial_block_size as u32,
-                                    type_size: 1,
-                                },
-                                &INITIAL_CELL_BUFFER[..ALIGN], // TODO: this assumes cell_size=1
-                                &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
-                            );
-                        }
-                        INITIAL_TIMESTAMP
-                    }
-                })
-                .collect::<Vec<_>>(); // PERF(AG): small buffer or small vec or something
+            // Process merge
+            let num_segs = BLOCK_SIZE / ALIGN;
+            let begin = merge_ptr / ALIGN;
 
-            let timestamp = *prev_ts.iter().max().unwrap();
+            let mut max_timestamp = INITIAL_TIMESTAMP;
+            let mut prev_ts = Vec::with_capacity(num_segs);
+            for i in 0..num_segs {
+                let meta = self.meta[address_space].get(begin + i);
+                let timestamp = if meta.block_size > 0 {
+                    meta.timestamp
+                } else {
+                    self.handle_uninitialized_memory::<T, ALIGN>(
+                        address_space,
+                        begin + i,
+                        merge_ptr + i * ALIGN,
+                    );
+                    INITIAL_TIMESTAMP
+                };
+                prev_ts.push(timestamp);
+                if timestamp > max_timestamp {
+                    max_timestamp = timestamp;
+                }
+            }
+
+            // Create the merge record
             self.add_merge_record(
                 AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
+                    timestamp_and_mask: max_timestamp,
                     address_space: address_space as u32,
-                    pointer: pointer as u32,
-                    block_size: BLOCK_SIZE as u32,
+                    pointer: merge_ptr as u32,
+                    block_size: merge_size as u32,
                     lowest_block_size: ALIGN as u32,
                     type_size: size_of::<T>() as u32,
                 },
-                // SAFETY: T is plain old data
                 unsafe { slice_as_bytes(prev_values) },
                 &prev_ts,
             );
-            timestamp
+
+            max_timestamp
         } else {
-            first_meta.timestamp
+            self.meta[address_space].get(pointer / ALIGN).timestamp
         };
+
+        // Update the metadata for this access
         self.set_meta_block::<BLOCK_SIZE, ALIGN>(address_space, pointer, self.timestamp);
         result
+    }
+
+    /// Handle uninitialized memory by creating appropriate split or merge records.
+    #[inline(always)]
+    fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
+        &mut self,
+        address_space: usize,
+        segment_index: usize,
+        pointer: usize,
+    ) {
+        if self.initial_block_size >= ALIGN {
+            // Split the initial block into chunks
+            let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
+            self.split_by_meta::<T, ALIGN>(
+                &AccessMetadata {
+                    start_ptr: (block_start * ALIGN) as u32,
+                    block_size: self.initial_block_size as u8,
+                    timestamp: INITIAL_TIMESTAMP,
+                },
+                address_space,
+            );
+        } else {
+            // Create a merge record for single-byte initialization
+            debug_assert_eq!(self.initial_block_size, 1);
+            debug_assert!((address_space as u32) < NATIVE_AS);
+            self.add_merge_record(
+                AccessRecordHeader {
+                    timestamp_and_mask: INITIAL_TIMESTAMP,
+                    address_space: address_space as u32,
+                    pointer: pointer as u32,
+                    block_size: ALIGN as u32,
+                    lowest_block_size: self.initial_block_size as u32,
+                    type_size: 1,
+                },
+                &INITIAL_CELL_BUFFER[..ALIGN],
+                &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
+            );
+        }
     }
 
     /// Atomic read operation which increments the timestamp by 1.
