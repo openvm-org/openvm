@@ -17,8 +17,9 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
 use super::{
-    super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningAir,
-    FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
+    super::field_extension::FieldExtension, compute_polynomial_evaluation, elem_to_ext,
+    scalar_polynomial_evaluation, FriReducedOpeningAir, FriReducedOpeningChip,
+    FriReducedOpeningExecutor, EXT_DEG,
 };
 use crate::{
     fri::{WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
@@ -162,4 +163,124 @@ fn run_negative_fri_mat_opening_test() {
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// VECTORIZED POLYNOMIAL EVALUATION TESTS
+///
+/// Test that vectorized and scalar polynomial evaluation produce identical results
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn test_scalar_vs_vectorized_polynomial_evaluation() {
+    use openvm_stark_backend::p3_field::{
+        extension::BinomialExtensionField, FieldExtensionAlgebra,
+    };
+
+    type EF = BinomialExtensionField<F, EXT_DEG>;
+    let mut rng = create_seeded_rng();
+
+    // Test different sizes to verify correctness
+    let test_sizes = [1, 3, 4, 7, 8, 15, 16];
+
+    for &size in &test_sizes {
+        let alpha: EF = EF::from_base_fn(|_| rng.gen::<F>());
+
+        // Generate random test data
+        let mut as_and_bs = Vec::with_capacity(size);
+        for _ in 0..size {
+            let a: F = rng.gen();
+            let b: EF = EF::from_base_fn(|_| rng.gen::<F>());
+            as_and_bs.push((a, b));
+        }
+
+        // Compute using both methods
+        let scalar_result = scalar_polynomial_evaluation(&as_and_bs, alpha);
+        let vectorized_result = compute_polynomial_evaluation(&as_and_bs, alpha);
+
+        assert_eq!(
+            scalar_result, vectorized_result,
+            "Scalar and vectorized results differ for size {}: scalar={:?}, vectorized={:?}",
+            size, scalar_result, vectorized_result
+        );
+    }
+}
+
+#[test]
+fn test_polynomial_evaluation_edge_cases() {
+    use openvm_stark_backend::p3_field::{
+        extension::BinomialExtensionField, FieldExtensionAlgebra,
+    };
+
+    type EF = BinomialExtensionField<F, EXT_DEG>;
+
+    // Test with alpha = 0
+    let alpha_zero = EF::ZERO;
+    let as_and_bs = vec![(F::ONE, EF::from_base(F::TWO)); 5];
+    let result_zero = compute_polynomial_evaluation(&as_and_bs, alpha_zero);
+    let expected_zero = EF::from_base(F::ONE); // Should be b_0 - a_0 = 2 - 1 = 1
+    assert_eq!(result_zero, expected_zero, "Failed for alpha = 0");
+
+    // Test with alpha = 1
+    let alpha_one = EF::ONE;
+    let as_and_bs = vec![(F::ONE, EF::from_base(F::TWO)); 3];
+    let result_one = compute_polynomial_evaluation(&as_and_bs, alpha_one);
+    let expected_one = EF::from_base(F::from_canonical_u32(3)); // 1 + 1 + 1 = 3
+    assert_eq!(result_one, expected_one, "Failed for alpha = 1");
+
+    // Test empty vector should return 0
+    let empty_vec: Vec<(F, EF)> = vec![];
+    let result_empty = compute_polynomial_evaluation(&empty_vec, EF::from_base(F::TWO));
+    assert_eq!(result_empty, EF::ZERO, "Failed for empty vector");
+
+    // Test single element
+    let single = vec![(
+        F::from_canonical_u32(3),
+        EF::from_base(F::from_canonical_u32(7)),
+    )];
+    let alpha: EF = EF::from_base(F::from_canonical_u32(5));
+    let result_single = compute_polynomial_evaluation(&single, alpha);
+    let expected_single = EF::from_base(F::from_canonical_u32(4)); // 7 - 3 = 4
+    assert_eq!(result_single, expected_single, "Failed for single element");
+}
+
+#[test]
+fn test_polynomial_evaluation_consistency_with_reference() {
+    use openvm_stark_backend::p3_field::{
+        extension::BinomialExtensionField, FieldExtensionAlgebra,
+    };
+
+    type EF = BinomialExtensionField<F, EXT_DEG>;
+    let mut rng = create_seeded_rng();
+
+    // Test against the reference implementation from the test file
+    for size in [5, 10, 20, 50] {
+        let alpha: [F; EXT_DEG] = std::array::from_fn(|_| rng.gen());
+        let alpha_ef = EF::from_base_slice(&alpha);
+
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        let mut as_and_bs = Vec::new();
+
+        for _ in 0..size {
+            let a_val: F = rng.gen();
+            let b_val: [F; EXT_DEG] = std::array::from_fn(|_| rng.gen());
+            let b_ef = EF::from_base_slice(&b_val);
+
+            a.push(a_val);
+            b.push(b_val);
+            as_and_bs.push((a_val, b_ef));
+        }
+
+        // Reference implementation from compute_fri_mat_opening
+        let reference_result = compute_fri_mat_opening(alpha, &a, &b);
+        let our_result = compute_polynomial_evaluation(&as_and_bs, alpha_ef);
+
+        assert_eq!(
+            reference_result,
+            our_result.as_base_slice(),
+            "Results differ from reference implementation for size {}",
+            size
+        );
+    }
 }
