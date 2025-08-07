@@ -29,16 +29,10 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
-        assert!(
-            page_idx < self.pages.len(),
-            "PagedVec::get index out of bounds: {} >= {}",
-            index,
-            self.pages.len() * PAGE_SIZE
-        );
-
-        if self.pages[page_idx].is_none() {
-            let page = Box::new(get_zeroed_array::<_, PAGE_SIZE>());
-            self.pages[page_idx] = Some(page);
+        let page_slot = &mut self.pages[page_idx];
+        if page_slot.is_none() {
+            let new_page = get_zeroed_array::<_, PAGE_SIZE>();
+            *page_slot = Some(Box::new(new_page));
         }
 
         unsafe {
@@ -59,23 +53,16 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
-        assert!(
-            page_idx < self.pages.len(),
-            "PagedVec::set index out of bounds: {} >= {}",
-            index,
-            self.pages.len() * PAGE_SIZE
-        );
-
-        if let Some(page) = &mut self.pages[page_idx] {
-            // SAFETY:
-            // - If page exists, then it has size `PAGE_SIZE`
+        let page_slot = &mut self.pages[page_idx];
+        if let Some(page) = page_slot {
+            // SAFETY: If page exists, then it has size `PAGE_SIZE`
             unsafe {
                 *page.get_unchecked_mut(offset) = value;
             }
         } else {
-            let mut page = get_zeroed_array::<_, PAGE_SIZE>();
-            page[offset] = value;
-            self.pages[page_idx] = Some(Box::new(page));
+            let mut new_page = get_zeroed_array::<_, PAGE_SIZE>();
+            new_page[offset] = value;
+            *page_slot = Some(Box::new(new_page));
         }
     }
 
