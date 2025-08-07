@@ -49,7 +49,7 @@ This creates `Bls12_381G1Affine` and `P256Affine` structs which implement the `G
 openvm::init!();
 /* This expands to
 sw_init! {
-    Bls12_381G1Affine, P256Affine,
+    "Bls12_381G1Affine", "P256Affine",
 }
 */
 ```

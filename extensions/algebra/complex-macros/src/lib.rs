@@ -1,10 +1,12 @@
 extern crate proc_macro;
 
-use openvm_macros_common::MacroArgs;
+use openvm_macros_common::{MacroArgs, Param};
 use proc_macro::TokenStream;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Expr, ExprPath, Path, Token,
+    parse_macro_input,
+    punctuated::Punctuated,
+    Expr, ExprPath, LitStr, Path, Token,
 };
 
 /// This macro is used to declare the complex extension fields.
@@ -529,6 +531,38 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
     TokenStream::from_iter(output)
 }
 
+// Override the MacroArgs struct to use LitStr for item names instead of Ident.
+// This removes the need to import the complex struct when using the complex_init macro.
+struct ComplexInitArgs {
+    pub items: Vec<ComplexInitItem>,
+}
+
+struct ComplexInitItem {
+    pub name: LitStr,
+    pub params: Punctuated<Param, Token![,]>,
+}
+
+impl Parse for ComplexInitArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        Ok(ComplexInitArgs {
+            items: input
+                .parse_terminated(ComplexInitItem::parse, Token![,])?
+                .into_iter()
+                .collect(),
+        })
+    }
+}
+
+impl Parse for ComplexInitItem {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let name = input.parse()?;
+        let content;
+        syn::braced!(content in input);
+        let params = content.parse_terminated(Param::parse, Token![,])?;
+        Ok(ComplexInitItem { name, params })
+    }
+}
+
 /// This macro is used to initialize the complex extension fields.
 /// It must be called after `moduli_init!` is called.
 ///
@@ -543,14 +577,14 @@ pub fn complex_declare(input: TokenStream) -> TokenStream {
 /// the `moduli_init!` macro (not `moduli_declare!`).
 #[proc_macro]
 pub fn complex_init(input: TokenStream) -> TokenStream {
-    let MacroArgs { items } = parse_macro_input!(input as MacroArgs);
+    let ComplexInitArgs { items } = parse_macro_input!(input as ComplexInitArgs);
 
     let mut externs = Vec::new();
 
     let span = proc_macro::Span::call_site();
 
     for (complex_idx, item) in items.into_iter().enumerate() {
-        let struct_name = item.name.to_string();
+        let struct_name = item.name.value();
         let struct_name = syn::Ident::new(&struct_name, span.into());
         let mut intmod_idx: Option<usize> = None;
         for param in item.params {
