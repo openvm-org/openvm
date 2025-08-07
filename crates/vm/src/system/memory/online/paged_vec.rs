@@ -2,8 +2,6 @@ use std::fmt::Debug;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 
-use crate::utils::get_zeroed_array;
-
 #[derive(Debug, Clone)]
 pub struct PagedVec<T, const PAGE_SIZE: usize> {
     pages: Vec<Option<Box<[T; PAGE_SIZE]>>>,
@@ -19,6 +17,16 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let num_pages = total_size.div_ceil(PAGE_SIZE);
         Self {
             pages: vec![None; num_pages],
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn create_zeroed_page() -> Box<[T; PAGE_SIZE]> {
+        unsafe {
+            let layout = std::alloc::Layout::array::<T>(PAGE_SIZE).unwrap();
+            let ptr = std::alloc::alloc_zeroed(layout) as *mut [T; PAGE_SIZE];
+            Box::from_raw(ptr)
         }
     }
 
@@ -44,16 +52,11 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
-        let page_slot = &mut self.pages[page_idx];
-        if let Some(page) = page_slot {
-            // SAFETY: If page exists, then it has size `PAGE_SIZE`
-            unsafe {
-                *page.get_unchecked_mut(offset) = value;
-            }
-        } else {
-            let mut new_page = get_zeroed_array::<_, PAGE_SIZE>();
-            new_page[offset] = value;
-            *page_slot = Some(Box::new(new_page));
+        let page = self.pages[page_idx].get_or_insert_with(Self::create_zeroed_page);
+
+        // SAFETY: offset < PAGE_SIZE by construction
+        unsafe {
+            *page.get_unchecked_mut(offset) = value;
         }
     }
 
