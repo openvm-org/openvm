@@ -355,7 +355,7 @@ impl AggregateMetrics {
                             metric_name, summary.avg, "-", "-", "-",
                         )?;
                     } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
-                        || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
                         || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
                     {
                         // skip sum because it is misleading
@@ -469,8 +469,8 @@ pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
 pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
-pub const EXECUTE_E3_TIME_LABEL: &str = "execute_e3_time_ms";
-pub const EXECUTE_E3_INSN_MI_S_LABEL: &str = "execute_e3_insn_mi/s";
+pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
+pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
 pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
@@ -486,8 +486,8 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
-    EXECUTE_E3_TIME_LABEL,
-    EXECUTE_E3_INSN_MI_S_LABEL,
+    EXECUTE_PREFLIGHT_TIME_LABEL,
+    EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,

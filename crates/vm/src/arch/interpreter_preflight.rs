@@ -114,7 +114,8 @@ where
     }
 }
 
-/// Macro for executing with a compile-time span name for better tracing performance
+/// Macro for executing and emitting metrics for instructions/s and number of instructions executed.
+/// Does not include any tracing span.
 #[macro_export]
 macro_rules! execute_spanned {
     ($name:literal, $executor:expr, $state:expr) => {{
@@ -123,7 +124,7 @@ macro_rules! execute_spanned {
         #[cfg(feature = "metrics")]
         let start_instret = $state.instret;
 
-        let result = tracing::info_span!($name).in_scope(|| $executor.execute_from_state($state));
+        let result = $executor.execute_from_state($state);
 
         #[cfg(feature = "metrics")]
         {

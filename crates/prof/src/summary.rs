@@ -5,7 +5,7 @@ use itertools::Itertools;
 
 use crate::{
     aggregate::{
-        AggregateMetrics, EXECUTE_E3_TIME_LABEL, EXECUTE_METERED_TIME_LABEL, INSNS_LABEL,
+        AggregateMetrics, EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL, INSNS_LABEL,
         MAIN_CELLS_USED_LABEL, PROOF_TIME_LABEL, PROVE_EXCL_TRACE_TIME_LABEL, TRACE_GEN_TIME_LABEL,
     },
     types::MdTableCell,
@@ -169,8 +169,8 @@ impl AggregateMetrics {
                 .get(EXECUTE_METERED_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
-            let execute_e3 = stats
-                .get(EXECUTE_E3_TIME_LABEL)
+            let execute_preflight = stats
+                .get(EXECUTE_PREFLIGHT_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
             // If total_proof_time_ms is not available, compute it from components
@@ -184,9 +184,12 @@ impl AggregateMetrics {
                 .unwrap_or(0.0);
             println!(
                 "{} {} {} {}",
-                execute_metered, execute_e3, trace_gen, stark_prove
+                execute_metered, execute_preflight, trace_gen, stark_prove
             );
-            MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
+            MdTableCell::new(
+                execute_metered + execute_preflight + trace_gen + stark_prove,
+                None,
+            )
         };
         println!("{}", self.total_proof_time.val);
         let par_proof_time_ms = if let Some(proof_stats) = stats.get(PROOF_TIME_LABEL) {
@@ -197,8 +200,8 @@ impl AggregateMetrics {
                 .get(EXECUTE_METERED_TIME_LABEL)
                 .map(|s| s.max.val)
                 .unwrap_or(0.0);
-            let execute_e3 = stats
-                .get(EXECUTE_E3_TIME_LABEL)
+            let execute_preflight = stats
+                .get(EXECUTE_PREFLIGHT_TIME_LABEL)
                 .map(|s| s.max.val)
                 .unwrap_or(0.0);
             let trace_gen = stats
@@ -209,7 +212,10 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.max.val)
                 .unwrap_or(0.0);
-            MdTableCell::new(execute_metered + execute_e3 + trace_gen + stark_prove, None)
+            MdTableCell::new(
+                execute_metered + execute_preflight + trace_gen + stark_prove,
+                None,
+            )
         };
         let cells_used = stats
             .get(MAIN_CELLS_USED_LABEL)

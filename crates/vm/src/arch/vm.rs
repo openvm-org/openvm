@@ -388,6 +388,7 @@ where
     ///
     /// This function should rarely be called on its own. Users are advised to call
     /// [`prove`](Self::prove) directly.
+    #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -444,7 +445,7 @@ where
             metrics: state.metrics,
         };
         let mut exec_state = VmExecState::new(vm_state, ctx);
-        execute_spanned!("execute_e3", instance, &mut exec_state)?;
+        execute_spanned!("execute_preflight", instance, &mut exec_state)?;
         let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
         let touched_memory = exec_state
             .vm_state
@@ -1256,6 +1257,8 @@ mod vm_metrics {
                 total_cells_used +=
                     width.total_width(<E::SC as StarkGenericConfig>::Challenge::D) * *height;
             }
+            tracing::debug!(?heights);
+            tracing::info!(main_cells_used, total_cells_used);
             counter!("main_cells_used").absolute(main_cells_used as u64);
             counter!("total_cells_used").absolute(total_cells_used as u64);
 
