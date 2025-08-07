@@ -298,7 +298,7 @@ fn setup_leaf_verifier() -> (
     (vm, leaf_exe, input_stream)
 }
 
-#[divan::bench(sample_count = 3)]
+#[divan::bench(sample_count = 5)]
 fn benchmark_leaf_verifier_execute(bencher: Bencher) {
     bencher
         .with_inputs(|| {
@@ -321,7 +321,7 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 3)]
+#[divan::bench(sample_count = 5)]
 fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
     bencher
         .with_inputs(|| {
@@ -349,7 +349,7 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 3)]
+#[divan::bench(sample_count = 5)]
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
     bencher
         .with_inputs(|| {

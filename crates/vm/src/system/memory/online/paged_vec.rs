@@ -6,7 +6,7 @@ use crate::utils::get_zeroed_array;
 
 #[derive(Debug, Clone)]
 pub struct PagedVec<T, const PAGE_SIZE: usize> {
-    pages: Vec<Option<Box<[T]>>>,
+    pages: Vec<Option<Box<[T; PAGE_SIZE]>>>,
 }
 
 unsafe impl<T: Send, const PAGE_SIZE: usize> Send for PagedVec<T, PAGE_SIZE> {}
@@ -37,7 +37,7 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         );
 
         if self.pages[page_idx].is_none() {
-            let page = get_zeroed_array(PAGE_SIZE);
+            let page = Box::new(get_zeroed_array::<_, PAGE_SIZE>());
             self.pages[page_idx] = Some(page);
         }
 
@@ -73,9 +73,9 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
                 *page.get_unchecked_mut(offset) = value;
             }
         } else {
-            let mut page = get_zeroed_array(PAGE_SIZE);
+            let mut page = get_zeroed_array::<_, PAGE_SIZE>();
             page[offset] = value;
-            self.pages[page_idx] = Some(page);
+            self.pages[page_idx] = Some(Box::new(page));
         }
     }
 
