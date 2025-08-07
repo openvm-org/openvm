@@ -367,18 +367,53 @@ impl GuestMemory {
     }
 }
 
-// perf[jpw]: since we restrict `timestamp < 2^29`, we could pack `timestamp, log2(block_size)`
-// into a single u32 to save some memory, since `block_size` is a power of 2 and its log2
-// is less than 2^3.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, derive_new::new)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct AccessMetadata {
-    /// The timestamp (only valid when offset_to_start == 0)
-    pub timestamp: u32,
-    /// The block size (only valid when offset_to_start == 0)
-    pub block_size: u8,
+    /// Packed timestamp (29 bits) and log2(block_size) (3 bits) (only valid when offset_to_start == 0)
+    pub timestamp_and_log_block_size: u32,
     /// Offset to block start (in ALIGN units).
     pub offset_to_start: u8,
+}
+
+impl AccessMetadata {
+    const TIMESTAMP_MASK: u32 = (1 << 29) - 1;
+    const LOG_BLOCK_SIZE_SHIFT: u32 = 29;
+    const LOG_BLOCK_SIZE_MASK: u32 = 0b111;
+
+    pub fn new(timestamp: u32, block_size: u8, offset_to_start: u8) -> Self {
+        debug_assert!(timestamp < (1 << 29), "Timestamp must be less than 2^29");
+        debug_assert!(
+            block_size == 0 || (block_size.is_power_of_two() && block_size <= 32),
+            "Block size must be 0 or power of 2 and <= 32"
+        );
+
+        let encoded_block_size = if block_size == 0 {
+            0
+        } else {
+            block_size.ilog2() + 1
+        };
+        let packed = timestamp | (encoded_block_size << Self::LOG_BLOCK_SIZE_SHIFT);
+
+        Self {
+            timestamp_and_log_block_size: packed,
+            offset_to_start,
+        }
+    }
+
+    pub fn timestamp(&self) -> u32 {
+        self.timestamp_and_log_block_size & Self::TIMESTAMP_MASK
+    }
+
+    pub fn block_size(&self) -> u8 {
+        let encoded = (self.timestamp_and_log_block_size >> Self::LOG_BLOCK_SIZE_SHIFT)
+            & Self::LOG_BLOCK_SIZE_MASK;
+        if encoded == 0 {
+            0
+        } else {
+            1 << (encoded - 1)
+        }
+    }
 }
 
 /// Online memory that stores additional information for trace generation purposes.
@@ -489,10 +524,10 @@ impl TracingMemory {
         let current_meta = meta_page.get(ptr_index);
 
         match current_meta.offset_to_start {
-            0 => current_meta.timestamp,
+            0 => current_meta.timestamp(),
             offset => {
                 let block_start_index = ptr_index - offset as usize;
-                meta_page.get(block_start_index).timestamp
+                meta_page.get(block_start_index).timestamp()
             }
         }
     }
@@ -511,24 +546,13 @@ impl TracingMemory {
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         // Store full metadata at the block start
-        meta_page.set(
-            ptr,
-            AccessMetadata {
-                offset_to_start: 0,
-                block_size: BLOCK_SIZE as u8,
-                timestamp,
-            },
-        );
+        meta_page.set(ptr, AccessMetadata::new(timestamp, BLOCK_SIZE as u8, 0));
 
         // Store offsets for other positions in the block
         for i in 1..(BLOCK_SIZE / ALIGN) {
             meta_page.set(
                 ptr + i,
-                AccessMetadata {
-                    offset_to_start: i as u8,
-                    block_size: 0, // Not used for non-start positions
-                    timestamp: 0,  // Not used for non-start positions
-                },
+                AccessMetadata::new(0, 0, i as u8), // timestamp and block_size not used for non-start positions
             );
         }
     }
@@ -584,7 +608,7 @@ impl TracingMemory {
     ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
         // Skip adapters if this is a repeated access to the same location with same size
         let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
-        if block_meta.block_size == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
+        if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
             return None;
         }
 
@@ -599,17 +623,17 @@ impl TracingMemory {
             let (start_ptr, block_metadata) =
                 self.get_block_metadata::<ALIGN>(address_space, current_ptr);
 
-            if block_metadata.block_size == 0 {
+            if block_metadata.block_size() == 0 {
                 current_ptr += ALIGN;
                 continue;
             }
 
-            if block_metadata.block_size > ALIGN as u8 {
-                splits.push((start_ptr as usize, block_metadata.block_size as usize));
+            if block_metadata.block_size() > ALIGN as u8 {
+                splits.push((start_ptr as usize, block_metadata.block_size() as usize));
             }
 
             // Skip to the next segment after this block ends
-            current_ptr = start_ptr as usize + block_metadata.block_size as usize;
+            current_ptr = start_ptr as usize + block_metadata.block_size() as usize;
         }
 
         let merge = (pointer, BLOCK_SIZE);
@@ -624,28 +648,24 @@ impl TracingMemory {
         block_metadata: AccessMetadata,
         address_space: usize,
     ) {
-        if block_metadata.block_size == MIN_BLOCK_SIZE as u8 {
+        if block_metadata.block_size() == MIN_BLOCK_SIZE as u8 {
             return;
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
-        for i in 0..(block_metadata.block_size as usize / MIN_BLOCK_SIZE) {
+        for i in 0..(block_metadata.block_size() as usize / MIN_BLOCK_SIZE) {
             // Each split piece becomes its own block start
             meta_page.set(
                 begin + i,
-                AccessMetadata {
-                    offset_to_start: 0,
-                    block_size: MIN_BLOCK_SIZE as u8,
-                    timestamp: block_metadata.timestamp,
-                },
+                AccessMetadata::new(block_metadata.timestamp(), MIN_BLOCK_SIZE as u8, 0),
             );
         }
         self.add_split_record(AccessRecordHeader {
-            timestamp_and_mask: block_metadata.timestamp,
+            timestamp_and_mask: block_metadata.timestamp(),
             address_space: address_space as u32,
             pointer: start_ptr,
-            block_size: block_metadata.block_size as u32,
+            block_size: block_metadata.block_size() as u32,
             lowest_block_size: MIN_BLOCK_SIZE as u32,
             type_size: size_of::<T>() as u32,
         });
@@ -669,11 +689,8 @@ impl TracingMemory {
             for (split_ptr, split_size) in splits {
                 let (_, block_metadata) =
                     self.get_block_metadata::<ALIGN>(address_space, split_ptr);
-                let split_metadata = AccessMetadata {
-                    offset_to_start: 0,
-                    block_size: split_size as u8,
-                    timestamp: block_metadata.timestamp,
-                };
+                let split_metadata =
+                    AccessMetadata::new(block_metadata.timestamp(), split_size as u8, 0);
                 self.split_by_meta::<T, ALIGN>(split_ptr as u32, split_metadata, address_space);
             }
 
@@ -688,8 +705,8 @@ impl TracingMemory {
             while ptr < end_ptr {
                 let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
 
-                let timestamp = if block_metadata.block_size > 0 {
-                    block_metadata.timestamp
+                let timestamp = if block_metadata.block_size() > 0 {
+                    block_metadata.timestamp()
                 } else {
                     self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
                     INITIAL_TIMESTAMP
@@ -738,11 +755,7 @@ impl TracingMemory {
             let start_ptr = (block_start * ALIGN) as u32;
             self.split_by_meta::<T, ALIGN>(
                 start_ptr,
-                AccessMetadata {
-                    offset_to_start: 0,
-                    block_size: self.initial_block_size as u8,
-                    timestamp: INITIAL_TIMESTAMP,
-                },
+                AccessMetadata::new(INITIAL_TIMESTAMP, self.initial_block_size as u8, 0),
                 address_space,
             );
         } else {
@@ -889,7 +902,7 @@ impl TracingMemory {
                     .par_iter()
                     .filter_map(move |(idx, metadata)| {
                         let ptr = idx as u32 * align;
-                        if metadata.offset_to_start == 0 && metadata.block_size != 0 {
+                        if metadata.offset_to_start == 0 && metadata.block_size() != 0 {
                             Some(((addr_space as u32, ptr), metadata))
                         } else {
                             None
@@ -931,8 +944,8 @@ impl TracingMemory {
                 unsafe { *self.data.memory.config.get_unchecked(addr_space as usize) };
             let min_block_size = addr_space_config.min_block_size;
             let cell_size = addr_space_config.layout.size();
-            let timestamp = access_metadata.timestamp;
-            let block_size = access_metadata.block_size;
+            let timestamp = access_metadata.timestamp();
+            let block_size = access_metadata.block_size();
             assert!(
                 current_cnt == 0
                     || (current_address.address_space == addr_space
