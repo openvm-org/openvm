@@ -66,6 +66,18 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
+    /// Get value at index without allocating.
+    #[inline]
+    pub fn get_unchecked(&self, index: usize) -> Option<&T> {
+        let page_idx = index / PAGE_SIZE;
+        let offset = index % PAGE_SIZE;
+
+        self.pages.get(page_idx)?.as_ref().map(|page| {
+            // SAFETY: offset < PAGE_SIZE by construction
+            unsafe { page.get_unchecked(offset) }
+        })
+    }
+
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_
     where
         T: Send + Sync,
