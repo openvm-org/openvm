@@ -29,7 +29,7 @@ openvm-stark-sdk = { workspace = true, optional = true }
 
 [features]
 default = []
-build-binaries = []
+build-elfs = []
 generate-fixtures = [
     "dep:bitcode",
     "dep:openvm-circuit",

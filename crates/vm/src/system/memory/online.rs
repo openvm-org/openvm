@@ -395,7 +395,7 @@ pub struct TracingMemory {
     /// metadata. Uses paged storage for memory efficiency. AccessMetadata stores offset_to_start
     /// (in ALIGN units), block_size, and timestamp (latter two only valid at offset_to_start ==
     /// 0).
-    pub(super) meta: Vec<PagedVec<AccessMetadata>>,
+    pub(super) meta: Vec<PagedVec<AccessMetadata, PAGE_SIZE>>,
     /// For each `addr_space`, the minimum block size allowed for memory accesses. In other words,
     /// all memory accesses in `addr_space` must be aligned to this block size.
     pub min_block_size: Vec<u32>,
@@ -429,10 +429,7 @@ impl TracingMemory {
                     let num_cells = mem.size() / addr_sp.layout.size();
                     let min_block_size = addr_sp.min_block_size;
                     let total_metadata_len = num_cells.div_ceil(min_block_size);
-                    (
-                        PagedVec::new(total_metadata_len, PAGE_SIZE),
-                        min_block_size as u32,
-                    )
+                    (PagedVec::new(total_metadata_len), min_block_size as u32)
                 })
                 .unzip();
         let access_adapter_records =
@@ -592,18 +589,18 @@ impl TracingMemory {
         }
 
         let num_segs = BLOCK_SIZE / ALIGN;
-        let begin = pointer / ALIGN;
 
         // Split intersecting blocks to align bytes
         let mut splits = Vec::with_capacity(num_segs);
-        let mut i = 0;
-        while i < num_segs {
-            let current_ptr = (begin + i) * ALIGN;
+        let mut current_ptr = pointer;
+        let end_ptr = pointer + BLOCK_SIZE;
+
+        while current_ptr < end_ptr {
             let (start_ptr, block_metadata) =
                 self.get_block_metadata::<ALIGN>(address_space, current_ptr);
 
             if block_metadata.block_size == 0 {
-                i += 1;
+                current_ptr += ALIGN;
                 continue;
             }
 
@@ -611,7 +608,8 @@ impl TracingMemory {
                 splits.push((start_ptr as usize, block_metadata.block_size as usize));
             }
 
-            i = (start_ptr + block_metadata.block_size as u32) as usize / ALIGN - begin;
+            // Skip to the next segment after this block ends
+            current_ptr = start_ptr as usize + block_metadata.block_size as usize;
         }
 
         let merge = (pointer, BLOCK_SIZE);
@@ -619,6 +617,7 @@ impl TracingMemory {
         Some((splits, merge))
     }
 
+    #[inline(always)]
     fn split_by_meta<T: Copy, const MIN_BLOCK_SIZE: usize>(
         &mut self,
         start_ptr: u32,
@@ -680,28 +679,24 @@ impl TracingMemory {
 
             // Process merge
             let num_segs = BLOCK_SIZE / ALIGN;
-            let begin = merge_ptr / ALIGN;
-
-            let mut max_timestamp = INITIAL_TIMESTAMP;
             let mut prev_ts = Vec::with_capacity(num_segs); // PERF(AG): small buffer or small vec or something
 
-            for i in 0..num_segs {
-                let ptr_index = begin + i;
-                let (_, block_metadata) =
-                    self.get_block_metadata::<ALIGN>(address_space, ptr_index * ALIGN);
+            let mut max_timestamp = INITIAL_TIMESTAMP;
+
+            let mut ptr = merge_ptr;
+            let end_ptr = merge_ptr + merge_size;
+            while ptr < end_ptr {
+                let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
 
                 let timestamp = if block_metadata.block_size > 0 {
                     block_metadata.timestamp
                 } else {
-                    self.handle_uninitialized_memory::<T, ALIGN>(
-                        address_space,
-                        ptr_index,
-                        ptr_index * ALIGN,
-                    );
+                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
                     INITIAL_TIMESTAMP
                 };
                 prev_ts.push(timestamp);
                 max_timestamp = max_timestamp.max(timestamp);
+                ptr += ALIGN;
             }
 
             // Create the merge record
@@ -734,11 +729,11 @@ impl TracingMemory {
     fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
         &mut self,
         address_space: usize,
-        segment_index: usize,
         pointer: usize,
     ) {
         if self.initial_block_size >= ALIGN {
             // Split the initial block into chunks
+            let segment_index = pointer / ALIGN;
             let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
             let start_ptr = (block_start * ALIGN) as u32;
             self.split_by_meta::<T, ALIGN>(

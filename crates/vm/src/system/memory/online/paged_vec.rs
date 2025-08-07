@@ -5,22 +5,20 @@ use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use crate::utils::get_zeroed_array;
 
 #[derive(Debug, Clone)]
-pub struct PagedVec<T> {
+pub struct PagedVec<T, const PAGE_SIZE: usize> {
     pages: Vec<Option<Box<[T]>>>,
-    page_size: usize,
 }
 
-unsafe impl<T: Send> Send for PagedVec<T> {}
-unsafe impl<T: Sync> Sync for PagedVec<T> {}
+unsafe impl<T: Send, const PAGE_SIZE: usize> Send for PagedVec<T, PAGE_SIZE> {}
+unsafe impl<T: Sync, const PAGE_SIZE: usize> Sync for PagedVec<T, PAGE_SIZE> {}
 
-impl<T: Copy + Default> PagedVec<T> {
+impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     #[inline]
     /// `total_size` is the capacity of elements of type `T`.
-    pub fn new(total_size: usize, page_size: usize) -> Self {
-        let num_pages = total_size.div_ceil(page_size);
+    pub fn new(total_size: usize) -> Self {
+        let num_pages = total_size.div_ceil(PAGE_SIZE);
         Self {
             pages: vec![None; num_pages],
-            page_size,
         }
     }
 
@@ -28,25 +26,25 @@ impl<T: Copy + Default> PagedVec<T> {
     /// exists.
     #[inline]
     pub fn get(&mut self, index: usize) -> &T {
-        let page_idx = index / self.page_size;
-        let offset = index % self.page_size;
+        let page_idx = index / PAGE_SIZE;
+        let offset = index % PAGE_SIZE;
 
         assert!(
             page_idx < self.pages.len(),
             "PagedVec::get index out of bounds: {} >= {}",
             index,
-            self.pages.len() * self.page_size
+            self.pages.len() * PAGE_SIZE
         );
 
         if self.pages[page_idx].is_none() {
-            let page = get_zeroed_array(self.page_size);
+            let page = get_zeroed_array(PAGE_SIZE);
             self.pages[page_idx] = Some(page);
         }
 
         unsafe {
             // SAFETY:
-            // - We just ensured the page exists and has size `page_size`
-            // - offset < page_size by construction
+            // - We just ensured the page exists and has size `PAGE_SIZE`
+            // - offset < PAGE_SIZE by construction
             self.pages
                 .get_unchecked(page_idx)
                 .as_ref()
@@ -58,24 +56,24 @@ impl<T: Copy + Default> PagedVec<T> {
     /// Panics if the index is out of bounds. Creates new page before write when necessary.
     #[inline]
     pub fn set(&mut self, index: usize, value: T) {
-        let page_idx = index / self.page_size;
-        let offset = index % self.page_size;
+        let page_idx = index / PAGE_SIZE;
+        let offset = index % PAGE_SIZE;
 
         assert!(
             page_idx < self.pages.len(),
             "PagedVec::set index out of bounds: {} >= {}",
             index,
-            self.pages.len() * self.page_size
+            self.pages.len() * PAGE_SIZE
         );
 
         if let Some(page) = &mut self.pages[page_idx] {
             // SAFETY:
-            // - If page exists, then it has size `page_size`
+            // - If page exists, then it has size `PAGE_SIZE`
             unsafe {
                 *page.get_unchecked_mut(offset) = value;
             }
         } else {
-            let mut page = get_zeroed_array(self.page_size);
+            let mut page = get_zeroed_array(PAGE_SIZE);
             page[offset] = value;
             self.pages[page_idx] = Some(page);
         }
@@ -92,7 +90,7 @@ impl<T: Copy + Default> PagedVec<T> {
                 page.as_ref().map(move |p| {
                     p.par_iter()
                         .enumerate()
-                        .map(move |(offset, &value)| (page_idx * self.page_size + offset, value))
+                        .map(move |(offset, &value)| (page_idx * PAGE_SIZE + offset, value))
                 })
             })
             .flatten()
@@ -109,7 +107,7 @@ impl<T: Copy + Default> PagedVec<T> {
                 page.as_ref().map(move |p| {
                     p.iter()
                         .enumerate()
-                        .map(move |(offset, &value)| (page_idx * self.page_size + offset, value))
+                        .map(move |(offset, &value)| (page_idx * PAGE_SIZE + offset, value))
                 })
             })
             .flatten()
