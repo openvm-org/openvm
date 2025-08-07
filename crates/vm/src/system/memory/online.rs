@@ -376,7 +376,7 @@ pub struct AccessMetadata {
     /// The starting pointer of the access
     pub start_ptr: u32,
     /// The block size of the memory access
-    pub block_size: u32,
+    pub block_size: u8,
     /// The timestamp of the last access.
     /// We don't _have_ to store it, but this is probably faster
     /// in terms of cache locality
@@ -477,7 +477,7 @@ impl TracingMemory {
                 ptr + i,
                 AccessMetadata {
                     start_ptr: pointer as u32,
-                    block_size: BLOCK_SIZE as u32,
+                    block_size: BLOCK_SIZE as u8,
                     timestamp,
                 },
             );
@@ -529,7 +529,7 @@ impl TracingMemory {
         meta: &AccessMetadata,
         address_space: usize,
     ) {
-        if meta.block_size == MIN_BLOCK_SIZE as u32 {
+        if meta.block_size == MIN_BLOCK_SIZE as u8 {
             return;
         }
         let begin = meta.start_ptr as usize / MIN_BLOCK_SIZE;
@@ -538,7 +538,7 @@ impl TracingMemory {
                 begin + i,
                 AccessMetadata {
                     start_ptr: (meta.start_ptr + (i * MIN_BLOCK_SIZE) as u32),
-                    block_size: MIN_BLOCK_SIZE as u32,
+                    block_size: MIN_BLOCK_SIZE as u8,
                     timestamp: meta.timestamp,
                 },
             );
@@ -547,7 +547,7 @@ impl TracingMemory {
             timestamp_and_mask: meta.timestamp,
             address_space: address_space as u32,
             pointer: meta.start_ptr,
-            block_size: meta.block_size,
+            block_size: meta.block_size as u32,
             lowest_block_size: MIN_BLOCK_SIZE as u32,
             type_size: size_of::<T>() as u32,
         });
@@ -569,7 +569,7 @@ impl TracingMemory {
 
         let first_meta = self.meta[address_space].get(begin);
         let need_to_merge =
-            first_meta.block_size != BLOCK_SIZE as u32 || first_meta.start_ptr != pointer as u32;
+            first_meta.block_size != BLOCK_SIZE as u8 || first_meta.start_ptr != pointer as u32;
         let result = if need_to_merge {
             // Then we need to split everything we touched there
             // And add a merge record in the end
@@ -582,7 +582,7 @@ impl TracingMemory {
                 }
                 let meta = *meta;
                 self.split_by_meta::<T, ALIGN>(&meta, address_space);
-                i = (meta.start_ptr + meta.block_size) as usize / ALIGN - begin;
+                i = (meta.start_ptr + meta.block_size as u32) as usize / ALIGN - begin;
             }
 
             let prev_ts = (0..num_segs)
@@ -598,7 +598,7 @@ impl TracingMemory {
                             self.split_by_meta::<T, ALIGN>(
                                 &AccessMetadata {
                                     start_ptr: (block_start * ALIGN) as u32,
-                                    block_size: self.initial_block_size as u32,
+                                    block_size: self.initial_block_size as u8,
                                     timestamp: INITIAL_TIMESTAMP,
                                 },
                                 address_space,
@@ -823,7 +823,7 @@ impl TracingMemory {
                         && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
-            debug_assert!(block_size >= min_block_size as u32);
+            debug_assert!(block_size >= min_block_size as u8);
             debug_assert!(ptr % min_block_size as u32 == 0);
 
             if current_cnt == 0 {
@@ -835,19 +835,19 @@ impl TracingMemory {
                 current_address = MemoryAddress::new(addr_space, ptr);
             }
 
-            if block_size > min_block_size as u32 {
+            if block_size > min_block_size as u8 {
                 self.add_split_record(AccessRecordHeader {
                     timestamp_and_mask: timestamp,
                     address_space: addr_space,
                     pointer: start_ptr,
-                    block_size,
+                    block_size: block_size as u32,
                     lowest_block_size: min_block_size as u32,
                     type_size: cell_size as u32,
                 });
             }
             if min_block_size > CHUNK {
                 assert_eq!(current_cnt, 0);
-                for i in (0..block_size).step_by(min_block_size) {
+                for i in (0..block_size as u32).step_by(min_block_size) {
                     self.add_split_record(AccessRecordHeader {
                         timestamp_and_mask: timestamp,
                         address_space: addr_space,
@@ -865,7 +865,7 @@ impl TracingMemory {
                         block_size as usize * cell_size,
                     )
                 };
-                for i in (0..block_size).step_by(CHUNK) {
+                for i in (0..block_size as u32).step_by(CHUNK) {
                     final_memory.push((
                         (addr_space, ptr + i),
                         TimestampedValues {
@@ -884,7 +884,7 @@ impl TracingMemory {
                     ));
                 }
             } else {
-                for i in 0..block_size {
+                for i in 0..block_size as u32 {
                     // SAFETY: getting cell data
                     let cell_data = unsafe {
                         self.data.memory.get_u8_slice(
