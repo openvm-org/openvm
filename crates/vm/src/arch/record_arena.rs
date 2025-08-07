@@ -15,6 +15,8 @@ pub trait Arena {
     /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
 
+    fn is_empty(&self) -> bool;
+
     /// Only used for metric collection purposes. Intended usage is that for a record arena that
     /// corresponds to a single trace matrix, this function can extract the current number of used
     /// rows of the corresponding trace matrix. This is currently expected to work only for
@@ -115,6 +117,10 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
             trace_offset: 0,
             allow_truncate: true,
         }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.trace_offset == 0
     }
 
     #[cfg(feature = "metrics")]
@@ -243,6 +249,10 @@ impl Arena for DenseRecordArena {
     fn with_capacity(height: usize, width: usize) -> Self {
         let size_bytes = height * (width * size_of::<u32>());
         Self::with_byte_capacity(size_bytes)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.allocated().is_empty()
     }
 }
 

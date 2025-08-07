@@ -35,10 +35,13 @@ use rustc_hash::FxHashMap;
 use tracing::info_span;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
-use crate::system::{
-    memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-    phantom::PhantomExecutor,
-    SystemAirInventory, SystemChipComplex, SystemRecords,
+use crate::{
+    arch::Arena,
+    system::{
+        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
+        phantom::PhantomExecutor,
+        SystemAirInventory, SystemChipComplex, SystemRecords,
+    },
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -641,6 +644,7 @@ pub enum ChipInventoryError {
 impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
 where
     SC: StarkGenericConfig,
+    RA: Arena,
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
 {
@@ -692,9 +696,12 @@ where
             .chain(
                 zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).map(
                     |((insertion_idx, chip), records)| {
-                        let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                        info_span!("single_trace_gen", air = air_name)
-                            .in_scope(|| chip.generate_proving_ctx(records))
+                        // Only create a span if record is not empty:
+                        let _span = (!records.is_empty()).then(|| {
+                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                            info_span!("single_trace_gen", air = air_name).entered()
+                        });
+                        chip.generate_proving_ctx(records)
                     },
                 ),
             )
