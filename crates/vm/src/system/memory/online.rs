@@ -650,13 +650,12 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn split_by_meta<const MIN_BLOCK_SIZE: usize>(
+    fn split_by_meta<T: Copy, const MIN_BLOCK_SIZE: usize>(
         &mut self,
         start_ptr: u32,
         timestamp: u32,
         block_size: u8,
         address_space: usize,
-        cell_size: usize,
     ) {
         if block_size == MIN_BLOCK_SIZE as u8 {
             return;
@@ -677,7 +676,7 @@ impl TracingMemory {
             pointer: start_ptr,
             block_size: block_size as u32,
             lowest_block_size: MIN_BLOCK_SIZE as u32,
-            type_size: cell_size as u32,
+            type_size: size_of::<T>() as u32,
         });
     }
 
@@ -692,14 +691,17 @@ impl TracingMemory {
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
-        let cell_size = unsafe {
-            self.data
-                .memory
-                .config
-                .get_unchecked(address_space)
-                .layout
-                .size()
-        };
+        debug_assert_eq!(
+            unsafe {
+                self.data
+                    .memory
+                    .config
+                    .get_unchecked(address_space)
+                    .layout
+                    .size()
+            },
+            size_of::<T>()
+        );
         // Calculate what splits and merges are needed for this memory access
         let result = if let Some((splits, (merge_ptr, merge_size))) =
             self.calculate_splits_and_merges::<BLOCK_SIZE, ALIGN>(address_space, pointer)
@@ -709,12 +711,11 @@ impl TracingMemory {
                 let (_, block_metadata) =
                     self.get_block_metadata::<ALIGN>(address_space, split_ptr);
                 let timestamp = block_metadata.timestamp();
-                self.split_by_meta::<ALIGN>(
+                self.split_by_meta::<T, ALIGN>(
                     split_ptr as u32,
                     timestamp,
                     split_size as u8,
                     address_space,
-                    cell_size,
                 );
             }
 
@@ -732,7 +733,7 @@ impl TracingMemory {
                 let timestamp = if block_metadata.block_size() > 0 {
                     block_metadata.timestamp()
                 } else {
-                    self.handle_uninitialized_memory::<ALIGN>(address_space, ptr, cell_size);
+                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
                     INITIAL_TIMESTAMP
                 };
 
@@ -754,7 +755,7 @@ impl TracingMemory {
                     pointer: merge_ptr as u32,
                     block_size: merge_size as u32,
                     lowest_block_size: ALIGN as u32,
-                    type_size: cell_size as u32,
+                    type_size: size_of::<T>() as u32,
                 },
                 // SAFETY: T is plain old data
                 unsafe { slice_as_bytes(prev_values) },
@@ -773,23 +774,21 @@ impl TracingMemory {
 
     /// Handle uninitialized memory by creating appropriate split or merge records.
     #[inline(always)]
-    fn handle_uninitialized_memory<const ALIGN: usize>(
+    fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
-        cell_size: usize,
     ) {
         if self.initial_block_size >= ALIGN {
             // Split the initial block into chunks
             let segment_index = pointer / ALIGN;
             let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
             let start_ptr = (block_start * ALIGN) as u32;
-            self.split_by_meta::<ALIGN>(
+            self.split_by_meta::<T, ALIGN>(
                 start_ptr,
                 INITIAL_TIMESTAMP,
                 self.initial_block_size as u8,
                 address_space,
-                cell_size,
             );
         } else {
             // Create a merge record for single-byte initialization
@@ -801,7 +800,7 @@ impl TracingMemory {
                     pointer: pointer as u32,
                     block_size: ALIGN as u32,
                     lowest_block_size: self.initial_block_size as u32,
-                    type_size: cell_size as u32,
+                    type_size: size_of::<T>() as u32,
                 },
                 &INITIAL_CELL_BUFFER[..ALIGN],
                 &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
