@@ -1286,6 +1286,7 @@ where
     length as u32 + 2
 }
 
+#[inline(always)]
 fn compute_polynomial_evaluation<F>(as_and_bs: &[(F, EF<F>)], alpha: EF<F>) -> EF<F>
 where
     F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
@@ -1300,7 +1301,7 @@ where
     }
 }
 
-#[inline]
+#[inline(always)]
 fn scalar_polynomial_evaluation<F>(as_and_bs: &[(F, EF<F>)], alpha: EF<F>) -> EF<F>
 where
     F: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
@@ -1312,7 +1313,7 @@ where
     result
 }
 
-#[inline]
+#[inline(always)]
 fn packed_polynomial_evaluation<F, const WIDTH: usize>(
     as_and_bs: &[(F, EF<F>)],
     alpha: EF<F>,
