@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{atomic::AtomicUsize, Arc};
 
 use openvm_circuit::{
     system::poseidon2::columns::Poseidon2PeripheryCols, utils::next_power_of_two_or_zero,
@@ -20,11 +20,15 @@ use crate::system::cuda::poseidon2;
 pub struct SharedBuffer<T> {
     pub buffer: Arc<DeviceBuffer<T>>,
     pub idx: Arc<DeviceBuffer<u32>>,
+    #[cfg(feature = "metrics")]
+    pub(crate) current_trace_height: Arc<AtomicUsize>,
 }
 
 pub struct Poseidon2ChipGPU<const SBOX_REGISTERS: usize> {
     pub records: Arc<DeviceBuffer<F>>,
     pub idx: Arc<DeviceBuffer<u32>>,
+    #[cfg(feature = "metrics")]
+    pub(crate) current_trace_height: Arc<AtomicUsize>,
 }
 
 impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
@@ -34,6 +38,8 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
         Self {
             records: Arc::new(DeviceBuffer::<F>::with_capacity(max_buffer_size)),
             idx,
+            #[cfg(feature = "metrics")]
+            current_trace_height: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -41,6 +47,8 @@ impl<const SBOX_REGISTERS: usize> Poseidon2ChipGPU<SBOX_REGISTERS> {
         SharedBuffer {
             buffer: self.records.clone(),
             idx: self.idx.clone(),
+            #[cfg(feature = "metrics")]
+            current_trace_height: self.current_trace_height.clone(),
         }
     }
 
@@ -57,6 +65,9 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
             poseidon2::deduplicate_records(&self.records, &counts, &mut num_records)
                 .expect("Failed to deduplicate records");
         }
+        #[cfg(feature = "metrics")]
+        self.current_trace_height
+            .store(num_records, std::sync::atomic::Ordering::Relaxed);
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
         unsafe {

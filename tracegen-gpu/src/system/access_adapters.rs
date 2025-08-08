@@ -23,6 +23,8 @@ pub struct AccessAdapterInventoryGPU {
     max_access_adapter_n: usize,
     timestamp_max_bits: usize,
     range_checker: Arc<VariableRangeCheckerChipGPU>,
+    #[cfg(feature = "metrics")]
+    pub(super) unpadded_heights: Vec<usize>,
 }
 
 #[repr(C)]
@@ -31,97 +33,99 @@ pub struct OffsetInfo {
     pub adapter_rows: [u32; NUM_ADAPTERS],
 }
 
-pub(crate) fn generate_traces_from_records(
-    records: &[u8],
-    range_checker: Arc<VariableRangeCheckerChipGPU>,
-    max_access_adapter_n: usize,
-    timestamp_max_bits: usize,
-) -> Vec<Option<DeviceMatrix<F>>> {
-    assert!(max_access_adapter_n.is_power_of_two());
-    let cnt_adapters = max_access_adapter_n.ilog2() as usize;
-    if records.is_empty() {
-        return vec![None; cnt_adapters];
-    }
-    // TODO: Temporary hack to get mut access to `records`, should have `self` or `&mut self` as a
-    // parameter **SAFETY**: `records` should be non-empty at this point
-    let records =
-        unsafe { std::slice::from_raw_parts_mut(records.as_ptr() as *mut u8, records.len()) };
-
-    let mut offsets = Vec::new();
-    let mut offset = 0;
-    let mut row_ids = [0; NUM_ADAPTERS];
-
-    while offset < records.len() {
-        offsets.push(OffsetInfo {
-            record_offset: offset as u32,
-            adapter_rows: row_ids,
-        });
-        let layout: AccessLayout = unsafe { records[offset..].extract_layout() };
-        let record: AccessRecordMut<'_> = records[offset..].custom_borrow(layout.clone());
-        offset += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
-        let bs = record.header.block_size;
-        let lbs = record.header.lowest_block_size;
-        for logn in lbs.ilog2()..bs.ilog2() {
-            row_ids[logn as usize] += bs >> (1 + logn);
-        }
-    }
-
-    let d_records = records.to_device().unwrap();
-    let d_record_offsets = offsets.to_device().unwrap();
-    let widths: [_; NUM_ADAPTERS] = std::array::from_fn(|i| match i {
-        0 => size_of::<AccessAdapterCols<u8, 2>>(),
-        1 => size_of::<AccessAdapterCols<u8, 4>>(),
-        2 => size_of::<AccessAdapterCols<u8, 8>>(),
-        3 => size_of::<AccessAdapterCols<u8, 16>>(),
-        4 => size_of::<AccessAdapterCols<u8, 32>>(),
-        _ => panic!(),
-    });
-    let unpadded_heights = row_ids
-        .iter()
-        .take(cnt_adapters)
-        .map(|&x| x as usize)
-        .collect::<Vec<_>>();
-    let traces = unpadded_heights
-        .iter()
-        .enumerate()
-        .map(|(i, &h)| match h {
-            0 => None,
-            h => Some(DeviceMatrix::<F>::with_capacity(
-                next_power_of_two_or_zero(h),
-                widths[i],
-            )),
-        })
-        .collect::<Vec<_>>();
-    let trace_ptrs = traces
-        .iter()
-        .map(|trace| {
-            trace
-                .as_ref()
-                .map_or_else(null_mut, |t| t.buffer().as_mut_raw_ptr())
-        })
-        .collect::<Vec<_>>();
-    let d_trace_ptrs = trace_ptrs.to_device().unwrap();
-    let d_unpadded_heights = unpadded_heights.to_device().unwrap();
-    let d_widths = widths.to_device().unwrap();
-
-    unsafe {
-        tracegen(
-            &d_trace_ptrs,
-            &d_unpadded_heights,
-            &d_widths,
-            offsets.len(),
-            &d_records,
-            &d_record_offsets,
-            &range_checker.count,
-            timestamp_max_bits,
-        )
-        .unwrap();
-    }
-
-    traces
-}
-
 impl AccessAdapterInventoryGPU {
+    pub(crate) fn generate_traces_from_records(
+        &mut self,
+        records: &mut [u8],
+    ) -> Vec<Option<DeviceMatrix<F>>> {
+        let max_access_adapter_n = &self.max_access_adapter_n;
+        let timestamp_max_bits = self.timestamp_max_bits;
+        let range_checker = &self.range_checker;
+
+        assert!(max_access_adapter_n.is_power_of_two());
+        let cnt_adapters = max_access_adapter_n.ilog2() as usize;
+        if records.is_empty() {
+            return vec![None; cnt_adapters];
+        }
+
+        let mut offsets = Vec::new();
+        let mut offset = 0;
+        let mut row_ids = [0; NUM_ADAPTERS];
+
+        while offset < records.len() {
+            offsets.push(OffsetInfo {
+                record_offset: offset as u32,
+                adapter_rows: row_ids,
+            });
+            let layout: AccessLayout = unsafe { records[offset..].extract_layout() };
+            let record: AccessRecordMut<'_> = records[offset..].custom_borrow(layout.clone());
+            offset += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
+            let bs = record.header.block_size;
+            let lbs = record.header.lowest_block_size;
+            for logn in lbs.ilog2()..bs.ilog2() {
+                row_ids[logn as usize] += bs >> (1 + logn);
+            }
+        }
+
+        let d_records = records.to_device().unwrap();
+        let d_record_offsets = offsets.to_device().unwrap();
+        let widths: [_; NUM_ADAPTERS] = std::array::from_fn(|i| match i {
+            0 => size_of::<AccessAdapterCols<u8, 2>>(),
+            1 => size_of::<AccessAdapterCols<u8, 4>>(),
+            2 => size_of::<AccessAdapterCols<u8, 8>>(),
+            3 => size_of::<AccessAdapterCols<u8, 16>>(),
+            4 => size_of::<AccessAdapterCols<u8, 32>>(),
+            _ => panic!(),
+        });
+        let unpadded_heights = row_ids
+            .iter()
+            .take(cnt_adapters)
+            .map(|&x| x as usize)
+            .collect::<Vec<_>>();
+        let traces = unpadded_heights
+            .iter()
+            .enumerate()
+            .map(|(i, &h)| match h {
+                0 => None,
+                h => Some(DeviceMatrix::<F>::with_capacity(
+                    next_power_of_two_or_zero(h),
+                    widths[i],
+                )),
+            })
+            .collect::<Vec<_>>();
+        let trace_ptrs = traces
+            .iter()
+            .map(|trace| {
+                trace
+                    .as_ref()
+                    .map_or_else(null_mut, |t| t.buffer().as_mut_raw_ptr())
+            })
+            .collect::<Vec<_>>();
+        let d_trace_ptrs = trace_ptrs.to_device().unwrap();
+        let d_unpadded_heights = unpadded_heights.to_device().unwrap();
+        let d_widths = widths.to_device().unwrap();
+
+        unsafe {
+            tracegen(
+                &d_trace_ptrs,
+                &d_unpadded_heights,
+                &d_widths,
+                offsets.len(),
+                &d_records,
+                &d_record_offsets,
+                &range_checker.count,
+                timestamp_max_bits,
+            )
+            .unwrap();
+        }
+        #[cfg(feature = "metrics")]
+        {
+            self.unpadded_heights = unpadded_heights;
+        }
+
+        traces
+    }
+
     pub fn new(
         range_checker: Arc<VariableRangeCheckerChipGPU>,
         max_access_adapter_n: usize,
@@ -131,27 +135,25 @@ impl AccessAdapterInventoryGPU {
             range_checker,
             max_access_adapter_n,
             timestamp_max_bits,
+            #[cfg(feature = "metrics")]
+            unpadded_heights: Vec::new(),
         }
     }
 
+    // @dev: mutable borrow is only to update `self.unpadded_heights` for metrics
     pub fn generate_air_proving_ctxs(
-        &self,
-        arena: &DenseRecordArena,
+        &mut self,
+        mut arena: DenseRecordArena,
     ) -> Vec<AirProvingContext<GpuBackend>> {
-        let records = arena.allocated();
-        generate_traces_from_records(
-            records,
-            self.range_checker.clone(),
-            self.max_access_adapter_n,
-            self.timestamp_max_bits,
-        )
-        .into_iter()
-        .map(|trace| AirProvingContext {
-            cached_mains: vec![],
-            common_main: trace,
-            public_values: vec![],
-        })
-        .collect()
+        let records = arena.allocated_mut();
+        self.generate_traces_from_records(records)
+            .into_iter()
+            .map(|trace| AirProvingContext {
+                cached_mains: vec![],
+                common_main: trace,
+                public_values: vec![],
+            })
+            .collect()
     }
 }
 
@@ -227,16 +229,17 @@ mod tests {
         }
 
         let touched = tester.memory.memory.finalize(false);
-        let allocated = tester.memory.memory.access_adapter_records.allocated();
-        let gpu_traces = generate_traces_from_records(
-            allocated,
+        let mut access_adapter_inv = AccessAdapterInventoryGPU::new(
             tester.range_checker(),
             mem_config.max_access_adapter_n,
             mem_config.timestamp_max_bits,
-        )
-        .into_iter()
-        .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
-        .collect::<Vec<_>>();
+        );
+        let allocated = tester.memory.memory.access_adapter_records.allocated_mut();
+        let gpu_traces = access_adapter_inv
+            .generate_traces_from_records(allocated)
+            .into_iter()
+            .map(|trace| trace.unwrap_or_else(DeviceMatrix::dummy))
+            .collect::<Vec<_>>();
 
         let mut controller = MemoryController::with_volatile_memory(
             MemoryBus::new(MEMORY_BUS),

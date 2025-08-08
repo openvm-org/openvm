@@ -33,6 +33,8 @@ pub struct MemoryInventoryGPU {
     pub boundary: BoundaryChipGPU,
     pub access_adapters: AccessAdapterInventoryGPU,
     pub persistent: Option<PersistentMemoryInventoryGPU>,
+    #[cfg(feature = "metrics")]
+    pub(super) unpadded_merkle_height: usize,
 }
 
 pub struct PersistentMemoryInventoryGPU {
@@ -57,6 +59,8 @@ impl MemoryInventoryGPU {
                 config.timestamp_max_bits,
             ),
             persistent: None,
+            #[cfg(feature = "metrics")]
+            unpadded_merkle_height: 0,
         }
     }
 
@@ -79,6 +83,8 @@ impl MemoryInventoryGPU {
                 merkle_tree: MemoryMerkleTree::new(config.clone(), hasher_chip.clone()),
                 initial_memory: Vec::new(),
             }),
+            #[cfg(feature = "metrics")]
+            unpadded_merkle_height: 0,
         }
     }
 
@@ -144,6 +150,10 @@ impl MemoryInventoryGPU {
 
                 let unpadded_merkle_height =
                     persistent.merkle_tree.calculate_unpadded_height(&partition);
+                #[cfg(feature = "metrics")]
+                {
+                    self.unpadded_merkle_height = unpadded_merkle_height;
+                }
 
                 mem.tracing_info("boundary finalize");
                 let (touched_memory, empty) = if partition.is_empty() {
@@ -223,7 +233,7 @@ impl MemoryInventoryGPU {
         }
         ret.extend(
             self.access_adapters
-                .generate_air_proving_ctxs(&access_adapter_arena),
+                .generate_air_proving_ctxs(access_adapter_arena),
         );
         ret
     }
