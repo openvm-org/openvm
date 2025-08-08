@@ -70,6 +70,24 @@ static const size_t KECCAK_Q_SIZE = 192;
 /// From memory config
 static const size_t KECCAK_POINTER_MAX_BITS = 29;
 } // namespace keccak256
+
 namespace mod_builder {
 static const size_t MAX_LIMBS = 97;
 } // namespace mod_builder
+
+namespace sha256 {
+static const size_t SHA256_BLOCK_BITS = 512;
+static const size_t SHA256_BLOCK_U8S = 64;
+static const size_t SHA256_BLOCK_WORDS = 16;
+static const size_t SHA256_WORD_U8S = 4;
+static const size_t SHA256_WORD_BITS = 32;
+static const size_t SHA256_WORD_U16S = 2;
+static const size_t SHA256_HASH_WORDS = 8;
+static const size_t SHA256_NUM_READ_ROWS = 4;
+static const size_t SHA256_ROWS_PER_BLOCK = 17;
+static const size_t SHA256_ROUNDS_PER_ROW = 4;
+static const size_t SHA256_ROW_VAR_CNT = 5;
+static const size_t SHA256_REGISTER_READS = 3;
+static const size_t SHA256_READ_SIZE = 16;
+static const size_t SHA256_WRITE_SIZE = 32;
+} // namespace sha256
