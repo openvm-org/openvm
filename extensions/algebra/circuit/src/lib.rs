@@ -18,9 +18,9 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
 };
 use openvm_mod_circuit_builder::{
-    run_field_expression_precomputed, FieldExpr, FieldExpressionStep,
+    run_field_expression_precomputed, FieldExpr, FieldExpressionExecutor,
 };
-use openvm_rv32_adapters::Rv32VecHeapAdapterStep;
+use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use self::fields::{
@@ -94,9 +94,11 @@ pub mod fields;
 pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct FieldExprVecHeapStep<const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>(
-    FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
-);
+pub struct FieldExprVecHeapExecutor<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const IS_FP2: bool,
+>(FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>);
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -108,7 +110,7 @@ struct FieldExpressionPreCompute<'a> {
 }
 
 impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
@@ -199,7 +201,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> Executor<F>
-    for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
+    for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -295,7 +297,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
-    MeteredExecutor<F> for FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, IS_FP2>
+    MeteredExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

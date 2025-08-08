@@ -689,20 +689,20 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
 }
 
 #[derive(derive_new::new, Copy, Clone)]
-pub struct FriReducedOpeningStep;
+pub struct FriReducedOpeningExecutor;
 
 #[derive(derive_new::new)]
 pub struct FriReducedOpeningFiller;
 
 pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;
 
-impl Default for FriReducedOpeningStep {
+impl Default for FriReducedOpeningExecutor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningStep
+impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
@@ -1097,7 +1097,7 @@ struct FriReducedOpeningPreCompute {
     is_init_ptr: u32,
 }
 
-impl FriReducedOpeningStep {
+impl FriReducedOpeningExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -1138,7 +1138,7 @@ impl FriReducedOpeningStep {
     }
 }
 
-impl<F> Executor<F> for FriReducedOpeningStep
+impl<F> Executor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
@@ -1163,7 +1163,7 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for FriReducedOpeningStep
+impl<F> MeteredExecutor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {

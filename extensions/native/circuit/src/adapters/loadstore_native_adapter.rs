@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::{
@@ -186,15 +186,15 @@ pub struct NativeLoadStoreAdapterRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
+pub struct NativeLoadStoreAdapterExecutor<const NUM_CELLS: usize> {
     offset: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct NativeLoadStoreAdapterFiller<const NUM_CELLS: usize>;
 
-impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceStep<F>
-    for NativeLoadStoreAdapterStep<NUM_CELLS>
+impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceExecutor<F>
+    for NativeLoadStoreAdapterExecutor<NUM_CELLS>
 {
     const WIDTH: usize = std::mem::size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
     type ReadData = (F, [F; NUM_CELLS]);

@@ -9,18 +9,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapBranchAdapterStep;
-use openvm_rv32im_circuit::BranchEqualStep;
+use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
+use openvm_rv32im_circuit::BranchEqualExecutor;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32BranchEqual256Step, INT256_NUM_LIMBS};
+use crate::{Rv32BranchEqual256Executor, INT256_NUM_LIMBS};
 
-type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
+type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
 
-impl Rv32BranchEqual256Step {
-    pub fn new(adapter_step: AdapterStep, offset: usize, pc_step: u32) -> Self {
-        Self(BranchEqualStep::new(adapter_step, offset, pc_step))
+impl Rv32BranchEqual256Executor {
+    pub fn new(adapter_step: AdapterExecutor, offset: usize, pc_step: u32) -> Self {
+        Self(BranchEqualExecutor::new(adapter_step, offset, pc_step))
     }
 }
 
@@ -32,7 +32,7 @@ struct BranchEqPreCompute {
     b: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32BranchEqual256Step {
+impl<F: PrimeField32> Executor<F> for Rv32BranchEqual256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchEqPreCompute>()
     }
@@ -56,7 +56,7 @@ impl<F: PrimeField32> Executor<F> for Rv32BranchEqual256Step {
     }
 }
 
-impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchEqual256Step {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchEqual256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }
@@ -120,7 +120,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_NE: boo
     execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state);
 }
 
-impl Rv32BranchEqual256Step {
+impl Rv32BranchEqual256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

@@ -199,7 +199,7 @@ pub struct MulHCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct MulHStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct MulHExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -239,11 +239,11 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MulHFiller<A, NUM_LIMBS,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for MulHStep<A, NUM_LIMBS, LIMB_BITS>
+    for MulHExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -357,7 +357,7 @@ struct MulHPreCompute {
 }
 
 impl<F, A, const LIMB_BITS: usize> Executor<F>
-    for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -385,7 +385,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
-    for MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -450,7 +450,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: MulHOperatio
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
 }
 
-impl<A, const LIMB_BITS: usize> MulHStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_e1<F: PrimeField32>(
         &self,

@@ -20,11 +20,11 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{core::run_alu, BaseAluCoreAir, Rv32BaseAluChip, Rv32BaseAluStep};
+use super::{core::run_alu, BaseAluCoreAir, Rv32BaseAluChip, Rv32BaseAluExecutor};
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     base_alu::BaseAluCoreCols,
     test_utils::{
@@ -35,7 +35,7 @@ use crate::{
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32BaseAluStep, Rv32BaseAluAir, Rv32BaseAluChip<F>>;
+type Harness = TestChipHarness<F, Rv32BaseAluExecutor, Rv32BaseAluAir, Rv32BaseAluChip<F>>;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
@@ -59,7 +59,10 @@ fn create_test_chip(
         ),
         BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32BaseAluStep::new(Rv32BaseAluAdapterStep::new(), BaseAluOpcode::CLASS_OFFSET);
+    let executor = Rv32BaseAluExecutor::new(
+        Rv32BaseAluAdapterExecutor::new(),
+        BaseAluOpcode::CLASS_OFFSET,
+    );
     let chip = Rv32BaseAluChip::new(
         BaseAluFiller::new(
             Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),

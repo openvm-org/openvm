@@ -28,10 +28,10 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
+    FieldExpressionCoreAir, FieldExpressionExecutor, FieldExpressionFiller,
 };
 use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -67,8 +67,8 @@ pub fn ec_add_ne_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcAddNeStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
 fn gen_base_expr(
@@ -111,10 +111,10 @@ pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
+) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
-    EcAddNeStep(FieldExpressionStep::new(
-        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+    EcAddNeExecutor(FieldExpressionExecutor::new(
+        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -153,7 +153,7 @@ struct EcAddNePreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -215,7 +215,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeStep<BLOCKS, BLOCK
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
-    for EcAddNeStep<BLOCKS, BLOCK_SIZE>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -315,7 +315,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
-    for EcAddNeStep<BLOCKS, BLOCK_SIZE>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

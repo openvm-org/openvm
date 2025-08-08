@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::{
@@ -135,12 +135,12 @@ pub struct BranchNativeAdapterRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct BranchNativeAdapterStep;
+pub struct BranchNativeAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct BranchNativeAdapterFiller;
 
-impl<F> AdapterTraceStep<F> for BranchNativeAdapterStep
+impl<F> AdapterTraceExecutor<F> for BranchNativeAdapterExecutor
 where
     F: PrimeField32,
 {

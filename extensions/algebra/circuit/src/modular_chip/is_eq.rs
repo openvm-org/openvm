@@ -25,7 +25,7 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32IsEqualModAdapterStep;
+use openvm_rv32_adapters::Rv32IsEqualModAdapterExecutor;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -33,7 +33,7 @@ use openvm_stark_backend::{
     rap::BaseAirWithPublicValues,
 };
 
-use crate::modular_chip::VmModularIsEqualStep;
+use crate::modular_chip::VmModularIsEqualExecutor;
 // Given two numbers b and c, we want to prove that a) b == c or b != c, depending on
 // result of cmp_result and b) b, c < N for some modulus N that is passed into the AIR
 // at runtime (i.e. when chip is instantiated).
@@ -295,7 +295,7 @@ pub struct ModularIsEqualRecord<const READ_LIMBS: usize> {
 }
 
 #[derive(derive_new::new, Clone)]
-pub struct ModularIsEqualStep<
+pub struct ModularIsEqualExecutor<
     A,
     const READ_LIMBS: usize,
     const WRITE_LIMBS: usize,
@@ -320,11 +320,11 @@ pub struct ModularIsEqualFiller<
 }
 
 impl<F, A, RA, const READ_LIMBS: usize, const WRITE_LIMBS: usize, const LIMB_BITS: usize>
-    PreflightExecutor<F, RA> for ModularIsEqualStep<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
+    PreflightExecutor<F, RA> for ModularIsEqualExecutor<A, READ_LIMBS, WRITE_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; READ_LIMBS]; 2]>,
             WriteData: From<[u8; WRITE_LIMBS]>,
@@ -452,14 +452,14 @@ where
 }
 
 impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
+    VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
 {
     pub fn new(
-        adapter: Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        adapter: Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         offset: usize,
         modulus_limbs: [u8; TOTAL_LIMBS],
     ) -> Self {
-        Self(ModularIsEqualStep::new(adapter, offset, modulus_limbs))
+        Self(ModularIsEqualExecutor::new(adapter, offset, modulus_limbs))
     }
 }
 
@@ -472,7 +472,7 @@ struct ModularIsEqualPreCompute<const READ_LIMBS: usize> {
 }
 
 impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -524,7 +524,7 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> Executor<F>
-    for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
@@ -553,7 +553,7 @@ where
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
-    MeteredExecutor<F> for VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+    MeteredExecutor<F> for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {

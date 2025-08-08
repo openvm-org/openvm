@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::{
@@ -316,7 +316,7 @@ pub struct Rv32LoadStoreAdapterRecord {
 /// In case of Loads, reads from the shifted intermediate pointer and writes to rd.
 /// In case of Stores, reads from rs2 and writes to the shifted intermediate pointer.
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32LoadStoreAdapterStep {
+pub struct Rv32LoadStoreAdapterExecutor {
     pointer_max_bits: usize,
 }
 
@@ -326,7 +326,7 @@ pub struct Rv32LoadStoreAdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F> AdapterTraceStep<F> for Rv32LoadStoreAdapterStep
+impl<F> AdapterTraceExecutor<F> for Rv32LoadStoreAdapterExecutor
 where
     F: PrimeField32,
 {

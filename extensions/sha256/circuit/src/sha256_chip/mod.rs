@@ -48,7 +48,7 @@ pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
 
 #[derive(derive_new::new, Clone)]
-pub struct Sha256VmStep {
+pub struct Sha256VmExecutor {
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
@@ -82,7 +82,7 @@ struct ShaPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Sha256VmStep {
+impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShaPreCompute>()
     }
@@ -101,7 +101,7 @@ impl<F: PrimeField32> Executor<F> for Sha256VmStep {
         Ok(execute_e1_impl::<_, _>)
     }
 }
-impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmStep {
+impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
     }
@@ -183,7 +183,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
-impl Sha256VmStep {
+impl Sha256VmExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

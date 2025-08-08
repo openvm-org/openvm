@@ -30,8 +30,8 @@ use rand::{rngs::StdRng, Rng};
 use crate::modular_chip::{
     get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
     get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-    ModularChip, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularIsEqualCoreCols, ModularIsEqualFiller, ModularStep, VmModularIsEqualStep,
+    ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
+    ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -48,7 +48,7 @@ mod addsubtests {
 
     type Harness<RA> = TestChipHarness<
         F,
-        ModularStep<1, NUM_LIMBS>,
+        ModularExecutor<1, NUM_LIMBS>,
         ModularAir<1, NUM_LIMBS>,
         ModularChip<F, 1, NUM_LIMBS>,
         RA,
@@ -104,7 +104,7 @@ mod addsubtests {
         is_setup: bool,
         offset: usize,
     ) where
-        ModularStep<1, NUM_LIMBS>: PreflightExecutor<F, RA>,
+        ModularExecutor<1, NUM_LIMBS>: PreflightExecutor<F, RA>,
     {
         let mut rng = create_seeded_rng();
 
@@ -252,7 +252,7 @@ mod muldivtests {
     const MUL_LOCAL: usize = Rv32ModularArithmeticOpcode::MUL as usize;
     type Harness = TestChipHarness<
         F,
-        ModularStep<1, NUM_LIMBS>,
+        ModularExecutor<1, NUM_LIMBS>,
         ModularAir<1, NUM_LIMBS>,
         ModularChip<F, 1, NUM_LIMBS>,
     >;
@@ -387,7 +387,7 @@ mod muldivtests {
 #[cfg(test)]
 mod is_equal_tests {
     use openvm_rv32_adapters::{
-        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
     };
     use openvm_stark_backend::{
         p3_air::BaseAir,
@@ -404,7 +404,7 @@ mod is_equal_tests {
     type Harness<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize> =
         TestChipHarness<
             F,
-            VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >;
@@ -437,8 +437,8 @@ mod is_equal_tests {
             ),
             ModularIsEqualCoreAir::new(modulus.clone(), bitwise_bus, offset),
         );
-        let executor = VmModularIsEqualStep::new(
-            Rv32IsEqualModAdapterStep::new(tester.address_bits()),
+        let executor = VmModularIsEqualExecutor::new(
+            Rv32IsEqualModAdapterExecutor::new(tester.address_bits()),
             offset,
             modulus_limbs,
         );

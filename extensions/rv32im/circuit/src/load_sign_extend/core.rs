@@ -183,7 +183,7 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
     adapter: A,
 }
 
@@ -198,11 +198,11 @@ pub struct LoadSignExtendFiller<
 }
 
 impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+    for LoadSignExtendExecutor<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -313,7 +313,7 @@ struct LoadSignExtendPreCompute {
 }
 
 impl<F, A, const LIMB_BITS: usize> Executor<F>
-    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -341,7 +341,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
-    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -446,7 +446,7 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(&pre_compute.data, vm_state);
 }
 
-impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     /// Return (is_loadb, enabled)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -476,7 +476,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
         );
         match local_opcode {
             LOADB | LOADH => {}
-            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+            _ => unreachable!("LoadSignExtendExecutor should only handle LOADB/LOADH opcodes"),
         }
 
         let imm = c.as_canonical_u32();

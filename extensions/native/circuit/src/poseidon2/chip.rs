@@ -37,7 +37,7 @@ use crate::poseidon2::{
 };
 
 #[derive(Clone)]
-pub struct NativePoseidon2Step<F: Field, const SBOX_REGISTERS: usize> {
+pub struct NativePoseidon2Executor<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     /// If true, `verify_batch` assumes the verification is always passed and skips poseidon2
     /// computation during execution for performance.
@@ -50,7 +50,7 @@ pub struct NativePoseidon2Filler<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subchip: Poseidon2SubChip<F, SBOX_REGISTERS>,
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SBOX_REGISTERS> {
     pub fn new(poseidon2_config: Poseidon2Config<F>) -> Self {
         let subchip = Poseidon2SubChip::new(poseidon2_config.constants);
         Self {
@@ -145,7 +145,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> SizedRecord<NativePoseidon2Re
 }
 
 impl<F: PrimeField32, RA, const SBOX_REGISTERS: usize> PreflightExecutor<F, RA>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
 where
     for<'buf> RA: RecordArena<
         'buf,
@@ -1009,7 +1009,7 @@ struct VerifyBatchPreCompute<'a, F: Field, const SBOX_REGISTERS: usize> {
     opened_element_size: F,
 }
 
-impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SBOX_REGISTERS> {
+impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F, SBOX_REGISTERS> {
     #[inline(always)]
     fn pre_compute_pos2_impl(
         &'a self,
@@ -1107,7 +1107,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Step<F, SB
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
@@ -1146,7 +1146,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
-    for NativePoseidon2Step<F, SBOX_REGISTERS>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {

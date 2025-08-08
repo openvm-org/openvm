@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
@@ -143,12 +143,12 @@ pub struct AluNativeAdapterRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct AluNativeAdapterStep;
+pub struct AluNativeAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct AluNativeAdapterFiller;
 
-impl<F: PrimeField32> AdapterTraceStep<F> for AluNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceExecutor<F> for AluNativeAdapterExecutor {
     const WIDTH: usize = size_of::<AluNativeAdapterCols<u8>>();
     type ReadData = [F; 2];
     type WriteData = [F; 1];

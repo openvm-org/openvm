@@ -181,7 +181,7 @@ pub struct LessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct LessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -194,11 +194,11 @@ pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for LessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for LessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -344,7 +344,7 @@ struct LessThanPreCompute {
 }
 
 impl<F, A, const LIMB_BITS: usize> Executor<F>
-    for LessThanStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -373,7 +373,7 @@ where
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
-    for LessThanStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -460,7 +460,7 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(&pre_compute.data, vm_state);
 }
 
-impl<A, const LIMB_BITS: usize> LessThanStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,

@@ -17,7 +17,7 @@ use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Sha256VmAir, Sha256VmChip, Sha256VmStep};
+use super::{Sha256VmAir, Sha256VmChip, Sha256VmExecutor};
 use crate::{
     sha256_chip::trace::Sha256VmRecordLayout, sha256_solve, Sha256VmDigestCols, Sha256VmFiller,
     Sha256VmRoundCols,
@@ -26,7 +26,7 @@ use crate::{
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
 const MAX_INS_CAPACITY: usize = 4096;
-type Harness<RA> = TestChipHarness<F, Sha256VmStep, Sha256VmAir, Sha256VmChip<F>, RA>;
+type Harness<RA> = TestChipHarness<F, Sha256VmExecutor, Sha256VmAir, Sha256VmChip<F>, RA>;
 
 fn create_test_chips<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
@@ -48,7 +48,7 @@ fn create_test_chips<RA: Arena>(
         tester.address_bits(),
         SELF_BUS_IDX,
     );
-    let executor = Sha256VmStep::new(Rv32Sha256Opcode::CLASS_OFFSET, tester.address_bits());
+    let executor = Sha256VmExecutor::new(Rv32Sha256Opcode::CLASS_OFFSET, tester.address_bits());
     let chip = Sha256VmChip::new(
         Sha256VmFiller::new(bitwise_chip.clone(), tester.address_bits()),
         tester.memory_helper(),
@@ -66,7 +66,7 @@ fn set_and_execute<RA: Arena>(
     message: Option<&[u8]>,
     len: Option<usize>,
 ) where
-    Sha256VmStep: PreflightExecutor<F, RA>,
+    Sha256VmExecutor: PreflightExecutor<F, RA>,
 {
     let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);

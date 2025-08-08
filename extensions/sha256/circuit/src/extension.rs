@@ -33,7 +33,7 @@ pub struct Sha256;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Sha256Executor {
-    Sha256(Sha256VmStep),
+    Sha256(Sha256VmExecutor),
 }
 
 impl<F> VmExecutionExtension<F> for Sha256 {
@@ -44,7 +44,7 @@ impl<F> VmExecutionExtension<F> for Sha256 {
         inventory: &mut ExecutorInventoryBuilder<F, Sha256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        let sha256_step = Sha256VmStep::new(Rv32Sha256Opcode::CLASS_OFFSET, pointer_max_bits);
+        let sha256_step = Sha256VmExecutor::new(Rv32Sha256Opcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             sha256_step,
             Rv32Sha256Opcode::iter().map(|x| x.global_opcode()),

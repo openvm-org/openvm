@@ -72,30 +72,30 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv32IExecutor {
     // Rv32 (for standard 32-bit integers):
-    BaseAlu(Rv32BaseAluStep),
-    LessThan(Rv32LessThanStep),
-    Shift(Rv32ShiftStep),
-    LoadStore(Rv32LoadStoreStep),
-    LoadSignExtend(Rv32LoadSignExtendStep),
-    BranchEqual(Rv32BranchEqualStep),
-    BranchLessThan(Rv32BranchLessThanStep),
-    JalLui(Rv32JalLuiStep),
-    Jalr(Rv32JalrStep),
-    Auipc(Rv32AuipcStep),
+    BaseAlu(Rv32BaseAluExecutor),
+    LessThan(Rv32LessThanExecutor),
+    Shift(Rv32ShiftExecutor),
+    LoadStore(Rv32LoadStoreExecutor),
+    LoadSignExtend(Rv32LoadSignExtendExecutor),
+    BranchEqual(Rv32BranchEqualExecutor),
+    BranchLessThan(Rv32BranchLessThanExecutor),
+    JalLui(Rv32JalLuiExecutor),
+    Jalr(Rv32JalrExecutor),
+    Auipc(Rv32AuipcExecutor),
 }
 
 /// RISC-V 32-bit Multiplication Extension (RV32M) Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv32MExecutor {
-    Multiplication(Rv32MultiplicationStep),
-    MultiplicationHigh(Rv32MulHStep),
-    DivRem(Rv32DivRemStep),
+    Multiplication(Rv32MultiplicationExecutor),
+    MultiplicationHigh(Rv32MulHExecutor),
+    DivRem(Rv32DivRemExecutor),
 }
 
 /// RISC-V 32-bit Io Instruction Executors
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv32IoExecutor {
-    HintStore(Rv32HintStoreStep),
+    HintStore(Rv32HintStoreExecutor),
 }
 
 // ============ VmExtension Implementations ============
@@ -109,17 +109,18 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let base_alu = Rv32BaseAluStep::new(Rv32BaseAluAdapterStep, BaseAluOpcode::CLASS_OFFSET);
+        let base_alu =
+            Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
         inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let lt = LessThanStep::new(Rv32BaseAluAdapterStep, LessThanOpcode::CLASS_OFFSET);
+        let lt = LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         inventory.add_executor(lt, LessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = ShiftStep::new(Rv32BaseAluAdapterStep, ShiftOpcode::CLASS_OFFSET);
+        let shift = ShiftExecutor::new(Rv32BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         inventory.add_executor(shift, ShiftOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let load_store = LoadStoreStep::new(
-            Rv32LoadStoreAdapterStep::new(pointer_max_bits),
+        let load_store = LoadStoreExecutor::new(
+            Rv32LoadStoreAdapterExecutor::new(pointer_max_bits),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -130,30 +131,34 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv32I {
         )?;
 
         let load_sign_extend =
-            LoadSignExtendStep::new(Rv32LoadStoreAdapterStep::new(pointer_max_bits));
+            LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(pointer_max_bits));
         inventory.add_executor(
             load_sign_extend,
             [Rv32LoadStoreOpcode::LOADB, Rv32LoadStoreOpcode::LOADH].map(|x| x.global_opcode()),
         )?;
 
-        let beq = BranchEqualStep::new(
-            Rv32BranchAdapterStep,
+        let beq = BranchEqualExecutor::new(
+            Rv32BranchAdapterExecutor,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
         inventory.add_executor(beq, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let blt =
-            BranchLessThanStep::new(Rv32BranchAdapterStep, BranchLessThanOpcode::CLASS_OFFSET);
+        let blt = BranchLessThanExecutor::new(
+            Rv32BranchAdapterExecutor,
+            BranchLessThanOpcode::CLASS_OFFSET,
+        );
         inventory.add_executor(blt, BranchLessThanOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let jal_lui = Rv32JalLuiStep::new(Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep));
+        let jal_lui = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
+            Rv32RdWriteAdapterExecutor,
+        ));
         inventory.add_executor(jal_lui, Rv32JalLuiOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let jalr = Rv32JalrStep::new(Rv32JalrAdapterStep);
+        let jalr = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
         inventory.add_executor(jalr, Rv32JalrOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let auipc = Rv32AuipcStep::new(Rv32RdWriteAdapterStep);
+        let auipc = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor);
         inventory.add_executor(auipc, Rv32AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
@@ -428,13 +433,14 @@ impl<F> VmExecutionExtension<F> for Rv32M {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, Rv32MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let mult = Rv32MultiplicationStep::new(Rv32MultAdapterStep, MulOpcode::CLASS_OFFSET);
+        let mult =
+            Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         inventory.add_executor(mult, MulOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let mul_h = Rv32MulHStep::new(Rv32MultAdapterStep, MulHOpcode::CLASS_OFFSET);
+        let mul_h = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         inventory.add_executor(mul_h, MulHOpcode::iter().map(|x| x.global_opcode()))?;
 
-        let div_rem = Rv32DivRemStep::new(Rv32MultAdapterStep, DivRemOpcode::CLASS_OFFSET);
+        let div_rem = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         inventory.add_executor(div_rem, DivRemOpcode::iter().map(|x| x.global_opcode()))?;
 
         Ok(())
@@ -600,7 +606,7 @@ impl<F> VmExecutionExtension<F> for Rv32Io {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
         let hint_store =
-            Rv32HintStoreStep::new(pointer_max_bits, Rv32HintStoreOpcode::CLASS_OFFSET);
+            Rv32HintStoreExecutor::new(pointer_max_bits, Rv32HintStoreOpcode::CLASS_OFFSET);
         inventory.add_executor(
             hint_store,
             Rv32HintStoreOpcode::iter().map(|x| x.global_opcode()),

@@ -147,7 +147,7 @@ pub struct FieldExtensionRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct FieldExtensionCoreStep<A> {
+pub struct FieldExtensionCoreExecutor<A> {
     adapter: A,
 }
 
@@ -156,10 +156,10 @@ pub struct FieldExtensionCoreFiller<A> {
     adapter: A,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for FieldExtensionCoreStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -245,7 +245,7 @@ struct FieldExtensionPreCompute {
     c: u32,
 }
 
-impl<A> FieldExtensionCoreStep<A> {
+impl<A> FieldExtensionCoreExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -286,7 +286,7 @@ impl<A> FieldExtensionCoreStep<A> {
     }
 }
 
-impl<F, A> Executor<F> for FieldExtensionCoreStep<A>
+impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -318,7 +318,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for FieldExtensionCoreStep<A>
+impl<F, A> MeteredExecutor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {

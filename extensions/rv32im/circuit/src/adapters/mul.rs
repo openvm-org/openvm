@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -142,12 +142,12 @@ pub struct Rv32MultAdapterRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32MultAdapterStep;
+pub struct Rv32MultAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32MultAdapterFiller;
 
-impl<F> AdapterTraceStep<F> for Rv32MultAdapterStep
+impl<F> AdapterTraceExecutor<F> for Rv32MultAdapterExecutor
 where
     F: PrimeField32,
 {

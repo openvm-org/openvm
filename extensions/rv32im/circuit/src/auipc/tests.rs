@@ -23,11 +23,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcStep};
+use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcExecutor};
 use crate::{
     adapters::{
-        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterRecord,
-        Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
+        Rv32RdWriteAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::get_verification_error,
     Rv32AuipcAir, Rv32AuipcCoreRecord, Rv32AuipcFiller,
@@ -36,7 +36,7 @@ use crate::{
 const IMM_BITS: usize = 24;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness<RA> = TestChipHarness<F, Rv32AuipcStep, Rv32AuipcAir, Rv32AuipcChip<F>, RA>;
+type Harness<RA> = TestChipHarness<F, Rv32AuipcExecutor, Rv32AuipcAir, Rv32AuipcChip<F>, RA>;
 
 fn create_test_chip<RA: Arena>(
     tester: &VmChipTestBuilder<F>,
@@ -56,7 +56,7 @@ fn create_test_chip<RA: Arena>(
         Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
         Rv32AuipcCoreAir::new(bitwise_bus),
     );
-    let executor = Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new());
+    let executor = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor::new());
     let chip = VmChipWrapper::<F, _>::new(
         Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller::new(), bitwise_chip.clone()),
         tester.memory_helper(),
@@ -74,7 +74,7 @@ fn set_and_execute<RA: Arena>(
     imm: Option<u32>,
     initial_pc: Option<u32>,
 ) where
-    Rv32AuipcStep: PreflightExecutor<F, RA>,
+    Rv32AuipcExecutor: PreflightExecutor<F, RA>,
 {
     let imm = imm.unwrap_or(rng.gen_range(0..(1 << IMM_BITS))) as usize;
     let a = rng.gen_range(0..32) << 2;
@@ -323,7 +323,7 @@ fn dense_record_arena_test() {
         let mut record_interpreter = dense_harness.arena.get_record_seeker::<Record, _>();
         record_interpreter.transfer_to_matrix_arena(
             &mut sparse_harness.arena,
-            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterExecutor>::new(),
         );
     }
 

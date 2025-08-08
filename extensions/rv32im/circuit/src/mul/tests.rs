@@ -21,20 +21,24 @@ use rand::{rngs::StdRng, Rng};
 use super::core::run_mul;
 use crate::{
     adapters::{
-        Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep, RV32_CELL_BITS,
+        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
     mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
-    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationStep,
+    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
 type F = BabyBear;
-type Harness =
-    TestChipHarness<F, Rv32MultiplicationStep, Rv32MultiplicationAir, Rv32MultiplicationChip<F>>;
+type Harness = TestChipHarness<
+    F,
+    Rv32MultiplicationExecutor,
+    Rv32MultiplicationAir,
+    Rv32MultiplicationChip<F>,
+>;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
@@ -53,7 +57,8 @@ fn create_test_chip(
         Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32MultiplicationStep::new(Rv32MultAdapterStep, MulOpcode::CLASS_OFFSET);
+    let executor =
+        Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
     let chip = Rv32MultiplicationChip::<F>::new(
         MultiplicationFiller::new(
             Rv32MultAdapterFiller,

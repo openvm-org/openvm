@@ -56,12 +56,12 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Int256Executor {
-    BaseAlu256(Rv32BaseAlu256Step),
-    LessThan256(Rv32LessThan256Step),
-    BranchEqual256(Rv32BranchEqual256Step),
-    BranchLessThan256(Rv32BranchLessThan256Step),
-    Multiplication256(Rv32Multiplication256Step),
-    Shift256(Rv32Shift256Step),
+    BaseAlu256(Rv32BaseAlu256Executor),
+    LessThan256(Rv32LessThan256Executor),
+    BranchEqual256(Rv32BranchEqual256Executor),
+    BranchLessThan256(Rv32BranchLessThan256Executor),
+    Multiplication256(Rv32Multiplication256Executor),
+    Shift256(Rv32Shift256Executor),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
@@ -73,20 +73,20 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
 
-        let alu = Rv32BaseAlu256Step::new(
-            Rv32HeapAdapterStep::new(pointer_max_bits),
+        let alu = Rv32BaseAlu256Executor::new(
+            Rv32HeapAdapterExecutor::new(pointer_max_bits),
             Rv32BaseAlu256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(alu, Rv32BaseAlu256Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let lt = Rv32LessThan256Step::new(
-            Rv32HeapAdapterStep::new(pointer_max_bits),
+        let lt = Rv32LessThan256Executor::new(
+            Rv32HeapAdapterExecutor::new(pointer_max_bits),
             Rv32LessThan256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(lt, Rv32LessThan256Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let beq = Rv32BranchEqual256Step::new(
-            Rv32HeapBranchAdapterStep::new(pointer_max_bits),
+        let beq = Rv32BranchEqual256Executor::new(
+            Rv32HeapBranchAdapterExecutor::new(pointer_max_bits),
             Rv32BranchEqual256Opcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
@@ -95,8 +95,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
             Rv32BranchEqual256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let blt = Rv32BranchLessThan256Step::new(
-            Rv32HeapBranchAdapterStep::new(pointer_max_bits),
+        let blt = Rv32BranchLessThan256Executor::new(
+            Rv32HeapBranchAdapterExecutor::new(pointer_max_bits),
             Rv32BranchLessThan256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -104,14 +104,14 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
             Rv32BranchLessThan256Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let mult = Rv32Multiplication256Step::new(
-            Rv32HeapAdapterStep::new(pointer_max_bits),
+        let mult = Rv32Multiplication256Executor::new(
+            Rv32HeapAdapterExecutor::new(pointer_max_bits),
             Rv32Mul256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(mult, Rv32Mul256Opcode::iter().map(|x| x.global_opcode()))?;
 
-        let shift = Rv32Shift256Step::new(
-            Rv32HeapAdapterStep::new(pointer_max_bits),
+        let shift = Rv32Shift256Executor::new(
+            Rv32HeapAdapterExecutor::new(pointer_max_bits),
             Rv32Shift256Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(shift, Rv32Shift256Opcode::iter().map(|x| x.global_opcode()))?;

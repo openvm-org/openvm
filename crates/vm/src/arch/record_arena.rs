@@ -569,7 +569,7 @@ impl<M> AdapterCoreLayout<M> {
 }
 
 /// Empty metadata that implements `AdapterCoreMetadata`
-/// **NOTE**: `AS` is the adapter type that implements `AdapterTraceStep`
+/// **NOTE**: `AS` is the adapter type that implements `AdapterTraceExecutor`
 /// **WARNING**: `AS::WIDTH` is the number of field elements, not the size in bytes
 pub struct AdapterCoreEmptyMetadata<F, AS> {
     _phantom: PhantomData<(F, AS)>,
@@ -601,7 +601,7 @@ impl<F, AS> Default for AdapterCoreEmptyMetadata<F, AS> {
 
 impl<F, AS> AdapterCoreMetadata for AdapterCoreEmptyMetadata<F, AS>
 where
-    AS: super::AdapterTraceStep<F>,
+    AS: super::AdapterTraceExecutor<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {

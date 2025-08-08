@@ -23,26 +23,27 @@ use test_case::test_case;
 use super::{core::run_eq, BranchEqualCoreCols, Rv32BranchEqualChip};
 use crate::{
     adapters::{
-        Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchAdapterStep,
+        Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller,
         RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::get_verification_error,
-    BranchEqualCoreAir, BranchEqualFiller, Rv32BranchEqualAir, Rv32BranchEqualStep,
+    BranchEqualCoreAir, BranchEqualFiller, Rv32BranchEqualAir, Rv32BranchEqualExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
-type Harness = TestChipHarness<F, Rv32BranchEqualStep, Rv32BranchEqualAir, Rv32BranchEqualChip<F>>;
+type Harness =
+    TestChipHarness<F, Rv32BranchEqualExecutor, Rv32BranchEqualAir, Rv32BranchEqualChip<F>>;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     let air = Rv32BranchEqualAir::new(
         Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv32BranchEqualStep::new(
-        Rv32BranchAdapterStep,
+    let executor = Rv32BranchEqualExecutor::new(
+        Rv32BranchAdapterExecutor,
         BranchEqualOpcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );

@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 use crate::{
     arch::{
         execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
         Executor, MeteredExecutor, MinimalInstruction, PreflightExecutor, RecordArena,
         StaticProgramError, TraceFiller, VmCoreAir, VmExecState, VmStateMut,
@@ -32,7 +32,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             MemoryAuxColsFactory,
         },
-        native_adapter::NativeAdapterStep,
+        native_adapter::NativeAdapterExecutor,
         public_values::columns::PublicValuesCoreColsView,
     },
     utils::{transmute_field_to_u32, transmute_u32_to_field},
@@ -125,14 +125,14 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
-pub struct PublicValuesStep<F, A = NativeAdapterStep<F, 2, 0>> {
+pub struct PublicValuesExecutor<F, A = NativeAdapterExecutor<F, 2, 0>> {
     adapter: A,
     encoder: Encoder,
     // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
     pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
 }
 
-impl<F: Clone, A> PublicValuesStep<F, A> {
+impl<F: Clone, A> PublicValuesExecutor<F, A> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
@@ -154,7 +154,7 @@ impl<F: Clone, A> PublicValuesStep<F, A> {
 }
 
 // We clone when we want to run a new instance of the program, so we reset the custom public values.
-impl<F: Clone, A: Clone> Clone for PublicValuesStep<F, A> {
+impl<F: Clone, A: Clone> Clone for PublicValuesExecutor<F, A> {
     fn clone(&self) -> Self {
         Self {
             adapter: self.adapter.clone(),
@@ -164,10 +164,10 @@ impl<F: Clone, A: Clone> Clone for PublicValuesStep<F, A> {
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for PublicValuesStep<F, A>
+impl<F, A, RA> PreflightExecutor<F, RA> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
-    A: 'static + Clone + AdapterTraceStep<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
+    A: 'static + Clone + AdapterTraceExecutor<F, ReadData = [[F; 1]; 2], WriteData = [[F; 1]; 0]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -212,7 +212,7 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for PublicValuesStep<F, A>
+impl<F, A> TraceFiller<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -252,7 +252,7 @@ struct PublicValuesPreCompute<F> {
     pvs: *const Mutex<Vec<Option<F>>>,
 }
 
-impl<F, A> Executor<F> for PublicValuesStep<F, A>
+impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -284,7 +284,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for PublicValuesStep<F, A>
+impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -374,7 +374,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     state.instret += 1;
 }
 
-impl<F, A> PublicValuesStep<F, A>
+impl<F, A> PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {

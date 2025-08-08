@@ -25,13 +25,13 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 
-use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreStep};
+use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
 use crate::{test_utils::get_verification_error, Rv32HintStoreFiller, Rv32HintStoreLayout};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> =
-    TestChipHarness<F, Rv32HintStoreStep, Rv32HintStoreAir, Rv32HintStoreChip<F>, RA>;
+    TestChipHarness<F, Rv32HintStoreExecutor, Rv32HintStoreAir, Rv32HintStoreChip<F>, RA>;
 
 fn create_test_chip<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
@@ -54,7 +54,8 @@ fn create_test_chip<RA: Arena>(
         Rv32HintStoreOpcode::CLASS_OFFSET,
         tester.address_bits(),
     );
-    let executor = Rv32HintStoreStep::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
+    let executor =
+        Rv32HintStoreExecutor::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
     let chip = Rv32HintStoreChip::<F>::new(
         Rv32HintStoreFiller::new(tester.address_bits(), bitwise_chip.clone()),
         tester.memory_helper(),
@@ -71,7 +72,7 @@ fn set_and_execute<RA: Arena>(
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
 ) where
-    Rv32HintStoreStep: PreflightExecutor<F, RA>,
+    Rv32HintStoreExecutor: PreflightExecutor<F, RA>,
 {
     let num_words = match opcode {
         HINT_STOREW => 1,

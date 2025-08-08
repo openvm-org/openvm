@@ -34,7 +34,7 @@ use rand::{rngs::StdRng, Rng};
 use super::air::VerifyBatchBus;
 use crate::{
     air::NativePoseidon2Air,
-    chip::NativePoseidon2Step,
+    chip::NativePoseidon2Executor,
     poseidon2::{chip::NativePoseidon2Filler, CHUNK},
     NativeConfig, NativeCpuBuilder, NativePoseidon2Chip,
 };
@@ -43,7 +43,7 @@ const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 const MAX_INS_CAPACITY: usize = 1 << 15;
 type Harness<F, const SBOX_REGISTERS: usize> = TestChipHarness<
     F,
-    NativePoseidon2Step<F, SBOX_REGISTERS>,
+    NativePoseidon2Executor<F, SBOX_REGISTERS>,
     NativePoseidon2Air<F, SBOX_REGISTERS>,
     NativePoseidon2Chip<F, SBOX_REGISTERS>,
 >;
@@ -57,7 +57,7 @@ fn create_test_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
         VERIFY_BATCH_BUS,
         Poseidon2Config::default(),
     );
-    let step = NativePoseidon2Step::new(Poseidon2Config::default());
+    let step = NativePoseidon2Executor::new(Poseidon2Config::default());
     let chip = NativePoseidon2Chip::new(
         NativePoseidon2Filler::new(Poseidon2Config::default()),
         tester.memory_helper(),

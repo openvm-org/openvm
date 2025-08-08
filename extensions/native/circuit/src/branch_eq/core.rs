@@ -27,7 +27,7 @@ pub struct NativeBranchEqualCoreRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct NativeBranchEqualStep<A> {
+pub struct NativeBranchEqualExecutor<A> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
@@ -38,10 +38,10 @@ pub struct NativeBranchEqualFiller<A> {
     adapter: A,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for NativeBranchEqualStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[F; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -121,7 +121,7 @@ struct NativeBranchEqualPreCompute {
     b_or_imm: u32,
 }
 
-impl<A> NativeBranchEqualStep<A> {
+impl<A> NativeBranchEqualExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -174,7 +174,7 @@ impl<A> NativeBranchEqualStep<A> {
     }
 }
 
-impl<F, A> Executor<F> for NativeBranchEqualStep<A>
+impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {
@@ -209,7 +209,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for NativeBranchEqualStep<A>
+impl<F, A> MeteredExecutor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {

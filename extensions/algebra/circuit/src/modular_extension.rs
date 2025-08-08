@@ -24,7 +24,7 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -41,8 +41,8 @@ use crate::{
     modular_chip::{
         get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
         get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-        ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
-        ModularStep, VmModularIsEqualStep,
+        ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
+        ModularIsEqualFiller, VmModularIsEqualExecutor,
     },
     AlgebraCpuProverExt,
 };
@@ -71,13 +71,13 @@ impl ModularExtension {
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
-    ModularAddSubRv32_32(ModularStep<1, 32>), // ModularAddSub
-    ModularMulDivRv32_32(ModularStep<1, 32>), // ModularMulDiv
-    ModularIsEqualRv32_32(VmModularIsEqualStep<1, 32, 32>), // ModularIsEqual
+    ModularAddSubRv32_32(ModularExecutor<1, 32>), // ModularAddSub
+    ModularMulDivRv32_32(ModularExecutor<1, 32>), // ModularMulDiv
+    ModularIsEqualRv32_32(VmModularIsEqualExecutor<1, 32, 32>), // ModularIsEqual
     // 48 limbs prime
-    ModularAddSubRv32_48(ModularStep<3, 16>), // ModularAddSub
-    ModularMulDivRv32_48(ModularStep<3, 16>), // ModularMulDiv
-    ModularIsEqualRv32_48(VmModularIsEqualStep<3, 16, 48>), // ModularIsEqual
+    ModularAddSubRv32_48(ModularExecutor<3, 16>), // ModularAddSub
+    ModularMulDivRv32_48(ModularExecutor<3, 16>), // ModularMulDiv
+    ModularIsEqualRv32_48(VmModularIsEqualExecutor<3, 16, 48>), // ModularIsEqual
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
@@ -138,8 +138,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     }
                 });
 
-                let is_eq = VmModularIsEqualStep::new(
-                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
+                let is_eq = VmModularIsEqualExecutor::new(
+                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );
@@ -192,8 +192,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
                     }
                 });
 
-                let is_eq = VmModularIsEqualStep::new(
-                    Rv32IsEqualModAdapterStep::new(pointer_max_bits),
+                let is_eq = VmModularIsEqualExecutor::new(
+                    Rv32IsEqualModAdapterExecutor::new(pointer_max_bits),
                     start_offset,
                     modulus_limbs,
                 );

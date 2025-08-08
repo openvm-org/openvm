@@ -203,7 +203,7 @@ impl<F, A> FieldExpressionMetadata<F, A> {
 
 impl<F, A> AdapterCoreMetadata for FieldExpressionMetadata<F, A>
 where
-    A: AdapterTraceStep<F>,
+    A: AdapterTraceExecutor<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {
@@ -234,7 +234,7 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
     }
 
     unsafe fn extract_layout(&self) -> FieldExpressionRecordLayout<F, A> {
-        panic!("Should get the Layout information from FieldExpressionStep");
+        panic!("Should get the Layout information from FieldExpressionExecutor");
     }
 }
 
@@ -273,7 +273,7 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
 }
 
 #[derive(Clone)]
-pub struct FieldExpressionStep<A> {
+pub struct FieldExpressionExecutor<A> {
     adapter: A,
     pub expr: FieldExpr,
     pub offset: usize,
@@ -282,7 +282,7 @@ pub struct FieldExpressionStep<A> {
     pub name: String,
 }
 
-impl<A> FieldExpressionStep<A> {
+impl<A> FieldExpressionExecutor<A> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: A,
@@ -301,7 +301,7 @@ impl<A> FieldExpressionStep<A> {
         };
         assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
         tracing::info!(
-            "FieldExpressionCoreStep: opcode={name}, main_width={}",
+            "FieldExpressionCoreExecutor: opcode={name}, main_width={}",
             BaseAir::<BabyBear>::width(&expr)
         );
         Self {
@@ -376,10 +376,11 @@ impl<A> FieldExpressionFiller<A> {
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for FieldExpressionStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for FieldExpressionExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
+    A: 'static
+        + AdapterTraceExecutor<F, ReadData: Into<DynArray<u8>>, WriteData: From<DynArray<u8>>>,
     for<'buf> RA: RecordArena<
         'buf,
         FieldExpressionRecordLayout<F, A>,

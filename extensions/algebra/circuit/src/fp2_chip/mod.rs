@@ -2,7 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
 
-use crate::FieldExprVecHeapStep;
+use crate::FieldExprVecHeapExecutor;
 
 mod addsub;
 pub use addsub::*;
@@ -15,8 +15,8 @@ pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     FieldExpressionCoreAir,
 >;
 
-pub type Fp2Step<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, true>;
+pub type Fp2Executor<const BLOCKS: usize, const BLOCK_SIZE: usize> =
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, true>;
 
 pub type Fp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,

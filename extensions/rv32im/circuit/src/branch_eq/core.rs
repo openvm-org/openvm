@@ -144,7 +144,7 @@ pub struct BranchEqualCoreRecord<const NUM_LIMBS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BranchEqualStep<A, const NUM_LIMBS: usize> {
+pub struct BranchEqualExecutor<A, const NUM_LIMBS: usize> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
@@ -157,10 +157,11 @@ pub struct BranchEqualFiller<A, const NUM_LIMBS: usize> {
     pub pc_step: u32,
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, RA, const NUM_LIMBS: usize> PreflightExecutor<F, RA>
+    for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -248,7 +249,7 @@ struct BranchEqualPreCompute {
     b: u8,
 }
 
-impl<F, A, const NUM_LIMBS: usize> Executor<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> Executor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -275,7 +276,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualStep<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -338,7 +339,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_NE: boo
     execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state);
 }
 
-impl<A, const NUM_LIMBS: usize> BranchEqualStep<A, NUM_LIMBS> {
+impl<A, const NUM_LIMBS: usize> BranchEqualExecutor<A, NUM_LIMBS> {
     /// Return `is_bne`, true if the local opcode is BNE.
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(

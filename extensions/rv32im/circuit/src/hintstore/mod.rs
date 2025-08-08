@@ -344,7 +344,7 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32HintStoreStep {
+pub struct Rv32HintStoreExecutor {
     pub pointer_max_bits: usize,
     pub offset: usize,
 }
@@ -355,7 +355,7 @@ pub struct Rv32HintStoreFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreStep
+impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
     for<'buf> RA:
@@ -588,7 +588,7 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl<F> Executor<F> for Rv32HintStoreStep
+impl<F> Executor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -613,7 +613,7 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for Rv32HintStoreStep
+impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -704,7 +704,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_HINT_ST
         .on_height_change(pre_compute.chip_idx as usize, height_delta);
 }
 
-impl Rv32HintStoreStep {
+impl Rv32HintStoreExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,

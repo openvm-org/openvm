@@ -38,7 +38,7 @@ use super::{
 use crate::{
     columns::NUM_KECCAK_VM_COLS,
     utils::{keccak256, keccak_f, num_keccak_f},
-    KeccakVmFiller, KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+    KeccakVmExecutor, KeccakVmFiller, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
 };
 
 #[derive(Clone, Copy)]
@@ -125,7 +125,7 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F, RA> PreflightExecutor<F, RA> for KeccakVmStep
+impl<F, RA> PreflightExecutor<F, RA> for KeccakVmExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, KeccakVmRecordLayout, KeccakVmRecordMut<'buf>>,

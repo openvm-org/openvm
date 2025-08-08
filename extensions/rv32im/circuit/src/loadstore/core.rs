@@ -254,7 +254,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
+pub struct LoadStoreExecutor<A, const NUM_CELLS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -268,11 +268,11 @@ pub struct LoadStoreFiller<
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -382,7 +382,7 @@ struct LoadStorePreCompute {
     e: u8,
 }
 
-impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -426,7 +426,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -557,7 +557,7 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, vm_state);
 }
 
-impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
+impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
     /// Return (local_opcode, enabled, is_native_store)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -593,7 +593,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
                     return Err(StaticProgramError::InvalidInstruction(pc));
                 }
             }
-            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
+            _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),
         }
 
         let imm = c.as_canonical_u32();

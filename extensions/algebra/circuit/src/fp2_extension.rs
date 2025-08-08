@@ -33,7 +33,7 @@ use strum::EnumCount;
 use crate::{
     fp2_chip::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
-        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Step,
+        get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Executor,
     },
     AlgebraCpuProverExt, ModularExtension,
 };
@@ -77,11 +77,11 @@ impl Fp2Extension {
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
-    Fp2AddSubRv32_32(Fp2Step<2, 32>), // Fp2AddSub
-    Fp2MulDivRv32_32(Fp2Step<2, 32>), // Fp2MulDiv
+    Fp2AddSubRv32_32(Fp2Executor<2, 32>), // Fp2AddSub
+    Fp2MulDivRv32_32(Fp2Executor<2, 32>), // Fp2MulDiv
     // 48 limbs prime
-    Fp2AddSubRv32_48(Fp2Step<6, 16>), // Fp2AddSub
-    Fp2MulDivRv32_48(Fp2Step<6, 16>), // Fp2MulDiv
+    Fp2AddSubRv32_48(Fp2Executor<6, 16>), // Fp2AddSub
+    Fp2MulDivRv32_48(Fp2Executor<6, 16>), // Fp2MulDiv
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {

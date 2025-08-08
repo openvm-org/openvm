@@ -28,19 +28,23 @@ use test_case::test_case;
 use super::{core::run_cmp, Rv32BranchLessThanChip};
 use crate::{
     adapters::{
-        Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchAdapterStep, RV32_CELL_BITS,
+        Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_lt::BranchLessThanCoreCols,
     test_utils::get_verification_error,
-    BranchLessThanCoreAir, BranchLessThanFiller, Rv32BranchLessThanAir, Rv32BranchLessThanStep,
+    BranchLessThanCoreAir, BranchLessThanFiller, Rv32BranchLessThanAir, Rv32BranchLessThanExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
-type Harness =
-    TestChipHarness<F, Rv32BranchLessThanStep, Rv32BranchLessThanAir, Rv32BranchLessThanChip<F>>;
+type Harness = TestChipHarness<
+    F,
+    Rv32BranchLessThanExecutor,
+    Rv32BranchLessThanAir,
+    Rv32BranchLessThanChip<F>,
+>;
 
 fn create_test_chip(
     tester: &mut VmChipTestBuilder<F>,
@@ -60,8 +64,8 @@ fn create_test_chip(
         Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32BranchLessThanStep::new(
-        Rv32BranchAdapterStep::new(),
+    let executor = Rv32BranchLessThanExecutor::new(
+        Rv32BranchAdapterExecutor::new(),
         BranchLessThanOpcode::CLASS_OFFSET,
     );
     let chip = Rv32BranchLessThanChip::new(

@@ -185,7 +185,7 @@ pub struct BaseAluCoreRecord<const NUM_LIMBS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BaseAluStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BaseAluExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -198,11 +198,11 @@ pub struct BaseAluFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for BaseAluStep<A, NUM_LIMBS, LIMB_BITS>
+    for BaseAluExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -304,7 +304,7 @@ struct BaseAluPreCompute {
 }
 
 impl<F, A, const LIMB_BITS: usize> Executor<F>
-    for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -388,7 +388,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bo
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
-    for BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -432,7 +432,7 @@ where
     }
 }
 
-impl<A, const LIMB_BITS: usize> BaseAluStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     /// Return `is_imm`, true if `e` is RV32_IMM_AS.
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(

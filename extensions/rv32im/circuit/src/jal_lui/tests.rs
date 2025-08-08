@@ -20,12 +20,12 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiStep};
+use super::{run_jal_lui, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiExecutor};
 use crate::{
     adapters::{
-        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterFiller,
-        Rv32CondRdWriteAdapterStep, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterFiller,
-        Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
+        Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterCols, Rv32CondRdWriteAdapterExecutor,
+        Rv32CondRdWriteAdapterFiller, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor,
+        Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS,
     },
     jal_lui::{Rv32JalLuiCoreCols, ADDITIONAL_BITS},
     test_utils::get_verification_error,
@@ -35,7 +35,7 @@ use crate::{
 const IMM_BITS: usize = 20;
 const LIMB_MAX: u32 = (1 << RV32_CELL_BITS) - 1;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv32JalLuiStep, Rv32JalLuiAir, Rv32JalLuiChip<F>>;
+type Harness = TestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChip<F>>;
 
 type F = BabyBear;
 
@@ -61,7 +61,9 @@ fn create_test_chip(
         )),
         Rv32JalLuiCoreAir::new(bitwise_bus),
     );
-    let executor = Rv32JalLuiStep::new(Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep));
+    let executor = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
+        Rv32RdWriteAdapterExecutor,
+    ));
     let chip = Rv32JalLuiChip::<F>::new(
         Rv32JalLuiFiller::new(
             Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),

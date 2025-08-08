@@ -32,7 +32,7 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    Sha256VmDigestCols, Sha256VmRoundCols, Sha256VmStep, SHA256VM_CONTROL_WIDTH,
+    Sha256VmDigestCols, Sha256VmExecutor, Sha256VmRoundCols, SHA256VM_CONTROL_WIDTH,
     SHA256VM_DIGEST_WIDTH,
 };
 use crate::{
@@ -135,7 +135,7 @@ impl SizedRecord<Sha256VmRecordLayout> for Sha256VmRecordMut<'_> {
     }
 }
 
-impl<F, RA> PreflightExecutor<F, RA> for Sha256VmStep
+impl<F, RA> PreflightExecutor<F, RA> for Sha256VmExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, Sha256VmRecordLayout, Sha256VmRecordMut<'buf>>,

@@ -9,21 +9,21 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapBranchAdapterStep;
-use openvm_rv32im_circuit::BranchLessThanStep;
+use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
+use openvm_rv32im_circuit::BranchLessThanExecutor;
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     common::{i256_lt, u256_lt},
-    Rv32BranchLessThan256Step, INT256_NUM_LIMBS,
+    Rv32BranchLessThan256Executor, INT256_NUM_LIMBS,
 };
 
-type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
+type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
 
-impl Rv32BranchLessThan256Step {
-    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
-        Self(BranchLessThanStep::new(adapter, offset))
+impl Rv32BranchLessThan256Executor {
+    pub fn new(adapter: AdapterExecutor, offset: usize) -> Self {
+        Self(BranchLessThanExecutor::new(adapter, offset))
     }
 }
 
@@ -35,7 +35,7 @@ struct BranchLtPreCompute {
     b: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32BranchLessThan256Step {
+impl<F: PrimeField32> Executor<F> for Rv32BranchLessThan256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLtPreCompute>()
     }
@@ -61,7 +61,7 @@ impl<F: PrimeField32> Executor<F> for Rv32BranchLessThan256Step {
     }
 }
 
-impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchLessThan256Step {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchLessThan256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLtPreCompute>>()
     }
@@ -126,7 +126,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: BranchLessTh
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
 }
 
-impl Rv32BranchLessThan256Step {
+impl Rv32BranchLessThan256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

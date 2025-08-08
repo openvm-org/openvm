@@ -7,7 +7,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
     },
     system::memory::{
@@ -291,7 +291,7 @@ pub struct Rv32VecHeapAdapterRecord<
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct Rv32VecHeapAdapterStep<
+pub struct Rv32VecHeapAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -320,8 +320,14 @@ impl<
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceStep<F>
-    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    > AdapterTraceExecutor<F>
+    for Rv32VecHeapAdapterExecutor<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
     const WIDTH: usize = Rv32VecHeapAdapterCols::<
         F,

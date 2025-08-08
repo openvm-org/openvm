@@ -1,11 +1,11 @@
-use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterStep};
-use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterStep};
-use convert_adapter::{ConvertAdapterAir, ConvertAdapterStep};
+use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterExecutor};
+use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterExecutor};
+use convert_adapter::{ConvertAdapterAir, ConvertAdapterExecutor};
 use derive_more::derive::From;
-use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningStep};
-use jal_rangecheck::{JalRangeCheckAir, JalRangeCheckStep};
-use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterStep};
-use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
+use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor};
+use jal_rangecheck::{JalRangeCheckAir, JalRangeCheckExecutor};
+use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor};
+use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor};
 use openvm_circuit::{
     arch::{
         AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
@@ -35,7 +35,7 @@ use strum::IntoEnumIterator;
 use crate::{
     adapters::*,
     air::{NativePoseidon2Air, VerifyBatchBus},
-    chip::{NativePoseidon2Filler, NativePoseidon2Step},
+    chip::{NativePoseidon2Executor, NativePoseidon2Filler},
     phantom::*,
     *,
 };
@@ -47,14 +47,14 @@ pub struct Native;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum NativeExecutor<F: Field> {
-    LoadStore(NativeLoadStoreStep<1>),
-    BlockLoadStore(NativeLoadStoreStep<BLOCK_LOAD_STORE_SIZE>),
-    BranchEqual(NativeBranchEqStep),
-    Jal(JalRangeCheckStep),
-    FieldArithmetic(FieldArithmeticStep),
-    FieldExtension(FieldExtensionStep),
-    FriReducedOpening(FriReducedOpeningStep),
-    VerifyBatch(NativePoseidon2Step<F, 1>),
+    LoadStore(NativeLoadStoreExecutor<1>),
+    BlockLoadStore(NativeLoadStoreExecutor<BLOCK_LOAD_STORE_SIZE>),
+    BranchEqual(NativeBranchEqExecutor),
+    Jal(JalRangeCheckExecutor),
+    FieldArithmetic(FieldArithmeticExecutor),
+    FieldExtension(FieldExtensionExecutor),
+    FriReducedOpening(FriReducedOpeningExecutor),
+    VerifyBatch(NativePoseidon2Executor<F, 1>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for Native {
@@ -64,8 +64,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, NativeExecutor<F>>,
     ) -> Result<(), ExecutorInventoryError> {
-        let load_store = NativeLoadStoreStep::<1>::new(
-            NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+        let load_store = NativeLoadStoreExecutor::<1>::new(
+            NativeLoadStoreAdapterExecutor::new(NativeLoadStoreOpcode::CLASS_OFFSET),
             NativeLoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -73,8 +73,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
             NativeLoadStoreOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let block_load_store = NativeLoadStoreStep::<BLOCK_LOAD_STORE_SIZE>::new(
-            NativeLoadStoreAdapterStep::new(NativeLoadStore4Opcode::CLASS_OFFSET),
+        let block_load_store = NativeLoadStoreExecutor::<BLOCK_LOAD_STORE_SIZE>::new(
+            NativeLoadStoreAdapterExecutor::new(NativeLoadStore4Opcode::CLASS_OFFSET),
             NativeLoadStore4Opcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -82,8 +82,8 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
             NativeLoadStore4Opcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let branch_equal = NativeBranchEqStep::new(
-            BranchNativeAdapterStep::new(),
+        let branch_equal = NativeBranchEqExecutor::new(
+            BranchNativeAdapterExecutor::new(),
             NativeBranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
@@ -92,7 +92,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
             NativeBranchEqualOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let jal_rangecheck = JalRangeCheckStep;
+        let jal_rangecheck = JalRangeCheckExecutor;
         inventory.add_executor(
             jal_rangecheck,
             [
@@ -101,25 +101,25 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Native {
             ],
         )?;
 
-        let field_arithmetic = FieldArithmeticStep::new(AluNativeAdapterStep::new());
+        let field_arithmetic = FieldArithmeticExecutor::new(AluNativeAdapterExecutor::new());
         inventory.add_executor(
             field_arithmetic,
             FieldArithmeticOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let field_extension = FieldExtensionStep::new(NativeVectorizedAdapterStep::new());
+        let field_extension = FieldExtensionExecutor::new(NativeVectorizedAdapterExecutor::new());
         inventory.add_executor(
             field_extension,
             FieldExtensionOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let fri_reduced_opening = FriReducedOpeningStep::new();
+        let fri_reduced_opening = FriReducedOpeningExecutor::new();
         inventory.add_executor(
             fri_reduced_opening,
             FriOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
-        let verify_batch = NativePoseidon2Step::<F, 1>::new(Poseidon2Config::default());
+        let verify_batch = NativePoseidon2Executor::<F, 1>::new(Poseidon2Config::default());
         inventory.add_executor(
             verify_batch,
             [
@@ -446,7 +446,7 @@ pub struct CastFExtension;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum CastFExtensionExecutor {
-    CastF(CastFStep),
+    CastF(CastFExecutor),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
@@ -456,7 +456,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for CastFExtension {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, CastFExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let castf = CastFStep::new(ConvertAdapterStep::new());
+        let castf = CastFExecutor::new(ConvertAdapterExecutor::new());
         inventory.add_executor(castf, [CastfOpcode::CASTF.global_opcode()])?;
         Ok(())
     }

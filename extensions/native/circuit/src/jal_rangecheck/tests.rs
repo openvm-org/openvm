@@ -22,7 +22,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{JalRangeCheckAir, JalRangeCheckStep};
+use super::{JalRangeCheckAir, JalRangeCheckExecutor};
 use crate::{
     jal_rangecheck::{JalRangeCheckCols, NativeJalRangeCheckChip},
     test_utils::write_native_array,
@@ -31,7 +31,8 @@ use crate::{
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, JalRangeCheckStep, JalRangeCheckAir, NativeJalRangeCheckChip<F>>;
+type Harness =
+    TestChipHarness<F, JalRangeCheckExecutor, JalRangeCheckAir, NativeJalRangeCheckChip<F>>;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker().clone();
@@ -40,7 +41,7 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
         tester.memory_bridge(),
         range_checker.bus(),
     );
-    let executor = JalRangeCheckStep::new();
+    let executor = JalRangeCheckExecutor::new();
     let chip = NativeJalRangeCheckChip::<F>::new(
         JalRangeCheckFiller::new(range_checker),
         tester.memory_helper(),

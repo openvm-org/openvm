@@ -9,18 +9,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapAdapterStep;
-use openvm_rv32im_circuit::MultiplicationStep;
+use openvm_rv32_adapters::Rv32HeapAdapterExecutor;
+use openvm_rv32im_circuit::MultiplicationExecutor;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32Multiplication256Step, INT256_NUM_LIMBS};
+use crate::{Rv32Multiplication256Executor, INT256_NUM_LIMBS};
 
-type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
+type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
-impl Rv32Multiplication256Step {
-    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
-        Self(MultiplicationStep::new(adapter, offset))
+impl Rv32Multiplication256Executor {
+    pub fn new(adapter: AdapterExecutor, offset: usize) -> Self {
+        Self(MultiplicationExecutor::new(adapter, offset))
     }
 }
 
@@ -32,7 +32,7 @@ struct MultPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Step {
+impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<MultPreCompute>()
     }
@@ -52,7 +52,7 @@ impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Step {
     }
 }
 
-impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Step {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultPreCompute>>()
     }
@@ -110,7 +110,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     execute_e12_impl(&pre_compute.data, vm_state);
 }
 
-impl Rv32Multiplication256Step {
+impl Rv32Multiplication256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

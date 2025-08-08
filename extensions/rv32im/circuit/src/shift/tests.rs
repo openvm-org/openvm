@@ -23,18 +23,18 @@ use test_case::test_case;
 use super::{core::run_shift, Rv32ShiftChip, ShiftCoreAir, ShiftCoreCols};
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::{
         generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
-    Rv32ShiftAir, Rv32ShiftStep, ShiftFiller,
+    Rv32ShiftAir, Rv32ShiftExecutor, ShiftFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv32ShiftStep, Rv32ShiftAir, Rv32ShiftChip<F>>;
+type Harness = TestChipHarness<F, Rv32ShiftExecutor, Rv32ShiftAir, Rv32ShiftChip<F>>;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
@@ -59,7 +59,7 @@ fn create_test_chip(
         ),
         ShiftCoreAir::new(bitwise_bus, range_checker.bus(), ShiftOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32ShiftStep::new(Rv32BaseAluAdapterStep, ShiftOpcode::CLASS_OFFSET);
+    let executor = Rv32ShiftExecutor::new(Rv32BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
     let chip = Rv32ShiftChip::<F>::new(
         ShiftFiller::new(
             Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),

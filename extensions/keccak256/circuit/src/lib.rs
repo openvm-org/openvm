@@ -63,7 +63,7 @@ pub const KECCAK_DIGEST_U64S: usize = KECCAK_DIGEST_BYTES / 8;
 pub type KeccakVmChip<F> = VmChipWrapper<F, KeccakVmFiller>;
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct KeccakVmStep {
+pub struct KeccakVmExecutor {
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
@@ -82,7 +82,7 @@ struct KeccakPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for KeccakVmStep {
+impl<F: PrimeField32> Executor<F> for KeccakVmExecutor {
     fn pre_compute_size(&self) -> usize {
         size_of::<KeccakPreCompute>()
     }
@@ -102,7 +102,7 @@ impl<F: PrimeField32> Executor<F> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmStep {
+impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<KeccakPreCompute>>()
     }
@@ -182,7 +182,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
-impl KeccakVmStep {
+impl KeccakVmExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

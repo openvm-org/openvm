@@ -118,7 +118,7 @@ pub struct CastFCoreRecord {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct CastFCoreStep<A> {
+pub struct CastFCoreExecutor<A> {
     adapter: A,
 }
 
@@ -128,10 +128,11 @@ pub struct CastFCoreFiller<A> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for CastFCoreStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static
+        + AdapterTraceExecutor<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -202,7 +203,7 @@ struct CastFPreCompute {
     b: u32,
 }
 
-impl<A> CastFCoreStep<A> {
+impl<A> CastFCoreExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -232,7 +233,7 @@ impl<A> CastFCoreStep<A> {
     }
 }
 
-impl<F, A> Executor<F> for CastFCoreStep<A>
+impl<F, A> Executor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -258,7 +259,7 @@ where
     }
 }
 
-impl<F, A> MeteredExecutor<F> for CastFCoreStep<A>
+impl<F, A> MeteredExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {

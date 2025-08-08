@@ -22,7 +22,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcDoubleStep, WeierstrassAir, WeierstrassChip,
+    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -89,7 +89,7 @@ fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
 
 type WeierstrassHarness = TestChipHarness<
     F,
-    EcDoubleStep<2, BLOCK_SIZE>,
+    EcDoubleExecutor<2, BLOCK_SIZE>,
     WeierstrassAir<1, 2, BLOCK_SIZE>,
     WeierstrassChip<F, 1, 2, BLOCK_SIZE>,
     MatrixRecordArena<F>,

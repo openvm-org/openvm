@@ -36,7 +36,7 @@ use strum::EnumCount;
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcAddNeStep, EcDoubleStep, EccCpuProverExt, WeierstrassAir,
+    get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
 };
 
 #[serde_as]
@@ -95,11 +95,11 @@ impl WeierstrassExtension {
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum WeierstrassExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeStep<2, 32>),
-    EcDoubleRv32_32(EcDoubleStep<2, 32>),
+    EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
+    EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeStep<6, 16>),
-    EcDoubleRv32_48(EcDoubleStep<6, 16>),
+    EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
+    EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {

@@ -198,7 +198,7 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct BranchLessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -211,10 +211,10 @@ pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -365,7 +365,7 @@ struct BranchLePreCompute {
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -393,7 +393,7 @@ where
     }
 }
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -460,7 +460,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: BranchLessTh
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+    BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(

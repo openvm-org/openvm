@@ -147,7 +147,7 @@ pub struct JalRangeCheckRecord<F> {
 /// Chip for JAL and RANGE_CHECK. These opcodes are logically irrelevant. Putting these opcodes into
 /// the same chip is just to save columns.
 #[derive(derive_new::new, Clone, Copy)]
-pub struct JalRangeCheckStep;
+pub struct JalRangeCheckExecutor;
 
 #[derive(derive_new::new)]
 pub struct JalRangeCheckFiller {
@@ -155,7 +155,7 @@ pub struct JalRangeCheckFiller {
 }
 pub type NativeJalRangeCheckChip<F> = VmChipWrapper<F, JalRangeCheckFiller>;
 
-impl<F, RA> PreflightExecutor<F, RA> for JalRangeCheckStep
+impl<F, RA> PreflightExecutor<F, RA> for JalRangeCheckExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut JalRangeCheckRecord<F>>,
@@ -303,7 +303,7 @@ struct RangeCheckPreCompute {
     c: u8,
 }
 
-impl JalRangeCheckStep {
+impl JalRangeCheckExecutor {
     #[inline(always)]
     fn pre_compute_jal_impl<F: PrimeField32>(
         &self,
@@ -355,7 +355,7 @@ impl JalRangeCheckStep {
     }
 }
 
-impl<F> Executor<F> for JalRangeCheckStep
+impl<F> Executor<F> for JalRangeCheckExecutor
 where
     F: PrimeField32,
 {
@@ -390,7 +390,7 @@ where
     }
 }
 
-impl<F> MeteredExecutor<F> for JalRangeCheckStep
+impl<F> MeteredExecutor<F> for JalRangeCheckExecutor
 where
     F: PrimeField32,
 {

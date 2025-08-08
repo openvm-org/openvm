@@ -23,9 +23,9 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_rv32_adapters::{
-    rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterAir, Rv32HeapAdapterFiller,
-    Rv32HeapAdapterStep, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterFiller,
-    Rv32HeapBranchAdapterStep,
+    rv32_heap_branch_default, rv32_write_heap_default, Rv32HeapAdapterAir, Rv32HeapAdapterExecutor,
+    Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterExecutor,
+    Rv32HeapBranchAdapterFiller,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV_B_TYPE_IMM_BITS},
@@ -42,11 +42,12 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use crate::{
-    Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Step, Rv32BranchEqual256Air,
-    Rv32BranchEqual256Chip, Rv32BranchEqual256Step, Rv32BranchLessThan256Air,
-    Rv32BranchLessThan256Chip, Rv32BranchLessThan256Step, Rv32LessThan256Air, Rv32LessThan256Chip,
-    Rv32LessThan256Step, Rv32Multiplication256Air, Rv32Multiplication256Chip,
-    Rv32Multiplication256Step, Rv32Shift256Air, Rv32Shift256Chip, Rv32Shift256Step,
+    Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air,
+    Rv32BranchEqual256Chip, Rv32BranchEqual256Executor, Rv32BranchLessThan256Air,
+    Rv32BranchLessThan256Chip, Rv32BranchLessThan256Executor, Rv32LessThan256Air,
+    Rv32LessThan256Chip, Rv32LessThan256Executor, Rv32Multiplication256Air,
+    Rv32Multiplication256Chip, Rv32Multiplication256Executor, Rv32Shift256Air, Rv32Shift256Chip,
+    Rv32Shift256Executor,
 };
 
 type F = BabyBear;
@@ -122,7 +123,8 @@ fn run_alu_256_rand_test(opcode: BaseAluOpcode, num_ops: usize) {
         ),
         BaseAluCoreAir::new(bitwise_bus, offset),
     );
-    let executor = Rv32BaseAlu256Step::new(Rv32HeapAdapterStep::new(tester.address_bits()), offset);
+    let executor =
+        Rv32BaseAlu256Executor::new(Rv32HeapAdapterExecutor::new(tester.address_bits()), offset);
     let chip = Rv32BaseAlu256Chip::new(
         BaseAluFiller::new(
             Rv32HeapAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
@@ -173,7 +175,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     );
 
     let executor =
-        Rv32LessThan256Step::new(Rv32HeapAdapterStep::new(tester.address_bits()), offset);
+        Rv32LessThan256Executor::new(Rv32HeapAdapterExecutor::new(tester.address_bits()), offset);
     let chip = Rv32LessThan256Chip::new(
         LessThanFiller::new(
             Rv32HeapAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
@@ -230,8 +232,10 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         ),
         MultiplicationCoreAir::new(range_tuple_bus, offset),
     );
-    let executor =
-        Rv32Multiplication256Step::new(Rv32HeapAdapterStep::new(tester.address_bits()), offset);
+    let executor = Rv32Multiplication256Executor::new(
+        Rv32HeapAdapterExecutor::new(tester.address_bits()),
+        offset,
+    );
     let chip = Rv32Multiplication256Chip::<F>::new(
         MultiplicationFiller::new(
             Rv32HeapAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
@@ -283,7 +287,8 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         ),
         ShiftCoreAir::new(bitwise_bus, range_checker_chip.bus(), offset),
     );
-    let executor = Rv32Shift256Step::new(Rv32HeapAdapterStep::new(tester.address_bits()), offset);
+    let executor =
+        Rv32Shift256Executor::new(Rv32HeapAdapterExecutor::new(tester.address_bits()), offset);
     let chip = Rv32Shift256Chip::new(
         ShiftFiller::new(
             Rv32HeapAdapterFiller::new(tester.address_bits(), bitwise_chip.clone()),
@@ -334,8 +339,8 @@ fn run_beq_256_rand_test(opcode: BranchEqualOpcode, num_ops: usize) {
         ),
         BranchEqualCoreAir::new(offset, DEFAULT_PC_STEP),
     );
-    let executor = Rv32BranchEqual256Step::new(
-        Rv32HeapBranchAdapterStep::new(tester.address_bits()),
+    let executor = Rv32BranchEqual256Executor::new(
+        Rv32HeapBranchAdapterExecutor::new(tester.address_bits()),
         offset,
         DEFAULT_PC_STEP,
     );
@@ -397,8 +402,8 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         ),
         BranchLessThanCoreAir::new(bitwise_bus, offset),
     );
-    let executor = Rv32BranchLessThan256Step::new(
-        Rv32HeapBranchAdapterStep::new(tester.address_bits()),
+    let executor = Rv32BranchLessThan256Executor::new(
+        Rv32HeapBranchAdapterExecutor::new(tester.address_bits()),
         offset,
     );
     let chip = Rv32BranchLessThan256Chip::new(

@@ -113,7 +113,7 @@ pub struct NativeLoadStoreCoreRecord<F, const NUM_CELLS: usize> {
 }
 
 #[derive(derive_new::new, Debug, Clone, Copy)]
-pub struct NativeLoadStoreCoreStep<A, const NUM_CELLS: usize> {
+pub struct NativeLoadStoreCoreExecutor<A, const NUM_CELLS: usize> {
     adapter: A,
     offset: usize,
 }
@@ -124,10 +124,11 @@ pub struct NativeLoadStoreCoreFiller<A, const NUM_CELLS: usize> {
 }
 
 impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA>
-    for NativeLoadStoreCoreStep<A, NUM_CELLS>
+    for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
+    A: 'static
+        + AdapterTraceExecutor<F, ReadData = (F, [F; NUM_CELLS]), WriteData = [F; NUM_CELLS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -215,7 +216,7 @@ struct NativeLoadStorePreCompute<F> {
     c: u32,
 }
 
-impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
+impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreExecutor<A, NUM_CELLS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -250,7 +251,7 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreStep<A, NUM_CELLS> {
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> Executor<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> Executor<F> for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -280,7 +281,7 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for NativeLoadStoreCoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {

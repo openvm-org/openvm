@@ -94,8 +94,8 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 /// Helper trait for CPU tracegen.
 pub trait TraceFiller<F>: Send + Sync {
     /// Populates `trace`. This function will always be called after
-    /// [`TraceStep::execute`], so the `trace` should already contain the records necessary to fill
-    /// in the rest of it.
+    /// [`TraceExecutor::execute`], so the `trace` should already contain the records necessary to
+    /// fill in the rest of it.
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -118,7 +118,7 @@ pub trait TraceFiller<F>: Send + Sync {
     }
 
     /// Populates `row_slice`. This function will always be called after
-    /// [`TraceStep::execute`], so the `row_slice` should already contain context necessary to
+    /// [`TraceExecutor::execute`], so the `row_slice` should already contain context necessary to
     /// fill in the rest of the row. This function will be called for each row in the trace which
     /// is being used, and for all other rows in the trace see `fill_dummy_trace_row`.
     ///
@@ -167,10 +167,10 @@ where
 }
 
 /// A helper trait for expressing generic state accesses within the implementation of
-/// [TraceStep]. Note that this is only a helper trait when the same interface of state access
+/// [TraceExecutor]. Note that this is only a helper trait when the same interface of state access
 /// is reused or shared by multiple implementations. It is not required to implement this trait if
-/// it is easier to implement the [TraceStep] trait directly without this trait.
-pub trait AdapterTraceStep<F>: Clone {
+/// it is easier to implement the [TraceExecutor] trait directly without this trait.
+pub trait AdapterTraceExecutor<F>: Clone {
     const WIDTH: usize;
     type ReadData;
     type WriteData;

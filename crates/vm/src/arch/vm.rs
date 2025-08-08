@@ -67,7 +67,7 @@ use crate::{
             AddressMap, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
-        public_values::PublicValuesStep,
+        public_values::PublicValuesExecutor,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
     },
 };
@@ -461,7 +461,7 @@ where
             .then(|| {
                 instance.handler.executors[PV_EXECUTOR_IDX]
                     .as_any_kind()
-                    .downcast_ref::<PublicValuesStep<Val<E::SC>>>()
+                    .downcast_ref::<PublicValuesExecutor<Val<E::SC>>>()
                     .unwrap()
                     .generate_public_values()
             })

@@ -18,10 +18,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use super::{
-    FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticStep,
+    FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticExecutor,
 };
 use crate::{
-    adapters::{AluNativeAdapterAir, AluNativeAdapterFiller, AluNativeAdapterStep},
+    adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
     field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
     test_utils::write_native_or_imm,
     FieldArithmeticCoreFiller,
@@ -29,14 +29,15 @@ use crate::{
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, FieldArithmeticStep, FieldArithmeticAir, FieldArithmeticChip<F>>;
+type Harness =
+    TestChipHarness<F, FieldArithmeticExecutor, FieldArithmeticAir, FieldArithmeticChip<F>>;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let air = FieldArithmeticAir::new(
         AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FieldArithmeticCoreAir::new(),
     );
-    let executor = FieldArithmeticStep::new(AluNativeAdapterStep::new());
+    let executor = FieldArithmeticExecutor::new(AluNativeAdapterExecutor::new());
     let chip = FieldArithmeticChip::<F>::new(
         FieldArithmeticCoreFiller::new(AluNativeAdapterFiller),
         tester.memory_helper(),

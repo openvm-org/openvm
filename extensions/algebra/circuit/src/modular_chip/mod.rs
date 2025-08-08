@@ -3,11 +3,11 @@ use openvm_circuit_derive::PreflightExecutor;
 use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+    Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
     Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller,
 };
 
-use crate::FieldExprVecHeapStep;
+use crate::FieldExprVecHeapExecutor;
 
 mod is_eq;
 pub use is_eq::*;
@@ -24,8 +24,8 @@ pub type ModularAir<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper
     FieldExpressionCoreAir,
 >;
 
-pub type ModularStep<const BLOCKS: usize, const BLOCK_SIZE: usize> =
-    FieldExprVecHeapStep<BLOCKS, BLOCK_SIZE, false>;
+pub type ModularExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> =
+    FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, false>;
 
 pub type ModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> = VmChipWrapper<
     F,
@@ -43,13 +43,13 @@ pub type ModularIsEqualAir<
 >;
 
 #[derive(Clone, PreflightExecutor)]
-pub struct VmModularIsEqualStep<
+pub struct VmModularIsEqualExecutor<
     const NUM_LANES: usize,
     const LANE_SIZE: usize,
     const TOTAL_LIMBS: usize,
 >(
-    ModularIsEqualStep<
-        Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+    ModularIsEqualExecutor<
+        Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         TOTAL_LIMBS,
         RV32_REGISTER_NUM_LIMBS,
         RV32_CELL_BITS,

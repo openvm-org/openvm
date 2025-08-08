@@ -103,7 +103,7 @@ pub struct Keccak256;
 
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Keccak256Executor {
-    Keccak256(KeccakVmStep),
+    Keccak256(KeccakVmExecutor),
 }
 
 impl<F> VmExecutionExtension<F> for Keccak256 {
@@ -114,7 +114,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        let keccak_step = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+        let keccak_step = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             keccak_step,
             Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),

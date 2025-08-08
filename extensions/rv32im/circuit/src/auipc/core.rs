@@ -30,7 +30,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -201,7 +201,7 @@ pub struct Rv32AuipcCoreRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
+pub struct Rv32AuipcExecutor<A = Rv32RdWriteAdapterExecutor> {
     adapter: A,
 }
 
@@ -211,10 +211,10 @@ pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterFiller> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for Rv32AuipcStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -297,7 +297,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<F, A> Executor<F> for Rv32AuipcStep<A>
+impl<F, A> Executor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -336,7 +336,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.instret += 1;
 }
 
-impl<F, A> MeteredExecutor<F> for Rv32AuipcStep<A>
+impl<F, A> MeteredExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -369,7 +369,7 @@ where
     }
 }
 
-impl<A> Rv32AuipcStep<A> {
+impl<A> Rv32AuipcExecutor<A> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

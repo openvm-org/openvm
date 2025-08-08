@@ -40,7 +40,7 @@ use crate::{
             online::GuestMemory,
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
         },
-        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        native_adapter::{NativeAdapterAir, NativeAdapterExecutor},
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
             PhantomChip, PhantomExecutor, PhantomFiller,
@@ -49,7 +49,7 @@ use crate::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
         },
         program::{ProgramBus, ProgramChip},
-        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
+        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor},
     },
 };
 
@@ -135,7 +135,7 @@ pub enum TouchedMemory<F> {
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 pub enum SystemExecutor<F: Field> {
-    PublicValues(PublicValuesStep<F>),
+    PublicValues(PublicValuesExecutor<F>),
     Phantom(PhantomExecutor<F>),
 }
 
@@ -236,8 +236,8 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
-    /// executor for [PublicValuesStep] if continuations is disabled. It will always add an executor
-    /// for [PhantomChip], which handles all phantom sub-executors.
+    /// executor for [PublicValuesExecutor] if continuations is disabled. It will always add an
+    /// executor for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
@@ -246,8 +246,8 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
-            let public_values = PublicValuesStep::new(
-                NativeAdapterStep::default(),
+            let public_values = PublicValuesExecutor::new(
+                NativeAdapterExecutor::default(),
                 self.num_public_values,
                 (self.max_constraint_degree as u32).checked_sub(1).unwrap(),
             );
@@ -397,8 +397,8 @@ where
 
         let public_values_chip = config.has_public_values_chip().then(|| {
             VmChipWrapper::new(
-                PublicValuesStep::new(
-                    NativeAdapterStep::default(),
+                PublicValuesExecutor::new(
+                    NativeAdapterExecutor::default(),
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
                 ),

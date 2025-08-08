@@ -29,12 +29,12 @@ use tiny_keccak::Hasher;
 
 use super::{columns::KeccakVmCols, KeccakVmChip};
 use crate::{
-    trace::KeccakVmRecordLayout, utils::keccak256, KeccakVmAir, KeccakVmFiller, KeccakVmStep,
+    trace::KeccakVmRecordLayout, utils::keccak256, KeccakVmAir, KeccakVmExecutor, KeccakVmFiller,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 8192;
-type Harness<RA> = TestChipHarness<F, KeccakVmStep, KeccakVmAir, KeccakVmChip<F>, RA>;
+type Harness<RA> = TestChipHarness<F, KeccakVmExecutor, KeccakVmAir, KeccakVmChip<F>, RA>;
 
 fn create_test_chips<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
@@ -58,7 +58,7 @@ fn create_test_chips<RA: Arena>(
         Rv32KeccakOpcode::CLASS_OFFSET,
     );
 
-    let executor = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
+    let executor = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
     let chip = KeccakVmChip::new(
         KeccakVmFiller::new(bitwise_chip.clone(), tester.address_bits()),
         tester.memory_helper(),
@@ -78,7 +78,7 @@ fn set_and_execute<RA: Arena>(
     len: Option<usize>,
     expected_output: Option<[u8; 32]>,
 ) where
-    KeccakVmStep: PreflightExecutor<F, RA>,
+    KeccakVmExecutor: PreflightExecutor<F, RA>,
 {
     let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);
