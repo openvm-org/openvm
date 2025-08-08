@@ -870,7 +870,9 @@ where
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = Some(vm.create_initial_state(exe, input));
         for (seg_idx, segment) in segments.into_iter().enumerate() {
-            let _span = info_span!("total_proof", segment = seg_idx).entered();
+            let _segment_span = info_span!("prove_segment", segment = seg_idx).entered();
+            // We need a separate span so the metric label includes "segment" from _segment_span
+            let _prove_span = info_span!("total_proof").entered();
             let Segment {
                 instret_start,
                 num_insns,
