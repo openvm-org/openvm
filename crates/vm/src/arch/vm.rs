@@ -611,7 +611,6 @@ where
     /// - proof for the execution segment
     /// - final memory state only if execution ends in successful termination (exit code 0). This
     ///   final memory state may be used to extract user public values afterwards.
-    #[instrument(name = "total_proof", skip_all)]
     pub fn prove(
         &mut self,
         exe: &VmExe<Val<E::SC>>,
@@ -915,6 +914,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
         PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
+    #[instrument(name = "total_proof", skip_all)]
     fn prove(
         &mut self,
         input: impl Into<Streams<Val<E::SC>>>,
