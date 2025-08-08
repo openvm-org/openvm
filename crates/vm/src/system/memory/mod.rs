@@ -16,8 +16,8 @@ pub mod merkle;
 pub mod offline_checker;
 pub mod online;
 pub mod persistent;
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 pub mod volatile;
 
 pub use controller::*;
