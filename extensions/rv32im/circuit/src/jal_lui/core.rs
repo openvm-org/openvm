@@ -148,7 +148,7 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv32JalLuiRecord {
+pub struct Rv32JalLuiCoreRecord {
     pub imm: u32,
     pub rd_data: [u8; RV32_REGISTER_NUM_LIMBS],
     pub is_jal: bool,
@@ -173,7 +173,7 @@ where
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
-        (A::RecordMut<'buf>, &'buf mut Rv32JalLuiRecord),
+        (A::RecordMut<'buf>, &'buf mut Rv32JalLuiCoreRecord),
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
@@ -220,7 +220,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &Rv32JalLuiRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &Rv32JalLuiCoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut Rv32JalLuiCoreCols<F> = core_row.borrow_mut();
 
         for pair in record.rd_data.chunks_exact(2) {
