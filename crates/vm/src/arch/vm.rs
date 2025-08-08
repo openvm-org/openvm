@@ -611,6 +611,7 @@ where
     /// - proof for the execution segment
     /// - final memory state only if execution ends in successful termination (exit code 0). This
     ///   final memory state may be used to extract user public values afterwards.
+    #[instrument(name = "total_proof", skip_all)]
     pub fn prove(
         &mut self,
         exe: &VmExe<Val<E::SC>>,
@@ -870,7 +871,7 @@ where
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = Some(vm.create_initial_state(exe, input));
         for (seg_idx, segment) in segments.into_iter().enumerate() {
-            let _span = info_span!("prove_segment", segment = seg_idx).entered();
+            let _span = info_span!("total_proof", segment = seg_idx).entered();
             let Segment {
                 instret_start,
                 num_insns,

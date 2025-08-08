@@ -46,6 +46,12 @@ impl MetricDb {
     pub fn apply_aggregations(&mut self) {
         for metrics in self.flat_dict.values_mut() {
             let get = |key: &str| metrics.iter().find(|m| m.name == key).map(|m| m.value);
+            let total_proof_time = get(PROOF_TIME_LABEL);
+            if total_proof_time.is_some() {
+                // We have instrumented total_proof_time_ms
+                continue;
+            }
+            // otherwise, calculate it from sub-components
             let execute_metered_time = get(EXECUTE_METERED_TIME_LABEL);
             let execute_preflight_time = get(EXECUTE_PREFLIGHT_TIME_LABEL);
             let trace_gen_time = get(TRACE_GEN_TIME_LABEL);
