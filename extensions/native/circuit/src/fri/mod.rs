@@ -1292,17 +1292,11 @@ where
     F::Packing: PackedField<Scalar = F>,
     EF<F>: ExtensionField<F>,
 {
-    let length = as_and_bs.len();
-
-    if length >= F::Packing::WIDTH {
-        match F::Packing::WIDTH {
-            4 => packed_polynomial_evaluation::<F, 4>(as_and_bs, alpha),
-            8 => packed_polynomial_evaluation::<F, 8>(as_and_bs, alpha),
-            16 => packed_polynomial_evaluation::<F, 16>(as_and_bs, alpha),
-            _ => scalar_polynomial_evaluation(as_and_bs, alpha),
-        }
-    } else {
-        scalar_polynomial_evaluation(as_and_bs, alpha)
+    match F::Packing::WIDTH {
+        4 => packed_polynomial_evaluation::<F, 4>(as_and_bs, alpha),
+        8 => packed_polynomial_evaluation::<F, 8>(as_and_bs, alpha),
+        16 => packed_polynomial_evaluation::<F, 16>(as_and_bs, alpha),
+        _ => scalar_polynomial_evaluation(as_and_bs, alpha),
     }
 }
 
@@ -1328,51 +1322,50 @@ where
     F::Packing: PackedField<Scalar = F>,
     EF<F>: ExtensionField<F>,
 {
-    let mut result = EF::<F>::ZERO;
-    let len = as_and_bs.len();
-
-    let chunks = len / WIDTH;
-
-    let remainder_start = chunks * WIDTH;
-    for &(a, b) in as_and_bs[remainder_start..].iter().rev() {
-        result = result * alpha + (b - EF::<F>::from_base(a));
+    let mut alpha_powers = [EF::<F>::ONE; WIDTH];
+    for i in 1..WIDTH {
+        alpha_powers[i] = alpha_powers[i - 1] * alpha;
     }
 
-    for chunk_idx in 0..chunks {
-        let start = (chunks - 1 - chunk_idx) * WIDTH;
-        let chunk = &as_and_bs[start..start + WIDTH];
+    let mut alpha_powers_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+        F::Packing::from_fn(|lane| alpha_powers[lane].as_base_slice()[coeff_idx])
+    });
 
-        let mut a_vals = [F::ZERO; WIDTH];
-        let mut b_coeffs = [[F::ZERO; WIDTH]; EXT_DEG];
+    let alpha_width = alpha_powers[WIDTH - 1] * alpha;
+    let alpha_width_packed = ExtPacked::<F>::from_f(alpha_width);
 
-        for (lane, &(a, b)) in chunk.iter().enumerate() {
-            a_vals[lane] = a;
-            let b_slice = b.as_base_slice();
+    let len = as_and_bs.len();
+    let mut result = EF::<F>::ZERO;
+
+    for batch_start in (0..len).step_by(WIDTH) {
+        let batch_end = (batch_start + WIDTH).min(len);
+        let batch_size = batch_end - batch_start;
+
+        let mut batch_coeffs = [[F::ZERO; WIDTH]; EXT_DEG];
+        for j in 0..batch_size {
+            let (a, b) = as_and_bs[batch_start + j];
+            let diff = b - EF::<F>::from_base(a);
+
+            let diff_slice = diff.as_base_slice();
             for coeff in 0..EXT_DEG {
-                b_coeffs[coeff][lane] = b_slice[coeff];
+                batch_coeffs[coeff][j] = diff_slice[coeff];
             }
         }
 
-        let a_packed = F::Packing::from_fn(|lane| a_vals[lane]);
-        let b_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
-            F::Packing::from_fn(|lane| b_coeffs[coeff_idx][lane])
-        });
-        let a_ext_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
-            if coeff_idx == 0 {
-                a_packed
-            } else {
-                F::Packing::ZERO
-            }
+        let coeffs_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            F::Packing::from_fn(|lane| batch_coeffs[coeff_idx][lane])
         });
 
-        let diff_packed = b_packed - a_ext_packed;
+        let batch_result_packed = coeffs_packed * alpha_powers_packed;
 
-        for lane in (0..WIDTH).rev() {
-            let diff_lane = EF::<F>::from_base_fn(|coeff_idx| {
-                diff_packed.as_base_slice()[coeff_idx].as_slice()[lane]
+        for lane in 0..WIDTH {
+            let lane_result = EF::<F>::from_base_fn(|coeff_idx| {
+                batch_result_packed.as_base_slice()[coeff_idx].as_slice()[lane]
             });
-            result = result * alpha + diff_lane;
+            result += lane_result;
         }
+
+        alpha_powers_packed *= alpha_width_packed;
     }
 
     result
