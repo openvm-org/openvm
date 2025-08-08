@@ -116,6 +116,7 @@ fn main() {
             .file("cuda/src/extensions/rv32im/mulh.cu")
             .compile("tracegen_gpu_rv32im");
     }
+
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/native/field_arithmetic.cu")
@@ -128,22 +129,31 @@ fn main() {
             .file("cuda/src/extensions/native/jal_rangecheck.cu")
             .compile("tracegen_gpu_native");
     }
+
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/algebra/modular_chip/is_eq.cu")
             .compile("tracegen_gpu_algebra");
     }
+
     {
         let mut b = common.clone();
         b.file("cuda/src/mod_builder/field_expression.cu")
             .compile("tracegen_mod_builder");
     }
+
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/keccak256/keccak256.cu")
             .file("cuda/src/extensions/keccak256/keccakf.cu")
             .compile("tracegen_gpu_keccak");
     }
+    {
+        let mut b = common.clone();
+        b.file("cuda/src/extensions/sha256/sha256.cu")
+            .compile("tracegen_gpu_sha256");
+    }
+
     {
         let mut b = common.clone();
         b.file("cuda/src/extensions/bigint.cu")

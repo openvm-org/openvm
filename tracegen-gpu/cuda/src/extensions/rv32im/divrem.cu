@@ -86,8 +86,8 @@ template <size_t NUM_LIMBS> struct DivRemCore {
         bool c_sign = is_signed && (record.c[3] >> 7);
         bool q_sign = false;
         bool case_none = false;
-        uint32_t b_u32 = u32_from_bytes(record.b);
-        uint32_t c_u32 = u32_from_bytes(record.c);
+        uint32_t b_u32 = u32_from_bytes_le(record.b);
+        uint32_t c_u32 = u32_from_bytes_le(record.c);
         uint32_t q_u32 = 0;
         uint32_t r_u32 = 0;
 

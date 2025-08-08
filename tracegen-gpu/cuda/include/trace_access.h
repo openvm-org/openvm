@@ -7,9 +7,9 @@
 /// A RowSlice is a contiguous section of a row in col-based trace.
 struct RowSlice {
     Fp *ptr;
-    uint32_t stride;
+    size_t stride;
 
-    __device__ RowSlice(Fp *ptr, uint32_t stride) : ptr(ptr), stride(stride) {}
+    __device__ RowSlice(Fp *ptr, size_t stride) : ptr(ptr), stride(stride) {}
 
     __device__ __forceinline__ Fp &operator[](size_t column_index) const {
         return ptr[column_index * stride];
@@ -25,11 +25,8 @@ struct RowSlice {
     }
 
     template <typename T>
-    __device__ __forceinline__ void write_array(
-        size_t column_index,
-        size_t length,
-        const T *values
-    ) const {
+    __device__ __forceinline__ void write_array(size_t column_index, size_t length, const T *values)
+        const {
 #pragma unroll
         for (size_t i = 0; i < length; i++) {
             ptr[(column_index + i) * stride] = values[i];
