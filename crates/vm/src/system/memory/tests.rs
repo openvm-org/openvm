@@ -31,13 +31,17 @@ use rand::{
 use super::MemoryController;
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
+        testing::{
+            memory::gen_pointer, VmChipTestBuilder, MEMORY_BUS, MEMORY_MERKLE_BUS,
+            POSEIDON2_DIRECT_BUS,
+        },
         MemoryConfig,
     },
     system::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus, MemoryReadAuxCols, MemoryWriteAuxCols},
-            MemoryAddress, OfflineMemory, RecordId,
+            online::TracingMemory,
+            MemoryAddress,
         },
         poseidon2::Poseidon2PeripheryChip,
     },
@@ -45,6 +49,8 @@ use crate::{
 
 const MAX: usize = 32;
 const RANGE_CHECKER_BUS: BusIndex = 3;
+
+type F = BabyBear;
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -203,13 +209,8 @@ fn generate_trace<F: PrimeField32>(
 /// which sends reads/writes over [MemoryBridge].
 #[test]
 fn test_memory_controller() {
-    let memory_bus = MemoryBus::new(MEMORY_BUS);
     let memory_config = MemoryConfig::default();
-    let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
-
-    let mut memory_controller =
-        MemoryController::with_volatile_memory(memory_bus, memory_config, range_checker.clone());
+    let mut memory = TracingMemory::new(&memory_config, 1, 0);
 
     let mut rng = create_seeded_rng();
     let records = make_random_accesses(&mut memory_controller, &mut rng);
@@ -237,23 +238,10 @@ fn test_memory_controller() {
 
 #[test]
 fn test_memory_controller_persistent() {
-    let memory_bus = MemoryBus::new(MEMORY_BUS);
-    let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
-    let compression_bus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
-    let memory_config = MemoryConfig::default();
-    let range_bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, memory_config.decomp);
-    let range_checker = SharedVariableRangeCheckerChip::new(range_bus);
-
-    let mut memory_controller = MemoryController::with_persistent_memory(
-        memory_bus,
-        memory_config,
-        range_checker.clone(),
-        merkle_bus,
-        compression_bus,
-    );
+    let mut tester = VmChipTestBuilder::<F>::persistent(MemoryConfig::default());
 
     let mut rng = create_seeded_rng();
-    let records = make_random_accesses(&mut memory_controller, &mut rng);
+    let records = make_random_accesses(&mut tester.memory, &mut rng);
 
     let memory_requester_air = MemoryRequesterAir {
         memory_bridge: memory_controller.memory_bridge(),

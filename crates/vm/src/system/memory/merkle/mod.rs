@@ -21,9 +21,8 @@ pub use columns::*;
 pub(super) use trace::SerialReceiver;
 pub use tree::*;
 
-// TODO: add back
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 pub struct MemoryMerkleChip<const CHUNK: usize, F> {
     pub air: MemoryMerkleAir<CHUNK>,

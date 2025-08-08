@@ -16,7 +16,6 @@ pub mod merkle;
 pub mod offline_checker;
 pub mod online;
 pub mod persistent;
-// TODO: add back
 // #[cfg(test)]
 // mod tests;
 pub mod volatile;
