@@ -1,5 +1,6 @@
 use std::{
     array,
+    borrow::BorrowMut,
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::Arc,
 };
@@ -25,7 +26,7 @@ use crate::{
     system::memory::{
         merkle::{
             memory_to_vec_partition, tests::util::HashTestChip, MemoryDimensions, MemoryMerkleChip,
-            MerkleTree,
+            MemoryMerkleCols, MerkleTree,
         },
         online::{GuestMemory, LinearMemory},
         AddressMap, MemoryImage,
@@ -34,11 +35,11 @@ use crate::{
 
 mod util;
 
-const DEFAULT_CHUNK: usize = 8;
+const CHUNK: usize = 8;
 const COMPRESSION_BUS: PermutationCheckBus = PermutationCheckBus::new(POSEIDON2_DIRECT_BUS);
 type F = BabyBear;
 
-fn test<const CHUNK: usize>(
+fn test(
     memory_dimensions: MemoryDimensions,
     initial_memory: &MemoryImage,
     touched_labels: BTreeSet<(u32, u32)>,
@@ -176,7 +177,7 @@ fn test<const CHUNK: usize>(
     .expect("Verification failed");
 }
 
-fn random_test<const CHUNK: usize>(
+fn random_test(
     height: usize,
     max_value: u32,
     mut num_initial_addresses: usize,
@@ -204,7 +205,7 @@ fn random_test<const CHUNK: usize>(
                 layout: MemoryCellType::Native { size: 4 },
             },
         ],
-        height,
+        height + 3,
         20,
         17,
         32,
@@ -247,7 +248,7 @@ fn random_test<const CHUNK: usize>(
         }
     }
 
-    test::<CHUNK>(
+    test(
         MemoryDimensions {
             addr_space_height: 1,
             address_height: height,
@@ -260,100 +261,124 @@ fn random_test<const CHUNK: usize>(
 
 #[test]
 fn expand_test_0() {
-    random_test::<DEFAULT_CHUNK>(2, 3000, 2, 3);
+    random_test(2, 3000, 2, 3);
 }
 
 #[test]
 fn expand_test_1() {
-    random_test::<DEFAULT_CHUNK>(10, 3000, 400, 30);
+    random_test(10, 3000, 400, 30);
 }
 
 #[test]
 fn expand_test_2() {
-    random_test::<DEFAULT_CHUNK>(3, 3000, 3, 2);
+    random_test(3, 3000, 3, 2);
 }
 
-// #[test]
-// fn expand_test_no_accesses() {
-//     let memory_dimensions = MemoryDimensions {
-//         addr_space_height: 2,
-//         address_height: 1,
-//     };
-//     let mut hash_test_chip = HashTestChip::new();
+#[test]
+fn expand_test_no_accesses() {
+    let mut hash_test_chip = HashTestChip::new();
+    let height = 1;
 
-//     let memory = AddressMap::new(vec![
-//         1 << memory_dimensions.address_height;
-//         1 + (1 << memory_dimensions.addr_space_height)
-//     ]);
-//     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
-//         memory_dimensions,
-//         &memory,
-//         &hash_test_chip,
-//     );
+    let mem_config = MemoryConfig::new(
+        1,
+        vec![
+            AddressSpaceHostConfig {
+                num_cells: 0,
+                min_block_size: 0,
+                layout: MemoryCellType::Null,
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+        ],
+        height + 3,
+        20,
+        17,
+        32,
+    );
+    let md = mem_config.memory_dimensions();
 
-//     let mut chip: MemoryMerkleChip<DEFAULT_CHUNK, _> = MemoryMerkleChip::new(
-//         memory_dimensions,
-//         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-//         COMPRESSION_BUS,
-//     );
+    let memory = AddressMap::from_mem_config(&mem_config);
 
-//     let partition = memory_to_partition(&memory);
-//     chip.finalize(&tree, &partition, &mut hash_test_chip);
-//     BabyBearPoseidon2Engine::run_test_fast(
-//         vec![chip.air(), Arc::new(hash_test_chip.air())],
-//         vec![
-//             chip.generate_air_proof_input(),
-//             hash_test_chip.generate_air_proof_input(),
-//         ],
-//     )
-//     .expect("This should occur");
-// }
+    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+        md,
+        PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+        COMPRESSION_BUS,
+    );
 
-// #[test]
-// #[should_panic]
-// fn expand_test_negative() {
-//     let memory_dimensions = MemoryDimensions {
-//         addr_space_height: 2,
-//         address_height: 1,
-//     };
+    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    let trace = chip.generate_proving_ctx();
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
+        vec![trace, hash_test_chip.generate_proving_ctx()],
+    )
+    .expect("Empty touched memory doesn't work");
+}
 
-//     let mut hash_test_chip = HashTestChip::new();
+#[test]
+#[should_panic]
+fn expand_test_negative() {
+    let mut hash_test_chip = HashTestChip::new();
+    let height = 1;
 
-//     let memory = AddressMap::new(vec![
-//         1 << memory_dimensions.address_height;
-//         1 + (1 << memory_dimensions.addr_space_height)
-//     ]);
-//     let tree = MemoryNode::<DEFAULT_CHUNK, _>::tree_from_memory(
-//         memory_dimensions,
-//         &memory,
-//         &hash_test_chip,
-//     );
+    let mem_config = MemoryConfig::new(
+        1,
+        vec![
+            AddressSpaceHostConfig {
+                num_cells: 0,
+                min_block_size: 0,
+                layout: MemoryCellType::Null,
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+            AddressSpaceHostConfig {
+                num_cells: CHUNK << height,
+                min_block_size: 1,
+                layout: MemoryCellType::Native { size: 4 },
+            },
+        ],
+        height + 3,
+        20,
+        17,
+        32,
+    );
+    let md = mem_config.memory_dimensions();
 
-//     let mut chip = MemoryMerkleChip::<DEFAULT_CHUNK, _>::new(
-//         memory_dimensions,
-//         PermutationCheckBus::new(MEMORY_MERKLE_BUS),
-//         COMPRESSION_BUS,
-//     );
+    let memory = AddressMap::from_mem_config(&mem_config);
 
-//     let partition = memory_to_partition(&memory);
-//     chip.finalize(&tree, &partition, &mut hash_test_chip);
-//     let air = chip.air();
-//     let mut chip_api = chip.generate_air_proof_input();
-//     {
-//         let trace = chip_api.raw.common_main.as_mut().unwrap();
-//         for row in trace.rows_mut() {
-//             let row: &mut MemoryMerkleCols<_, DEFAULT_CHUNK> = row.borrow_mut();
-//             if row.expand_direction == BabyBear::NEG_ONE {
-//                 row.left_direction_different = BabyBear::ZERO;
-//                 row.right_direction_different = BabyBear::ZERO;
-//             }
-//         }
-//     }
+    let mut chip: MemoryMerkleChip<CHUNK, _> = MemoryMerkleChip::new(
+        md,
+        PermutationCheckBus::new(MEMORY_MERKLE_BUS),
+        COMPRESSION_BUS,
+    );
 
-//     let hash_air = Arc::new(hash_test_chip.air());
-//     BabyBearPoseidon2Engine::run_test_fast(
-//         vec![air, hash_air],
-//         vec![chip_api, hash_test_chip.generate_air_proof_input()],
-//     )
-//     .expect("This should occur");
-// }
+    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    let mut chip_ctx = chip.generate_proving_ctx();
+    {
+        let mut trace = (*chip_ctx.clone().common_main.unwrap()).clone();
+        for row in trace.rows_mut() {
+            let row: &mut MemoryMerkleCols<_, CHUNK> = row.borrow_mut();
+            if row.expand_direction == BabyBear::NEG_ONE {
+                row.left_direction_different = BabyBear::ZERO;
+                row.right_direction_different = BabyBear::ZERO;
+            }
+        }
+        chip_ctx.common_main.replace(Arc::new(trace));
+    }
+
+    BabyBearPoseidon2Engine::run_test_fast(
+        vec![Arc::new(chip.air), Arc::new(hash_test_chip.air())],
+        vec![chip_ctx, hash_test_chip.generate_proving_ctx()],
+    )
+    .expect("We tinkered with the trace and now it doesn't pass");
+}
