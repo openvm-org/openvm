@@ -1322,51 +1322,66 @@ where
     F::Packing: PackedField<Scalar = F>,
     EF<F>: ExtensionField<F>,
 {
+    // Precompute powers of alpha for vectorized operations: [1, α, α², ..., α^(WIDTH-1)]
     let mut alpha_powers = [EF::<F>::ONE; WIDTH];
     for i in 1..WIDTH {
         alpha_powers[i] = alpha_powers[i - 1] * alpha;
     }
 
+    // Pack alpha powers into SIMD format for efficient computation
     let mut alpha_powers_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
         F::Packing::from_fn(|lane| alpha_powers[lane].as_base_slice()[coeff_idx])
     });
 
+    // Compute α^WIDTH for updating packed powers between batches
     let alpha_width = alpha_powers[WIDTH - 1] * alpha;
     let alpha_width_packed = ExtPacked::<F>::from_f(alpha_width);
 
-    let len = as_and_bs.len();
-    let mut result = EF::<F>::ZERO;
+    let mut result_packed = ExtPacked::<F>::from_f(EF::<F>::ZERO);
 
-    for batch_start in (0..len).step_by(WIDTH) {
-        let batch_end = (batch_start + WIDTH).min(len);
-        let batch_size = batch_end - batch_start;
-
-        let mut batch_coeffs = [[F::ZERO; WIDTH]; EXT_DEG];
-        for j in 0..batch_size {
-            let (a, b) = as_and_bs[batch_start + j];
-            let diff = b - EF::<F>::from_base(a);
-
-            let diff_slice = diff.as_base_slice();
-            for coeff in 0..EXT_DEG {
-                batch_coeffs[coeff][j] = diff_slice[coeff];
-            }
-        }
-
+    // Process full batches of WIDTH elements each
+    for batch in as_and_bs.chunks_exact(WIDTH) {
+        // Extract and pack coefficients (b - a) for the current batch
         let coeffs_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
-            F::Packing::from_fn(|lane| batch_coeffs[coeff_idx][lane])
+            F::Packing::from_fn(|lane| {
+                let (a, b) = batch[lane];
+                (b - EF::<F>::from_base(a)).as_base_slice()[coeff_idx]
+            })
         });
 
-        let batch_result_packed = coeffs_packed * alpha_powers_packed;
-
-        for lane in 0..WIDTH {
-            let lane_result = EF::<F>::from_base_fn(|coeff_idx| {
-                batch_result_packed.as_base_slice()[coeff_idx].as_slice()[lane]
-            });
-            result += lane_result;
-        }
-
+        result_packed += coeffs_packed * alpha_powers_packed;
         alpha_powers_packed *= alpha_width_packed;
     }
 
-    result
+    // Handle remaining elements that don't fill a complete batch
+    let remainder = as_and_bs.chunks_exact(WIDTH).remainder();
+    if !remainder.is_empty() {
+        let coeffs_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            F::Packing::from_fn(|lane| {
+                remainder.get(lane).map_or(F::ZERO, |&(a, b)| {
+                    (b - EF::<F>::from_base(a)).as_base_slice()[coeff_idx]
+                })
+            })
+        });
+
+        result_packed += coeffs_packed * alpha_powers_packed;
+    }
+
+    // Perform horizontal reduction using tree-based summation for optimal performance
+    let mut working_packed = result_packed;
+    let mut stride = WIDTH / 2;
+
+    while stride > 0 {
+        let shifted_packed = ExtPacked::<F>::from_base_fn(|coeff_idx| {
+            F::Packing::from_fn(|lane| {
+                let shifted_lane = (lane + stride) % WIDTH;
+                working_packed.as_base_slice()[coeff_idx].as_slice()[shifted_lane]
+            })
+        });
+        working_packed += shifted_packed;
+        stride /= 2;
+    }
+
+    // Extract the accumulated result from the first lane
+    EF::<F>::from_base_fn(|coeff_idx| working_packed.as_base_slice()[coeff_idx].as_slice()[0])
 }
