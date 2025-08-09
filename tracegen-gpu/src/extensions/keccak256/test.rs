@@ -4,7 +4,7 @@ use openvm_circuit::{arch::testing::memory::gen_pointer, utils::get_random_messa
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_keccak256_circuit::{
-    utils::keccak256, KeccakVmAir, KeccakVmChip, KeccakVmFiller, KeccakVmStep,
+    utils::keccak256, KeccakVmAir, KeccakVmChip, KeccakVmExecutor, KeccakVmFiller,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -16,7 +16,8 @@ use super::*;
 use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
 
 const MAX_INS_CAPACITY: usize = 1024;
-type Harness = GpuTestChipHarness<F, KeccakVmStep, KeccakVmAir, Keccak256ChipGpu, KeccakVmChip<F>>;
+type Harness =
+    GpuTestChipHarness<F, KeccakVmExecutor, KeccakVmAir, Keccak256ChipGpu, KeccakVmChip<F>>;
 
 fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
     // getting bus from tester since `gpu_chip` and `air` must use the same bus
@@ -34,7 +35,7 @@ fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         Rv32KeccakOpcode::CLASS_OFFSET,
     );
 
-    let executor = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
+    let executor = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
     let cpu_chip = KeccakVmChip::new(
         KeccakVmFiller::new(dummy_bitwise_chip, tester.address_bits()),
         tester.dummy_memory_helper(),

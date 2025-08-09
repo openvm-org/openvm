@@ -58,7 +58,7 @@ mod test {
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyMultiRowLayout};
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
     use openvm_native_circuit::{
-        JalRangeCheckAir, JalRangeCheckFiller, JalRangeCheckStep, NativeJalRangeCheckChip,
+        JalRangeCheckAir, JalRangeCheckExecutor, JalRangeCheckFiller, NativeJalRangeCheckChip,
     };
     use openvm_native_compiler::{conversion::AS, NativeJalOpcode, NativeRangeCheckOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -77,7 +77,7 @@ mod test {
         tester: &GpuChipTestBuilder,
     ) -> GpuTestChipHarness<
         F,
-        JalRangeCheckStep,
+        JalRangeCheckExecutor,
         JalRangeCheckAir,
         JalRangeCheckGpu,
         NativeJalRangeCheckChip<F>,
@@ -85,7 +85,7 @@ mod test {
         let range_bus = default_var_range_checker_bus();
         let air =
             JalRangeCheckAir::new(tester.execution_bridge(), tester.memory_bridge(), range_bus);
-        let executor = JalRangeCheckStep::new();
+        let executor = JalRangeCheckExecutor::new();
         let filler = JalRangeCheckFiller::new(dummy_range_checker(range_bus));
         let cpu_chip = NativeJalRangeCheckChip::<F>::new(filler, tester.dummy_memory_helper());
         let gpu_chip = JalRangeCheckGpu::new(tester.range_checker(), tester.timestamp_max_bits());

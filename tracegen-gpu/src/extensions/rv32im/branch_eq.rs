@@ -65,11 +65,11 @@ mod tests {
     };
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchAdapterRecord,
-            Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS,
+            Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller,
+            Rv32BranchAdapterRecord, RV32_REGISTER_NUM_LIMBS,
         },
         BranchEqualCoreAir, BranchEqualCoreRecord, BranchEqualFiller, Rv32BranchEqualAir,
-        Rv32BranchEqualChip, Rv32BranchEqualStep,
+        Rv32BranchEqualChip, Rv32BranchEqualExecutor,
     };
     use openvm_rv32im_transpiler::BranchEqualOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -87,7 +87,7 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32BranchEqualStep,
+        Rv32BranchEqualExecutor,
         Rv32BranchEqualAir,
         Rv32BranchEqualChipGpu,
         Rv32BranchEqualChip<F>,
@@ -98,8 +98,8 @@ mod tests {
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
         );
-        let executor = Rv32BranchEqualStep::new(
-            Rv32BranchAdapterStep,
+        let executor = Rv32BranchEqualExecutor::new(
+            Rv32BranchAdapterExecutor,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         );
@@ -176,7 +176,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32BranchAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
             );
 
         tester

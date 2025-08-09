@@ -19,8 +19,8 @@ use openvm_instructions::{
     LocalOpcode, VmOpcode,
 };
 use openvm_rv32_adapters::{
-    Rv32HeapAdapterAir, Rv32HeapAdapterFiller, Rv32HeapAdapterStep, Rv32HeapBranchAdapterAir,
-    Rv32HeapBranchAdapterFiller, Rv32HeapBranchAdapterStep,
+    Rv32HeapAdapterAir, Rv32HeapAdapterExecutor, Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir,
+    Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
 };
 use openvm_rv32im_circuit::{
     adapters::{INT256_NUM_LIMBS, RV32_CELL_BITS, RV_B_TYPE_IMM_BITS},
@@ -144,7 +144,7 @@ fn set_and_execute_rand<STEP, AIR, GpuChip, CpuChip>(
 
 type BaseAluHarness = GpuTestChipHarness<
     F,
-    Rv32BaseAlu256Step,
+    Rv32BaseAlu256Executor,
     Rv32BaseAlu256Air,
     BaseAlu256ChipGpu,
     VmChipWrapper<
@@ -159,7 +159,7 @@ type BaseAluHarness = GpuTestChipHarness<
 
 type BranchEqualHarness = GpuTestChipHarness<
     F,
-    Rv32BranchEqual256Step,
+    Rv32BranchEqual256Executor,
     Rv32BranchEqual256Air,
     BranchEqual256ChipGpu,
     VmChipWrapper<
@@ -170,7 +170,7 @@ type BranchEqualHarness = GpuTestChipHarness<
 
 type LessThanHarness = GpuTestChipHarness<
     F,
-    Rv32LessThan256Step,
+    Rv32LessThan256Executor,
     Rv32LessThan256Air,
     LessThan256ChipGpu,
     VmChipWrapper<
@@ -185,7 +185,7 @@ type LessThanHarness = GpuTestChipHarness<
 
 type BranchLessThanHarness = GpuTestChipHarness<
     F,
-    Rv32BranchLessThan256Step,
+    Rv32BranchLessThan256Executor,
     Rv32BranchLessThan256Air,
     BranchLessThan256ChipGpu,
     VmChipWrapper<
@@ -200,7 +200,7 @@ type BranchLessThanHarness = GpuTestChipHarness<
 
 type Shift256Harness = GpuTestChipHarness<
     F,
-    Rv32Shift256Step,
+    Rv32Shift256Executor,
     Rv32Shift256Air,
     Shift256ChipGpu,
     VmChipWrapper<
@@ -215,7 +215,7 @@ type Shift256Harness = GpuTestChipHarness<
 
 type Multiplication256Harness = GpuTestChipHarness<
     F,
-    Rv32Multiplication256Step,
+    Rv32Multiplication256Executor,
     Rv32Multiplication256Air,
     Multiplication256ChipGpu,
     VmChipWrapper<
@@ -245,8 +245,8 @@ fn create_alu_test_harness(tester: &GpuChipTestBuilder) -> BaseAluHarness {
         ),
         BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32BaseAlu256Step::new(
-        Rv32HeapAdapterStep::new(tester.address_bits()),
+    let executor = Rv32BaseAlu256Executor::new(
+        Rv32HeapAdapterExecutor::new(tester.address_bits()),
         BaseAluOpcode::CLASS_OFFSET,
     );
 
@@ -289,8 +289,8 @@ fn create_branch_equal_test_harness(tester: &GpuChipTestBuilder) -> BranchEqualH
         ),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = Rv32BranchEqual256Step::new(
-        Rv32HeapBranchAdapterStep::new(tester.address_bits()),
+    let executor = Rv32BranchEqual256Executor::new(
+        Rv32HeapBranchAdapterExecutor::new(tester.address_bits()),
         BranchEqualOpcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
@@ -334,8 +334,8 @@ fn create_less_than_test_harness(tester: &GpuChipTestBuilder) -> LessThanHarness
         ),
         LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32LessThan256Step::new(
-        Rv32HeapAdapterStep::new(tester.address_bits()),
+    let executor = Rv32LessThan256Executor::new(
+        Rv32HeapAdapterExecutor::new(tester.address_bits()),
         LessThanOpcode::CLASS_OFFSET,
     );
 
@@ -378,8 +378,8 @@ fn create_branch_less_than_test_harness(tester: &GpuChipTestBuilder) -> BranchLe
         ),
         BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32BranchLessThan256Step::new(
-        Rv32HeapBranchAdapterStep::new(tester.address_bits()),
+    let executor = Rv32BranchLessThan256Executor::new(
+        Rv32HeapBranchAdapterExecutor::new(tester.address_bits()),
         BranchLessThanOpcode::CLASS_OFFSET,
     );
 
@@ -424,8 +424,8 @@ fn create_shift_test_harness(tester: &GpuChipTestBuilder) -> Shift256Harness {
         ),
         ShiftCoreAir::new(bitwise_bus, range_bus, ShiftOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32Shift256Step::new(
-        Rv32HeapAdapterStep::new(tester.address_bits()),
+    let executor = Rv32Shift256Executor::new(
+        Rv32HeapAdapterExecutor::new(tester.address_bits()),
         ShiftOpcode::CLASS_OFFSET,
     );
 
@@ -479,8 +479,8 @@ fn create_multiplication_test_harness(tester: &GpuChipTestBuilder) -> Multiplica
         ),
         MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32Multiplication256Step::new(
-        Rv32HeapAdapterStep::new(tester.address_bits()),
+    let executor = Rv32Multiplication256Executor::new(
+        Rv32HeapAdapterExecutor::new(tester.address_bits()),
         MulOpcode::CLASS_OFFSET,
     );
 
@@ -532,7 +532,7 @@ fn rand_alu_256_tracegen_test(opcode: usize, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -573,7 +573,7 @@ fn rand_branch_equal_256_tracegen_test(opcode: usize, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -612,7 +612,7 @@ fn run_lt_256_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -673,7 +673,7 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -710,7 +710,7 @@ fn run_shift_256_rand_test(opcode: ShiftOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
         );
 
     tester
@@ -756,7 +756,7 @@ fn run_mul_256_rand_test(opcode: MulOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>>::new(),
         );
 
     tester

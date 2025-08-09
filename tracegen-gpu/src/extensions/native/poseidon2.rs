@@ -98,7 +98,7 @@ mod tests {
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
         air::{NativePoseidon2Air, VerifyBatchBus},
-        chip::{NativePoseidon2Filler, NativePoseidon2RecordMut, NativePoseidon2Step},
+        chip::{NativePoseidon2Executor, NativePoseidon2Filler, NativePoseidon2RecordMut},
         NativePoseidon2Chip,
     };
     use openvm_native_compiler::{conversion::AS, Poseidon2Opcode, VerifyBatchOpcode};
@@ -120,7 +120,7 @@ mod tests {
         config: Poseidon2Config<F>,
     ) -> GpuTestChipHarness<
         F,
-        NativePoseidon2Step<F, SBOX_REGISTERS>,
+        NativePoseidon2Executor<F, SBOX_REGISTERS>,
         NativePoseidon2Air<F, SBOX_REGISTERS>,
         NativePoseidon2ChipGpu<SBOX_REGISTERS>,
         NativePoseidon2Chip<F, SBOX_REGISTERS>,
@@ -131,7 +131,7 @@ mod tests {
             VerifyBatchBus::new(7),
             config,
         );
-        let executor = NativePoseidon2Step::new(config);
+        let executor = NativePoseidon2Executor::new(config);
 
         let cpu_chip = NativePoseidon2Chip::new(
             NativePoseidon2Filler::new(config),

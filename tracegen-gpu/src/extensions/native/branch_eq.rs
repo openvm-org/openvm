@@ -68,8 +68,10 @@ mod test {
         LocalOpcode,
     };
     use openvm_native_circuit::{
-        adapters::{BranchNativeAdapterAir, BranchNativeAdapterFiller, BranchNativeAdapterStep},
-        NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqStep, NativeBranchEqualFiller,
+        adapters::{
+            BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller,
+        },
+        NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqExecutor, NativeBranchEqualFiller,
     };
     use openvm_native_compiler::NativeBranchEqualOpcode;
     use openvm_rv32im_circuit::{adapters::RV_B_TYPE_IMM_BITS, BranchEqualCoreAir};
@@ -92,7 +94,7 @@ mod test {
         tester: &GpuChipTestBuilder,
     ) -> GpuTestChipHarness<
         F,
-        NativeBranchEqStep,
+        NativeBranchEqExecutor,
         NativeBranchEqAir,
         NativeBranchEqChipGpu,
         NativeBranchEqChip<F>,
@@ -103,8 +105,8 @@ mod test {
             BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
         let air = NativeBranchEqAir::new(adapter_air, core_air);
 
-        let adapter_step = BranchNativeAdapterStep::new();
-        let executor = NativeBranchEqStep::new(
+        let adapter_step = BranchNativeAdapterExecutor::new();
+        let executor = NativeBranchEqExecutor::new(
             adapter_step,
             NativeBranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
@@ -123,7 +125,7 @@ mod test {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            NativeBranchEqStep,
+            NativeBranchEqExecutor,
             NativeBranchEqAir,
             NativeBranchEqChipGpu,
             NativeBranchEqChip<F>,
@@ -179,7 +181,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, BranchNativeAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, BranchNativeAdapterExecutor>::new(),
             );
 
         tester

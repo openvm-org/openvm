@@ -71,9 +71,11 @@ mod test {
         instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
     };
     use openvm_rv32im_circuit::{
-        adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterFiller, Rv32LoadStoreAdapterStep},
+        adapters::{
+            Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor, Rv32LoadStoreAdapterFiller,
+        },
         LoadSignExtendCoreAir, LoadSignExtendFiller, Rv32LoadSignExtendAir, Rv32LoadSignExtendChip,
-        Rv32LoadSignExtendStep,
+        Rv32LoadSignExtendExecutor,
     };
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -92,7 +94,7 @@ mod test {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32LoadSignExtendStep,
+        Rv32LoadSignExtendExecutor,
         Rv32LoadSignExtendAir,
         Rv32LoadSignExtendChipGpu,
         Rv32LoadSignExtendChip<F>,
@@ -113,8 +115,9 @@ mod test {
             ),
             LoadSignExtendCoreAir::new(range_bus),
         );
-        let executor =
-            Rv32LoadSignExtendStep::new(Rv32LoadStoreAdapterStep::new(tester.address_bits()));
+        let executor = Rv32LoadSignExtendExecutor::new(Rv32LoadStoreAdapterExecutor::new(
+            tester.address_bits(),
+        ));
         let cpu_chip = Rv32LoadSignExtendChip::<F>::new(
             LoadSignExtendFiller::new(
                 Rv32LoadStoreAdapterFiller::new(
@@ -218,7 +221,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
             );
 
         tester

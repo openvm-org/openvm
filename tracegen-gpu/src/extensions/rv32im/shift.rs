@@ -72,10 +72,10 @@ mod test {
     use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterRecord,
-            Rv32BaseAluAdapterStep,
+            Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
+            Rv32BaseAluAdapterRecord,
         },
-        Rv32ShiftAir, Rv32ShiftChip, Rv32ShiftStep, ShiftCoreAir, ShiftCoreRecord, ShiftFiller,
+        Rv32ShiftAir, Rv32ShiftChip, Rv32ShiftExecutor, ShiftCoreAir, ShiftCoreRecord, ShiftFiller,
     };
     use openvm_rv32im_transpiler::ShiftOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -93,7 +93,7 @@ mod test {
     const MAX_INS_CAPACITY: usize = 128;
 
     type Harness =
-        GpuTestChipHarness<F, Rv32ShiftStep, Rv32ShiftAir, Rv32ShiftChipGpu, Rv32ShiftChip<F>>;
+        GpuTestChipHarness<F, Rv32ShiftExecutor, Rv32ShiftAir, Rv32ShiftChipGpu, Rv32ShiftChip<F>>;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus's from tester since `gpu_chip` and `air` must use the same bus
@@ -114,7 +114,8 @@ mod test {
             ),
             ShiftCoreAir::new(bitwise_bus, range_bus, ShiftOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32ShiftStep::new(Rv32BaseAluAdapterStep, ShiftOpcode::CLASS_OFFSET);
+        let executor =
+            Rv32ShiftExecutor::new(Rv32BaseAluAdapterExecutor, ShiftOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32ShiftChip::<F>::new(
             ShiftFiller::new(
                 Rv32BaseAluAdapterFiller::new(dummy_bitwise_chip.clone()),
@@ -195,7 +196,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterStep<RV32_CELL_BITS>>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
             );
 
         tester

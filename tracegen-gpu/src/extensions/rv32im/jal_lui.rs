@@ -4,7 +4,7 @@ use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_rv32im_circuit::{
     adapters::{Rv32CondRdWriteAdapterCols, Rv32RdWriteAdapterRecord, RV32_CELL_BITS},
-    Rv32JalLuiCoreCols, Rv32JalLuiStepRecord,
+    Rv32JalLuiCoreCols, Rv32JalLuiCoreRecord,
 };
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
@@ -28,7 +28,7 @@ pub struct Rv32JalLuiChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv32JalLuiChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv32RdWriteAdapterRecord, Rv32JalLuiStepRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv32RdWriteAdapterRecord, Rv32JalLuiCoreRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return get_empty_air_proving_ctx::<GpuBackend>();
@@ -65,12 +65,11 @@ mod tests {
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterFiller, Rv32CondRdWriteAdapterStep,
-            Rv32RdWriteAdapterAir, Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterRecord,
-            Rv32RdWriteAdapterStep, RV32_CELL_BITS,
+            Rv32CondRdWriteAdapterAir, Rv32CondRdWriteAdapterExecutor,
+            Rv32CondRdWriteAdapterFiller, Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor,
+            Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterRecord, RV32_CELL_BITS,
         },
-        Rv32JalLuiAir, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiFiller, Rv32JalLuiStep,
-        Rv32JalLuiStepRecord,
+        Rv32JalLuiAir, Rv32JalLuiChip, Rv32JalLuiCoreAir, Rv32JalLuiExecutor, Rv32JalLuiFiller,
     };
     use openvm_rv32im_transpiler::Rv32JalLuiOpcode;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -84,8 +83,13 @@ mod tests {
     const IMM_BITS: usize = 12;
     const MAX_INS_CAPACITY: usize = 128;
 
-    type Harness =
-        GpuTestChipHarness<F, Rv32JalLuiStep, Rv32JalLuiAir, Rv32JalLuiChipGpu, Rv32JalLuiChip<F>>;
+    type Harness = GpuTestChipHarness<
+        F,
+        Rv32JalLuiExecutor,
+        Rv32JalLuiAir,
+        Rv32JalLuiChipGpu,
+        Rv32JalLuiChip<F>,
+    >;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
@@ -102,7 +106,9 @@ mod tests {
             )),
             Rv32JalLuiCoreAir::new(bitwise_bus),
         );
-        let executor = Rv32JalLuiStep::new(Rv32CondRdWriteAdapterStep::new(Rv32RdWriteAdapterStep));
+        let executor = Rv32JalLuiExecutor::new(Rv32CondRdWriteAdapterExecutor::new(
+            Rv32RdWriteAdapterExecutor,
+        ));
         let cpu_chip = Rv32JalLuiChip::<F>::new(
             Rv32JalLuiFiller::new(
                 Rv32CondRdWriteAdapterFiller::new(Rv32RdWriteAdapterFiller),
@@ -166,14 +172,14 @@ mod tests {
         // Transfer records from dense to sparse chip
         type Record<'a> = (
             &'a mut Rv32RdWriteAdapterRecord,
-            &'a mut Rv32JalLuiStepRecord,
+            &'a mut Rv32JalLuiCoreRecord,
         );
         harness
             .dense_arena
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32CondRdWriteAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32CondRdWriteAdapterExecutor>::new(),
             );
 
         tester

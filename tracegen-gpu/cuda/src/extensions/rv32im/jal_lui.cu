@@ -13,7 +13,7 @@ template <typename T> struct Rv32JalLuiCoreCols {
     T is_lui;                           // core_row.is_lui
 };
 
-struct Rv32JalLuiStepRecord {
+struct Rv32JalLuiCoreRecord {
     uint32_t imm;
     uint8_t rd_data[RV32_REGISTER_NUM_LIMBS];
     bool is_jal;
@@ -24,7 +24,7 @@ struct Rv32JalLuiCore {
 
     __device__ Rv32JalLuiCore(uint32_t *bw_ptr, uint32_t bw_bits) : bw(bw_ptr, bw_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv32JalLuiStepRecord record) {
+    __device__ void fill_trace_row(RowSlice row, Rv32JalLuiCoreRecord record) {
 #pragma unroll
         for (int i = 0; i < RV32_REGISTER_NUM_LIMBS; i += 2) {
             bw.add_range(record.rd_data[i], record.rd_data[i + 1]);
@@ -47,7 +47,7 @@ template <typename T> struct Rv32JalLuiCols {
 
 struct Rv32JalLuiRecord {
     Rv32RdWriteAdapterRecord adapter;
-    Rv32JalLuiStepRecord core;
+    Rv32JalLuiCoreRecord core;
 };
 
 __global__ void jal_lui_tracegen(

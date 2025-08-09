@@ -74,8 +74,11 @@ mod test {
         LocalOpcode,
     };
     use openvm_rv32im_circuit::{
-        adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterFiller, Rv32LoadStoreAdapterStep},
-        LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreChip, Rv32LoadStoreStep,
+        adapters::{
+            Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor, Rv32LoadStoreAdapterFiller,
+        },
+        LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreChip,
+        Rv32LoadStoreExecutor,
     };
     use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -92,7 +95,7 @@ mod test {
     const MAX_INS_CAPACITY: usize = 128;
     type Harness = GpuTestChipHarness<
         F,
-        Rv32LoadStoreStep,
+        Rv32LoadStoreExecutor,
         Rv32LoadStoreAir,
         Rv32LoadStoreChipGpu,
         Rv32LoadStoreChip<F>,
@@ -112,8 +115,8 @@ mod test {
             ),
             LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32LoadStoreStep::new(
-            Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+        let executor = Rv32LoadStoreExecutor::new(
+            Rv32LoadStoreAdapterExecutor::new(tester.address_bits()),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         );
         let cpu_chip = Rv32LoadStoreChip::<F>::new(
@@ -240,7 +243,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
             );
 
         tester

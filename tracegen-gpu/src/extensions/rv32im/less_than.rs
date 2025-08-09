@@ -72,10 +72,10 @@ mod test {
     use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep,
+            Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
             RV_IS_TYPE_IMM_BITS,
         },
-        LessThanCoreAir, LessThanFiller, Rv32LessThanAir, Rv32LessThanChip, Rv32LessThanStep,
+        LessThanCoreAir, LessThanFiller, Rv32LessThanAir, Rv32LessThanChip, Rv32LessThanExecutor,
     };
     use openvm_rv32im_transpiler::LessThanOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -92,7 +92,7 @@ mod test {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32LessThanStep,
+        Rv32LessThanExecutor,
         Rv32LessThanAir,
         Rv32LessThanChipGpu,
         Rv32LessThanChip<F>,
@@ -113,7 +113,8 @@ mod test {
             ),
             LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32LessThanStep::new(Rv32BaseAluAdapterStep, LessThanOpcode::CLASS_OFFSET);
+        let executor =
+            Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32LessThanChip::<F>::new(
             LessThanFiller::new(
                 Rv32BaseAluAdapterFiller::new(dummy_bitwise_chip.clone()),
@@ -197,7 +198,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterStep<RV32_CELL_BITS>>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
             );
 
         tester

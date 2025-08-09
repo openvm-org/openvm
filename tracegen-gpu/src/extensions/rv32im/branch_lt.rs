@@ -73,11 +73,11 @@ mod tests {
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32BranchAdapterAir, Rv32BranchAdapterFiller, Rv32BranchAdapterRecord,
-            Rv32BranchAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+            Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller,
+            Rv32BranchAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
         },
         BranchLessThanCoreAir, BranchLessThanCoreRecord, BranchLessThanFiller,
-        Rv32BranchLessThanAir, Rv32BranchLessThanChip, Rv32BranchLessThanStep,
+        Rv32BranchLessThanAir, Rv32BranchLessThanChip, Rv32BranchLessThanExecutor,
     };
     use openvm_rv32im_transpiler::BranchLessThanOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -95,7 +95,7 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32BranchLessThanStep,
+        Rv32BranchLessThanExecutor,
         Rv32BranchLessThanAir,
         Rv32BranchLessThanChipGpu,
         Rv32BranchLessThanChip<F>,
@@ -113,8 +113,8 @@ mod tests {
             Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             BranchLessThanCoreAir::new(bitwise_bus, BranchLessThanOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32BranchLessThanStep::new(
-            Rv32BranchAdapterStep::new(),
+        let executor = Rv32BranchLessThanExecutor::new(
+            Rv32BranchAdapterExecutor::new(),
             BranchLessThanOpcode::CLASS_OFFSET,
         );
         let cpu_chip = Rv32BranchLessThanChip::new(
@@ -195,7 +195,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32BranchAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
             );
 
         tester

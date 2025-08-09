@@ -71,9 +71,9 @@ mod tests {
     use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
     use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
     use openvm_rv32im_circuit::{
-        adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep},
+        adapters::{Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller},
         BaseAluCoreAir, BaseAluCoreRecord, BaseAluFiller, Rv32BaseAluAir, Rv32BaseAluChip,
-        Rv32BaseAluStep,
+        Rv32BaseAluExecutor,
     };
     use openvm_rv32im_transpiler::BaseAluOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -89,7 +89,7 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32BaseAluStep,
+        Rv32BaseAluExecutor,
         Rv32BaseAluAir,
         Rv32BaseAluChipGpu,
         Rv32BaseAluChip<F>,
@@ -111,8 +111,10 @@ mod tests {
             ),
             BaseAluCoreAir::new(bitwise_bus, BaseAluOpcode::CLASS_OFFSET),
         );
-        let executor =
-            Rv32BaseAluStep::new(Rv32BaseAluAdapterStep::new(), BaseAluOpcode::CLASS_OFFSET);
+        let executor = Rv32BaseAluExecutor::new(
+            Rv32BaseAluAdapterExecutor::new(),
+            BaseAluOpcode::CLASS_OFFSET,
+        );
 
         let cpu_chip = Rv32BaseAluChip::new(
             BaseAluFiller::new(
@@ -204,7 +206,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterStep<RV32_CELL_BITS>>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
             );
 
         tester

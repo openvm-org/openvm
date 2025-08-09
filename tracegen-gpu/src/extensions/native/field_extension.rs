@@ -65,10 +65,11 @@ mod tests {
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
         adapters::{
-            NativeVectorizedAdapterAir, NativeVectorizedAdapterFiller, NativeVectorizedAdapterStep,
+            NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor,
+            NativeVectorizedAdapterFiller,
         },
         FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreFiller,
-        FieldExtensionStep,
+        FieldExtensionExecutor,
     };
     use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -87,7 +88,7 @@ mod tests {
         tester: &GpuChipTestBuilder,
     ) -> GpuTestChipHarness<
         F,
-        FieldExtensionStep,
+        FieldExtensionExecutor,
         FieldExtensionAir,
         FieldExtensionChipGpu,
         FieldExtensionChip<F>,
@@ -97,8 +98,8 @@ mod tests {
         let core_air = FieldExtensionCoreAir::new();
         let air = FieldExtensionAir::new(adapter_air, core_air);
 
-        let adapter_step = NativeVectorizedAdapterStep::new();
-        let executor = FieldExtensionStep::new(adapter_step);
+        let adapter_step = NativeVectorizedAdapterExecutor::new();
+        let executor = FieldExtensionExecutor::new(adapter_step);
 
         let core_filler = FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller);
 
@@ -113,7 +114,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            FieldExtensionStep,
+            FieldExtensionExecutor,
             FieldExtensionAir,
             FieldExtensionChipGpu,
             FieldExtensionChip<F>,
@@ -166,7 +167,7 @@ mod tests {
             .get_record_seeker::<Record<'_>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, NativeVectorizedAdapterStep<EXT_DEG>>::new(),
+                EmptyAdapterCoreLayout::<F, NativeVectorizedAdapterExecutor<EXT_DEG>>::new(),
             );
 
         tester

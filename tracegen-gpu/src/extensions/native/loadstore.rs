@@ -75,10 +75,10 @@ mod test {
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
     use openvm_native_circuit::{
         adapters::{
-            NativeLoadStoreAdapterAir, NativeLoadStoreAdapterFiller, NativeLoadStoreAdapterStep,
+            NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor, NativeLoadStoreAdapterFiller,
         },
         NativeLoadStoreAir, NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreFiller,
-        NativeLoadStoreStep,
+        NativeLoadStoreExecutor,
     };
     use openvm_native_compiler::{
         conversion::AS, NativeLoadStore4Opcode, NativeLoadStoreOpcode, BLOCK_LOAD_STORE_SIZE,
@@ -101,7 +101,7 @@ mod test {
         offset: usize,
     ) -> GpuTestChipHarness<
         F,
-        NativeLoadStoreStep<NUM_CELLS>,
+        NativeLoadStoreExecutor<NUM_CELLS>,
         NativeLoadStoreAir<NUM_CELLS>,
         NativeLoadStoreChipGpu<NUM_CELLS>,
         NativeLoadStoreChip<F, NUM_CELLS>,
@@ -111,8 +111,8 @@ mod test {
         let core_air = NativeLoadStoreCoreAir::new(offset);
         let air = NativeLoadStoreAir::new(adapter_air, core_air);
 
-        let adapter_step = NativeLoadStoreAdapterStep::new(offset);
-        let executor = NativeLoadStoreStep::new(adapter_step, offset);
+        let adapter_step = NativeLoadStoreAdapterExecutor::new(offset);
+        let executor = NativeLoadStoreExecutor::new(adapter_step, offset);
 
         let core_filler = NativeLoadStoreCoreFiller::new(NativeLoadStoreAdapterFiller);
         let cpu_chip = NativeLoadStoreChip::new(core_filler, tester.dummy_memory_helper());
@@ -127,7 +127,7 @@ mod test {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            NativeLoadStoreStep<NUM_CELLS>,
+            NativeLoadStoreExecutor<NUM_CELLS>,
             NativeLoadStoreAir<NUM_CELLS>,
             NativeLoadStoreChipGpu<NUM_CELLS>,
             NativeLoadStoreChip<F, NUM_CELLS>,
@@ -222,7 +222,7 @@ mod test {
             .get_record_seeker::<Record<'_, NUM_CELLS>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterStep<NUM_CELLS>>::new(),
+                EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<NUM_CELLS>>::new(),
             );
 
         tester
