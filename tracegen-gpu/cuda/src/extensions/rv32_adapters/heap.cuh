@@ -12,4 +12,4 @@ template <size_t NUM_READS, size_t READ_SIZE, size_t WRITE_SIZE>
 using Rv32HeapAdapterRecord = Rv32VecHeapAdapterRecord<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;
 
 template <size_t NUM_READS, size_t READ_SIZE, size_t WRITE_SIZE>
-using Rv32HeapAdapterStep = Rv32VecHeapAdapter<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;
+using Rv32HeapAdapterExecutor = Rv32VecHeapAdapter<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>;

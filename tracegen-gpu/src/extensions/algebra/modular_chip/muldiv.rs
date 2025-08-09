@@ -8,7 +8,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend};
 
@@ -41,7 +41,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -99,7 +99,7 @@ mod tests {
     use num_traits::Zero;
     use openvm_algebra_circuit::modular_chip::{
         get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-        ModularChip, ModularStep,
+        ModularChip, ModularExecutor,
     };
     use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_circuit_primitives::{
@@ -129,7 +129,7 @@ mod tests {
         offset: usize,
     ) -> GpuTestChipHarness<
         F,
-        ModularStep<BLOCKS, BLOCK_SIZE>,
+        ModularExecutor<BLOCKS, BLOCK_SIZE>,
         ModularAir<BLOCKS, BLOCK_SIZE>,
         ModularMulDivChipGpu<BLOCKS, BLOCK_SIZE>,
         ModularChip<F, BLOCKS, BLOCK_SIZE>,
@@ -182,7 +182,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            ModularStep<BLOCKS, BLOCK_SIZE>,
+            ModularExecutor<BLOCKS, BLOCK_SIZE>,
             ModularAir<BLOCKS, BLOCK_SIZE>,
             ModularMulDivChipGpu<BLOCKS, BLOCK_SIZE>,
             ModularChip<F, BLOCKS, BLOCK_SIZE>,

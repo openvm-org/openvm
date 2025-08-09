@@ -104,10 +104,10 @@ mod tests {
             EmptyAdapterCoreLayout, MemoryConfig, SystemConfig, VmChipWrapper,
         },
         system::{
-            native_adapter::{NativeAdapterAir, NativeAdapterRecord, NativeAdapterStep},
+            native_adapter::{NativeAdapterAir, NativeAdapterExecutor, NativeAdapterRecord},
             public_values::{
-                PublicValuesAir, PublicValuesChip, PublicValuesCoreAir, PublicValuesRecord,
-                PublicValuesStep,
+                PublicValuesAir, PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor,
+                PublicValuesRecord,
             },
         },
     };
@@ -127,7 +127,7 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        PublicValuesStep<F>,
+        PublicValuesExecutor<F>,
         PublicValuesAir,
         PublicValuesChipGPU,
         PublicValuesChip<F>,
@@ -147,15 +147,15 @@ mod tests {
             PublicValuesCoreAir::new(num_custom_pvs, max_degree),
         );
 
-        let executor = PublicValuesStep::new(
-            NativeAdapterStep::<F, 2, 0>::default(),
+        let executor = PublicValuesExecutor::new(
+            NativeAdapterExecutor::<F, 2, 0>::default(),
             num_custom_pvs,
             max_degree,
         );
 
         let cpu_chip = VmChipWrapper::new(
-            PublicValuesStep::new(
-                NativeAdapterStep::<F, 2, 0>::default(),
+            PublicValuesExecutor::new(
+                NativeAdapterExecutor::<F, 2, 0>::default(),
                 num_custom_pvs,
                 max_degree,
             ),
@@ -239,7 +239,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, NativeAdapterStep<F, 2, 0>>::new(),
+                EmptyAdapterCoreLayout::<F, NativeAdapterExecutor<F, 2, 0>>::new(),
             );
 
         tester

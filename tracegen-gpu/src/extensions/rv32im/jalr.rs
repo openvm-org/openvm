@@ -68,11 +68,11 @@ mod tests {
     };
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32JalrAdapterAir, Rv32JalrAdapterFiller, Rv32JalrAdapterRecord, Rv32JalrAdapterStep,
-            RV32_CELL_BITS,
+            Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
+            Rv32JalrAdapterRecord, RV32_CELL_BITS,
         },
-        Rv32JalrAir, Rv32JalrChip, Rv32JalrCoreAir, Rv32JalrCoreRecord, Rv32JalrFiller,
-        Rv32JalrStep,
+        Rv32JalrAir, Rv32JalrChip, Rv32JalrCoreAir, Rv32JalrCoreRecord, Rv32JalrExecutor,
+        Rv32JalrFiller,
     };
     use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -90,7 +90,7 @@ mod tests {
     const MAX_INS_CAPACITY: usize = 128;
 
     type Harness =
-        GpuTestChipHarness<F, Rv32JalrStep, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
+        GpuTestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
@@ -106,7 +106,7 @@ mod tests {
             Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             Rv32JalrCoreAir::new(bitwise_bus, range_bus),
         );
-        let executor = Rv32JalrStep::new(Rv32JalrAdapterStep);
+        let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
         let cpu_chip = Rv32JalrChip::<F>::new(
             Rv32JalrFiller::new(
                 Rv32JalrAdapterFiller,
@@ -171,7 +171,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32JalrAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32JalrAdapterExecutor>::new(),
             );
 
         tester

@@ -78,9 +78,9 @@ mod tests {
     use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
     use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
     use openvm_rv32im_circuit::{
-        adapters::{Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep},
+        adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller},
         MultiplicationCoreAir, MultiplicationCoreRecord, MultiplicationFiller,
-        Rv32MultiplicationAir, Rv32MultiplicationChip, Rv32MultiplicationStep,
+        Rv32MultiplicationAir, Rv32MultiplicationChip, Rv32MultiplicationExecutor,
     };
     use openvm_rv32im_transpiler::MulOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -98,7 +98,7 @@ mod tests {
 
     type Harness = GpuTestChipHarness<
         F,
-        Rv32MultiplicationStep,
+        Rv32MultiplicationExecutor,
         Rv32MultiplicationAir,
         Rv32MultiplicationChipGpu,
         Rv32MultiplicationChip<F>,
@@ -115,7 +115,8 @@ mod tests {
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32MultiplicationStep::new(Rv32MultAdapterStep, MulOpcode::CLASS_OFFSET);
+        let executor =
+            Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32MultiplicationChip::<F>::new(
             MultiplicationFiller::new(
                 Rv32MultAdapterFiller,
@@ -190,7 +191,7 @@ mod tests {
             .get_record_seeker::<Record<'_>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32MultAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
             );
 
         tester

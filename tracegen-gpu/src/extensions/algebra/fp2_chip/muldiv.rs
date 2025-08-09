@@ -8,7 +8,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend};
 
@@ -41,7 +41,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -98,7 +98,7 @@ mod tests {
     use num_bigint::BigUint;
     use num_traits::{One, Zero};
     use openvm_algebra_circuit::fp2_chip::{
-        get_fp2_muldiv_air, get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Step,
+        get_fp2_muldiv_air, get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Chip, Fp2Executor,
     };
     use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_circuit_primitives::{
@@ -128,7 +128,7 @@ mod tests {
         offset: usize,
     ) -> GpuTestChipHarness<
         F,
-        Fp2Step<BLOCKS, BLOCK_SIZE>,
+        Fp2Executor<BLOCKS, BLOCK_SIZE>,
         Fp2Air<BLOCKS, BLOCK_SIZE>,
         Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>,
         Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
@@ -177,7 +177,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            Fp2Step<BLOCKS, BLOCK_SIZE>,
+            Fp2Executor<BLOCKS, BLOCK_SIZE>,
             Fp2Air<BLOCKS, BLOCK_SIZE>,
             Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>,
             Fp2Chip<F, BLOCKS, BLOCK_SIZE>,

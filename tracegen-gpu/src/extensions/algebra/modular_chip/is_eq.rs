@@ -94,7 +94,7 @@ mod tests {
     use num_traits::Zero;
     use openvm_algebra_circuit::modular_chip::{
         ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir, ModularIsEqualFiller,
-        VmModularIsEqualStep,
+        VmModularIsEqualExecutor,
     };
     use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
@@ -110,7 +110,7 @@ mod tests {
     use openvm_mod_circuit_builder::test_utils::biguint_to_limbs;
     use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
     use openvm_rv32_adapters::{
-        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterFiller, Rv32IsEqualModAdapterStep,
+        Rv32IsEqualModAdapterAir, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
     };
     use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -134,7 +134,7 @@ mod tests {
         offset: usize,
     ) -> GpuTestChipHarness<
         F,
-        VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+        VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
@@ -167,8 +167,8 @@ mod tests {
         );
         let air = ModularIsEqualAir::new(adapter_air, core_air);
 
-        let adapter_step = Rv32IsEqualModAdapterStep::new(tester.address_bits());
-        let executor = VmModularIsEqualStep::new(adapter_step, offset, modulus_limbs);
+        let adapter_step = Rv32IsEqualModAdapterExecutor::new(tester.address_bits());
+        let executor = VmModularIsEqualExecutor::new(adapter_step, offset, modulus_limbs);
 
         let adapter_filler =
             Rv32IsEqualModAdapterFiller::new(tester.address_bits(), dummy_bitwise_chip.clone());
@@ -199,7 +199,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            VmModularIsEqualStep<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
@@ -336,7 +336,7 @@ mod tests {
                 &mut harness.matrix_arena,
                 EmptyAdapterCoreLayout::<
                     F,
-                    Rv32IsEqualModAdapterStep<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+                    Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
                 >::new(),
             );
 

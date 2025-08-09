@@ -87,8 +87,8 @@ mod tests {
     };
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_rv32im_circuit::{
-        adapters::{Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep},
-        MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHChip, Rv32MulHStep,
+        adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller},
+        MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHChip, Rv32MulHExecutor,
     };
     use openvm_rv32im_transpiler::MulHOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -105,7 +105,7 @@ mod tests {
         (8 * (1 << RV32_CELL_BITS)) as u32,
     ];
     type Harness =
-        GpuTestChipHarness<F, Rv32MulHStep, Rv32MulHAir, Rv32MulHChipGpu, Rv32MulHChip<F>>;
+        GpuTestChipHarness<F, Rv32MulHExecutor, Rv32MulHAir, Rv32MulHChipGpu, Rv32MulHChip<F>>;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus's from tester since `gpu_chip` and `air` must use the same bus
@@ -124,7 +124,7 @@ mod tests {
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             MulHCoreAir::new(bitwise_bus, range_tuple_bus),
         );
-        let executor = Rv32MulHStep::new(Rv32MultAdapterStep, MulHOpcode::CLASS_OFFSET);
+        let executor = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32MulHChip::<F>::new(
             MulHFiller::new(
                 Rv32MultAdapterFiller,
@@ -194,7 +194,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32MultAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
             );
 
         tester

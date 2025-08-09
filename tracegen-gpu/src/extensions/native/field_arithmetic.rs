@@ -62,9 +62,9 @@ mod tests {
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
-        adapters::{AluNativeAdapterAir, AluNativeAdapterFiller, AluNativeAdapterStep},
+        adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
         FieldArithmeticAir, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreFiller,
-        FieldArithmeticStep,
+        FieldArithmeticExecutor,
     };
     use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
     use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
@@ -84,7 +84,7 @@ mod tests {
         tester: &GpuChipTestBuilder,
     ) -> GpuTestChipHarness<
         F,
-        FieldArithmeticStep,
+        FieldArithmeticExecutor,
         FieldArithmeticAir,
         FieldArithmeticChipGpu,
         FieldArithmeticChip<F>,
@@ -94,8 +94,8 @@ mod tests {
         let core_air = FieldArithmeticCoreAir::new();
         let air = FieldArithmeticAir::new(adapter_air, core_air);
 
-        let adapter_step = AluNativeAdapterStep::new();
-        let executor = FieldArithmeticStep::new(adapter_step);
+        let adapter_step = AluNativeAdapterExecutor::new();
+        let executor = FieldArithmeticExecutor::new(adapter_step);
 
         let core_filler = FieldArithmeticCoreFiller::new(AluNativeAdapterFiller);
 
@@ -159,7 +159,7 @@ mod tests {
             .get_record_seeker::<Record<'_>, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, AluNativeAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, AluNativeAdapterExecutor>::new(),
             );
 
         tester

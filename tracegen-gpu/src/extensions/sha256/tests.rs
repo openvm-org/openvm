@@ -5,7 +5,7 @@ use openvm_circuit::{arch::testing::memory::gen_pointer, utils::get_random_messa
 use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
 use openvm_sha256_air::{get_sha256_num_blocks, SHA256_BLOCK_U8S};
-use openvm_sha256_circuit::{Sha256VmAir, Sha256VmChip, Sha256VmFiller, Sha256VmStep};
+use openvm_sha256_circuit::{Sha256VmAir, Sha256VmChip, Sha256VmExecutor, Sha256VmFiller};
 use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -20,7 +20,8 @@ use crate::{
 type F = BabyBear;
 
 const MAX_INS_CAPACITY: usize = 8192;
-type Harness = GpuTestChipHarness<F, Sha256VmStep, Sha256VmAir, Sha256VmChipGpu, Sha256VmChip<F>>;
+type Harness =
+    GpuTestChipHarness<F, Sha256VmExecutor, Sha256VmAir, Sha256VmChipGpu, Sha256VmChip<F>>;
 
 fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
     // getting bus from tester since `gpu_chip` and `air` must use the same bus
@@ -37,7 +38,7 @@ fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         Rv32Sha256Opcode::CLASS_OFFSET as u16,
     );
 
-    let executor = Sha256VmStep::new(Rv32Sha256Opcode::CLASS_OFFSET, tester.address_bits());
+    let executor = Sha256VmExecutor::new(Rv32Sha256Opcode::CLASS_OFFSET, tester.address_bits());
     let cpu_chip = Sha256VmChip::new(
         Sha256VmFiller::new(dummy_bitwise_chip, tester.address_bits()),
         tester.dummy_memory_helper(),

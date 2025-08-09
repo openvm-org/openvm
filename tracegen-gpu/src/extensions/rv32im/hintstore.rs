@@ -95,7 +95,7 @@ mod test {
         LocalOpcode,
     };
     use openvm_rv32im_circuit::{
-        Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreFiller, Rv32HintStoreStep,
+        Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreExecutor, Rv32HintStoreFiller,
     };
     use openvm_rv32im_transpiler::Rv32HintStoreOpcode;
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -109,7 +109,7 @@ mod test {
     const MAX_INS_CAPACITY: usize = 1024;
     type Harness = GpuTestChipHarness<
         F,
-        Rv32HintStoreStep,
+        Rv32HintStoreExecutor,
         Rv32HintStoreAir,
         Rv32HintStoreChipGpu,
         Rv32HintStoreChip<F>,
@@ -131,7 +131,7 @@ mod test {
             tester.address_bits(),
         );
         let executor =
-            Rv32HintStoreStep::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
+            Rv32HintStoreExecutor::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32HintStoreChip::<F>::new(
             Rv32HintStoreFiller::new(tester.address_bits(), dummy_bitwise_chip),
             tester.dummy_memory_helper(),

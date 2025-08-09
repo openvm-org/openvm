@@ -8,7 +8,7 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
     ExprBuilderConfig, FieldExpressionCoreAir, FieldExpressionMetadata,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterStep};
+use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{cuda::copy::MemCopyH2D, prelude::F, prover_backend::GpuBackend};
 
@@ -41,7 +41,7 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBac
         let total_input_limbs = expr.builder.num_input * expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
@@ -101,7 +101,7 @@ mod tests {
         var_range::VariableRangeCheckerChip,
     };
     use openvm_ecc_circuit::{
-        get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, EcAddNeStep, WeierstrassAir,
+        get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, EcAddNeExecutor, WeierstrassAir,
         WeierstrassChip,
     };
     use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
@@ -127,7 +127,7 @@ mod tests {
         offset: usize,
     ) -> GpuTestChipHarness<
         F,
-        EcAddNeStep<BLOCKS, BLOCK_SIZE>,
+        EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
         WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
         WeierstrassAddNeChipGpu<BLOCKS, BLOCK_SIZE>,
         WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,
@@ -179,7 +179,7 @@ mod tests {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            EcAddNeStep<BLOCKS, BLOCK_SIZE>,
+            EcAddNeExecutor<BLOCKS, BLOCK_SIZE>,
             WeierstrassAir<2, BLOCKS, BLOCK_SIZE>,
             WeierstrassAddNeChipGpu<BLOCKS, BLOCK_SIZE>,
             WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE>,

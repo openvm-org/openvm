@@ -64,8 +64,8 @@ mod test {
         LocalOpcode,
     };
     use openvm_native_circuit::{
-        adapters::{ConvertAdapterAir, ConvertAdapterFiller, ConvertAdapterStep},
-        CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFStep,
+        adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller},
+        CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor,
     };
     use openvm_native_compiler::{conversion::AS, CastfOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -87,14 +87,14 @@ mod test {
 
     fn create_test_harness(
         tester: &GpuChipTestBuilder,
-    ) -> GpuTestChipHarness<F, CastFStep, CastFAir, CastFChipGpu, CastFChip<F>> {
+    ) -> GpuTestChipHarness<F, CastFExecutor, CastFAir, CastFChipGpu, CastFChip<F>> {
         let range_bus = default_var_range_checker_bus();
         let adapter_air = ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
         let core_air = CastFCoreAir::new(range_bus);
         let air = CastFAir::new(adapter_air, core_air);
 
-        let adapter_step = ConvertAdapterStep::<1, 4>::new();
-        let executor = CastFStep::new(adapter_step);
+        let adapter_step = ConvertAdapterExecutor::<1, 4>::new();
+        let executor = CastFExecutor::new(adapter_step);
 
         let core_filler =
             CastFCoreFiller::new(ConvertAdapterFiller, dummy_range_checker(range_bus));
@@ -108,7 +108,7 @@ mod test {
     #[allow(clippy::too_many_arguments)]
     fn set_and_execute(
         tester: &mut GpuChipTestBuilder,
-        harness: &mut GpuTestChipHarness<F, CastFStep, CastFAir, CastFChipGpu, CastFChip<F>>,
+        harness: &mut GpuTestChipHarness<F, CastFExecutor, CastFAir, CastFChipGpu, CastFChip<F>>,
         rng: &mut StdRng,
         b: Option<F>,
     ) {
@@ -149,7 +149,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, ConvertAdapterStep<1, 4>>::new(),
+                EmptyAdapterCoreLayout::<F, ConvertAdapterExecutor<1, 4>>::new(),
             );
 
         tester

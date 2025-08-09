@@ -61,11 +61,13 @@ __device__ inline void instantiate_rv32_vec_heap_adapter(
         BLOCKS_PER_WRITE,
         READ_SIZE,
         WRITE_SIZE>;
-    using AdapterStep =
+    using AdapterExecutor =
         Rv32VecHeapAdapter<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>;
 
     const auto *adapter_rec = reinterpret_cast<const AdapterRecord *>(rec_bytes);
-    AdapterStep adapter_step(pointer_max_bits, range_checker, bitwise_lookup, timestamp_max_bits);
+    AdapterExecutor adapter_step(
+        pointer_max_bits, range_checker, bitwise_lookup, timestamp_max_bits
+    );
     adapter_step.fill_trace_row(row, *adapter_rec);
 
     adapter_size = sizeof(AdapterRecord);

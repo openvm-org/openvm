@@ -88,8 +88,8 @@ mod test {
         instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
     };
     use openvm_rv32im_circuit::{
-        adapters::{Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep},
-        DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemChip, Rv32DivRemStep,
+        adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller},
+        DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemChip, Rv32DivRemExecutor,
     };
     use openvm_rv32im_transpiler::DivRemOpcode::{self, *};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -108,8 +108,13 @@ mod test {
     ];
     const MAX_INS_CAPACITY: usize = 128;
 
-    type Harness =
-        GpuTestChipHarness<F, Rv32DivRemStep, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
+    type Harness = GpuTestChipHarness<
+        F,
+        Rv32DivRemExecutor,
+        Rv32DivRemAir,
+        Rv32DivRemChipGpu,
+        Rv32DivRemChip<F>,
+    >;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus's from tester since `gpu_chip` and `air` must use the same bus
@@ -128,7 +133,7 @@ mod test {
             Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
             DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
         );
-        let executor = Rv32DivRemStep::new(Rv32MultAdapterStep, DivRemOpcode::CLASS_OFFSET);
+        let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
         let cpu_chip = Rv32DivRemChip::<F>::new(
             DivRemFiller::new(
                 Rv32MultAdapterFiller,
@@ -261,7 +266,7 @@ mod test {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32MultAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
             );
 
         tester

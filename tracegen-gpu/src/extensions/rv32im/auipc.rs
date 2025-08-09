@@ -66,11 +66,11 @@ mod tests {
     };
     use openvm_rv32im_circuit::{
         adapters::{
-            Rv32RdWriteAdapterAir, Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterRecord,
-            Rv32RdWriteAdapterStep, RV32_CELL_BITS,
+            Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
+            Rv32RdWriteAdapterRecord, RV32_CELL_BITS,
         },
-        Rv32AuipcAir, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreRecord, Rv32AuipcFiller,
-        Rv32AuipcStep,
+        Rv32AuipcAir, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreRecord, Rv32AuipcExecutor,
+        Rv32AuipcFiller,
     };
     use openvm_rv32im_transpiler::Rv32AuipcOpcode::*;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -83,7 +83,7 @@ mod tests {
     const IMM_BITS: usize = 24;
     const MAX_INS_CAPACITY: usize = 128;
     type Harness =
-        GpuTestChipHarness<F, Rv32AuipcStep, Rv32AuipcAir, Rv32AuipcChipGpu, Rv32AuipcChip<F>>;
+        GpuTestChipHarness<F, Rv32AuipcExecutor, Rv32AuipcAir, Rv32AuipcChipGpu, Rv32AuipcChip<F>>;
 
     fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
         // getting bus from tester since `gpu_chip` and `air` must use the same bus
@@ -97,7 +97,7 @@ mod tests {
             Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
             Rv32AuipcCoreAir::new(bitwise_bus),
         );
-        let executor = Rv32AuipcStep::new(Rv32RdWriteAdapterStep::new());
+        let executor = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor::new());
         let cpu_chip = Rv32AuipcChip::new(
             Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller::new(), dummy_bitwise_chip.clone()),
             tester.dummy_memory_helper(),
@@ -143,7 +143,7 @@ mod tests {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterStep>::new(),
+                EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterExecutor>::new(),
             );
 
         tester

@@ -41,7 +41,7 @@ template <typename T> using BranchLessThan256CoreCols = BranchLessThanCoreCols<T
 // Heap adapter instantiation for 256-bit operations
 // NUM_READS = 2, READ_SIZE = INT256_NUM_LIMBS (32 bytes), WRITE_SIZE = INT256_NUM_LIMBS (32 bytes)
 // BLOCKS_PER_READ = 1, BLOCKS_PER_WRITE = 1
-using Rv32HeapAdapterStep256 = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
+using Rv32HeapAdapterExecutor256 = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
 template <typename T> struct BaseAlu256Cols {
     Rv32HeapAdapterCols<T, 2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter;
@@ -70,7 +70,7 @@ __global__ void alu256_tracegen(
     if (idx < num_records) {
         auto rec = reinterpret_cast<BaseAlu256Record *>(d_records)[idx];
 
-        Rv32HeapAdapterStep256 adapter(
+        Rv32HeapAdapterExecutor256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
@@ -226,7 +226,7 @@ __global__ void less_than256_tracegen(
     if (idx < num_records) {
         auto rec = reinterpret_cast<LessThan256Record *>(d_records)[idx];
 
-        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
+        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
@@ -378,7 +378,7 @@ __global__ void shift256_tracegen(
     if (idx < num_records) {
         auto rec = reinterpret_cast<Shift256Record *>(d_records)[idx];
 
-        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
+        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
@@ -459,7 +459,7 @@ __global__ void multiplication256_tracegen(
     if (idx < num_records) {
         auto rec = reinterpret_cast<Multiplication256Record *>(d_records)[idx];
 
-        Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
+        Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
             BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),

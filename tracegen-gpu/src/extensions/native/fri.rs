@@ -89,8 +89,8 @@ mod test {
     use openvm_circuit::arch::testing::memory::gen_pointer;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_circuit::{
-        FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningFiller,
-        FriReducedOpeningRecordMut, FriReducedOpeningStep, EXT_DEG,
+        FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor,
+        FriReducedOpeningFiller, FriReducedOpeningRecordMut, EXT_DEG,
     };
     use openvm_native_compiler::{conversion::AS, FriOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -110,13 +110,13 @@ mod test {
         tester: &GpuChipTestBuilder,
     ) -> GpuTestChipHarness<
         F,
-        FriReducedOpeningStep,
+        FriReducedOpeningExecutor,
         FriReducedOpeningAir,
         FriReducedOpeningChipGpu,
         FriReducedOpeningChip<F>,
     > {
         let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
-        let executor = FriReducedOpeningStep;
+        let executor = FriReducedOpeningExecutor;
 
         let cpu_chip =
             FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.dummy_memory_helper());
@@ -130,7 +130,7 @@ mod test {
         tester: &mut GpuChipTestBuilder,
         harness: &mut GpuTestChipHarness<
             F,
-            FriReducedOpeningStep,
+            FriReducedOpeningExecutor,
             FriReducedOpeningAir,
             FriReducedOpeningChipGpu,
             FriReducedOpeningChip<F>,
