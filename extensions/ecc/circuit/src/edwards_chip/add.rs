@@ -165,7 +165,7 @@ pub fn get_te_add_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
             local_opcode_idx,
             vec![],
             range_checker,
-            false,
+            true,
         ),
         mem_helper,
     )
