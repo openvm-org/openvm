@@ -12,18 +12,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::Rv32HeapAdapterStep;
-use openvm_rv32im_circuit::BaseAluStep;
+use openvm_rv32_adapters::Rv32HeapAdapterExecutor;
+use openvm_rv32im_circuit::BaseAluExecutor;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32BaseAlu256Step, INT256_NUM_LIMBS};
+use crate::{Rv32BaseAlu256Executor, INT256_NUM_LIMBS};
 
-type AdapterStep = Rv32HeapAdapterStep<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
+type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
-impl Rv32BaseAlu256Step {
-    pub fn new(adapter: AdapterStep, offset: usize) -> Self {
-        Self(BaseAluStep::new(adapter, offset))
+impl Rv32BaseAlu256Executor {
+    pub fn new(adapter: AdapterExecutor, offset: usize) -> Self {
+        Self(BaseAluExecutor::new(adapter, offset))
     }
 }
 
@@ -34,12 +34,12 @@ struct BaseAluPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> InsExecutorE1<F> for Rv32BaseAlu256Step {
+impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BaseAluPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -61,12 +61,12 @@ impl<F: PrimeField32> InsExecutorE1<F> for Rv32BaseAlu256Step {
     }
 }
 
-impl<F: PrimeField32> InsExecutorE2<F> for Rv32BaseAlu256Step {
-    fn e2_pre_compute_size(&self) -> usize {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32BaseAlu256Executor {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -93,7 +93,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Rv32BaseAlu256Step {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
     pre_compute: &BaseAluPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
@@ -108,7 +108,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BaseAluPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
@@ -116,7 +116,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: AluOp>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: AluOp>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BaseAluPreCompute> = pre_compute.borrow();
     vm_state
@@ -125,7 +125,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: AluOp>(
     execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
 }
 
-impl Rv32BaseAlu256Step {
+impl Rv32BaseAlu256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

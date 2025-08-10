@@ -254,7 +254,7 @@ pub struct LoadStoreCoreRecord<const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadStoreStep<A, const NUM_CELLS: usize> {
+pub struct LoadStoreExecutor<A, const NUM_CELLS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -268,11 +268,11 @@ pub struct LoadStoreFiller<
     pub offset: usize,
 }
 
-impl<F, A, RA, const NUM_CELLS: usize> InstructionExecutor<F, RA> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, RA, const NUM_CELLS: usize> PreflightExecutor<F, RA> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -382,7 +382,7 @@ struct LoadStorePreCompute {
     e: u8,
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE1<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -392,7 +392,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -426,15 +426,15 @@ where
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> InsExecutorE2<F> for LoadStoreStep<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LoadStorePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -482,7 +482,7 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &LoadStorePreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -507,7 +507,10 @@ unsafe fn execute_e12_impl<
     };
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+        vm_state.exit_code = Err(ExecutionError::Fail {
+            pc: vm_state.pc,
+            msg: "Invalid LoadStoreOp",
+        });
         return;
     }
 
@@ -531,7 +534,7 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
@@ -545,7 +548,7 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LoadStorePreCompute> = pre_compute.borrow();
     vm_state
@@ -554,7 +557,7 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, vm_state);
 }
 
-impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
+impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
     /// Return (local_opcode, enabled, is_native_store)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -590,7 +593,7 @@ impl<A, const NUM_CELLS: usize> LoadStoreStep<A, NUM_CELLS> {
                     return Err(StaticProgramError::InvalidInstruction(pc));
                 }
             }
-            _ => unreachable!("LoadStoreStep should not handle LOADB/LOADH opcodes"),
+            _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),
         }
 
         let imm = c.as_canonical_u32();

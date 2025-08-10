@@ -11,15 +11,16 @@ mod integration_api;
 /// [RecordArena] trait definitions and implementations. Currently there are two concrete
 /// implementations: [MatrixRecordArena] and [DenseRecordArena].
 mod record_arena;
-/// Runtime execution and segmentation
-// TODO: rename this module
-pub mod segment;
+/// VM state definitions
+mod state;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
 pub mod hasher;
-/// Interpreter for VM execution
+/// Interpreter for pure and metered VM execution
 pub mod interpreter;
+/// Interpreter for preflight VM execution, for trace generation purposes.
+pub mod interpreter_preflight;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
@@ -31,5 +32,5 @@ pub use extensions::*;
 pub use integration_api::*;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;
-pub use segment::*;
+pub use state::*;
 pub use vm::*;

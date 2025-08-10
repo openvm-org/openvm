@@ -31,7 +31,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv32JalrAdapterFiller, Rv32JalrAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -184,7 +184,7 @@ pub struct Rv32JalrCoreRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32JalrStep<A = Rv32JalrAdapterStep> {
+pub struct Rv32JalrExecutor<A = Rv32JalrAdapterExecutor> {
     adapter: A,
 }
 
@@ -210,11 +210,11 @@ impl<A> Rv32JalrFiller<A> {
     }
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for Rv32JalrStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData = [u8; RV32_REGISTER_NUM_LIMBS],
             WriteData = [u8; RV32_REGISTER_NUM_LIMBS],
@@ -328,7 +328,7 @@ struct JalrPreCompute {
     b: u8,
 }
 
-impl<F, A> InsExecutorE1<F> for Rv32JalrStep<A>
+impl<F, A> Executor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -337,7 +337,7 @@ where
         size_of::<JalrPreCompute>()
     }
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -354,15 +354,15 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for Rv32JalrStep<A>
+impl<F, A> MeteredExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<JalrPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -387,7 +387,7 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs1 = u32::from_le_bytes(rs1);
@@ -406,7 +406,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: 
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalrPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, ENABLED>(pre_compute, vm_state);
@@ -414,7 +414,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const ENABLED: b
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const ENABLED: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalrPreCompute> = pre_compute.borrow();
     vm_state
@@ -423,7 +423,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const ENABLED: b
     execute_e12_impl::<F, CTX, ENABLED>(&pre_compute.data, vm_state);
 }
 
-impl<A> Rv32JalrStep<A> {
+impl<A> Rv32JalrExecutor<A> {
     /// Return true if enabled.
     fn pre_compute_impl<F: PrimeField32>(
         &self,

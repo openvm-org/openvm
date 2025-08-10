@@ -6,7 +6,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -245,7 +245,7 @@ pub struct Rv32IsEqualModAdapterRecord<
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv32IsEqualModAdapterStep<
+pub struct Rv32IsEqualModAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCK_SIZE: usize,
@@ -270,7 +270,7 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > Rv32IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -289,8 +289,8 @@ impl<
         const BLOCKS_PER_READ: usize,
         const BLOCK_SIZE: usize,
         const TOTAL_READ_SIZE: usize,
-    > AdapterTraceStep<F>
-    for Rv32IsEqualModAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
+    > AdapterTraceExecutor<F>
+    for Rv32IsEqualModAdapterExecutor<NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {

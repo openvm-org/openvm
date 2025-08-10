@@ -14,8 +14,8 @@ use openvm_circuit::{
     arch::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
-        verify_segments, ContinuationVmProof, InitFileGenerator, InsExecutorE1, InsExecutorE2,
-        InstructionExecutor, SystemConfig, VerifiedExecutionPayload, VmBuilder, VmCircuitConfig,
+        verify_segments, ContinuationVmProof, Executor, InitFileGenerator, MeteredExecutor,
+        PreflightExecutor, SystemConfig, VerifiedExecutionPayload, VmBuilder, VmCircuitConfig,
         VmExecutionConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
@@ -138,7 +138,7 @@ where
     E: StarkFriEngine<SC = SC>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     pub fn new() -> Self {
         Self::default()
@@ -183,12 +183,15 @@ where
     pub fn execute<VC>(&self, exe: VmExe<F>, vm_config: VC, inputs: StdIn) -> Result<Vec<F>>
     where
         VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
-        VC::Executor: Clone + InsExecutorE1<F> + InsExecutorE2<F>,
+        VC::Executor: Clone + Executor<F> + MeteredExecutor<F>,
     {
-        let vm = VmExecutor::new(vm_config)?;
-        let final_memory = vm.execute_e1(exe, inputs, None)?.memory;
-        let public_values =
-            extract_public_values(vm.config.as_ref().num_public_values, &final_memory.memory);
+        let executor = VmExecutor::new(vm_config)?;
+        let instance = executor.instance(&exe)?;
+        let final_memory = instance.execute(inputs, None)?.memory;
+        let public_values = extract_public_values(
+            executor.config.as_ref().num_public_values,
+            &final_memory.memory,
+        );
         Ok(public_values)
     }
 
@@ -220,7 +223,7 @@ where
         VB: VmBuilder<E>,
         VB::VmConfig: VmExecutionConfig<F> + VmCircuitConfig<SC>,
         <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VB::RecordArena>,
+            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
     {
         let mut app_prover =
             AppProver::<E, VB>::new(app_vm_builder, app_pk.app_vm_pk.clone(), app_committed_exe)?;
@@ -312,9 +315,9 @@ where
     ) -> Result<VmStarkProof<SC>>
     where
         VB: VmBuilder<E>,
-        <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
-            + InsExecutorE2<F>
-            + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F>
+            + MeteredExecutor<F>
+            + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
     {
         let mut stark_prover = StarkProver::<E, _, _>::new(
             app_vm_builder,
@@ -440,9 +443,9 @@ where
     ) -> Result<EvmProof>
     where
         VB: VmBuilder<E>,
-        <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
-            + InsExecutorE2<F>
-            + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
+        <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F>
+            + MeteredExecutor<F>
+            + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
     {
         let mut e2e_prover = EvmHalo2Prover::<E, _, _>::new(
             reader,

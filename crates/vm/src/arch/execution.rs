@@ -11,7 +11,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1ExecutionCtx, Streams, VmSegmentState};
+use super::{execution_mode::E1ExecutionCtx, Streams, VmExecState};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -24,14 +24,16 @@ use crate::{
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
-    #[error("execution failed at pc {pc}")]
-    Fail { pc: u32 },
+    #[error("execution failed at pc {pc}, err: {msg}")]
+    Fail { pc: u32, msg: &'static str },
     #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
     PcOutOfBounds {
         pc: u32,
         pc_base: u32,
         program_len: usize,
     },
+    #[error("unreachable instruction at pc {0}")]
+    Unreachable(u32),
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("at pc = {pc}")]
@@ -79,26 +81,60 @@ pub enum StaticProgramError {
     InvalidInstruction(u32),
     #[error("Too many executors")]
     TooManyExecutors,
+    #[error("at pc {pc}, opcode {opcode} was not enabled")]
+    DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
 }
 
-/// Global VM state accessible during instruction execution.
-/// The state is generic in guest memory `MEM` and additional host state `CTX`.
-/// The host state is execution context specific.
-#[derive(derive_new::new)]
-pub struct VmStateMut<'a, F, MEM, CTX> {
-    pub pc: &'a mut u32,
-    pub memory: &'a mut MEM,
-    pub streams: &'a mut Streams<F>,
-    pub rng: &'a mut StdRng,
-    pub ctx: &'a mut CTX,
-    #[cfg(feature = "metrics")]
-    pub metrics: &'a mut VmMetrics,
+/// Function pointer for interpreter execution with function signature `(pre_compute, exec_state)`.
+/// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
+/// The contents of `pre_compute` are determined from the program code as specified by the
+/// [Executor] and [MeteredExecutor] traits.
+pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmExecState<F, GuestMemory, CTX>);
+
+/// Trait for pure execution via a host interpreter. The trait methods provide the methods to
+/// pre-process the program code into function pointers which operate on `pre_compute` instruction
+/// data.
+// @dev: In the codebase this is sometimes referred to as (E1).
+pub trait Executor<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E1ExecutionCtx;
 }
 
-// TODO[jpw]: Can we avoid Clone by making executors stateless?
-pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
+/// Trait for metered execution via a host interpreter. The trait methods provide the methods to
+/// pre-process the program code into function pointers which operate on `pre_compute` instruction
+/// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
+// @dev: In the codebase this is sometimes referred to as (E2).
+pub trait MeteredExecutor<F> {
+    fn metered_pre_compute_size(&self) -> usize;
+
+    fn metered_pre_compute<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: E2ExecutionCtx;
+}
+
+// TODO[jpw]: Avoid Clone by making executors stateless?
+/// Trait for preflight execution via a host interpreter. The trait methods allow execution of
+/// instructions via enum dispatch within an interpreter. This execution is specialized to record
+/// "records" of execution which will be ingested later for trace matrix generation. The records are
+/// stored in a record arena, which is provided in the [VmStateMut] argument.
+// @dev: In the codebase this is sometimes referred to as (E3).
+pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
@@ -112,46 +148,27 @@ pub trait InstructionExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     fn get_opcode_name(&self, opcode: usize) -> String;
 }
 
-pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmSegmentState<F, GuestMemory, CTX>);
-
-pub struct PreComputeInstruction<'a, F, CTX> {
-    pub handler: ExecuteFunc<F, CTX>,
-    pub pre_compute: &'a [u8],
+/// Global VM state accessible during instruction execution.
+/// The state is generic in guest memory `MEM` and additional record arena `RA`.
+/// The host state is execution context specific.
+#[derive(derive_new::new)]
+pub struct VmStateMut<'a, F, MEM, RA> {
+    pub pc: &'a mut u32,
+    pub memory: &'a mut MEM,
+    pub streams: &'a mut Streams<F>,
+    pub rng: &'a mut StdRng,
+    pub ctx: &'a mut RA,
+    #[cfg(feature = "metrics")]
+    pub metrics: &'a mut VmMetrics,
 }
 
+/// Wrapper type for metered pre-computed data, which is always an AIR index together with the
+/// pre-computed data for pure execution.
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
 pub struct E2PreCompute<DATA> {
     pub chip_idx: u32,
     pub data: DATA,
-}
-
-/// Trait for E1 execution
-pub trait InsExecutorE1<F> {
-    fn pre_compute_size(&self) -> usize;
-
-    fn pre_compute_e1<Ctx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
-    where
-        Ctx: E1ExecutionCtx;
-}
-
-pub trait InsExecutorE2<F> {
-    fn e2_pre_compute_size(&self) -> usize;
-
-    fn pre_compute_e2<Ctx>(
-        &self,
-        air_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
-    where
-        Ctx: E2ExecutionCtx;
 }
 
 #[repr(C)]

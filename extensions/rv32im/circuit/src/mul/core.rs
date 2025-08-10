@@ -126,7 +126,7 @@ pub struct MultiplicationCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct MultiplicationStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct MultiplicationExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -168,12 +168,12 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
-    for MultiplicationStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
+    for MultiplicationExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -260,15 +260,15 @@ struct MultiPreCompute {
     c: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
-    for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const LIMB_BITS: usize> Executor<F>
+    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
     fn pre_compute_size(&self) -> usize {
         size_of::<MultiPreCompute>()
     }
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -283,16 +283,16 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
-    for MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+    for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<MultiPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -312,7 +312,7 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &MultiPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -329,7 +329,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MultiPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -337,7 +337,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MultiPreCompute> = pre_compute.borrow();
     vm_state
@@ -346,7 +346,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     execute_e12_impl(&pre_compute.data, vm_state);
 }
 
-impl<A, const LIMB_BITS: usize> MultiplicationStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

@@ -15,6 +15,8 @@ pub trait Arena {
     /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
 
+    fn is_empty(&self) -> bool;
+
     /// Only used for metric collection purposes. Intended usage is that for a record arena that
     /// corresponds to a single trace matrix, this function can extract the current number of used
     /// rows of the corresponding trace matrix. This is currently expected to work only for
@@ -117,6 +119,10 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
         }
     }
 
+    fn is_empty(&self) -> bool {
+        self.trace_offset == 0
+    }
+
     #[cfg(feature = "metrics")]
     fn current_trace_height(&self) -> usize {
         self.trace_offset / self.width
@@ -182,12 +188,9 @@ impl DenseRecordArena {
         self.records_buffer = cursor;
     }
 
-    /// Returns the current size of the allocated buffer so far.
-    pub fn current_size(&self) -> usize {
-        self.records_buffer.position() as usize
-    }
-
     /// Returns the allocated size of the arena in bytes.
+    ///
+    /// **Note**: This may include additional bytes for alignment.
     pub fn capacity(&self) -> usize {
         self.records_buffer.get_ref().len()
     }
@@ -246,6 +249,10 @@ impl Arena for DenseRecordArena {
     fn with_capacity(height: usize, width: usize) -> Self {
         let size_bytes = height * (width * size_of::<u32>());
         Self::with_byte_capacity(size_bytes)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.allocated().is_empty()
     }
 }
 
@@ -562,7 +569,7 @@ impl<M> AdapterCoreLayout<M> {
 }
 
 /// Empty metadata that implements `AdapterCoreMetadata`
-/// **NOTE**: `AS` is the adapter type that implements `AdapterTraceStep`
+/// **NOTE**: `AS` is the adapter type that implements `AdapterTraceExecutor`
 /// **WARNING**: `AS::WIDTH` is the number of field elements, not the size in bytes
 pub struct AdapterCoreEmptyMetadata<F, AS> {
     _phantom: PhantomData<(F, AS)>,
@@ -594,7 +601,7 @@ impl<F, AS> Default for AdapterCoreEmptyMetadata<F, AS> {
 
 impl<F, AS> AdapterCoreMetadata for AdapterCoreEmptyMetadata<F, AS>
 where
-    AS: super::AdapterTraceStep<F>,
+    AS: super::AdapterTraceExecutor<F>,
 {
     #[inline(always)]
     fn get_adapter_width() -> usize {

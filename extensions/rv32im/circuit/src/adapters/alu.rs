@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -164,7 +164,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize>;
+pub struct Rv32BaseAluAdapterExecutor<const LIMB_BITS: usize>;
 
 #[derive(derive_new::new)]
 pub struct Rv32BaseAluAdapterFiller<const LIMB_BITS: usize> {
@@ -189,8 +189,8 @@ pub struct Rv32BaseAluAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceStep<F>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceExecutor<F>
+    for Rv32BaseAluAdapterExecutor<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];

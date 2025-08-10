@@ -22,7 +22,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     edwards_chip::{
-        get_te_add_air, get_te_add_chip, get_te_add_step, EdwardsAir, EdwardsChip, TeAddStep,
+        get_te_add_air, get_te_add_chip, get_te_add_step, EdwardsAir, EdwardsChip, TeAddExecutor,
     },
     weierstrass_chip::prime_limbs,
 };
@@ -108,7 +108,7 @@ lazy_static::lazy_static! {
 
 type EdwardsHarness = TestChipHarness<
     F,
-    TeAddStep<2, BLOCK_SIZE>,
+    TeAddExecutor<2, BLOCK_SIZE>,
     EdwardsAir<2, 2, BLOCK_SIZE>,
     EdwardsChip<F, 2, 2, BLOCK_SIZE>,
     MatrixRecordArena<F>,

@@ -118,7 +118,7 @@ pub struct CastFCoreRecord {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct CastFCoreStep<A> {
+pub struct CastFCoreExecutor<A> {
     adapter: A,
 }
 
@@ -128,10 +128,11 @@ pub struct CastFCoreFiller<A> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for CastFCoreStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static
+        + AdapterTraceExecutor<F, ReadData = [F; 1], WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -202,7 +203,7 @@ struct CastFPreCompute {
     b: u32,
 }
 
-impl<A> CastFCoreStep<A> {
+impl<A> CastFCoreExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -232,7 +233,7 @@ impl<A> CastFCoreStep<A> {
     }
 }
 
-impl<F, A> InsExecutorE1<F> for CastFCoreStep<A>
+impl<F, A> Executor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -242,7 +243,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -258,17 +259,17 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for CastFCoreStep<A>
+impl<F, A> MeteredExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<CastFPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -288,7 +289,7 @@ where
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &CastFPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -296,7 +297,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<CastFPreCompute> = pre_compute.borrow();
     vm_state
@@ -308,7 +309,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &CastFPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let y = vm_state.vm_read::<F, 1>(AS::Native as u32, pre_compute.b)[0];
     let x = run_castf(y.as_canonical_u32());

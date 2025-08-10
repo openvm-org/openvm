@@ -1,5 +1,5 @@
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, VmSegmentState},
+    arch::{execution_mode::E1ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
 };
 
@@ -29,7 +29,7 @@ impl E1ExecutionCtx for E1Ctx {
     #[inline(always)]
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmSegmentState<F, GuestMemory, Self>) -> bool {
+    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         vm_state.instret >= vm_state.ctx.instret_end
     }
 }

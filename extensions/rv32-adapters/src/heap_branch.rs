@@ -6,7 +6,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -176,7 +176,7 @@ pub struct Rv32HeapBranchAdapterRecord<const NUM_READS: usize> {
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv32HeapBranchAdapterStep<const NUM_READS: usize, const READ_SIZE: usize> {
+pub struct Rv32HeapBranchAdapterExecutor<const NUM_READS: usize, const READ_SIZE: usize> {
     pub pointer_max_bits: usize,
 }
 
@@ -187,7 +187,7 @@ pub struct Rv32HeapBranchAdapterFiller<const NUM_READS: usize, const READ_SIZE: 
 }
 
 impl<const NUM_READS: usize, const READ_SIZE: usize>
-    Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+    Rv32HeapBranchAdapterExecutor<NUM_READS, READ_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -199,8 +199,8 @@ impl<const NUM_READS: usize, const READ_SIZE: usize>
     }
 }
 
-impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceStep<F>
-    for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceExecutor<F>
+    for Rv32HeapBranchAdapterExecutor<NUM_READS, READ_SIZE>
 {
     const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
     type ReadData = [[u8; READ_SIZE]; NUM_READS];

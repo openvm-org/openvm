@@ -29,7 +29,7 @@ use util::{tracing_read_or_imm_native, tracing_write_native};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{get_record_from_slice, AdapterTraceFiller, AdapterTraceStep},
+    arch::{get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller},
     system::memory::offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
 };
 
@@ -170,11 +170,11 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
 #[derive(Clone, Debug)]
-pub struct NativeAdapterStep<F, const R: usize, const W: usize> {
+pub struct NativeAdapterExecutor<F, const R: usize, const W: usize> {
     _phantom: PhantomData<F>,
 }
 
-impl<F, const R: usize, const W: usize> Default for NativeAdapterStep<F, R, W> {
+impl<F, const R: usize, const W: usize> Default for NativeAdapterExecutor<F, R, W> {
     fn default() -> Self {
         Self {
             _phantom: PhantomData,
@@ -182,7 +182,7 @@ impl<F, const R: usize, const W: usize> Default for NativeAdapterStep<F, R, W> {
     }
 }
 
-impl<F, const R: usize, const W: usize> AdapterTraceStep<F> for NativeAdapterStep<F, R, W>
+impl<F, const R: usize, const W: usize> AdapterTraceExecutor<F> for NativeAdapterExecutor<F, R, W>
 where
     F: PrimeField32,
 {
@@ -252,7 +252,7 @@ where
 }
 
 impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
-    for NativeAdapterStep<F, R, W>
+    for NativeAdapterExecutor<F, R, W>
 {
     const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
 

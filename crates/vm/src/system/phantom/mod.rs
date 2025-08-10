@@ -29,7 +29,7 @@ use super::memory::online::{GuestMemory, TracingMemory};
 use crate::{
     arch::{
         get_record_from_slice, EmptyMultiRowLayout, ExecutionBridge, ExecutionError,
-        ExecutionState, InstructionExecutor, PcIncOrSet, PhantomSubExecutor, RecordArena, Streams,
+        ExecutionState, PcIncOrSet, PhantomSubExecutor, PreflightExecutor, RecordArena, Streams,
         TraceFiller, VmChipWrapper, VmStateMut,
     },
     system::memory::MemoryAuxColsFactory,
@@ -111,7 +111,7 @@ pub struct PhantomExecutor<F> {
 pub struct PhantomFiller;
 pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
 
-impl<F, RA> InstructionExecutor<F, RA> for PhantomExecutor<F>
+impl<F, RA> PreflightExecutor<F, RA> for PhantomExecutor<F>
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
@@ -134,7 +134,10 @@ where
             tracing::trace!("pc: {pc:#x} | system phantom: {sys:?}");
             match sys {
                 SysPhantom::DebugPanic => {
-                    #[cfg(feature = "metrics")]
+                    #[cfg(all(
+                        feature = "metrics",
+                        any(debug_assertions, feature = "perf-metrics")
+                    ))]
                     {
                         let metrics = state.metrics;
                         metrics.update_backtrace(pc);
@@ -145,16 +148,19 @@ where
                             eprintln!("openvm program failure; no backtrace");
                         }
                     }
-                    return Err(ExecutionError::Fail { pc });
+                    return Err(ExecutionError::Fail {
+                        pc,
+                        msg: "DebugPanic",
+                    });
                 }
-                #[cfg(feature = "metrics")]
+                #[cfg(feature = "perf-metrics")]
                 SysPhantom::CtStart => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {
                         metrics.cycle_tracker.start(info.dsl_instruction.clone());
                     }
                 }
-                #[cfg(feature = "metrics")]
+                #[cfg(feature = "perf-metrics")]
                 SysPhantom::CtEnd => {
                     let metrics = state.metrics;
                     if let Some(info) = metrics.debug_infos.get(pc) {

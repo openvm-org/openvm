@@ -147,7 +147,7 @@ pub struct FieldExtensionRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct FieldExtensionCoreStep<A> {
+pub struct FieldExtensionCoreExecutor<A> {
     adapter: A,
 }
 
@@ -156,10 +156,10 @@ pub struct FieldExtensionCoreFiller<A> {
     adapter: A,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for FieldExtensionCoreStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = [[F; EXT_DEG]; 2], WriteData = [F; EXT_DEG]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -245,7 +245,7 @@ struct FieldExtensionPreCompute {
     c: u32,
 }
 
-impl<A> FieldExtensionCoreStep<A> {
+impl<A> FieldExtensionCoreExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -286,7 +286,7 @@ impl<A> FieldExtensionCoreStep<A> {
     }
 }
 
-impl<F, A> InsExecutorE1<F> for FieldExtensionCoreStep<A>
+impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -296,7 +296,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -318,17 +318,17 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for FieldExtensionCoreStep<A>
+impl<F, A> MeteredExecutor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<FieldExtensionPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -354,7 +354,7 @@ where
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExtensionPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OPCODE>(pre_compute, vm_state);
@@ -362,7 +362,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const OPCODE: u8>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExtensionPreCompute> = pre_compute.borrow();
     vm_state
@@ -374,7 +374,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const OPCODE: u8
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const OPCODE: u8>(
     pre_compute: &FieldExtensionPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let y: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
     let z: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.c);

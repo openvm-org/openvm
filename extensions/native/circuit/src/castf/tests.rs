@@ -23,9 +23,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFStep, LIMB_BITS};
+use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFExecutor, LIMB_BITS};
 use crate::{
-    adapters::{ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterFiller, ConvertAdapterStep},
+    adapters::{
+        ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterExecutor, ConvertAdapterFiller,
+    },
     castf::run_castf,
     test_utils::write_native_array,
     CastFAir, CastFCoreFiller, CASTF_MAX_BITS,
@@ -35,7 +37,7 @@ const MAX_INS_CAPACITY: usize = 128;
 const READ_SIZE: usize = 1;
 const WRITE_SIZE: usize = 4;
 type F = BabyBear;
-type Harness = TestChipHarness<F, CastFStep, CastFAir, CastFChip<F>>;
+type Harness = TestChipHarness<F, CastFExecutor, CastFAir, CastFChip<F>>;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker().clone();
@@ -43,7 +45,7 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
         ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         CastFCoreAir::new(range_checker.bus()),
     );
-    let executor = CastFStep::new(ConvertAdapterStep::<READ_SIZE, WRITE_SIZE>::new());
+    let executor = CastFExecutor::new(ConvertAdapterExecutor::<READ_SIZE, WRITE_SIZE>::new());
     let chip = CastFChip::<F>::new(
         CastFCoreFiller::new(ConvertAdapterFiller, range_checker),
         tester.memory_helper(),

@@ -5,8 +5,8 @@ use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::SegmentationLimits, instructions::exe::VmExe,
-    verify_single, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
-    SystemConfig, VmBuilder, VmConfig, VmExecutionConfig,
+    verify_single, Executor, MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig,
+    VmBuilder, VmConfig, VmExecutionConfig,
 };
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -171,7 +171,7 @@ impl BenchmarkCli {
         VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
         VC: VmExecutionConfig<F> + VmConfig<SC>,
         <VC as VmExecutionConfig<F>>::Executor:
-            InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
+            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
     {
         let app_config = self.app_config(vm_config);
         bench_from_exe::<BabyBearPoseidon2Engine, _, NativeCpuBuilder>(
@@ -208,10 +208,10 @@ where
     E: StarkFriEngine<SC = SC>,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F, VB::RecordArena>,
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     let bench_name = bench_name.to_string();
     // 1. Generate proving key from config.

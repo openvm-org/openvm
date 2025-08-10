@@ -30,7 +30,7 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    Rv32RdWriteAdapterFiller, Rv32RdWriteAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
 };
 
 #[repr(C)]
@@ -201,7 +201,7 @@ pub struct Rv32AuipcCoreRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32AuipcStep<A = Rv32RdWriteAdapterStep> {
+pub struct Rv32AuipcExecutor<A = Rv32RdWriteAdapterExecutor> {
     adapter: A,
 }
 
@@ -211,10 +211,10 @@ pub struct Rv32AuipcFiller<A = Rv32RdWriteAdapterFiller> {
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for Rv32AuipcStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
+    A: 'static + AdapterTraceExecutor<F, ReadData = (), WriteData = [u8; RV32_REGISTER_NUM_LIMBS]>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -297,7 +297,7 @@ struct AuiPcPreCompute {
     a: u8,
 }
 
-impl<F, A> InsExecutorE1<F> for Rv32AuipcStep<A>
+impl<F, A> Executor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
@@ -307,7 +307,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -327,7 +327,7 @@ where
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &AuiPcPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rd = run_auipc(vm_state.pc, pre_compute.imm);
     vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
@@ -336,15 +336,15 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.instret += 1;
 }
 
-impl<F, A> InsExecutorE2<F> for Rv32AuipcStep<A>
+impl<F, A> MeteredExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<AuiPcPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -369,7 +369,7 @@ where
     }
 }
 
-impl<A> Rv32AuipcStep<A> {
+impl<A> Rv32AuipcExecutor<A> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

@@ -2,7 +2,7 @@
 
 ```rust
 pub trait VmExtension<F: PrimeField32> {
-    type Executor: InstructionExecutor<F> + AnyEnum;
+    type Executor: PreflightExecutor<F> + AnyEnum;
     type Periphery: AnyEnum;
 
     fn build(
@@ -17,7 +17,7 @@ by them. This data is collected into a `VmInventory` struct, which is returned.
 
 To handle previous chip dependencies necessary for chip construction and also automatic bus index management, we provide a `VmInventoryBuilder` api.
 
-Due to strong types, we have **two** associated trait types `Executor, Periphery`. It is expected that `Executor` is an enum of all types implementing `InstructionExecutor + Chip` that this extension will construct. It is expected that `Periphery` is an enum of all types that implement `Chip` **but are not InstructionExecutor**. In general, it is always OK for the enum to have more kinds than necessary. For easy downcasting and enum wrangling, we also have an `AnyEnum` trait, which can always be derived by a macro.
+Due to strong types, we have **two** associated trait types `Executor, Periphery`. It is expected that `Executor` is an enum of all types implementing `PreflightExecutor + Chip` that this extension will construct. It is expected that `Periphery` is an enum of all types that implement `Chip` **but are not PreflightExecutor**. In general, it is always OK for the enum to have more kinds than necessary. For easy downcasting and enum wrangling, we also have an `AnyEnum` trait, which can always be derived by a macro.
 
 ### `VmInventory<Executor, Periphery>`
 
@@ -90,7 +90,7 @@ We have trait `VmConfig`:
 
 ```rust
 pub trait VmConfig<F: PrimeField32> {
-    type Executor: InstructionExecutor<F> + AnyEnum + ChipUsageGetter;
+    type Executor: PreflightExecutor<F> + AnyEnum + ChipUsageGetter;
     type Periphery: AnyEnum + ChipUsageGetter;
 
     /// Must contain system config

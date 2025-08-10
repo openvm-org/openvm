@@ -12,4 +12,4 @@ pub use core::*;
 mod tests;
 
 pub type PublicValuesAir = VmAirWrapper<NativeAdapterAir<2, 0>, PublicValuesCoreAir>;
-pub type PublicValuesChip<F> = VmChipWrapper<F, PublicValuesStep<F>>;
+pub type PublicValuesChip<F> = VmChipWrapper<F, PublicValuesExecutor<F>>;

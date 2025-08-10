@@ -32,12 +32,16 @@ use openvm_stark_backend::{
     AirRef, AnyChip, Chip,
 };
 use rustc_hash::FxHashMap;
+use tracing::info_span;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};
-use crate::system::{
-    memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
-    phantom::PhantomExecutor,
-    SystemAirInventory, SystemChipComplex, SystemRecords,
+use crate::{
+    arch::Arena,
+    system::{
+        memory::{BOUNDARY_AIR_OFFSET, MERKLE_AIR_OFFSET},
+        phantom::PhantomExecutor,
+        SystemAirInventory, SystemChipComplex, SystemRecords,
+    },
 };
 
 /// Global AIR ID in the VM circuit verifying key.
@@ -640,6 +644,7 @@ pub enum ChipInventoryError {
 impl<SC, RA, PB, SCC> VmChipComplex<SC, RA, PB, SCC>
 where
     SC: StarkGenericConfig,
+    RA: Arena,
     PB: ProverBackend,
     SCC: SystemChipComplex<RA, PB>,
 {
@@ -684,13 +689,21 @@ where
         // the peak memory usage, by keeping a dependency tree and generating traces at the same
         // layer of the tree in parallel.
         let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = iter::empty()
-            .chain(
+            .chain(info_span!("system_trace_gen").in_scope(|| {
                 self.system
-                    .generate_proving_ctx(system_records, sys_record_arenas),
-            )
+                    .generate_proving_ctx(system_records, sys_record_arenas)
+            }))
             .chain(
-                zip(self.inventory.chips.iter().rev(), record_arenas)
-                    .map(|(chip, records)| chip.generate_proving_ctx(records)),
+                zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).map(
+                    |((insertion_idx, chip), records)| {
+                        // Only create a span if record is not empty:
+                        let _span = (!records.is_empty()).then(|| {
+                            let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
+                            info_span!("single_trace_gen", air = air_name).entered()
+                        });
+                        chip.generate_proving_ctx(records)
+                    },
+                ),
             )
             .enumerate()
             .filter(|(_air_id, ctx)| {

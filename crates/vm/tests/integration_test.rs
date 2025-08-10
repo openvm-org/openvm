@@ -7,15 +7,13 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        execution_mode::{
-            e1::E1Ctx,
-            metered::{ctx::DEFAULT_SEGMENT_CHECK_INSNS, segment_ctx::SegmentationLimits},
+        execution_mode::metered::{
+            ctx::DEFAULT_SEGMENT_CHECK_INSNS, segment_ctx::SegmentationLimits,
         },
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
-        interpreter::InterpretedInstance,
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
-        VmCircuitConfig, VmLocalProver, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutor, VmLocalProver, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
     utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -132,9 +130,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
     let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeCpuBuilder, vm_config)?;
     let vk = pk.get_vk();
 
-    let state = vm
-        .executor()
-        .create_initial_state(&committed_exe.exe, vec![]);
+    let state = vm.create_initial_state(&committed_exe.exe, vec![]);
     vm.transport_init_memory_to_device(&state.memory);
     let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
     vm.load_program(cached_program_trace);
@@ -661,7 +657,7 @@ fn test_hint_load_1() {
     let input = vec![vec![F::ONE, F::TWO]];
 
     let state = execute_program(program, input);
-    let streams = state.input;
+    let streams = state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ZERO]));
     assert_eq!(streams.hint_space, vec![vec![F::ONE, F::TWO]]);
@@ -693,7 +689,7 @@ fn test_hint_load_2() {
     let state = execute_program(program, input);
     let [read] = unsafe { state.memory.read::<F, 1>(4, 32) };
     assert_eq!(read, F::ZERO);
-    let streams = state.input;
+    let streams = state.streams;
     assert!(streams.input_stream.is_empty());
     assert_eq!(streams.hint_stream, VecDeque::from(vec![F::ONE]));
     assert_eq!(
@@ -714,7 +710,7 @@ fn test_vm_pure_execution_non_continuation() {
     Instruction 2 decrements word[0]_4 (using word[1]_4)
     Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
      */
-    let instructions = vec![
+    let instructions: Vec<Instruction<F>> = vec![
         // word[0]_4 <- word[n]_0
         Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
         // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
@@ -741,18 +737,16 @@ fn test_vm_pure_execution_non_continuation() {
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program::from_instructions(&instructions);
-
-    let executor = InterpretedInstance::<F, _>::new(test_native_config(), program).unwrap();
-    executor
-        .execute(E1Ctx::default(), vec![])
-        .expect("Failed to execute");
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let executor = VmExecutor::new(test_native_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
+    instance.execute(vec![], None).expect("Failed to execute");
 }
 
 #[test]
 fn test_vm_pure_execution_continuation() {
     type F = BabyBear;
-    let instructions = vec![
+    let instructions: Vec<Instruction<F>> = vec![
         Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
         Instruction::large_from_isize(ADD.global_opcode(), 1, 0, 2, 4, 0, 0, 0),
         Instruction::large_from_isize(ADD.global_opcode(), 2, 0, 1, 4, 0, 0, 0),
@@ -769,12 +763,10 @@ fn test_vm_pure_execution_continuation() {
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program::from_instructions(&instructions);
-    let executor =
-        InterpretedInstance::<F, _>::new(test_native_continuations_config(), program).unwrap();
-    executor
-        .execute(E1Ctx::default(), vec![])
-        .expect("Failed to execute");
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let executor = VmExecutor::new(test_native_continuations_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
+    instance.execute(vec![], None).expect("Failed to execute");
 }
 
 #[test]
@@ -877,13 +869,13 @@ fn test_vm_e1_native_chips() {
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
-    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(Program::from_instructions(&instructions));
     let input_stream: Vec<Vec<F>> = vec![vec![]];
 
-    let executor =
-        InterpretedInstance::<F, _>::new(test_rv32_with_kernels_config(), program).unwrap();
-    executor
-        .execute(E1Ctx::new(None), input_stream)
+    let executor = VmExecutor::new(test_rv32_with_kernels_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
+    instance
+        .execute(input_stream, None)
         .expect("Failed to execute");
 }
 
@@ -911,10 +903,12 @@ fn test_single_segment_executor_no_segmentation() {
         )))
         .collect();
 
-    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(Program::from_instructions(&instructions));
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
     let metered_ctx = vm.build_metered_ctx();
     vm.executor()
-        .execute_metered(program, vec![], &executor_idx_to_air_idx, metered_ctx)
+        .metered_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap()
+        .execute_metered(vec![], metered_ctx)
         .unwrap();
 }

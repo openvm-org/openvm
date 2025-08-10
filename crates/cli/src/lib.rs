@@ -6,8 +6,7 @@ pub mod util;
 use std::process::{Command, Stdio};
 
 use eyre::{Context, Result};
-
-pub const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+pub use openvm_build::{get_rustup_toolchain_name, DEFAULT_RUSTUP_TOOLCHAIN_NAME};
 
 pub const OPENVM_VERSION_MESSAGE: &str = concat!(
     "v",

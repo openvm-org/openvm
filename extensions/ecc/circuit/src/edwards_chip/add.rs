@@ -14,13 +14,13 @@ use openvm_circuit::{
         offline_checker::MemoryBridge, online::GuestMemory, SharedMemoryHelper, POINTER_MAX_BITS,
     },
 };
-use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::PreflightExecutor;
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBytesBorrow, Chip, ChipUsageGetter,
+    AlignedBytesBorrow,
 };
-use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
+use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -28,10 +28,10 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{
     run_field_expression_precomputed, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExpressionCoreAir, FieldExpressionFiller, FieldExpressionStep,
+    FieldExpressionCoreAir, FieldExpressionExecutor, FieldExpressionFiller,
 };
 use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -73,9 +73,11 @@ pub fn te_add_expr(
     FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint, d_biguint])
 }
 
-#[derive(Clone, InstructionExecutor, Deref, DerefMut)]
-pub struct TeAddStep<const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub(crate) FieldExpressionStep<Rv32VecHeapAdapterStep<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
+#[derive(Clone, PreflightExecutor, Deref, DerefMut)]
+pub struct TeAddExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    pub(crate)  FieldExpressionExecutor<
+        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+    >,
 );
 
 fn gen_base_expr(
@@ -128,14 +130,14 @@ pub fn get_te_add_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     offset: usize,
     a_biguint: BigUint,
     d_biguint: BigUint,
-) -> TeAddStep<BLOCKS, BLOCK_SIZE> {
+) -> TeAddExecutor<BLOCKS, BLOCK_SIZE> {
     // Ensure that the addition operation is complete
     assert!(jacobi(&a_biguint.clone().into(), &config.modulus.clone().into()) == 1);
     assert!(jacobi(&d_biguint.clone().into(), &config.modulus.clone().into()) == -1);
 
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint, d_biguint);
-    TeAddStep(FieldExpressionStep::new(
-        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+    TeAddExecutor(FieldExpressionExecutor::new(
+        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -180,7 +182,7 @@ struct TeAddPreCompute<'a> {
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> TeAddStep<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> TeAddExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
@@ -241,15 +243,15 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> TeAddStep<BLOCKS, BLOCK_S
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE1<F>
-    for TeAddStep<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
+    for TeAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<TeAddPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -262,38 +264,48 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        if is_setup {
-            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = {
+        if let Some(curve_type) = {
             let modulus = &pre_compute.expr.builder.prime;
             let a_coeff = &pre_compute.expr.setup_values[0];
             let d_coeff = &pre_compute.expr.setup_values[1];
             get_te_curve_type(modulus, a_coeff, d_coeff)
         } {
-            match curve_type {
-                TeCurveType::ED25519 => Ok(execute_e1_impl::<
+            match (is_setup, curve_type) {
+                (true, TeCurveType::ED25519) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
                     { TeCurveType::ED25519 as u8 },
-                >)
+                    true,
+                >),
+                (false, TeCurveType::ED25519) => Ok(execute_e12_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { TeCurveType::ED25519 as u8 },
+                    false,
+                >),
+                _ => panic!("Unsupported curve type"),
             }
+        } else if is_setup {
+            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
         } else {
-            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
+            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
         }
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE2<F>
-    for TeAddStep<BLOCKS, BLOCK_SIZE>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
+    for TeAddExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<TeAddPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -308,55 +320,31 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InsExecutorE
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        if is_setup {
-            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>)
-        } else if let Some(curve_type) = {
+        if let Some(curve_type) = {
             let modulus = &pre_compute.data.expr.builder.prime;
             let a_coeff = &pre_compute.data.expr.setup_values[0];
             let d_coeff = &pre_compute.data.expr.setup_values[1];
             get_te_curve_type(modulus, a_coeff, d_coeff)
         } {
-            match curve_type {
-                TeCurveType::ED25519 => Ok(execute_e2_impl::<
+            match (is_setup, curve_type) {
+                (true, TeCurveType::ED25519) => Ok(execute_e2_setup_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
                     { TeCurveType::ED25519 as u8 },
-                >)
+                >),
+                (false, TeCurveType::ED25519) => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { TeCurveType::ED25519 as u8 }>)
+                }
+                _ => panic!("Unsupported curve type"),
             }
+        } else if is_setup {
+            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         } else {
             Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
         }
     }
-}
-
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: E1ExecutionCtx,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
-) {
-    let pre_compute: &TeAddPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e1_setup_impl<
-    F: PrimeField32,
-    CTX: E1ExecutionCtx,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
-) {
-    let pre_compute: &TeAddPreCompute = pre_compute.borrow();
-
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e2_impl<
@@ -367,13 +355,19 @@ unsafe fn execute_e2_impl<
     const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<TeAddPreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<TeAddPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE>(&pre_compute.data, vm_state);
+        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<TeAddPreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, false>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e2_setup_impl<
@@ -381,15 +375,22 @@ unsafe fn execute_e2_setup_impl<
     CTX: E2ExecutionCtx,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<TeAddPreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<TeAddPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE>(&pre_compute.data, vm_state);
+        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<TeAddPreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(&pre_compute, vm_state);
 }
 
 unsafe fn execute_e12_impl<
@@ -398,10 +399,12 @@ unsafe fn execute_e12_impl<
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
+    const IS_SETUP: bool,
 >(
-    pre_compute: &TeAddPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    let pre_compute: &TeAddPreCompute = pre_compute.borrow();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -412,6 +415,36 @@ unsafe fn execute_e12_impl<
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
         from_fn(|i| vm_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
+
+    if IS_SETUP {
+        let input_prime = BigUint::from_bytes_le(read_data[0][..BLOCKS / 2].as_flattened());
+        let input_a = BigUint::from_bytes_le(read_data[0][BLOCKS / 2..].as_flattened());
+        let input_d = BigUint::from_bytes_le(read_data[1][..BLOCKS / 2].as_flattened());
+
+        if input_prime != pre_compute.expr.prime {
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "TeAdd: mismatched prime",
+            });
+            return;
+        }
+
+        if input_a != pre_compute.expr.setup_values[0] {
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "TeAdd: mismatched a",
+            });
+            return;
+        }
+
+        if input_d != pre_compute.expr.setup_values[1] {
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "TeAdd: mismatched d",
+            });
+            return;
+        }
+    }
 
     let output_data = if CURVE_TYPE == u8::MAX {
         let read_data: DynArray<u8> = read_data.into();
@@ -431,51 +464,6 @@ unsafe fn execute_e12_impl<
     // Write output data to memory
     for (i, block) in output_data.into_iter().enumerate() {
         vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
-    }
-
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
-}
-
-unsafe fn execute_e12_setup_impl<
-    F: PrimeField32,
-    CTX: E1ExecutionCtx,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
->(
-    pre_compute: &TeAddPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
-) {
-    // Read the first input (which should be the prime)
-    let rs_vals = pre_compute
-        .rs_addrs
-        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
-
-    // The setup data looks like [rs1] = (x1, y1) and [rs2] = (x2, y2)
-    // where x1 == modulus, y1 == CURVE_A, and x2 == CURVE_D.
-    let setup_input_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] =
-        from_fn(|i| {
-            from_fn(|j| vm_state.vm_read(RV32_MEMORY_AS, rs_vals[i] + (j * BLOCK_SIZE) as u32))
-        });
-
-    // Extract first field element as the prime
-    let input_prime = BigUint::from_bytes_le(setup_input_data[0][..BLOCKS / 2].as_flattened());
-    let input_a = BigUint::from_bytes_le(setup_input_data[0][BLOCKS / 2..].as_flattened());
-    let input_d = BigUint::from_bytes_le(setup_input_data[1][..BLOCKS / 2].as_flattened());
-
-    if input_prime != pre_compute.expr.prime {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
-        return;
-    }
-
-    if input_a != pre_compute.expr.setup_values[0] {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
-        return;
-    }
-
-    if input_d != pre_compute.expr.setup_values[1] {
-        vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
-        return;
     }
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);

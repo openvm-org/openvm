@@ -252,6 +252,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
+    // TODO(ayush): check if batching is actually even faster
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {

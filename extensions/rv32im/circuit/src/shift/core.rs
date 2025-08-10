@@ -258,7 +258,7 @@ pub struct ShiftCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(Clone, Copy)]
-pub struct ShiftStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
@@ -270,7 +270,7 @@ pub struct ShiftFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(adapter: A, offset: usize) -> Self {
         assert_eq!(NUM_LIMBS % 2, 0, "Number of limbs must be divisible by 2");
         Self { adapter, offset }
@@ -294,12 +294,12 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftFiller<A, NUM_LIMBS
     }
 }
 
-impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
+    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
@@ -438,8 +438,8 @@ struct ShiftPreCompute {
     b: u8,
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE1<F>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
+    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -448,7 +448,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -469,17 +469,17 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InsExecutorE2<F>
-    for ShiftStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
+    for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -509,7 +509,7 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
@@ -530,7 +530,7 @@ unsafe fn execute_e12_impl<
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, state);
@@ -538,14 +538,14 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bo
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: &[u8],
-    state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, state);
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftStep<A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIMBS, LIMB_BITS> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,

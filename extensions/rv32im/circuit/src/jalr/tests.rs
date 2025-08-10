@@ -22,10 +22,10 @@ use rand::{rngs::StdRng, Rng};
 use super::Rv32JalrCoreAir;
 use crate::{
     adapters::{
-        compose, Rv32JalrAdapterAir, Rv32JalrAdapterFiller, Rv32JalrAdapterStep, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
-    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrStep},
+    jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
     test_utils::get_verification_error,
     Rv32JalrAir, Rv32JalrFiller,
 };
@@ -33,7 +33,7 @@ use crate::{
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32JalrStep, Rv32JalrAir, Rv32JalrChip<F>>;
+type Harness = TestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChip<F>>;
 
 fn into_limbs(num: u32) -> [u32; 4] {
     array::from_fn(|i| (num >> (8 * i)) & 255)
@@ -59,7 +59,7 @@ fn create_test_chip(
         Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
         Rv32JalrCoreAir::new(bitwise_bus, range_checker_chip.bus()),
     );
-    let executor = Rv32JalrStep::new(Rv32JalrAdapterStep);
+    let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
     let chip = Rv32JalrChip::<F>::new(
         Rv32JalrFiller::new(
             Rv32JalrAdapterFiller::new(),

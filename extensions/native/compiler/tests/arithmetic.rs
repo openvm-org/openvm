@@ -1,4 +1,5 @@
 use openvm_circuit::arch::{ExecutionError, VmExecutor};
+use openvm_instructions::exe::VmExe;
 use openvm_native_circuit::{execute_program, NativeConfig};
 use openvm_native_compiler::{
     asm::{AsmBuilder, AsmCompiler, AsmConfig},
@@ -391,9 +392,15 @@ fn assert_failed_assertion(
     builder: Builder<AsmConfig<BabyBear, BinomialExtensionField<BabyBear, 4>>>,
 ) {
     let program = builder.compile_isa();
+    let exe = VmExe::new(program);
 
     let config = NativeConfig::aggregation(4, 3);
     let executor = VmExecutor::new(config).unwrap();
-    let result = executor.execute_e1(program, vec![], None);
-    assert!(matches!(result, Err(ExecutionError::Fail { .. })));
+    let instance = executor.instance(&exe).unwrap();
+    let result = instance.execute(vec![], None);
+    assert!(
+        matches!(result, Err(ExecutionError::Fail { .. })),
+        "Unexpected result: {:?}",
+        result.err()
+    );
 }

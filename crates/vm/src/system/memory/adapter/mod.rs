@@ -41,8 +41,6 @@ use crate::{
 mod air;
 mod columns;
 pub mod records;
-#[cfg(test)]
-mod tests;
 
 #[derive(Setters)]
 pub struct AccessAdapterInventory<F> {
@@ -50,6 +48,8 @@ pub struct AccessAdapterInventory<F> {
     chips: Vec<GenericAccessAdapterChip<F>>,
     #[getset(set = "pub")]
     arena: DenseRecordArena,
+    #[cfg(feature = "metrics")]
+    pub(crate) trace_heights: Vec<usize>,
 }
 
 impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
@@ -77,6 +77,8 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             memory_config,
             chips,
             arena: DenseRecordArena::with_byte_capacity(0),
+            #[cfg(feature = "metrics")]
+            trace_heights: Vec::new(),
         }
     }
 
@@ -177,6 +179,10 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
             .zip(heights.iter())
             .map(|(&width, &height)| RowMajorMatrix::new(vec![F::ZERO; width * height], width))
             .collect::<Vec<_>>();
+        #[cfg(feature = "metrics")]
+        {
+            self.trace_heights = heights;
+        }
 
         let mut trace_ptrs = vec![0; num_adapters];
 

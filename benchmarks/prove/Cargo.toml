@@ -35,7 +35,9 @@ tracing.workspace = true
 default = ["parallel", "jemalloc", "metrics"]
 metrics = ["openvm-sdk/metrics"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
-aggregation = []                                    # runs leaf aggregation benchmarks
+stark-debug = ["openvm-sdk/stark-debug"]
+# runs leaf aggregation benchmarks:
+aggregation = []
 evm = ["openvm-sdk/evm-verify"]
 parallel = ["openvm-sdk/parallel"]
 mimalloc = ["openvm-sdk/mimalloc"]

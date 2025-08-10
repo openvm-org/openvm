@@ -689,20 +689,20 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
 }
 
 #[derive(derive_new::new, Copy, Clone)]
-pub struct FriReducedOpeningStep;
+pub struct FriReducedOpeningExecutor;
 
 #[derive(derive_new::new)]
 pub struct FriReducedOpeningFiller;
 
 pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;
 
-impl Default for FriReducedOpeningStep {
+impl Default for FriReducedOpeningExecutor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for FriReducedOpeningStep
+impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
@@ -1097,7 +1097,7 @@ struct FriReducedOpeningPreCompute {
     is_init_ptr: u32,
 }
 
-impl FriReducedOpeningStep {
+impl FriReducedOpeningExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -1138,7 +1138,7 @@ impl FriReducedOpeningStep {
     }
 }
 
-impl<F> InsExecutorE1<F> for FriReducedOpeningStep
+impl<F> Executor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
@@ -1148,7 +1148,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -1163,17 +1163,17 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for FriReducedOpeningStep
+impl<F> MeteredExecutor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<FriReducedOpeningPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -1192,7 +1192,7 @@ where
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
     execute_e12_impl(pre_compute, vm_state);
@@ -1200,7 +1200,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl(&pre_compute.data, vm_state);
@@ -1212,7 +1212,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &FriReducedOpeningPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
 

@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
@@ -135,13 +135,13 @@ pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usi
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct ConvertAdapterStep<const READ_SIZE: usize, const WRITE_SIZE: usize>;
+pub struct ConvertAdapterExecutor<const READ_SIZE: usize, const WRITE_SIZE: usize>;
 
 #[derive(derive_new::new)]
 pub struct ConvertAdapterFiller<const READ_SIZE: usize, const WRITE_SIZE: usize>;
 
-impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceStep<F>
-    for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceExecutor<F>
+    for ConvertAdapterExecutor<READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
     type ReadData = [F; READ_SIZE];

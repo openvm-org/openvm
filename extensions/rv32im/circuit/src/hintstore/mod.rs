@@ -344,7 +344,7 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32HintStoreStep {
+pub struct Rv32HintStoreExecutor {
     pub pointer_max_bits: usize,
     pub offset: usize,
 }
@@ -355,7 +355,7 @@ pub struct Rv32HintStoreFiller {
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl<F, RA> InstructionExecutor<F, RA> for Rv32HintStoreStep
+impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
     for<'buf> RA:
@@ -588,7 +588,7 @@ struct HintStorePreCompute {
     b: u8,
 }
 
-impl<F> InsExecutorE1<F> for Rv32HintStoreStep
+impl<F> Executor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
@@ -597,7 +597,7 @@ where
         size_of::<HintStorePreCompute>()
     }
 
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -613,15 +613,15 @@ where
     }
 }
 
-impl<F> InsExecutorE2<F> for Rv32HintStoreStep
+impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -646,7 +646,7 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
     pre_compute: &HintStorePreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
@@ -687,7 +687,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_S
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &HintStorePreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, vm_state);
@@ -695,7 +695,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_ST
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
     let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, vm_state);
@@ -704,7 +704,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_HINT_ST
         .on_height_change(pre_compute.chip_idx as usize, height_delta);
 }
 
-impl Rv32HintStoreStep {
+impl Rv32HintStoreExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,

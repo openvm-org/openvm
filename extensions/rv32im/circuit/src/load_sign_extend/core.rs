@@ -183,7 +183,7 @@ pub struct LoadSignExtendCoreRecord<const NUM_CELLS: usize> {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct LoadSignExtendStep<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
+pub struct LoadSignExtendExecutor<A, const NUM_CELLS: usize, const LIMB_BITS: usize> {
     adapter: A,
 }
 
@@ -197,12 +197,12 @@ pub struct LoadSignExtendFiller<
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> InstructionExecutor<F, RA>
-    for LoadSignExtendStep<A, NUM_CELLS, LIMB_BITS>
+impl<F, A, RA, const NUM_CELLS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
+    for LoadSignExtendExecutor<A, NUM_CELLS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
             ReadData = (([u32; NUM_CELLS], [u8; NUM_CELLS]), u8),
             WriteData = [u32; NUM_CELLS],
@@ -312,8 +312,8 @@ struct LoadSignExtendPreCompute {
     e: u8,
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE1<F>
-    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const LIMB_BITS: usize> Executor<F>
+    for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
@@ -322,7 +322,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -340,16 +340,16 @@ where
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> InsExecutorE2<F>
-    for LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
+    for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
 {
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<LoadSignExtendPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -380,7 +380,7 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &LoadSignExtendPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
         vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -399,7 +399,10 @@ unsafe fn execute_e12_impl<
         sign_extended.to_le_bytes()
     } else {
         if shift_amount != 0 && shift_amount != 2 {
-            vm_state.exit_code = Err(ExecutionError::Fail { pc: vm_state.pc });
+            vm_state.exit_code = Err(ExecutionError::Fail {
+                pc: vm_state.pc,
+                msg: "LoadSignExtend invalid shift amount",
+            });
             return;
         }
         let half: [u8; 2] = array::from_fn(|i| read_data[shift_amount as usize + i]);
@@ -421,7 +424,7 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, vm_state);
@@ -434,7 +437,7 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = pre_compute.borrow();
     vm_state
@@ -443,7 +446,7 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(&pre_compute.data, vm_state);
 }
 
-impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
+impl<A, const LIMB_BITS: usize> LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     /// Return (is_loadb, enabled)
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -473,7 +476,7 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendStep<A, { RV32_REGISTER_NUM_LIMBS 
         );
         match local_opcode {
             LOADB | LOADH => {}
-            _ => unreachable!("LoadSignExtendStep should only handle LOADB/LOADH opcodes"),
+            _ => unreachable!("LoadSignExtendExecutor should only handle LOADB/LOADH opcodes"),
         }
 
         let imm = c.as_canonical_u32();

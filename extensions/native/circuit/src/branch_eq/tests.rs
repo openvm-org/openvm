@@ -27,8 +27,8 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 use crate::{
-    adapters::{BranchNativeAdapterAir, BranchNativeAdapterFiller, BranchNativeAdapterStep},
-    branch_eq::{run_eq, NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqStep},
+    adapters::{BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller},
+    branch_eq::{run_eq, NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqExecutor},
     test_utils::write_native_or_imm,
     NativeBranchEqualFiller,
 };
@@ -36,15 +36,15 @@ use crate::{
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
-type Harness = TestChipHarness<F, NativeBranchEqStep, NativeBranchEqAir, NativeBranchEqChip<F>>;
+type Harness = TestChipHarness<F, NativeBranchEqExecutor, NativeBranchEqAir, NativeBranchEqChip<F>>;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     let air = NativeBranchEqAir::new(
         BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
     );
-    let executor = NativeBranchEqStep::new(
-        BranchNativeAdapterStep,
+    let executor = NativeBranchEqExecutor::new(
+        BranchNativeAdapterExecutor,
         NativeBranchEqualOpcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );

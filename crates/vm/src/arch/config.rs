@@ -373,7 +373,8 @@ impl InitFileGenerator for SystemConfig {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct AddressSpaceHostConfig {
-    /// The number of cells in each address space.
+    /// The number of memory cells in each address space, where a memory cell refers to a single
+    /// addressable unit of memory as defined by the ISA.
     pub num_cells: usize,
     /// Minimum block size for memory accesses supported. This is a property of the address space
     /// that is determined by the ISA.
@@ -381,6 +382,13 @@ pub struct AddressSpaceHostConfig {
     /// **Note**: Block size is in terms of memory cells.
     pub min_block_size: usize,
     pub layout: MemoryCellType,
+}
+
+impl AddressSpaceHostConfig {
+    /// The total size in bytes of the address space in a linear memory layout.
+    pub fn size(&self) -> usize {
+        self.num_cells * self.layout.size()
+    }
 }
 
 pub(crate) const MAX_CELL_BYTE_SIZE: usize = 8;

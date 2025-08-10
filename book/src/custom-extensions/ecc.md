@@ -60,7 +60,7 @@ Each declared curve must specify the `mod_type` (implementing `Field`) and a con
 openvm::init!();
 /* This expands to
 sw_init! {
-    Bls12_381G1Affine, P256Affine,
+    "Bls12_381G1Affine", "P256Affine",
 }
 te_init! {
     Edwards25519,

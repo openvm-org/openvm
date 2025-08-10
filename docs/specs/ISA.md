@@ -133,9 +133,15 @@ to. Address space `0` is considered a read-only array with `[a]_0 = a` for any `
 #### Memory Accesses and Block Accesses
 
 VM instructions can access (read or write) a contiguous list of cells (called a **block**) in a single address space.
-The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and the access does not need to be aligned, meaning that
-it can start from any pointer address, even those not divisible by the block size. An access is called a **block access
-** if it has size greater than 1. Block accesses are not supported for address space `0`.
+The block size must be in the set `{1, 2, 4, 8, 16, 32}`, and each address space has a minimum block size that is
+configurable. All block accesses must be at pointers that are a multiple of the minimum block size. For address
+spaces `1`, `2`, and `3`, the minimum block size is 4, meaning all accesses must be at pointer addresses that are
+divisible by 4. However, RISC-V instructions like `lb`, `lh`, `sb`, and `sh` still work despite having minimum
+block size requirements equal to the size of the access (1 byte for `lb`/`sb`, 2 bytes for `lh`/`sh`) because these
+instructions are implemented by doing a block access of size 4. For the native address space (`4`), the minimum
+block size is 1, so accesses can start from any pointer address. For address spaces beyond `4`, the minimum
+block size defaults to 1 but can be configured.
+Block accesses are not supported for address space `0`.
 
 #### Address Spaces
 
@@ -706,9 +712,9 @@ The instructions that have prefix `SW_` perform short Weierstrass curve operatio
 | Name                 | Operands    | Description                                                                                                                                                                                                                                                                                    |
 | -------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SW_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
-| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for SW ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
+| SETUP_SW_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for SW ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
 | SW_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for SW DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| SETUP_SW_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for SW DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 | TE_ADD\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve.           |
 | SETUP_TE_ADD\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A && r32_ec_point(c).x == C::D)` in the chip for TE ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`.                       |
 

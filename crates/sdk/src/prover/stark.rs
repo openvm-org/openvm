@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    InsExecutorE1, InsExecutorE2, InstructionExecutor, VirtualMachineError, VmBuilder,
-    VmExecutionConfig,
+    Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
 #[cfg(feature = "evm-prove")]
@@ -32,12 +31,11 @@ impl<E, VB, NativeBuilder> StarkProver<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor: InsExecutorE1<F>
-        + InsExecutorE2<F>
-        + InstructionExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
-        InstructionExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
     pub fn new(
         app_vm_builder: VB,

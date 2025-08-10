@@ -25,6 +25,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
+  JEMALLOC_SYS_WITH_MALLOC_CONF: "retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true"
 
 jobs:
   codspeed-walltime-benchmarks:
@@ -46,6 +48,16 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp "${{ env.S3_FIXTURES_PATH }}/*" benchmarks/fixtures/ || echo "No fixtures found in S3"
+
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
       - name: Install codspeed
@@ -60,8 +72,6 @@ jobs:
           working-directory: benchmarks/execute
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
-        env:
-          CODSPEED_RUNNER_MODE: walltime
 
   codspeed-instrumentation-benchmarks:
     name: Run codspeed instrumentation benchmarks
@@ -83,6 +93,16 @@ jobs:
         with:
           cache-on-failure: true
 
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp "${{ env.S3_FIXTURES_PATH }}/*" benchmarks/fixtures/ || echo "No fixtures found in S3"
+
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
       - name: Install codspeed
@@ -97,5 +117,3 @@ jobs:
           working-directory: benchmarks/execute
           run: cargo codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
-        env:
-          CODSPEED_RUNNER_MODE: instrumentation

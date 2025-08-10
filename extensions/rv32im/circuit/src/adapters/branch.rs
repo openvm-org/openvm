@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -118,12 +118,12 @@ pub struct Rv32BranchAdapterRecord {
 /// Reads instructions of the form OP a, b, c, d, e where if(\[a:4\]_d op \[b:4\]_e) pc += c.
 /// Operands d and e can only be 1.
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32BranchAdapterStep;
+pub struct Rv32BranchAdapterExecutor;
 
 #[derive(derive_new::new)]
 pub struct Rv32BranchAdapterFiller;
 
-impl<F> AdapterTraceStep<F> for Rv32BranchAdapterStep
+impl<F> AdapterTraceExecutor<F> for Rv32BranchAdapterExecutor
 where
     F: PrimeField32,
 {

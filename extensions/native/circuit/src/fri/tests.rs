@@ -18,7 +18,7 @@ use rand::{rngs::StdRng, Rng};
 
 use super::{
     super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningAir,
-    FriReducedOpeningChip, FriReducedOpeningStep, EXT_DEG,
+    FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
 };
 use crate::{
     fri::{WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
@@ -28,11 +28,11 @@ use crate::{
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
 type Harness =
-    TestChipHarness<F, FriReducedOpeningStep, FriReducedOpeningAir, FriReducedOpeningChip<F>>;
+    TestChipHarness<F, FriReducedOpeningExecutor, FriReducedOpeningAir, FriReducedOpeningChip<F>>;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let step = FriReducedOpeningStep::new();
+    let step = FriReducedOpeningExecutor::new();
     let chip = FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.memory_helper());
 
     Harness::with_capacity(step, air, chip, MAX_INS_CAPACITY)

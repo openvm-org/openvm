@@ -25,19 +25,19 @@ use test_case::test_case;
 use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
 use crate::{
     adapters::{
-        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterFiller,
-        Rv32LoadStoreAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterExecutor,
+        Rv32LoadStoreAdapterFiller, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     loadstore::LoadStoreCoreCols,
     test_utils::get_verification_error,
-    LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreStep,
+    LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreExecutor,
 };
 
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 
 type F = BabyBear;
-type Harness = TestChipHarness<F, Rv32LoadStoreStep, Rv32LoadStoreAir, Rv32LoadStoreChip<F>>;
+type Harness = TestChipHarness<F, Rv32LoadStoreExecutor, Rv32LoadStoreAir, Rv32LoadStoreChip<F>>;
 
 fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     let range_checker_chip = tester.range_checker();
@@ -51,8 +51,8 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
         ),
         LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32LoadStoreStep::new(
-        Rv32LoadStoreAdapterStep::new(tester.address_bits()),
+    let executor = Rv32LoadStoreExecutor::new(
+        Rv32LoadStoreAdapterExecutor::new(tester.address_bits()),
         Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv32LoadStoreChip::<F>::new(

@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.4.0-rc.0"
+version = "1.4.0-rc.2"
 edition = "2021"
 rust-version = "1.86.0"
 authors = ["OpenVM Authors"]
@@ -113,8 +113,8 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.0", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.0", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -229,6 +229,7 @@ hex = { version = "0.4.3", default-features = false }
 serde-big-array = "0.5.1"
 dashmap = "6.1.0"
 memmap2 = "0.9.5"
+tracing-subscriber = { version = "0.3.17", features = ["std", "env-filter"] }
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }

@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
@@ -135,12 +135,14 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct NativeVectorizedAdapterStep<const N: usize>;
+pub struct NativeVectorizedAdapterExecutor<const N: usize>;
 
 #[derive(derive_new::new)]
 pub struct NativeVectorizedAdapterFiller<const N: usize>;
 
-impl<F: PrimeField32, const N: usize> AdapterTraceStep<F> for NativeVectorizedAdapterStep<N> {
+impl<F: PrimeField32, const N: usize> AdapterTraceExecutor<F>
+    for NativeVectorizedAdapterExecutor<N>
+{
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
     type WriteData = [F; N];

@@ -21,7 +21,13 @@ mod config;
 
 /// The rustc compiler [target](https://doc.rust-lang.org/rustc/targets/index.html).
 pub const RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
-const RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+/// The default Rust toolchain name to use if OPENVM_RUST_TOOLCHAIN is not set
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "nightly-2025-02-14";
+
+/// Get the Rust toolchain name from environment variable or default
+pub fn get_rustup_toolchain_name() -> String {
+    env::var("OPENVM_RUST_TOOLCHAIN").unwrap_or_else(|_| DEFAULT_RUSTUP_TOOLCHAIN_NAME.to_string())
+}
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
 const GUEST_LOGFILE_ENV: &str = "OPENVM_GUEST_LOGFILE";
@@ -240,7 +246,7 @@ fn sanitized_cmd(tool: &str) -> Command {
 /// Creates a std::process::Command to execute the given cargo
 /// command in an environment suitable for targeting the zkvm guest.
 pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
-    let toolchain = format!("+{RUSTUP_TOOLCHAIN_NAME}");
+    let toolchain = format!("+{}", get_rustup_toolchain_name());
 
     let rustc = sanitized_cmd("rustup")
         .args([&toolchain, "which", "rustc"])
@@ -382,7 +388,7 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
 
     // Check if the required toolchain and rust-src component are installed, and if not, install
     // them. This requires that `rustup` is installed.
-    if let Err(code) = ensure_toolchain_installed(RUSTUP_TOOLCHAIN_NAME, &["rust-src"]) {
+    if let Err(code) = ensure_toolchain_installed(&get_rustup_toolchain_name(), &["rust-src"]) {
         eprintln!("rustup toolchain commands failed. Please ensure rustup is installed (https://www.rust-lang.org/tools/install)");
         return Err(Some(code));
     }

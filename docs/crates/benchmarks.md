@@ -181,19 +181,19 @@ For execution benchmarks, the ELF files need to be compiled before running the b
 
 ```bash
 # Build all benchmark ELFs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs
 
 # Build specific benchmark ELFs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- fibonacci_recursive fibonacci_iterative
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- fibonacci_recursive fibonacci_iterative
 
 # Skip specific programs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --skip keccak256 sha256
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --skip keccak256 sha256
 
 # Force rebuild even if ELFs already exist (overwrite)
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --force
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --force
 
 # Set build profile (debug or release)
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --profile debug
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --profile debug
 ```
 
 ## Profiling Execution

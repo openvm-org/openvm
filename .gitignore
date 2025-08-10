@@ -40,3 +40,6 @@ crates/cli/openvm/
 
 # samply profile
 profile.json.gz
+
+# test fixtures
+benchmarks/fixtures

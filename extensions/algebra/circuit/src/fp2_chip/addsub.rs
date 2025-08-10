@@ -11,15 +11,15 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    FieldExpressionStep,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
+    FieldExpressionFiller,
 };
 use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
 
-use super::{Fp2Air, Fp2Chip, Fp2Step};
-use crate::{FieldExprVecHeapStep, Fp2};
+use super::{Fp2Air, Fp2Chip, Fp2Executor};
+use crate::{FieldExprVecHeapExecutor, Fp2};
 
 pub fn fp2_addsub_expr(
     config: ExprBuilderConfig,
@@ -92,11 +92,11 @@ pub fn get_fp2_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> Fp2Step<BLOCKS, BLOCK_SIZE> {
+) -> Fp2Executor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    FieldExprVecHeapStep(FieldExpressionStep::new(
-        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+    FieldExprVecHeapExecutor(FieldExpressionExecutor::new(
+        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -152,7 +152,7 @@ mod tests {
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 
     use crate::fp2_chip::{
-        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, Fp2Air, Fp2Chip, Fp2Step,
+        get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, Fp2Air, Fp2Chip, Fp2Executor,
     };
 
     const NUM_LIMBS: usize = 32;
@@ -160,8 +160,12 @@ mod tests {
     const MAX_INS_CAPACITY: usize = 128;
     const OFFSET: usize = Fp2Opcode::CLASS_OFFSET;
     type F = BabyBear;
-    type Harness =
-        TestChipHarness<F, Fp2Step<2, NUM_LIMBS>, Fp2Air<2, NUM_LIMBS>, Fp2Chip<F, 2, NUM_LIMBS>>;
+    type Harness = TestChipHarness<
+        F,
+        Fp2Executor<2, NUM_LIMBS>,
+        Fp2Air<2, NUM_LIMBS>,
+        Fp2Chip<F, 2, NUM_LIMBS>,
+    >;
 
     fn set_and_execute_rand(
         tester: &mut VmChipTestBuilder<F>,

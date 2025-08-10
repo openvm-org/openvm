@@ -13,7 +13,7 @@ use openvm_circuit::{
     },
     system::{memory::SharedMemoryHelper, SystemPort},
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -41,7 +41,7 @@ use strum::EnumCount;
 use crate::{
     get_sw_addne_air, get_sw_addne_chip, get_sw_addne_step, get_sw_double_air, get_sw_double_chip,
     get_sw_double_step, get_te_add_air, get_te_add_chip, get_te_add_step, EccCpuProverExt,
-    EdwardsAir, SwAddNeStep, SwDoubleStep, TeAddStep, WeierstrassAir,
+    EdwardsAir, SwAddNeExecutor, SwDoubleExecutor, TeAddExecutor, WeierstrassAir,
 };
 
 #[serde_as]
@@ -143,7 +143,7 @@ impl EccExtension {
         let supported_te_curves = self
             .supported_te_curves
             .iter()
-            .map(|curve_config| curve_config.struct_name.to_string())
+            .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
             .collect::<Vec<String>>()
             .join(", ");
 
@@ -153,16 +153,16 @@ impl EccExtension {
     }
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum EccExtensionExecutor {
     // 32 limbs prime
-    SwEcAddNeRv32_32(SwAddNeStep<2, 32>),
-    SwEcDoubleRv32_32(SwDoubleStep<2, 32>),
+    SwAddNeRv32_32(SwAddNeExecutor<2, 32>),
+    SwDoubleRv32_32(SwDoubleExecutor<2, 32>),
     // 48 limbs prime
-    SwEcAddNeRv32_48(SwAddNeStep<6, 16>),
-    SwEcDoubleRv32_48(SwDoubleStep<6, 16>),
+    SwAddNeRv32_48(SwAddNeExecutor<6, 16>),
+    SwDoubleRv32_48(SwDoubleExecutor<6, 16>),
     // 32 limbs prime
-    TeEcAddRv32_32(TeAddStep<2, 32>),
+    TeEcAddRv32_32(TeAddExecutor<2, 32>),
 }
 
 impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
@@ -196,7 +196,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
                 );
 
                 inventory.add_executor(
-                    EccExtensionExecutor::SwEcAddNeRv32_32(addne),
+                    EccExtensionExecutor::SwAddNeRv32_32(addne),
                     ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
                         ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -211,7 +211,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
                 );
 
                 inventory.add_executor(
-                    EccExtensionExecutor::SwEcDoubleRv32_32(double),
+                    EccExtensionExecutor::SwDoubleRv32_32(double),
                     ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
                         ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -230,7 +230,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
                 );
 
                 inventory.add_executor(
-                    EccExtensionExecutor::SwEcAddNeRv32_48(addne),
+                    EccExtensionExecutor::SwAddNeRv32_48(addne),
                     ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
                         ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
@@ -245,7 +245,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
                 );
 
                 inventory.add_executor(
-                    EccExtensionExecutor::SwEcDoubleRv32_48(double),
+                    EccExtensionExecutor::SwDoubleRv32_48(double),
                     ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
                         ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),

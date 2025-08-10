@@ -5,9 +5,9 @@ use openvm_circuit::{
         instructions::{
             instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
         },
-        ContinuationVmProof, InsExecutorE1, InsExecutorE2, InstructionExecutor, MatrixRecordArena,
-        PreflightExecutionOutput, SingleSegmentVmProver, SystemConfig, VirtualMachine,
-        VirtualMachineError, VmBuilder, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
+        ContinuationVmProof, Executor, MatrixRecordArena, MeteredExecutor,
+        PreflightExecutionOutput, PreflightExecutor, SingleSegmentVmProver, SystemConfig,
+        VirtualMachine, VirtualMachineError, VmBuilder, VmExecutionConfig, PUBLIC_VALUES_AIR_ID,
     },
     system::program::trace::VmCommittedExe,
     utils::next_power_of_two_or_zero,
@@ -68,9 +68,7 @@ pub(super) fn compute_root_proof_heights(
     // after tracegen:
     let mut trace_heights = NATIVE_MAX_TRACE_HEIGHTS.to_vec();
     trace_heights[PUBLIC_VALUES_AIR_ID] = num_public_values as u32;
-    let state = root_vm
-        .executor()
-        .create_initial_state(&root_committed_exe.exe, root_input.write());
+    let state = root_vm.create_initial_state(&root_committed_exe.exe, root_input.write());
     let cached_program_trace = root_vm.transport_committed_exe_to_device(root_committed_exe);
     root_vm.load_program(cached_program_trace);
     root_vm.transport_init_memory_to_device(&state.memory);
@@ -194,8 +192,7 @@ fn dummy_app_proof<VB, VC>(
 where
     VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>,
     VC: VmExecutionConfig<F>,
-    <VC as VmExecutionConfig<F>>::Executor:
-        InsExecutorE1<F> + InsExecutorE2<F> + InstructionExecutor<F>,
+    <VC as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
 {
     let fri_params = app_vm_pk.fri_params;
     let dummy_exe = dummy_app_committed_exe(fri_params);

@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -200,12 +200,12 @@ pub struct Rv32RdWriteAdapterRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32RdWriteAdapterStep;
+pub struct Rv32RdWriteAdapterExecutor;
 
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv32RdWriteAdapterFiller;
 
-impl<F> AdapterTraceStep<F> for Rv32RdWriteAdapterStep
+impl<F> AdapterTraceExecutor<F> for Rv32RdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -279,8 +279,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv32CondRdWriteAdapterStep {
-    inner: Rv32RdWriteAdapterStep,
+pub struct Rv32CondRdWriteAdapterExecutor {
+    inner: Rv32RdWriteAdapterExecutor,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
@@ -288,7 +288,7 @@ pub struct Rv32CondRdWriteAdapterFiller {
     inner: Rv32RdWriteAdapterFiller,
 }
 
-impl<F> AdapterTraceStep<F> for Rv32CondRdWriteAdapterStep
+impl<F> AdapterTraceExecutor<F> for Rv32CondRdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -310,7 +310,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::read(
+        <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -329,7 +329,7 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if enabled.is_one() {
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F>>::write(
+            <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::write(
                 &self.inner,
                 memory,
                 instruction,

@@ -23,24 +23,24 @@ use test_case::test_case;
 
 use crate::{
     adapters::{
-        NativeVectorizedAdapterAir, NativeVectorizedAdapterFiller, NativeVectorizedAdapterStep,
+        NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,
     },
     field_extension::run_field_extension,
     test_utils::write_native_array,
     FieldExtension, FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir,
-    FieldExtensionCoreCols, FieldExtensionCoreFiller, FieldExtensionStep, EXT_DEG,
+    FieldExtensionCoreCols, FieldExtensionCoreFiller, FieldExtensionExecutor, EXT_DEG,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
-type Harness = TestChipHarness<F, FieldExtensionStep, FieldExtensionAir, FieldExtensionChip<F>>;
+type Harness = TestChipHarness<F, FieldExtensionExecutor, FieldExtensionAir, FieldExtensionChip<F>>;
 
 fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let air = FieldExtensionAir::new(
         NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FieldExtensionCoreAir::new(),
     );
-    let executor = FieldExtensionStep::new(NativeVectorizedAdapterStep::new());
+    let executor = FieldExtensionExecutor::new(NativeVectorizedAdapterExecutor::new());
     let chip = FieldExtensionChip::<F>::new(
         FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller),
         tester.memory_helper(),

@@ -2,7 +2,7 @@ use std::borrow::Borrow;
 
 use openvm_circuit::{
     arch::{
-        AdapterAirContext, AdapterTraceFiller, AdapterTraceStep, BasicAdapterInterface,
+        AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller, BasicAdapterInterface,
         ExecutionBridge, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{offline_checker::MemoryBridge, online::TracingMemory, MemoryAuxColsFactory},
@@ -21,8 +21,8 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterFiller,
-    Rv32VecHeapAdapterRecord, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
+    Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterRecord,
 };
 
 /// This adapter reads from NUM_READS <= 2 pointers and writes to 1 pointer.
@@ -92,14 +92,14 @@ impl<
 }
 
 #[derive(Clone, Copy)]
-pub struct Rv32HeapAdapterStep<
+pub struct Rv32HeapAdapterExecutor<
     const NUM_READS: usize,
     const READ_SIZE: usize,
     const WRITE_SIZE: usize,
->(Rv32VecHeapAdapterStep<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
+>(Rv32VecHeapAdapterExecutor<NUM_READS, 1, 1, READ_SIZE, WRITE_SIZE>);
 
 impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+    Rv32HeapAdapterExecutor<NUM_READS, READ_SIZE, WRITE_SIZE>
 {
     pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
@@ -107,7 +107,7 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Rv32HeapAdapterStep(Rv32VecHeapAdapterStep::new(pointer_max_bits))
+        Rv32HeapAdapterExecutor(Rv32VecHeapAdapterExecutor::new(pointer_max_bits))
     }
 }
 
@@ -137,7 +137,7 @@ impl<const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
 }
 
 impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    AdapterTraceStep<F> for Rv32HeapAdapterStep<NUM_READS, READ_SIZE, WRITE_SIZE>
+    AdapterTraceExecutor<F> for Rv32HeapAdapterExecutor<NUM_READS, READ_SIZE, WRITE_SIZE>
 where
     F: PrimeField32,
 {
@@ -158,7 +158,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        let read_data = AdapterTraceStep::<F>::read(&self.0, memory, instruction, record);
+        let read_data = AdapterTraceExecutor::<F>::read(&self.0, memory, instruction, record);
         read_data.map(|r| r[0])
     }
 
@@ -169,7 +169,7 @@ where
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
-        AdapterTraceStep::<F>::write(&self.0, memory, instruction, data, record);
+        AdapterTraceExecutor::<F>::write(&self.0, memory, instruction, data, record);
     }
 }
 

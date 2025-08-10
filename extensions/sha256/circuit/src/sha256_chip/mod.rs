@@ -48,7 +48,7 @@ pub const SHA256_MAX_MESSAGE_LEN: usize = 1 << 29;
 pub type Sha256VmChip<F> = VmChipWrapper<F, Sha256VmFiller>;
 
 #[derive(derive_new::new, Clone)]
-pub struct Sha256VmStep {
+pub struct Sha256VmExecutor {
     pub offset: usize,
     pub pointer_max_bits: usize,
 }
@@ -82,12 +82,12 @@ struct ShaPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
+impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShaPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -101,12 +101,12 @@ impl<F: PrimeField32> InsExecutorE1<F> for Sha256VmStep {
         Ok(execute_e1_impl::<_, _>)
     }
 }
-impl<F: PrimeField32> InsExecutorE2<F> for Sha256VmStep {
-    fn e2_pre_compute_size(&self) -> usize {
+impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -125,7 +125,7 @@ impl<F: PrimeField32> InsExecutorE2<F> for Sha256VmStep {
 
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
     pre_compute: &ShaPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
     let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -167,14 +167,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
 
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShaPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
 }
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShaPreCompute> = pre_compute.borrow();
     let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, vm_state);
@@ -183,7 +183,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
-impl Sha256VmStep {
+impl Sha256VmExecutor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,

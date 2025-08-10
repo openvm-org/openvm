@@ -27,7 +27,7 @@ pub struct NativeBranchEqualCoreRecord<F> {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct NativeBranchEqualStep<A> {
+pub struct NativeBranchEqualExecutor<A> {
     adapter: A,
     pub offset: usize,
     pub pc_step: u32,
@@ -38,10 +38,10 @@ pub struct NativeBranchEqualFiller<A> {
     adapter: A,
 }
 
-impl<F, A, RA> InstructionExecutor<F, RA> for NativeBranchEqualStep<A>
+impl<F, A, RA> PreflightExecutor<F, RA> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceStep<F, ReadData: Into<[F; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[F; 2]>, WriteData = ()>,
     for<'buf> RA: RecordArena<
         'buf,
         EmptyAdapterCoreLayout<F, A>,
@@ -121,7 +121,7 @@ struct NativeBranchEqualPreCompute {
     b_or_imm: u32,
 }
 
-impl<A> NativeBranchEqualStep<A> {
+impl<A> NativeBranchEqualExecutor<A> {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
         &self,
@@ -174,7 +174,7 @@ impl<A> NativeBranchEqualStep<A> {
     }
 }
 
-impl<F, A> InsExecutorE1<F> for NativeBranchEqualStep<A>
+impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {
@@ -184,7 +184,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: E1ExecutionCtx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -209,17 +209,17 @@ where
     }
 }
 
-impl<F, A> InsExecutorE2<F> for NativeBranchEqualStep<A>
+impl<F, A> MeteredExecutor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {
     #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<NativeBranchEqualPreCompute>>()
     }
 
     #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -255,7 +255,7 @@ unsafe fn execute_e1_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, vm_state);
@@ -269,7 +269,7 @@ unsafe fn execute_e2_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeBranchEqualPreCompute> = pre_compute.borrow();
     vm_state
@@ -287,7 +287,7 @@ unsafe fn execute_e12_impl<
     const IS_NE: bool,
 >(
     pre_compute: &NativeBranchEqualPreCompute,
-    vm_state: &mut VmSegmentState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.a_or_imm)

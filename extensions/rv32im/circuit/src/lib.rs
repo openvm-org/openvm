@@ -5,7 +5,7 @@ use openvm_circuit::{
     },
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
-use openvm_circuit_derive::{InsExecutorE1, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{Executor, PreflightExecutor, VmConfig};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,

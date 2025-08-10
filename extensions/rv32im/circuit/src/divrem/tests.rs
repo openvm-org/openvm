@@ -35,21 +35,21 @@ use test_case::test_case;
 use super::core::run_divrem;
 use crate::{
     adapters::{
-        Rv32MultAdapterAir, Rv32MultAdapterFiller, Rv32MultAdapterStep, RV32_CELL_BITS,
+        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
         RV32_REGISTER_NUM_LIMBS,
     },
     divrem::{
         run_mul_carries, run_sltu_diff_idx, DivRemCoreCols, DivRemCoreSpecialCase, Rv32DivRemChip,
     },
     test_utils::get_verification_error,
-    DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemStep,
+    DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
-type Harness = TestChipHarness<F, Rv32DivRemStep, Rv32DivRemAir, Rv32DivRemChip<F>>;
+type Harness = TestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChip<F>>;
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     x: [u32; NUM_LIMBS],
@@ -86,7 +86,7 @@ fn create_test_chip(
         Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32DivRemStep::new(Rv32MultAdapterStep, DivRemOpcode::CLASS_OFFSET);
+    let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
     let chip = Rv32DivRemChip::<F>::new(
         DivRemFiller::new(
             Rv32MultAdapterFiller,

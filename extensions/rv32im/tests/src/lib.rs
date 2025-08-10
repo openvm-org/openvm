@@ -175,7 +175,8 @@ mod tests {
         )?;
 
         let executor = VmExecutor::new(config.clone())?;
-        let state = executor.execute_e1(exe, vec![], None)?;
+        let instance = executor.instance(&exe)?;
+        let state = instance.execute(vec![], None)?;
         let final_memory = state.memory.memory;
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
@@ -231,8 +232,9 @@ mod tests {
         )?;
 
         let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&exe)?;
         let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
-        match executor.execute_e1(exe.clone(), input.clone(), None) {
+        match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),
@@ -292,8 +294,9 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        let executor = VmExecutor::<F, _>::new(config.clone()).unwrap();
-        executor.execute_e1(exe, vec![], None).unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
+        instance.execute(vec![], None).unwrap();
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]

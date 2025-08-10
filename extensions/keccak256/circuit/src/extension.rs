@@ -13,7 +13,7 @@ use openvm_circuit::{
         SystemPort,
     },
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, VmConfig};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
 };
@@ -101,9 +101,9 @@ where
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
 pub struct Keccak256;
 
-#[derive(Clone, Copy, From, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor)]
+#[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Keccak256Executor {
-    Keccak256(KeccakVmStep),
+    Keccak256(KeccakVmExecutor),
 }
 
 impl<F> VmExecutionExtension<F> for Keccak256 {
@@ -114,7 +114,7 @@ impl<F> VmExecutionExtension<F> for Keccak256 {
         inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
-        let keccak_step = KeccakVmStep::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
+        let keccak_step = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, pointer_max_bits);
         inventory.add_executor(
             keccak_step,
             Rv32KeccakOpcode::iter().map(|x| x.global_opcode()),

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use derive_more::derive::From;
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::var_range::{
     SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
     VariableRangeCheckerChip,
@@ -40,7 +40,7 @@ use crate::{
             online::GuestMemory,
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
         },
-        native_adapter::{NativeAdapterAir, NativeAdapterStep},
+        native_adapter::{NativeAdapterAir, NativeAdapterExecutor},
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,
             PhantomChip, PhantomExecutor, PhantomFiller,
@@ -49,7 +49,7 @@ use crate::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
         },
         program::{ProgramBus, ProgramChip},
-        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesStep},
+        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor},
     },
 };
 
@@ -133,9 +133,9 @@ pub enum TouchedMemory<F> {
     Volatile(TimestampedEquipartition<F, 1>),
 }
 
-#[derive(Clone, AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor, From)]
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 pub enum SystemExecutor<F: Field> {
-    PublicValues(PublicValuesStep<F>),
+    PublicValues(PublicValuesExecutor<F>),
     Phantom(PhantomExecutor<F>),
 }
 
@@ -236,8 +236,8 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     type Executor = SystemExecutor<F>;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will add an
-    /// executor for [PublicValuesStep] if continuations is disabled. It will always add an executor
-    /// for [PhantomChip], which handles all phantom sub-executors.
+    /// executor for [PublicValuesExecutor] if continuations is disabled. It will always add an
+    /// executor for [PhantomChip], which handles all phantom sub-executors.
     fn create_executors(
         &self,
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
@@ -246,8 +246,8 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
-            let public_values = PublicValuesStep::new(
-                NativeAdapterStep::default(),
+            let public_values = PublicValuesExecutor::new(
+                NativeAdapterExecutor::default(),
                 self.num_public_values,
                 (self.max_constraint_degree as u32).checked_sub(1).unwrap(),
             );
@@ -397,8 +397,8 @@ where
 
         let public_values_chip = config.has_public_values_chip().then(|| {
             VmChipWrapper::new(
-                PublicValuesStep::new(
-                    NativeAdapterStep::default(),
+                PublicValuesExecutor::new(
+                    NativeAdapterExecutor::default(),
                     config.num_public_values,
                     config.max_constraint_degree as u32 - 1,
                 ),
@@ -477,6 +477,7 @@ where
         use crate::system::memory::interface::MemoryInterface;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values_chip.is_some());
+        let mut access_adapter_offset = boundary_idx + 1;
         match &self.memory_controller.interface_chip {
             MemoryInterface::Volatile { boundary_chip } => {
                 let boundary_height = boundary_chip
@@ -494,6 +495,7 @@ where
                 let boundary_height = 2 * boundary_chip.touched_labels.len();
                 heights[boundary_idx] = boundary_height;
                 heights[boundary_idx + 1] = merkle_chip.current_height;
+                access_adapter_offset += 1;
 
                 // Poseidon2Periphery height also varies based on memory, so set it now even though
                 // it's not a system chip:
@@ -505,6 +507,12 @@ where
                 heights[poseidon_idx] = poseidon_height;
             }
         }
+        let access_heights = &self
+            .memory_controller
+            .access_adapter_inventory
+            .trace_heights;
+        heights[access_adapter_offset..access_adapter_offset + access_heights.len()]
+            .copy_from_slice(access_heights);
     }
 }
 

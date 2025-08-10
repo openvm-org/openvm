@@ -14,8 +14,8 @@ openvm_algebra_moduli_macros::moduli_init! {
 
 // the order of the curves here does not match the order in supported_curves
 openvm_ecc_sw_macros::sw_init! {
-    P256Point,
-    Secp256k1Point,
+    "P256Point",
+    "Secp256k1Point",
 }
 
 openvm::entry!(main);

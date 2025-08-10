@@ -27,7 +27,7 @@ use crate::{
 };
 
 impl<const CHUNK: usize, F: PrimeField32> MemoryMerkleChip<CHUNK, F> {
-    #[instrument(name = "merkle_finalize", skip_all)]
+    #[instrument(name = "merkle_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize(
         &mut self,
         initial_memory: &MemoryImage,

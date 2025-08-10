@@ -26,19 +26,19 @@ use test_case::test_case;
 use super::{core::run_less_than, LessThanCoreAir, Rv32LessThanChip};
 use crate::{
     adapters::{
-        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterFiller, Rv32BaseAluAdapterStep, RV32_CELL_BITS,
-        RV32_REGISTER_NUM_LIMBS,
+        Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     less_than::LessThanCoreCols,
     test_utils::{
         generate_rv32_is_type_immediate, get_verification_error, rv32_rand_write_register_or_imm,
     },
-    LessThanFiller, Rv32LessThanAir, Rv32LessThanStep,
+    LessThanFiller, Rv32LessThanAir, Rv32LessThanExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
-type Harness = TestChipHarness<F, Rv32LessThanStep, Rv32LessThanAir, Rv32LessThanChip<F>>;
+type Harness = TestChipHarness<F, Rv32LessThanExecutor, Rv32LessThanAir, Rv32LessThanChip<F>>;
 
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
@@ -61,7 +61,8 @@ fn create_test_chip(
         ),
         LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
     );
-    let executor = Rv32LessThanStep::new(Rv32BaseAluAdapterStep, LessThanOpcode::CLASS_OFFSET);
+    let executor =
+        Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
     let chip = Rv32LessThanChip::<F>::new(
         LessThanFiller::new(
             Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),

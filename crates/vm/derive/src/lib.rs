@@ -9,8 +9,8 @@ use syn::{
     GenericParam, Ident, Meta, Token,
 };
 
-#[proc_macro_derive(InstructionExecutor)]
-pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(PreflightExecutor)]
+pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
@@ -48,11 +48,11 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             // crate.
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> },
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> },
             );
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
@@ -87,13 +87,13 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     let execute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>>::execute(x, state, instruction)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA>>::execute(x, state, instruction)
                     };
                     let get_opcode_name_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>>::get_opcode_name(x, opcode)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA>>::get_opcode_name(x, opcode)
                     };
                     let where_predicate = syn::parse_quote! {
-                        #field_ty: ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA>
+                        #field_ty: ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA>
                     };
                     (execute_arm, get_opcode_name_arm, where_predicate)
                 }));
@@ -104,7 +104,7 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InstructionExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
                     fn execute(
                         &mut self,
                         state: ::openvm_circuit::arch::VmStateMut<#field_ty_generic, ::openvm_circuit::system::memory::online::TracingMemory, RA>,
@@ -128,8 +128,8 @@ pub fn instruction_executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(InsExecutorE1)]
-pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Executor)]
+pub fn executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
@@ -154,15 +154,15 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE1<F> });
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::Executor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         self.0.pre_compute_size()
                     }
                     #[inline(always)]
-                    fn pre_compute_e1<Ctx>(
+                    fn pre_compute<Ctx>(
                         &self,
                         pc: u32,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
@@ -170,7 +170,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
-                        self.0.pre_compute_e1(pc, inst, data)
+                        self.0.pre_compute(pc, inst, data)
                     }
                 }
             }
@@ -205,18 +205,18 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, pre_compute_e1_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, pre_compute_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
                 };
-                let pre_compute_e1_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>>::pre_compute_e1(x, pc, instruction, data)
+                let pre_compute_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic>
+                    #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
                 };
-                (pre_compute_size_arm, pre_compute_e1_arm, where_predicate)
+                (pre_compute_size_arm, pre_compute_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -226,7 +226,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InsExecutorE1<#first_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::Executor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         match self {
@@ -235,7 +235,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn pre_compute_e1<Ctx>(
+                    fn pre_compute<Ctx>(
                         &self,
                         pc: u32,
                         instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
@@ -244,7 +244,7 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
                         match self {
-                            #(#pre_compute_e1_arms,)*
+                            #(#pre_compute_arms,)*
                         }
                     }
                 }
@@ -255,8 +255,8 @@ pub fn ins_executor_e1_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-#[proc_macro_derive(InsExecutorE2)]
-pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(MeteredExecutor)]
+pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
 
     let name = &ast.ident;
@@ -281,15 +281,15 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InsExecutorE2<F> });
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::MeteredExecutor<F> });
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
-                    fn e2_pre_compute_size(&self) -> usize {
-                        self.0.e2_pre_compute_size()
+                    fn metered_pre_compute_size(&self) -> usize {
+                        self.0.metered_pre_compute_size()
                     }
                     #[inline(always)]
-                    fn pre_compute_e2<Ctx>(
+                    fn metered_pre_compute<Ctx>(
                         &self,
                         chip_idx: usize,
                         pc: u32,
@@ -298,7 +298,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
-                        self.0.pre_compute_e2(chip_idx, pc, inst, data)
+                        self.0.metered_pre_compute(chip_idx, pc, inst, data)
                     }
                 }
             }
@@ -333,18 +333,18 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, pre_compute_e2_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, metered_pre_compute_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::e2_pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
                 };
-                let pre_compute_e2_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>>::pre_compute_e2(x, chip_idx, pc, instruction, data)
+                let metered_pre_compute_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic>
+                    #field_ty: ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>
                 };
-                (pre_compute_size_arm, pre_compute_e2_arm, where_predicate)
+                (pre_compute_size_arm, metered_pre_compute_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -354,16 +354,16 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::InsExecutorE2<#first_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
-                    fn e2_pre_compute_size(&self) -> usize {
+                    fn metered_pre_compute_size(&self) -> usize {
                         match self {
                             #(#pre_compute_size_arms,)*
                         }
                     }
 
                     #[inline(always)]
-                    fn pre_compute_e2<Ctx>(
+                    fn metered_pre_compute<Ctx>(
                         &self,
                         chip_idx: usize,
                         pc: u32,
@@ -373,7 +373,7 @@ pub fn ins_executor_e2_derive(input: TokenStream) -> TokenStream {
                     where
                         Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
                         match self {
-                            #(#pre_compute_e2_arms,)*
+                            #(#metered_pre_compute_arms,)*
                         }
                     }
                 }
@@ -562,9 +562,9 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             Clone,
             ::derive_more::derive::From,
             ::openvm_circuit::derive::AnyEnum,
-            ::openvm_circuit::derive::InsExecutorE1,
-            ::openvm_circuit::derive::InsExecutorE2,
-            ::openvm_circuit::derive::InstructionExecutor,
+            ::openvm_circuit::derive::Executor,
+            ::openvm_circuit::derive::MeteredExecutor,
+            ::openvm_circuit::derive::PreflightExecutor,
         )]
         pub enum #executor_type<F: openvm_stark_backend::p3_field::Field> {
             #[any_enum]

@@ -11,15 +11,15 @@ use openvm_circuit_primitives::{
 };
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionFiller,
-    FieldExpressionStep, FieldVariable,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
+    FieldExpressionFiller, FieldVariable,
 };
 use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller, Rv32VecHeapAdapterStep,
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
 };
 
-use super::{ModularAir, ModularChip, ModularStep};
-use crate::FieldExprVecHeapStep;
+use super::{ModularAir, ModularChip, ModularExecutor};
+use crate::FieldExprVecHeapExecutor;
 
 pub fn addsub_expr(
     config: ExprBuilderConfig,
@@ -89,11 +89,11 @@ pub fn get_modular_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> ModularStep<BLOCKS, BLOCK_SIZE> {
+) -> ModularExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
 
-    FieldExprVecHeapStep(FieldExpressionStep::new(
-        Rv32VecHeapAdapterStep::new(pointer_max_bits),
+    FieldExprVecHeapExecutor(FieldExpressionExecutor::new(
+        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,

@@ -23,18 +23,19 @@ use test_case::test_case;
 use super::{NativeLoadStoreChip, NativeLoadStoreCoreAir};
 use crate::{
     adapters::{
-        NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterFiller,
-        NativeLoadStoreAdapterStep,
+        NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterExecutor,
+        NativeLoadStoreAdapterFiller,
     },
     test_utils::write_native_array,
-    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreCoreFiller, NativeLoadStoreStep,
+    NativeLoadStoreAir, NativeLoadStoreCoreCols, NativeLoadStoreCoreFiller,
+    NativeLoadStoreExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness<const NUM_CELLS: usize> = TestChipHarness<
     F,
-    NativeLoadStoreStep<NUM_CELLS>,
+    NativeLoadStoreExecutor<NUM_CELLS>,
     NativeLoadStoreAir<NUM_CELLS>,
     NativeLoadStoreChip<F, NUM_CELLS>,
 >;
@@ -44,8 +45,8 @@ fn create_test_chip<const NUM_CELLS: usize>(tester: &VmChipTestBuilder<F>) -> Ha
         NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
         NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
     );
-    let executor = NativeLoadStoreStep::new(
-        NativeLoadStoreAdapterStep::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+    let executor = NativeLoadStoreExecutor::new(
+        NativeLoadStoreAdapterExecutor::new(NativeLoadStoreOpcode::CLASS_OFFSET),
         NativeLoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = NativeLoadStoreChip::<F, NUM_CELLS>::new(
