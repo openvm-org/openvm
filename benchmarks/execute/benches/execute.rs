@@ -22,9 +22,7 @@ use openvm_continuations::{
     verifier::{common::types::VmVerifierPvs, leaf::types::LeafVmVerifierInput},
     SC,
 };
-use openvm_ecc_circuit::{
-    EccCpuProverExt, EccExtension, EccExtensionExecutor, EccExtensionPeriphery,
-};
+use openvm_ecc_circuit::{EccCpuProverExt, EccExtension, EccExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
@@ -181,11 +179,7 @@ where
             inventory,
         )?;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &EccCpuProverExt,
-            &config.weierstrass,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&EccCpuProverExt, &config.ecc, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }

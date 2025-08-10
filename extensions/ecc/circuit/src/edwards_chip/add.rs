@@ -96,6 +96,7 @@ fn gen_base_expr(
     (expr, local_opcode_idx)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_te_add_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
@@ -287,7 +288,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
                     { TeCurveType::ED25519 as u8 },
                     false,
                 >),
-                _ => panic!("Unsupported curve type"),
             }
         } else if is_setup {
             Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
@@ -337,7 +337,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
                 (false, TeCurveType::ED25519) => {
                     Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { TeCurveType::ED25519 as u8 }>)
                 }
-                _ => panic!("Unsupported curve type"),
             }
         } else if is_setup {
             Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
@@ -390,7 +389,7 @@ unsafe fn execute_e2_setup_impl<
             std::mem::size_of::<TeAddPreCompute>(),
         )
     };
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(&pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(pre_compute, vm_state);
 }
 
 unsafe fn execute_e12_impl<

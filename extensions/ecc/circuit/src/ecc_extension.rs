@@ -560,9 +560,11 @@ lazy_static! {
     ));
 }
 // little-endian
-const P256_A: [u8; 32] = hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
+pub const P256_A: [u8; 32] =
+    hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
 // little-endian
-const P256_B: [u8; 32] = hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
+pub const P256_B: [u8; 32] =
+    hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
 
 pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
 pub const P256_ECC_STRUCT_NAME: &str = "P256Point";

@@ -97,8 +97,7 @@ mod guest_tests {
             system::SystemChipInventory,
         };
         use openvm_ecc_circuit::{
-            CurveConfig, EccExtension, EccExtensionExecutor, Rv32EccConfig, Rv32EccConfigExecutor,
-            Rv32EccCpuBuilder, SwCurveCoeffs,
+            CurveConfig, Rv32EccConfig, Rv32EccConfigExecutor, Rv32EccCpuBuilder, SwCurveCoeffs,
         };
         use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
         use openvm_stark_backend::{

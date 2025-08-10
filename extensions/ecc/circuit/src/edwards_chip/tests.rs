@@ -1,21 +1,21 @@
 use std::{str::FromStr, sync::Arc};
 
 use num_bigint::BigUint;
-use num_traits::{FromPrimitive, Num, Zero};
+use num_traits::FromPrimitive;
 use openvm_circuit::arch::{
     testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     MatrixRecordArena,
 };
 use openvm_circuit_primitives::{
-    bigint::utils::{big_uint_to_limbs, secp256k1_coord_prime, secp256r1_coord_prime},
+    bigint::utils::big_uint_to_limbs,
     bitwise_op_lookup::{
         BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
         SharedBitwiseOperationLookupChip,
     },
 };
-use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
+use openvm_ecc_transpiler::Rv32EdwardsOpcode;
 use openvm_instructions::{riscv::RV32_CELL_BITS, LocalOpcode};
-use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig, FieldExpr};
+use openvm_mod_circuit_builder::{test_utils::biguint_to_limbs, ExprBuilderConfig};
 use openvm_rv32_adapters::rv32_write_heap_default;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -172,10 +172,6 @@ fn test_add() {
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
-    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
 
     let (mut harness, bitwise) = create_test_chip(
         &tester,
