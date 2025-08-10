@@ -217,7 +217,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     use openvm_algebra_guest::IntMod;
                     // Safety: Self::set_up_once() ensures IntMod::set_up_once() has been called.
                     unsafe {
-                        self.x.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&#intmod_type::ZERO)
+                        self.x.eq_impl::<CHECK_SETUP>(&<#intmod_type as IntMod>::ZERO) && self.y.eq_impl::<CHECK_SETUP>(&<#intmod_type as IntMod>::ZERO)
                     }
                 }
             }
@@ -376,7 +376,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
             }
 
             mod #group_ops_mod_name {
-                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint, FromCompressed}, impl_sw_group_ops, algebra::IntMod};
+                use ::openvm_ecc_guest::{weierstrass::{WeierstrassPoint}, FromCompressed, impl_sw_group_ops, algebra::IntMod};
                 use super::*;
 
                 impl_sw_group_ops!(#struct_name, #intmod_type);
@@ -447,7 +447,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #add_ne_extern_func(rd: usize, rs1: usize, rs2: usize) {
                 openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
+                    opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
                     funct7 = SwBaseFunct7::SwAddNe as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
@@ -460,7 +460,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             #[no_mangle]
             extern "C" fn #double_extern_func(rd: usize, rs1: usize) {
                 openvm::platform::custom_insn_r!(
-                    opcode = OPCODE,
+                    opcode = SW_OPCODE,
                     funct3 = SW_FUNCT3 as usize,
                     funct7 = SwBaseFunct7::SwDouble as usize + #ec_idx
                         * (SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
@@ -475,7 +475,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 {
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
+                        opcode = ::openvm_ecc_guest::SW_OPCODE,
                         funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
@@ -485,7 +485,7 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         rs2 = In p2
                     );
                     openvm::platform::custom_insn_r!(
-                        opcode = ::openvm_ecc_guest::OPCODE,
+                        opcode = ::openvm_ecc_guest::SW_OPCODE,
                         funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
@@ -504,8 +504,8 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
     TokenStream::from(quote::quote_spanned! { span.into() =>
         #[allow(non_snake_case)]
         #[cfg(target_os = "zkvm")]
-        mod openvm_intrinsics_ffi_2 {
-            use ::openvm_ecc_guest::{OPCODE, SW_FUNCT3, SwBaseFunct7};
+        mod openvm_intrinsics_ffi_2_sw {
+            use ::openvm_ecc_guest::{SW_OPCODE, SW_FUNCT3, SwBaseFunct7};
 
             #(#externs)*
         }

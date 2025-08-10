@@ -14,8 +14,8 @@ mod tests {
         utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassCpuBuilder, P256_CONFIG,
-        SECP256K1_CONFIG,
+        CurveConfig, Rv32EccConfig, Rv32EccCpuBuilder, SwCurveCoeffs, TeCurveCoeffs,
+        ED25519_CONFIG, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -39,15 +39,18 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(test)]
-    fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
-        let mut config = Rv32WeierstrassConfig::new(curves);
+    fn test_rv32ecc_config(
+        sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+        te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
+    ) -> Rv32EccConfig {
+        let mut config = Rv32EccConfig::new(sw_curves, te_curves);
         *config.as_mut() = test_system_config_with_continuations();
         config
     }
 
     #[test]
     fn test_ec() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone()]);
+        let config = test_rv32ecc_config(vec![SECP256K1_CONFIG.clone()], vec![]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec",
@@ -63,13 +66,13 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32EccCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_nonzero_a() -> Result<()> {
-        let config = test_rv32weierstrass_config(vec![P256_CONFIG.clone()]);
+        let config = test_rv32ecc_config(vec![P256_CONFIG.clone()], vec![]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_nonzero_a",
@@ -85,14 +88,14 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32EccCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_two_curves() -> Result<()> {
         let config =
-            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+            test_rv32ecc_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()], vec![]);
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "ec_two_curves",
@@ -108,15 +111,15 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32EccCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_decompress() -> Result<()> {
-        use halo2curves_axiom::{group::Curve, secp256k1::Secp256k1Affine};
+        use halo2curves_axiom::{ed25519::Ed25519Affine, group::Curve, secp256k1::Secp256k1Affine};
 
-        let config = test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(),
+        let config = test_rv32ecc_config(vec![SECP256K1_CONFIG.clone(),
                 CurveConfig {
                     struct_name: "CurvePoint5mod8".to_string(),
                     modulus: BigUint::from_str("115792089237316195423570985008687907853269984665640564039457584007913129639501")
@@ -124,8 +127,10 @@ mod tests {
                     // unused, set to 10e9 + 7
                     scalar: BigUint::from_str("1000000007")
                         .unwrap(),
-                    a: BigUint::ZERO,
-                    b: BigUint::from_str("6").unwrap(),
+                    coeffs: SwCurveCoeffs {
+                        a: BigUint::ZERO,
+                        b: BigUint::from_str("6").unwrap(),
+                    },
                 },
                 CurveConfig {
                     struct_name: "CurvePoint1mod4".to_string(),
@@ -133,19 +138,24 @@ mod tests {
                         .unwrap(),
                     scalar: BigUint::from_radix_be(&hex!("ffffffffffffffffffffffffffff16a2e0b8f03e13dd29455c5c2a3d"), 256)
                         .unwrap(),
-                    a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
-                        .unwrap(),
-                    b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
-                        .unwrap(),
+                    coeffs: SwCurveCoeffs {
+                        a: BigUint::from_radix_be(&hex!("fffffffffffffffffffffffffffffffefffffffffffffffffffffffe"), 256)
+                            .unwrap(),
+                        b: BigUint::from_radix_be(&hex!("b4050a850c04b3abf54132565044b0b7d7bfd8ba270b39432355ffb4"), 256)
+                            .unwrap(),
+                    },
                 },
-            ]);
+            ],
+            vec![ED25519_CONFIG.clone()],
+        );
 
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!(),
             "decompress",
-            ["k256"],
+            ["k256", "ed25519"],
             &config,
         )?;
+
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -158,8 +168,7 @@ mod tests {
 
         let p = Secp256k1Affine::generator();
         let p = (p + p + p).to_affine();
-        println!("decompressed: {:?}", p);
-
+        println!("secp256k1 decompressed: {:?}", p);
         let q_x: [u8; 32] =
             hex!("0100000000000000000000000000000000000000000000000000000000000000");
         let q_y: [u8; 32] =
@@ -168,19 +177,25 @@ mod tests {
             hex!("211D5C11D68032342211C256D3C1034AB99013327FBFB46BBD0C0EB700000000");
         let r_y: [u8; 32] =
             hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
+        let s = Ed25519Affine::generator();
+        let s = (s + s + s).to_affine();
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
-            .concat()
-            .into_iter()
-            .map(FieldAlgebra::from_canonical_u8)
-            .collect();
-        air_test_with_min_segments(
-            Rv32WeierstrassCpuBuilder,
-            config,
-            openvm_exe,
-            vec![coords],
-            1,
-        );
+        let coords = [
+            p.x.to_bytes(),
+            p.y.to_bytes(),
+            q_x,
+            q_y,
+            r_x,
+            r_y,
+            s.x.to_bytes(),
+            s.y.to_bytes(),
+        ]
+        .concat()
+        .into_iter()
+        .map(FieldAlgebra::from_canonical_u8)
+        .collect();
+
+        air_test_with_min_segments(Rv32EccCpuBuilder, config, openvm_exe, vec![coords], 1);
         Ok(())
     }
 
@@ -256,6 +271,31 @@ mod tests {
     }
 
     #[test]
+    fn test_edwards_ec() -> Result<()> {
+        let config = toml::from_str::<AppConfig<SdkVmConfig>>(include_str!(
+            "../programs/openvm_ed25519.toml"
+        ))?
+        .app_vm_config;
+        let elf = build_example_program_at_path_with_features::<&str>(
+            get_programs_dir!(),
+            "edwards_ec",
+            ["ed25519"],
+            &config,
+        )?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        air_test(SdkVmCpuBuilder, config, openvm_exe);
+        Ok(())
+    }
+
+    #[test]
     #[should_panic]
     fn test_invalid_setup() {
         let elf = build_example_program_at_path_with_features(
@@ -276,7 +316,7 @@ mod tests {
         )
         .unwrap();
         let config =
-            test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+            test_rv32ecc_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()], vec![]);
+        air_test(Rv32EccCpuBuilder, config, openvm_exe);
     }
 }

@@ -35,10 +35,10 @@ use openvm_rv32_adapters::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{curves::get_curve_type, WeierstrassAir, WeierstrassChip};
-use crate::weierstrass_chip::curves::{ec_double, CurveType};
+use super::{curves::get_sw_curve_type, WeierstrassAir, WeierstrassChip};
+use crate::weierstrass_chip::curves::{sw_double, SwCurveType};
 
-pub fn ec_double_ne_expr(
+pub fn sw_double_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
     a_biguint: BigUint,
@@ -73,7 +73,7 @@ pub fn ec_double_ne_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub struct SwDoubleExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<1, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
@@ -82,18 +82,18 @@ fn gen_base_expr(
     range_checker_bus: VariableRangeCheckerBus,
     a_biguint: BigUint,
 ) -> (FieldExpr, Vec<usize>) {
-    let expr = ec_double_ne_expr(config, range_checker_bus, a_biguint);
+    let expr = sw_double_ne_expr(config, range_checker_bus, a_biguint);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_DOUBLE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SW_DOUBLE as usize,
+        Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     ];
 
     (expr, local_opcode_idx)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -115,25 +115,25 @@ pub fn get_ec_double_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_ec_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_double_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
     a_biguint: BigUint,
-) -> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+) -> SwDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus, a_biguint);
-    EcDoubleExecutor(FieldExpressionExecutor::new(
+    SwDoubleExecutor(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         vec![],
-        "EcDouble",
+        "SwDouble",
     ))
 }
 
-pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
@@ -157,19 +157,19 @@ pub fn get_ec_double_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct EcDoublePreCompute<'a> {
+struct SwDoublePreCompute<'a> {
     expr: &'a FieldExpr,
     rs_addrs: [u8; 1],
     a: u8,
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> SwDoubleExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut EcDoublePreCompute<'a>,
+        data: &mut SwDoublePreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode, a, b, d, e, ..
@@ -204,7 +204,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, 
         }
 
         let rs_addrs = [b as u8];
-        *data = EcDoublePreCompute {
+        *data = SwDoublePreCompute {
             expr: &self.expr,
             rs_addrs,
             a: a as u8,
@@ -212,18 +212,18 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, 
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize;
 
         Ok(is_setup)
     }
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+    for SwDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        std::mem::size_of::<EcDoublePreCompute>()
+        std::mem::size_of::<SwDoublePreCompute>()
     }
 
     fn pre_compute<Ctx>(
@@ -235,72 +235,78 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     where
         Ctx: E1ExecutionCtx,
     {
-        let pre_compute: &mut EcDoublePreCompute = data.borrow_mut();
+        let pre_compute: &mut SwDoublePreCompute = data.borrow_mut();
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         if let Some(curve_type) = {
             let modulus = &pre_compute.expr.builder.prime;
             let a_coeff = &pre_compute.expr.setup_values[0];
-            get_curve_type(modulus, a_coeff)
+            get_sw_curve_type(modulus, a_coeff)
         } {
             match (is_setup, curve_type) {
-                (true, CurveType::K256) => {
-                    Ok(
-                        execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>,
-                    )
-                }
-                (true, CurveType::P256) => {
-                    Ok(
-                        execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>,
-                    )
-                }
-                (true, CurveType::BN254) => Ok(execute_e12_impl::<
+                (true, SwCurveType::K256) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::BN254 as u8 },
+                    { SwCurveType::K256 as u8 },
                     true,
                 >),
-                (true, CurveType::BLS12_381) => Ok(execute_e12_impl::<
+                (true, SwCurveType::P256) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::BLS12_381 as u8 },
+                    { SwCurveType::P256 as u8 },
                     true,
                 >),
-                (false, CurveType::K256) => Ok(execute_e12_impl::<
+                (true, SwCurveType::BN254) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::K256 as u8 },
+                    { SwCurveType::BN254 as u8 },
+                    true,
+                >),
+                (true, SwCurveType::BLS12_381) => Ok(execute_e12_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { SwCurveType::BLS12_381 as u8 },
+                    true,
+                >),
+                (false, SwCurveType::K256) => Ok(execute_e12_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { SwCurveType::K256 as u8 },
                     false,
                 >),
-                (false, CurveType::P256) => Ok(execute_e12_impl::<
+                (false, SwCurveType::P256) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::P256 as u8 },
+                    { SwCurveType::P256 as u8 },
                     false,
                 >),
-                (false, CurveType::BN254) => Ok(execute_e12_impl::<
+                (false, SwCurveType::BN254) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::BN254 as u8 },
+                    { SwCurveType::BN254 as u8 },
                     false,
                 >),
-                (false, CurveType::BLS12_381) => Ok(execute_e12_impl::<
+                (false, SwCurveType::BLS12_381) => Ok(execute_e12_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::BLS12_381 as u8 },
+                    { SwCurveType::BLS12_381 as u8 },
                     false,
                 >),
             }
@@ -313,11 +319,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
-    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+    for SwDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        std::mem::size_of::<E2PreCompute<EcDoublePreCompute>>()
+        std::mem::size_of::<E2PreCompute<SwDoublePreCompute>>()
     }
 
     fn metered_pre_compute<Ctx>(
@@ -330,7 +336,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
     where
         Ctx: E2ExecutionCtx,
     {
-        let pre_compute: &mut E2PreCompute<EcDoublePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<SwDoublePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
@@ -338,38 +344,50 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         if let Some(curve_type) = {
             let modulus = &pre_compute.data.expr.builder.prime;
             let a_coeff = &pre_compute.data.expr.setup_values[0];
-            get_curve_type(modulus, a_coeff)
+            get_sw_curve_type(modulus, a_coeff)
         } {
             match (is_setup, curve_type) {
-                (true, CurveType::K256) => {
-                    Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
-                }
-                (true, CurveType::P256) => {
-                    Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
-                }
-                (true, CurveType::BN254) => {
-                    Ok(
-                        execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>,
-                    )
-                }
-                (true, CurveType::BLS12_381) => Ok(execute_e2_setup_impl::<
+                (true, SwCurveType::K256) => Ok(execute_e2_setup_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
-                    { CurveType::BLS12_381 as u8 },
+                    { SwCurveType::K256 as u8 },
                 >),
-                (false, CurveType::K256) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
+                (true, SwCurveType::P256) => Ok(execute_e2_setup_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { SwCurveType::P256 as u8 },
+                >),
+                (true, SwCurveType::BN254) => Ok(execute_e2_setup_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { SwCurveType::BN254 as u8 },
+                >),
+                (true, SwCurveType::BLS12_381) => Ok(execute_e2_setup_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { SwCurveType::BLS12_381 as u8 },
+                >),
+                (false, SwCurveType::K256) => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::K256 as u8 }>)
                 }
-                (false, CurveType::P256) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
+                (false, SwCurveType::P256) => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::P256 as u8 }>)
                 }
-                (false, CurveType::BN254) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
+                (false, SwCurveType::BN254) => {
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BN254 as u8 }>)
                 }
-                (false, CurveType::BLS12_381) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
+                (false, SwCurveType::BLS12_381) => {
+                    Ok(
+                        execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { SwCurveType::BLS12_381 as u8 }>,
+                    )
                 }
             }
         } else if is_setup {
@@ -390,14 +408,14 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<SwDoublePreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     let pre_compute = unsafe {
         std::slice::from_raw_parts(
             &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
+            std::mem::size_of::<SwDoublePreCompute>(),
         )
     };
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, false>(pre_compute, vm_state);
@@ -413,14 +431,14 @@ unsafe fn execute_e2_setup_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<SwDoublePreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     let pre_compute = unsafe {
         std::slice::from_raw_parts(
             &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
+            std::mem::size_of::<SwDoublePreCompute>(),
         )
     };
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(pre_compute, vm_state);
@@ -437,7 +455,7 @@ unsafe fn execute_e12_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
+    let pre_compute: &SwDoublePreCompute = pre_compute.borrow();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -456,7 +474,7 @@ unsafe fn execute_e12_impl<
         if input_prime != pre_compute.expr.builder.prime {
             vm_state.exit_code = Err(ExecutionError::Fail {
                 pc: vm_state.pc,
-                msg: "EcDouble: mismatched prime",
+                msg: "SwDouble: mismatched prime",
             });
             return;
         }
@@ -467,7 +485,7 @@ unsafe fn execute_e12_impl<
         if input_a != *coeff_a {
             vm_state.exit_code = Err(ExecutionError::Fail {
                 pc: vm_state.pc,
-                msg: "EcDouble: mismatched coeff_a",
+                msg: "SwDouble: mismatched coeff_a",
             });
             return;
         }
@@ -482,7 +500,7 @@ unsafe fn execute_e12_impl<
         )
         .into()
     } else {
-        ec_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+        sw_double::<CURVE_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));

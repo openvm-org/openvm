@@ -60,20 +60,39 @@ supported_moduli = ["<modulus_1>", "<modulus_2>", ...]
 [app_vm_config.pairing]
 supported_curves = ["Bls12_381", "Bn254"]
 
-[[app_vm_config.ecc.supported_curves]]
-struct_name = "<curve_name_1>"
+[[app_vm_config.ecc.supported_sw_curves]]
+struct_name = "<sw_curve_name_1>"
 modulus = "<modulus_1>"
 scalar = "<scalar_1>"
+[app_vm_config.ecc.supported_sw_curves.coeffs]
 a = "<a_1>"
 b = "<b_1>"
 
-[[app_vm_config.ecc.supported_curves]]
-struct_name = "<curve_name_2>"
+[[app_vm_config.ecc.supported_sw_curves]]
+struct_name = "<sw_curve_name_2>"
 modulus = "<modulus_2>"
 scalar = "<scalar_2>"
+[app_vm_config.ecc.supported_sw_curves.coeffs]
 a = "<a_2>"
 b = "<b_2>"
+
+[[app_vm_config.ecc.supported_te_curves]]
+struct_name = "<te_curve_name_1>"
+modulus = "<modulus_1>"
+scalar = "<scalar_1>"
+[app_vm_config.ecc.supported_te_curves.coeffs]
+a = "<a_1>"
+d = "<d_1>"
+
+[[app_vm_config.ecc.supported_te_curves]]
+struct_name = "<te_curve_name_2>"
+modulus = "<modulus_2>"
+scalar = "<scalar_2>"
+[app_vm_config.ecc.supported_te_curves.coeffs]
+a = "<a_2>"
+d = "<d_2>"
+`
 ```
 
 `rv32i`, `io`, and `rv32m` need to be always included if you make an `openvm.toml` file while the rest are optional and should be included if you want to use the corresponding extension.
-All moduli and scalars must be provided in decimal format. Currently `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_curves]]` entries.
+All moduli and scalars must be provided in decimal format. Currently `pairing` supports only pre-defined `Bls12_381` and `Bn254` curves. To add more `ecc` curves you need to add more `[[app_vm_config.ecc.supported_sw_curves]]` or `[[app_vm_config.ecc.supported_te_curves]]` entries.

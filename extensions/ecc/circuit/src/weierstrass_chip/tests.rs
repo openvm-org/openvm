@@ -21,8 +21,8 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
-    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
+    get_sw_addne_air, get_sw_addne_chip, get_sw_addne_step, get_sw_double_air, get_sw_double_chip,
+    get_sw_double_step, SwDoubleExecutor, WeierstrassAir, WeierstrassChip,
 };
 
 const NUM_LIMBS: usize = 32;
@@ -80,7 +80,7 @@ lazy_static::lazy_static! {
     };
 }
 
-fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
+pub fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
     expr.prime_limbs
         .iter()
         .map(|n| BabyBear::from_canonical_usize(*n))
@@ -89,7 +89,7 @@ fn prime_limbs(expr: &FieldExpr) -> Vec<BabyBear> {
 
 type WeierstrassHarness = TestChipHarness<
     F,
-    EcDoubleExecutor<2, BLOCK_SIZE>,
+    SwDoubleExecutor<2, BLOCK_SIZE>,
     WeierstrassAir<1, 2, BLOCK_SIZE>,
     WeierstrassChip<F, 1, 2, BLOCK_SIZE>,
     MatrixRecordArena<F>,
@@ -111,7 +111,7 @@ fn create_test_double_chips(
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-    let air = get_ec_double_air(
+    let air = get_sw_double_air(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
@@ -121,14 +121,14 @@ fn create_test_double_chips(
         offset,
         a_biguint.clone(),
     );
-    let executor = get_ec_double_step(
+    let executor = get_sw_double_step(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
         offset,
         a_biguint.clone(),
     );
-    let chip = get_ec_double_chip(
+    let chip = get_sw_double_chip(
         config.clone(),
         tester.memory_helper(),
         tester.range_checker(),
@@ -154,7 +154,7 @@ fn test_add_ne() {
         bitwise_bus,
     ));
 
-    let air = get_ec_addne_air::<2, BLOCK_SIZE>(
+    let air = get_sw_addne_air::<2, BLOCK_SIZE>(
         tester.execution_bridge(),
         tester.memory_bridge(),
         config.clone(),
@@ -163,13 +163,13 @@ fn test_add_ne() {
         tester.address_bits(),
         Rv32WeierstrassOpcode::CLASS_OFFSET,
     );
-    let executor = get_ec_addne_step::<2, BLOCK_SIZE>(
+    let executor = get_sw_addne_step::<2, BLOCK_SIZE>(
         config.clone(),
         tester.range_checker().bus(),
         tester.address_bits(),
         Rv32WeierstrassOpcode::CLASS_OFFSET,
     );
-    let chip = get_ec_addne_chip::<F, 2, BLOCK_SIZE>(
+    let chip = get_sw_addne_chip::<F, 2, BLOCK_SIZE>(
         config.clone(),
         tester.memory_helper(),
         tester.range_checker(),
@@ -209,7 +209,7 @@ fn test_add_ne() {
         &mut tester,
         vec![prime_limbs, one_limbs], // inputs[0] = prime, others doesn't matter
         vec![one_limbs, one_limbs],
-        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -217,7 +217,7 @@ fn test_add_ne() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![p2_x_limbs, p2_y_limbs],
-        harness.executor.offset + Rv32WeierstrassOpcode::EC_ADD_NE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SW_ADD_NE as usize,
     );
 
     tester.execute(&mut harness, &instruction);
@@ -268,7 +268,7 @@ fn test_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -276,7 +276,7 @@ fn test_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut harness, &instruction);
@@ -352,7 +352,7 @@ fn test_p256_double() {
         vec![prime_limbs, a_limbs], /* inputs[0] = prime, inputs[1] = a coeff of weierstrass
                                      * equation */
         vec![],
-        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize,
     );
     tester.execute(&mut harness, &setup_instruction);
 
@@ -360,7 +360,7 @@ fn test_p256_double() {
         &mut tester,
         vec![p1_x_limbs, p1_y_limbs],
         vec![],
-        harness.executor.offset + Rv32WeierstrassOpcode::EC_DOUBLE as usize,
+        harness.executor.offset + Rv32WeierstrassOpcode::SW_DOUBLE as usize,
     );
 
     tester.execute(&mut harness, &instruction);

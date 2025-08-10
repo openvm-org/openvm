@@ -21,7 +21,11 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerBus,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
+use openvm_ecc_guest::{
+    algebra::IntMod,
+    ed25519::{CURVE_A as ED25519_A, CURVE_D as ED25519_D, ED25519_MODULUS, ED25519_ORDER},
+};
+use openvm_ecc_transpiler::{Rv32EdwardsOpcode, Rv32WeierstrassOpcode};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
@@ -35,13 +39,14 @@ use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
 use crate::{
-    get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
-    get_ec_double_step, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt, WeierstrassAir,
+    get_sw_addne_air, get_sw_addne_chip, get_sw_addne_step, get_sw_double_air, get_sw_double_chip,
+    get_sw_double_step, get_te_add_air, get_te_add_chip, get_te_add_step, EccCpuProverExt,
+    EdwardsAir, SwAddNeExecutor, SwDoubleExecutor, TeAddExecutor, WeierstrassAir,
 };
 
 #[serde_as]
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
-pub struct CurveConfig {
+pub struct CurveConfig<T> {
     /// The name of the curve struct as defined by moduli_declare.
     pub struct_name: String,
     /// The coordinate modulus of the curve.
@@ -50,6 +55,13 @@ pub struct CurveConfig {
     /// The scalar field modulus of the curve.
     #[serde_as(as = "DisplayFromStr")]
     pub scalar: BigUint,
+    // curve-specific coefficients
+    pub coeffs: T,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+pub struct SwCurveCoeffs {
     /// The coefficient a of y^2 = x^3 + ax + b.
     #[serde_as(as = "DisplayFromStr")]
     pub a: BigUint,
@@ -58,61 +70,114 @@ pub struct CurveConfig {
     pub b: BigUint,
 }
 
-pub static SECP256K1_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    struct_name: SECP256K1_ECC_STRUCT_NAME.to_string(),
-    modulus: SECP256K1_MODULUS.clone(),
-    scalar: SECP256K1_ORDER.clone(),
-    a: BigUint::zero(),
-    b: BigUint::from_u8(7u8).unwrap(),
+#[serde_as]
+#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+pub struct TeCurveCoeffs {
+    /// The coefficient a of ax^2 + y^2 = 1 + dx^2y^2
+    #[serde_as(as = "DisplayFromStr")]
+    pub a: BigUint,
+    /// The coefficient d of ax^2 + y^2 = 1 + dx^2y^2
+    #[serde_as(as = "DisplayFromStr")]
+    pub d: BigUint,
+}
+
+pub static SECP256K1_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "Secp256k1Point".to_string(),
+    modulus: BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE FFFFFC2F"
+    )),
+    scalar: BigUint::from_bytes_be(&hex!(
+        "FFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141"
+    )),
+    coeffs: SwCurveCoeffs {
+        a: BigUint::zero(),
+        b: BigUint::from_u8(7u8).unwrap(),
+    },
 });
 
-pub static P256_CONFIG: Lazy<CurveConfig> = Lazy::new(|| CurveConfig {
-    struct_name: P256_ECC_STRUCT_NAME.to_string(),
-    modulus: P256_MODULUS.clone(),
-    scalar: P256_ORDER.clone(),
-    a: BigUint::from_bytes_le(&P256_A),
-    b: BigUint::from_bytes_le(&P256_B),
+pub static P256_CONFIG: Lazy<CurveConfig<SwCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "P256Point".to_string(),
+    modulus: BigUint::from_bytes_be(&hex!(
+        "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+    )),
+    scalar: BigUint::from_bytes_be(&hex!(
+        "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    )),
+    coeffs: SwCurveCoeffs {
+        a: BigUint::from_bytes_le(&hex!(
+            "fcffffffffffffffffffffff00000000000000000000000001000000ffffffff"
+        )),
+        b: BigUint::from_bytes_le(&hex!(
+            "4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a"
+        )),
+    },
+});
+
+pub static ED25519_CONFIG: Lazy<CurveConfig<TeCurveCoeffs>> = Lazy::new(|| CurveConfig {
+    struct_name: "Ed25519Point".to_string(),
+    modulus: ED25519_MODULUS.clone(),
+    scalar: ED25519_ORDER.clone(),
+    coeffs: TeCurveCoeffs {
+        a: BigUint::from_bytes_le(ED25519_A.as_le_bytes()),
+        d: BigUint::from_bytes_le(ED25519_D.as_le_bytes()),
+    },
 });
 
 #[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
-pub struct WeierstrassExtension {
-    pub supported_curves: Vec<CurveConfig>,
+pub struct EccExtension {
+    #[serde(default)]
+    pub supported_sw_curves: Vec<CurveConfig<SwCurveCoeffs>>,
+    #[serde(default)]
+    pub supported_te_curves: Vec<CurveConfig<TeCurveCoeffs>>,
 }
 
-impl WeierstrassExtension {
-    pub fn generate_sw_init(&self) -> String {
-        let supported_curves = self
-            .supported_curves
+impl EccExtension {
+    pub fn generate_ecc_init(&self) -> String {
+        let supported_sw_curves = self
+            .supported_sw_curves
             .iter()
             .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
             .collect::<Vec<String>>()
             .join(", ");
 
-        format!("openvm_ecc_guest::sw_macros::sw_init! {{ {supported_curves} }}")
+        let supported_te_curves = self
+            .supported_te_curves
+            .iter()
+            .map(|curve_config| format!("\"{}\"", curve_config.struct_name))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        format!(
+            "openvm_ecc_guest::sw_macros::sw_init! {{ {supported_sw_curves} }}\nopenvm_ecc_guest::te_macros::te_init! {{ {supported_te_curves} }}"
+        )
     }
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-pub enum WeierstrassExtensionExecutor {
+pub enum EccExtensionExecutor {
     // 32 limbs prime
-    EcAddNeRv32_32(EcAddNeExecutor<2, 32>),
-    EcDoubleRv32_32(EcDoubleExecutor<2, 32>),
+    SwAddNeRv32_32(SwAddNeExecutor<2, 32>),
+    SwDoubleRv32_32(SwDoubleExecutor<2, 32>),
     // 48 limbs prime
-    EcAddNeRv32_48(EcAddNeExecutor<6, 16>),
-    EcDoubleRv32_48(EcDoubleExecutor<6, 16>),
+    SwAddNeRv32_48(SwAddNeExecutor<6, 16>),
+    SwDoubleRv32_48(SwDoubleExecutor<6, 16>),
+    // 32 limbs prime
+    TeEcAddRv32_32(TeAddExecutor<2, 32>),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
-    type Executor = WeierstrassExtensionExecutor;
+impl<F: PrimeField32> VmExecutionExtension<F> for EccExtension {
+    type Executor = EccExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<F, EccExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let pointer_max_bits = inventory.pointer_max_bits();
         // TODO: somehow get the range checker bus from `ExecutorInventory`
         let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
-        for (i, curve) in self.supported_curves.iter().enumerate() {
+
+        // add the sw curves
+        for (i, curve) in self.supported_sw_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
@@ -123,7 +188,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: 32,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_sw_addne_step(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -131,24 +196,24 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_32(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    EccExtensionExecutor::SwAddNeRv32_32(addne),
+                    ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_sw_double_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_32(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    EccExtensionExecutor::SwDoubleRv32_32(double),
+                    ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else if bytes <= 48 {
@@ -157,7 +222,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                     num_limbs: 48,
                     limb_bits: 8,
                 };
-                let addne = get_ec_addne_step(
+                let addne = get_sw_addne_step(
                     config.clone(),
                     dummy_range_checker_bus,
                     pointer_max_bits,
@@ -165,24 +230,55 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcAddNeRv32_48(addne),
-                    ((Rv32WeierstrassOpcode::EC_ADD_NE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize))
+                    EccExtensionExecutor::SwAddNeRv32_48(addne),
+                    ((Rv32WeierstrassOpcode::SW_ADD_NE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let double = get_ec_double_step(
+                let double = get_sw_double_step(
                     config,
                     dummy_range_checker_bus,
                     pointer_max_bits,
                     start_offset,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
 
                 inventory.add_executor(
-                    WeierstrassExtensionExecutor::EcDoubleRv32_48(double),
-                    ((Rv32WeierstrassOpcode::EC_DOUBLE as usize)
-                        ..=(Rv32WeierstrassOpcode::SETUP_EC_DOUBLE as usize))
+                    EccExtensionExecutor::SwDoubleRv32_48(double),
+                    ((Rv32WeierstrassOpcode::SW_DOUBLE as usize)
+                        ..=(Rv32WeierstrassOpcode::SETUP_SW_DOUBLE as usize))
+                        .map(|x| VmOpcode::from_usize(x + start_offset)),
+                )?;
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        // add the te curves
+        for (i, curve) in self.supported_te_curves.iter().enumerate() {
+            let start_offset = Rv32EdwardsOpcode::CLASS_OFFSET + i * Rv32EdwardsOpcode::COUNT;
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+                let add = get_te_add_step(
+                    config.clone(),
+                    dummy_range_checker_bus,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.coeffs.a.clone(),
+                    curve.coeffs.d.clone(),
+                );
+
+                inventory.add_executor(
+                    EccExtensionExecutor::TeEcAddRv32_32(add),
+                    ((Rv32EdwardsOpcode::TE_ADD as usize)
+                        ..=(Rv32EdwardsOpcode::SETUP_TE_ADD as usize))
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
             } else {
@@ -194,7 +290,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
     }
 }
 
-impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for EccExtension {
     fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
         let SystemPort {
             execution_bus,
@@ -218,7 +314,8 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 air.bus
             }
         };
-        for (i, curve) in self.supported_curves.iter().enumerate() {
+
+        for (i, curve) in self.supported_sw_curves.iter().enumerate() {
             let start_offset =
                 Rv32WeierstrassOpcode::CLASS_OFFSET + i * Rv32WeierstrassOpcode::COUNT;
             let bytes = curve.modulus.bits().div_ceil(8);
@@ -230,7 +327,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<2, 32>(
+                let addne = get_sw_addne_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -241,7 +338,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<2, 32>(
+                let double = get_sw_double_air::<2, 32>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -249,7 +346,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
                 inventory.add_air(double);
             } else if bytes <= 48 {
@@ -259,7 +356,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     limb_bits: 8,
                 };
 
-                let addne = get_ec_addne_air::<6, 16>(
+                let addne = get_sw_addne_air::<6, 16>(
                     exec_bridge,
                     memory_bridge,
                     config.clone(),
@@ -270,7 +367,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                 );
                 inventory.add_air(addne);
 
-                let double = get_ec_double_air::<6, 16>(
+                let double = get_sw_double_air::<6, 16>(
                     exec_bridge,
                     memory_bridge,
                     config,
@@ -278,9 +375,37 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
                     bitwise_lu,
                     pointer_max_bits,
                     start_offset,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
                 inventory.add_air(double);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        for (i, curve) in self.supported_te_curves.iter().enumerate() {
+            let start_offset = Rv32EdwardsOpcode::CLASS_OFFSET + i * Rv32EdwardsOpcode::COUNT;
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                let add = get_te_add_air::<2, 32>(
+                    exec_bridge,
+                    memory_bridge,
+                    config.clone(),
+                    range_checker_bus,
+                    bitwise_lu,
+                    pointer_max_bits,
+                    start_offset,
+                    curve.coeffs.a.clone(),
+                    curve.coeffs.d.clone(),
+                );
+                inventory.add_air(add);
             } else {
                 panic!("Modulus too large");
             }
@@ -292,7 +417,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, WeierstrassExtension> for EccCpuProverExt
+impl<E, SC, RA> VmProverExtension<E, RA, EccExtension> for EccCpuProverExt
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -301,7 +426,7 @@ where
 {
     fn extend_prover(
         &self,
-        extension: &WeierstrassExtension,
+        extension: &EccExtension,
         inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
@@ -321,7 +446,8 @@ where
                 chip
             }
         };
-        for curve in extension.supported_curves.iter() {
+
+        for curve in extension.supported_sw_curves.iter() {
             let bytes = curve.modulus.bits().div_ceil(8);
 
             if bytes <= 32 {
@@ -332,7 +458,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 2, 32>(
+                let addne = get_sw_addne_chip::<Val<SC>, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -342,13 +468,13 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 2, 32>(
+                let double = get_sw_double_chip::<Val<SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
                 inventory.add_executor_chip(double);
             } else if bytes <= 48 {
@@ -359,7 +485,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 6, 16>(
+                let addne = get_sw_addne_chip::<Val<SC>, 6, 16>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -369,15 +495,41 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 6, 16>(
+                let double = get_sw_double_chip::<Val<SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
                     bitwise_lu.clone(),
                     pointer_max_bits,
-                    curve.a.clone(),
+                    curve.coeffs.a.clone(),
                 );
                 inventory.add_executor_chip(double);
+            } else {
+                panic!("Modulus too large");
+            }
+        }
+
+        for curve in extension.supported_te_curves.iter() {
+            let bytes = curve.modulus.bits().div_ceil(8);
+
+            if bytes <= 32 {
+                let config = ExprBuilderConfig {
+                    modulus: curve.modulus.clone(),
+                    num_limbs: 32,
+                    limb_bits: 8,
+                };
+
+                inventory.next_air::<EdwardsAir<2, 2, 32>>()?;
+                let add = get_te_add_chip::<Val<SC>, 2, 32>(
+                    config.clone(),
+                    mem_helper.clone(),
+                    range_checker.clone(),
+                    bitwise_lu.clone(),
+                    pointer_max_bits,
+                    curve.coeffs.a.clone(),
+                    curve.coeffs.d.clone(),
+                );
+                inventory.add_executor_chip(add);
             } else {
                 panic!("Modulus too large");
             }
@@ -408,9 +560,11 @@ lazy_static! {
     ));
 }
 // little-endian
-const P256_A: [u8; 32] = hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
+pub const P256_A: [u8; 32] =
+    hex!("fcffffffffffffffffffffff00000000000000000000000001000000ffffffff");
 // little-endian
-const P256_B: [u8; 32] = hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
+pub const P256_B: [u8; 32] =
+    hex!("4b60d2273e3cce3bf6b053ccb0061d65bc86987655bdebb3e7933aaad835c65a");
 
 pub const SECP256K1_ECC_STRUCT_NAME: &str = "Secp256k1Point";
 pub const P256_ECC_STRUCT_NAME: &str = "P256Point";

@@ -1,5 +1,5 @@
 mod add_ne;
-mod curves;
+pub(crate) mod curves;
 mod double;
 
 pub use add_ne::*;
@@ -7,10 +7,11 @@ pub use double::*;
 
 #[cfg(test)]
 mod tests;
-
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_mod_circuit_builder::{FieldExpressionCoreAir, FieldExpressionFiller};
 use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterFiller};
+#[cfg(test)]
+pub use tests::*;
 
 pub type WeierstrassAir<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize> =
     VmAirWrapper<

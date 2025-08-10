@@ -36,11 +36,11 @@ use openvm_rv32_adapters::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{WeierstrassAir, WeierstrassChip};
-use crate::weierstrass_chip::curves::ec_add_ne;
+use crate::weierstrass_chip::curves::sw_add_ne;
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.
-pub fn ec_add_ne_expr(
+pub fn sw_add_ne_expr(
     config: ExprBuilderConfig, // The coordinate field.
     range_bus: VariableRangeCheckerBus,
 ) -> FieldExpr {
@@ -67,7 +67,7 @@ pub fn ec_add_ne_expr(
 /// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
 /// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
-pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub struct SwAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>,
 );
 
@@ -75,17 +75,17 @@ fn gen_base_expr(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, Vec<usize>) {
-    let expr = ec_add_ne_expr(config, range_checker_bus);
+    let expr = sw_add_ne_expr(config, range_checker_bus);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        Rv32WeierstrassOpcode::SW_ADD_NE as usize,
+        Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize,
     ];
 
     (expr, local_opcode_idx)
 }
 
-pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
@@ -106,24 +106,24 @@ pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     )
 }
 
-pub fn get_ec_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_addne_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+) -> SwAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
-    EcAddNeExecutor(FieldExpressionExecutor::new(
+    SwAddNeExecutor(FieldExpressionExecutor::new(
         Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
         vec![],
-        "EcAddNe",
+        "SwAddNe",
     ))
 }
 
-pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_sw_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
@@ -146,19 +146,19 @@ pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct EcAddNePreCompute<'a> {
+struct SwAddNePreCompute<'a> {
     expr: &'a FieldExpr,
     rs_addrs: [u8; 2],
     a: u8,
     flag_idx: u8,
 }
 
-impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> SwAddNeExecutor<BLOCKS, BLOCK_SIZE> {
     fn pre_compute_impl<F: PrimeField32>(
         &'a self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut EcAddNePreCompute<'a>,
+        data: &mut SwAddNePreCompute<'a>,
     ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
@@ -200,7 +200,7 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         }
 
         let rs_addrs = from_fn(|i| if i == 0 { b } else { c } as u8);
-        *data = EcAddNePreCompute {
+        *data = SwAddNePreCompute {
             expr: &self.expr,
             rs_addrs,
             a: a as u8,
@@ -208,18 +208,18 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
         };
 
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize;
+        let is_setup = local_opcode == Rv32WeierstrassOpcode::SETUP_SW_ADD_NE as usize;
 
         Ok(is_setup)
     }
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for SwAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        std::mem::size_of::<EcAddNePreCompute>()
+        std::mem::size_of::<SwAddNePreCompute>()
     }
 
     fn pre_compute<Ctx>(
@@ -231,7 +231,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     where
         Ctx: E1ExecutionCtx,
     {
-        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let pre_compute: &mut SwAddNePreCompute = data.borrow_mut();
 
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
@@ -315,11 +315,11 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+    for SwAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        std::mem::size_of::<E2PreCompute<EcAddNePreCompute>>()
+        std::mem::size_of::<E2PreCompute<SwAddNePreCompute>>()
     }
 
     fn metered_pre_compute<Ctx>(
@@ -332,7 +332,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
     where
         Ctx: E2ExecutionCtx,
     {
-        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<SwAddNePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
@@ -424,14 +424,14 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<SwAddNePreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     let pre_compute = unsafe {
         std::slice::from_raw_parts(
             &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcAddNePreCompute>(),
+            std::mem::size_of::<SwAddNePreCompute>(),
         )
     };
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, false>(pre_compute, vm_state);
@@ -447,14 +447,14 @@ unsafe fn execute_e2_setup_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<SwAddNePreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     let pre_compute = unsafe {
         std::slice::from_raw_parts(
             &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcAddNePreCompute>(),
+            std::mem::size_of::<SwAddNePreCompute>(),
         )
     };
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, true>(pre_compute, vm_state);
@@ -471,7 +471,7 @@ unsafe fn execute_e12_impl<
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
+    let pre_compute: &SwAddNePreCompute = pre_compute.borrow();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -503,7 +503,7 @@ unsafe fn execute_e12_impl<
         )
         .into()
     } else {
-        ec_add_ne::<FIELD_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
+        sw_add_ne::<FIELD_TYPE, BLOCKS, BLOCK_SIZE>(read_data)
     };
 
     let rd_val = u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32));
