@@ -31,7 +31,6 @@ fn main() -> Result<()> {
 
     let config =
         SdkVmConfig::from_toml(include_str!("../../../guest/ecrecover/openvm.toml"))?.app_vm_config;
-    println!("config: {:?}", config);
     let elf = args.build_bench_program("ecrecover", &config, None)?;
     let exe = VmExe::from_elf(elf, config.transpiler())?;
 
