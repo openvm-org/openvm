@@ -6195,7 +6195,6 @@ dependencies = [
  "hex-literal 0.4.1",
  "num-bigint 0.4.6",
  "openvm",
- "openvm-algebra-circuit",
  "openvm-algebra-guest",
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
