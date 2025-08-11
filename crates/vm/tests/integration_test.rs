@@ -7,9 +7,7 @@ use std::{
 use itertools::Itertools;
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::{
-            ctx::DEFAULT_SEGMENT_CHECK_INSNS, segment_ctx::SegmentationLimits,
-        },
+        execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
