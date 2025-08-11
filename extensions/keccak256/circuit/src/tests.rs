@@ -12,7 +12,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::Rv32KeccakOpcode::{self, *};
 use openvm_stark_backend::{
     p3_field::FieldAlgebra,
@@ -33,7 +37,7 @@ use crate::{
 };
 
 type F = BabyBear;
-const MAX_INS_CAPACITY: usize = 8192;
+const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> = TestChipHarness<F, KeccakVmExecutor, KeccakVmAir, KeccakVmChip<F>, RA>;
 
 fn create_test_chips<RA: Arena>(
@@ -89,19 +93,17 @@ fn set_and_execute<RA: Arena>(
     let rs1 = gen_pointer(rng, 4);
     let rs2 = gen_pointer(rng, 4);
 
-    let max_mem_ptr: u32 = 1 << tester.address_bits();
-    let dst_ptr = rng.gen_range(0..max_mem_ptr);
-    let dst_ptr = dst_ptr ^ (dst_ptr & 3);
+    let dst_ptr = gen_pointer(rng, 4);
+    let src_ptr = gen_pointer(rng, 4);
     tester.write(1, rd, dst_ptr.to_le_bytes().map(F::from_canonical_u8));
-    let src_ptr = rng.gen_range(0..(max_mem_ptr - len as u32));
-    let src_ptr = src_ptr ^ (src_ptr & 3);
     tester.write(1, rs1, src_ptr.to_le_bytes().map(F::from_canonical_u8));
     tester.write(1, rs2, len.to_le_bytes().map(F::from_canonical_u8));
 
     message.chunks(4).enumerate().for_each(|(i, chunk)| {
-        let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&0));
+        let rng = rng.gen();
+        let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&rng));
         tester.write(
-            2,
+            RV32_MEMORY_AS as usize,
             src_ptr as usize + i * 4,
             chunk.map(|&x| F::from_canonical_u8(x)),
         );
@@ -117,7 +119,7 @@ fn set_and_execute<RA: Arena>(
     println!("keccak256(message): {:?}", keccak256(message));
     assert_eq!(
         expected_output.map(F::from_canonical_u8),
-        tester.read(2, dst_ptr as usize)
+        tester.read(RV32_MEMORY_AS as usize, dst_ptr as usize)
     );
 }
 
@@ -146,15 +148,33 @@ fn rand_keccak256_test() {
         );
     }
 
-    set_and_execute(
-        &mut tester,
-        &mut harness,
-        &mut rng,
-        KECCAK256,
-        None,
-        Some(10000),
-        None,
-    );
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[test]
+fn keccak256_length_tests() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_test_chips(&mut tester);
+
+    // Test special length edge cases:
+    for len in [0, 135, 136, 137, 2000, 10000] {
+        println!("Testing length: {}", len);
+        set_and_execute(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            KECCAK256,
+            None,
+            Some(len),
+            None,
+        );
+    }
 
     let tester = tester
         .build()
@@ -171,7 +191,7 @@ fn rand_keccak256_test() {
 fn test_keccak256_positive_kat_vectors() {
     // input, output, Len in bits
     let test_vectors = vec![
-        // ("", "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"), // ShortMsgKAT_256 Len = 0
+        ("", "C5D2460186F7233C927E7DB2DCC703C0E500B653CA82273B7BFAD8045D85A470"), // ShortMsgKAT_256 Len = 0
         ("CC", "EEAD6DBFC7340A56CAEDC044696A168870549A6A7F6F56961E84A54BD9970B8A"), // ShortMsgKAT_256 Len = 8
         ("B55C10EAE0EC684C16D13463F29291BF26C82E2FA0422A99C71DB4AF14DD9C7F33EDA52FD73D017CC0F2DBE734D831F0D820D06D5F89DACC485739144F8CFD4799223B1AFF9031A105CB6A029BA71E6E5867D85A554991C38DF3C9EF8C1E1E9A7630BE61CAABCA69280C399C1FB7A12D12AEFC", "0347901965D3635005E75A1095695CCA050BC9ED2D440C0372A31B348514A889"), // ShortMsgKAT_256 Len = 920
         ("2EDC282FFB90B97118DD03AAA03B145F363905E3CBD2D50ECD692B37BF000185C651D3E9726C690D3773EC1E48510E42B17742B0B0377E7DE6B8F55E00A8A4DB4740CEE6DB0830529DD19617501DC1E9359AA3BCF147E0A76B3AB70C4984C13E339E6806BB35E683AF8527093670859F3D8A0FC7D493BCBA6BB12B5F65E71E705CA5D6C948D66ED3D730B26DB395B3447737C26FAD089AA0AD0E306CB28BF0ACF106F89AF3745F0EC72D534968CCA543CD2CA50C94B1456743254E358C1317C07A07BF2B0ECA438A709367FAFC89A57239028FC5FECFD53B8EF958EF10EE0608B7F5CB9923AD97058EC067700CC746C127A61EE3", "DD1D2A92B3F3F3902F064365838E1F5F3468730C343E2974E7A9ECFCD84AA6DB"), // ShortMsgKAT_256 Len = 1952,
