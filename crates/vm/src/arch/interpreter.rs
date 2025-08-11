@@ -33,7 +33,7 @@ use crate::{
 ///
 /// The generic `Ctx` and constructor determine whether this supported pure execution or metered
 /// execution.
-// @dev: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
+// NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
 pub struct InterpretedInstance<'a, F, Ctx> {

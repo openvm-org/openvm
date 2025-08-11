@@ -26,7 +26,7 @@ const EXIT_CODE_FAIL: usize = 1;
 
 #[repr(C)]
 pub struct PcEntry<F> {
-    // TODO[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
+    // NOTE[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
     // VmOpcode is usize so align=8 and there are 7 u32 operands so we store ExecutorId(u32) after
     // to avoid padding. This means PcEntry has align=8 and size=40 bytes, which is too big
     pub insn: Instruction<F>,
@@ -50,8 +50,8 @@ impl<F: Default> PcEntry<F> {
 
 // pc_handler, execution_frequencies, debug_infos will all have the same length, which equals
 // `Program::len()`
-pub struct ProgramHandler<F, E> {
-    pub(crate) executors: Vec<E>,
+pub struct ProgramHandler<'a, F, E> {
+    pub(crate) executors: &'a [E],
     /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
     /// We will map to `u32::MAX` if the program has no instruction at that pc.
     // Perf[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the
@@ -61,7 +61,7 @@ pub struct ProgramHandler<F, E> {
     pc_base: u32,
 }
 
-impl<F: Field, E> ProgramHandler<F, E> {
+impl<'a, F: Field, E> ProgramHandler<'a, F, E> {
     /// Rewrite the program into compiled handlers.
     ///
     /// ## Assumption
@@ -69,7 +69,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
     // @dev: We need to clone the executors because they are not completely stateless
     pub fn new(
         program: &Program<F>,
-        inventory: &ExecutorInventory<E>,
+        inventory: &'a ExecutorInventory<E>,
     ) -> Result<Self, StaticProgramError>
     where
         E: Clone,
@@ -103,7 +103,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
                 pc_handler.push(PcEntry::undefined());
             }
         }
-        let executors = inventory.executors.clone();
+        let executors = &inventory.executors;
 
         Ok(Self {
             execution_frequencies: vec![0u32; len],
@@ -121,7 +121,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
 
     /// Returns `(executor, pc_entry, pc_idx)`.
     #[inline(always)]
-    pub fn get_executor(&mut self, pc: u32) -> Result<(&mut E, &PcEntry<F>), ExecutionError> {
+    pub fn get_executor(&mut self, pc: u32) -> Result<(&E, &PcEntry<F>), ExecutionError> {
         let pc_idx = self.get_pc_index(pc);
         let entry = self
             .pc_handler
@@ -138,10 +138,7 @@ impl<F: Field, E> ProgramHandler<F, E> {
         };
         // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
         // `executor_idx` is within bounds
-        let executor = unsafe {
-            self.executors
-                .get_unchecked_mut(entry.executor_idx as usize)
-        };
+        let executor = unsafe { self.executors.get_unchecked(entry.executor_idx as usize) };
 
         Ok((executor, entry))
     }

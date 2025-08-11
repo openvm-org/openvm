@@ -9,17 +9,17 @@ use crate::{
     system::{memory::online::TracingMemory, program::ProgramHandler},
 };
 
-pub struct PreflightInterpretedInstance<F, E> {
-    pub handler: ProgramHandler<F, E>,
+pub struct PreflightInterpretedInstance<'a, F, E> {
+    pub handler: ProgramHandler<'a, F, E>,
     executor_idx_to_air_idx: Vec<usize>,
 }
 
-impl<F, E> PreflightInterpretedInstance<F, E>
+impl<'a, F, E> PreflightInterpretedInstance<'a, F, E>
 where
     F: PrimeField32,
 {
     /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(handler: ProgramHandler<F, E>, executor_idx_to_air_idx: Vec<usize>) -> Self {
+    pub fn new(handler: ProgramHandler<'a, F, E>, executor_idx_to_air_idx: Vec<usize>) -> Self {
         Self {
             handler,
             executor_idx_to_air_idx,

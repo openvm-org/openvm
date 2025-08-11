@@ -53,7 +53,7 @@ pub struct VmMetrics {
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
     state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
-    executor: &mut Executor,
+    executor: &Executor,
     prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
 ) where
