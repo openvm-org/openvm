@@ -11,8 +11,11 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
 
 use crate::{
-    arch::{execution_mode::tracegen::TracegenCtx, Arena, PreflightExecutor, VmExecState},
-    system::{memory::online::TracingMemory, program::PcEntry},
+    arch::{
+        execution_mode::tracegen::TracegenCtx, interpreter_preflight::PcEntry, Arena,
+        PreflightExecutor, VmExecState,
+    },
+    system::memory::online::TracingMemory,
 };
 
 pub mod cycle_tracker;

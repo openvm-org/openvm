@@ -335,7 +335,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-fn get_pc_index(pc_base: u32, pc: u32) -> usize {
+pub fn get_pc_index(pc_base: u32, pc: u32) -> usize {
     ((pc - pc_base) / DEFAULT_PC_STEP) as usize
 }
 

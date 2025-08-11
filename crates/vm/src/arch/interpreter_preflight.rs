@@ -1,29 +1,92 @@
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 
-use super::ExecutionError;
 use crate::{
     arch::{
-        execution_mode::tracegen::TracegenCtx, instructions::*, Arena, PreflightExecutor,
-        VmExecState, VmStateMut,
+        execution_mode::tracegen::TracegenCtx, interpreter::get_pc_index, Arena, ExecutionError,
+        ExecutorId, ExecutorInventory, PreflightExecutor, StaticProgramError, VmExecState,
+        VmStateMut,
     },
-    system::{memory::online::TracingMemory, program::ProgramHandler},
+    system::memory::online::TracingMemory,
 };
 
+/// VM preflight executor (E3 executor) for use with trace generation.
+/// Note: This executor doesn't hold any VM state and can be used for multiple execution.
 pub struct PreflightInterpretedInstance<'a, F, E> {
-    pub handler: ProgramHandler<'a, F, E>,
+    pub(crate) executors: &'a [E],
+
+    /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
+    /// We will map to `u32::MAX` if the program has no instruction at that pc.
+    // PERF[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the
+    // u32 may be better for cache efficiency.
+    pc_handler: Vec<PcEntry<F>>,
+    // pc_handler, execution_frequencies will all have the same length, which equals
+    // `Program::len()`
+    execution_frequencies: Vec<u32>,
+    pc_base: u32,
+
     executor_idx_to_air_idx: Vec<usize>,
+}
+
+#[repr(C)]
+pub struct PcEntry<F> {
+    // NOTE[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
+    // VmOpcode is usize so align=8 and there are 7 u32 operands so we store ExecutorId(u32) after
+    // to avoid padding. This means PcEntry has align=8 and size=40 bytes, which is too big
+    pub insn: Instruction<F>,
+    pub executor_idx: ExecutorId,
 }
 
 impl<'a, F, E> PreflightInterpretedInstance<'a, F, E>
 where
     F: PrimeField32,
 {
-    /// Creates a new execution segment from a program and initial state, using parent VM config
-    pub fn new(handler: ProgramHandler<'a, F, E>, executor_idx_to_air_idx: Vec<usize>) -> Self {
-        Self {
-            handler,
-            executor_idx_to_air_idx,
+    /// Creates a new interpreter instance for preflight execution.
+    /// Rewrites the program into an internal table specialized for enum dispatch.
+    ///
+    /// ## Assumption
+    /// There are less than `u32::MAX` total AIRs.
+    pub fn new(
+        program: &Program<F>,
+        inventory: &'a ExecutorInventory<E>,
+        executor_idx_to_air_idx: Vec<usize>,
+    ) -> Result<Self, StaticProgramError> {
+        if inventory.executors().len() > u32::MAX as usize {
+            // This would mean we cannot use u32::MAX as an "undefined" executor index
+            return Err(StaticProgramError::TooManyExecutors);
         }
+        let len = program.instructions_and_debug_infos.len();
+        let mut pc_handler = Vec::with_capacity(len);
+        for insn_and_debug_info in &program.instructions_and_debug_infos {
+            if let Some((insn, _)) = insn_and_debug_info {
+                let insn = insn.clone();
+                let executor_idx = if insn.opcode == SystemOpcode::TERMINATE.global_opcode() {
+                    // The execution loop will always branch to terminate before using this executor
+                    0
+                } else {
+                    *inventory.instruction_lookup.get(&insn.opcode).ok_or(
+                        StaticProgramError::ExecutorNotFound {
+                            opcode: insn.opcode,
+                        },
+                    )?
+                };
+                assert!(
+                    (executor_idx as usize) < inventory.executors.len(),
+                    "ExecutorInventory ensures executor_idx is in bounds"
+                );
+                let pc_entry = PcEntry { insn, executor_idx };
+                pc_handler.push(pc_entry);
+            } else {
+                pc_handler.push(PcEntry::undefined());
+            }
+        }
+        Ok(Self {
+            executors: &inventory.executors,
+            execution_frequencies: vec![0u32; len],
+            pc_handler,
+            pc_base: program.pc_base,
+            executor_idx_to_air_idx,
+        })
     }
 
     /// Stopping is triggered by should_stop() or if VM is terminated
@@ -68,7 +131,23 @@ where
         E: PreflightExecutor<F, RA>,
     {
         let pc = state.pc;
-        let (executor, pc_entry) = self.handler.get_executor(pc)?;
+        let pc_idx = get_pc_index(self.pc_base, pc);
+        let pc_entry =
+            self.pc_handler
+                .get(pc_idx)
+                .ok_or_else(|| ExecutionError::PcOutOfBounds {
+                    pc,
+                    pc_base: self.pc_base,
+                    program_len: self.pc_handler.len(),
+                })?;
+        // SAFETY: `execution_frequencies` has the same length as `pc_handler` so `get_pc_entry`
+        // already does the bounds check
+        unsafe {
+            *self.execution_frequencies.get_unchecked_mut(pc_idx) += 1;
+        };
+        // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
+        // `executor_idx` is within bounds
+        let executor = unsafe { self.executors.get_unchecked(pc_entry.executor_idx as usize) };
         tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
 
         let opcode = pc_entry.insn.opcode;
@@ -112,6 +191,36 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
+    where
+        E: Sync,
+    {
+        self.pc_handler
+            .par_iter()
+            .enumerate()
+            .filter_map(|(i, entry)| entry.is_some().then(|| self.execution_frequencies[i]))
+            .collect()
+    }
+
+    pub fn reset_execution_frequencies(&mut self) {
+        self.execution_frequencies.fill(0);
+    }
+}
+
+impl<F> PcEntry<F> {
+    pub fn is_some(&self) -> bool {
+        self.executor_idx != u32::MAX
+    }
+}
+
+impl<F: Default> PcEntry<F> {
+    fn undefined() -> Self {
+        Self {
+            insn: Instruction::default(),
+            executor_idx: u32::MAX,
+        }
     }
 }
 

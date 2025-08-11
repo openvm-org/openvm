@@ -66,7 +66,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             AddressMap, CHUNK,
         },
-        program::{trace::VmCommittedExe, ProgramHandler},
+        program::trace::VmCommittedExe,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
@@ -400,12 +400,15 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        let handler = ProgramHandler::new(&exe.program, &self.executor.inventory)?;
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         debug_assert!(executor_idx_to_air_idx
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
-        let mut instance = PreflightInterpretedInstance::new(handler, executor_idx_to_air_idx);
+        let mut instance = PreflightInterpretedInstance::new(
+            &exe.program,
+            &self.executor.inventory,
+            executor_idx_to_air_idx,
+        )?;
 
         let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
@@ -446,7 +449,8 @@ where
         };
         let mut exec_state = VmExecState::new(vm_state, ctx);
         execute_spanned!("execute_preflight", instance, &mut exec_state)?;
-        let filtered_exec_frequencies = instance.handler.filtered_execution_frequencies();
+        let filtered_exec_frequencies = instance.filtered_execution_frequencies();
+        instance.reset_execution_frequencies();
         let touched_memory = exec_state
             .vm_state
             .memory
