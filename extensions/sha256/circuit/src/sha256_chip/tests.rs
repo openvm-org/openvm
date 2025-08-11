@@ -111,7 +111,7 @@ fn set_and_execute<RA: Arena>(
     let output = sha256_solve(message);
     assert_eq!(
         output.map(F::from_canonical_u8),
-        tester.read::<32>(RV32_MEMORY_AS as usize, dst_ptr as usize)
+        tester.read::<32>(RV32_MEMORY_AS as usize, dst_ptr)
     );
 }
 

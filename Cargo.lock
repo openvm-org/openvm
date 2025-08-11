@@ -5353,6 +5353,7 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-instructions",
  "openvm-mod-circuit-builder",
+ "openvm-pairing-guest",
  "openvm-rv32-adapters",
  "openvm-stark-backend",
  "openvm-stark-sdk",

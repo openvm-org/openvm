@@ -104,7 +104,7 @@ fn set_and_execute<RA: Arena>(
         let chunk: [&u8; 4] = array::from_fn(|i| chunk.get(i).unwrap_or(&rng));
         tester.write(
             RV32_MEMORY_AS as usize,
-            src_ptr as usize + i * 4,
+            src_ptr + i * 4,
             chunk.map(|&x| F::from_canonical_u8(x)),
         );
     });
@@ -119,7 +119,7 @@ fn set_and_execute<RA: Arena>(
     println!("keccak256(message): {:?}", keccak256(message));
     assert_eq!(
         expected_output.map(F::from_canonical_u8),
-        tester.read(RV32_MEMORY_AS as usize, dst_ptr as usize)
+        tester.read(RV32_MEMORY_AS as usize, dst_ptr)
     );
 }
 
