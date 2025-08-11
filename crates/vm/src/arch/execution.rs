@@ -158,7 +158,7 @@ pub struct VmStateMut<'a, F, MEM, RA> {
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
     /// Custom public values to be set by the system PublicValuesExecutor
-    pub(crate) system_public_values: &'a mut Vec<Option<F>>,
+    pub(crate) custom_pvs: &'a mut Vec<Option<F>>,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,

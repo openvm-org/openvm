@@ -204,7 +204,7 @@ where
                 .read(state.memory, instruction, &mut adapter_record);
         {
             let idx: usize = core_record.index.as_canonical_u32() as usize;
-            let custom_pvs = state.system_public_values;
+            let custom_pvs = state.custom_pvs;
 
             if custom_pvs[idx].is_none() {
                 custom_pvs[idx] = Some(core_record.value);
