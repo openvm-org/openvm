@@ -322,7 +322,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -357,7 +357,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -375,7 +375,7 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(
@@ -419,7 +419,7 @@ unsafe fn execute_e12_impl<
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(
@@ -432,7 +432,7 @@ unsafe fn execute_e1_impl<
 
 unsafe fn execute_e2_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(

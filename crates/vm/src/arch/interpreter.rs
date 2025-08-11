@@ -18,9 +18,9 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{
-            e1::E1Ctx,
             metered::{MeteredCtx, Segment},
-            E1ExecutionCtx, E2ExecutionCtx,
+            normal::ExecutionCtx,
+            ExecutionCtxTrait, MeteredExecutionCtxTrait,
         },
         ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
@@ -92,7 +92,7 @@ macro_rules! execute_with_metrics {
 impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
@@ -131,7 +131,7 @@ where
 impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
 where
     F: PrimeField32,
-    Ctx: E2ExecutionCtx,
+    Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
@@ -172,7 +172,7 @@ where
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<F> InterpretedInstance<'_, F, E1Ctx>
+impl<F> InterpretedInstance<'_, F, ExecutionCtx>
 where
     F: PrimeField32,
 {
@@ -205,7 +205,7 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let ctx = E1Ctx::new(num_insns);
+        let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
         // Start execution
         execute_with_metrics!(
@@ -300,7 +300,7 @@ fn split_pre_compute_buf<'a, F>(
 /// # Safety
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[inline(always)]
-unsafe fn execute_trampoline<F: PrimeField32, Ctx: E1ExecutionCtx>(
+unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     pc_base: u32,
     vm_state: &mut VmExecState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
@@ -377,7 +377,7 @@ impl Drop for AlignedBuf {
     }
 }
 
-unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -452,7 +452,7 @@ fn get_pre_compute_instructions<'a, F, Ctx, E>(
 ) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
     E: Executor<F>,
 {
     program
@@ -506,7 +506,7 @@ fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
 ) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
-    Ctx: E2ExecutionCtx,
+    Ctx: MeteredExecutionCtxTrait,
     E: MeteredExecutor<F>,
 {
     program
@@ -557,7 +557,7 @@ where
         .collect::<Result<Vec<_>, _>>()
 }
 
-fn get_system_opcode_handler<F: PrimeField32, Ctx: E1ExecutionCtx>(
+fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     inst: &Instruction<F>,
     buf: &mut [u8],
 ) -> Option<ExecuteFunc<F, Ctx>> {

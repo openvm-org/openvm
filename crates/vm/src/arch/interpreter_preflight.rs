@@ -3,7 +3,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::ExecutionError;
 use crate::{
     arch::{
-        execution_mode::tracegen::TracegenCtx, instructions::*, Arena, PreflightExecutor,
+        execution_mode::preflight::PreflightCtx, instructions::*, Arena, PreflightExecutor,
         VmExecState, VmStateMut,
     },
     system::{memory::online::TracingMemory, program::ProgramHandler},
@@ -29,7 +29,7 @@ where
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
-        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
@@ -61,7 +61,7 @@ where
     #[inline(always)]
     fn execute_instruction<RA>(
         &mut self,
-        state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
+        state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,

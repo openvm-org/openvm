@@ -184,7 +184,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -219,7 +219,7 @@ where
     }
 
     #[inline(always)]
-    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -249,7 +249,7 @@ where
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const A_IS_IMM: bool,
     const B_IS_IMM: bool,
     const IS_NE: bool,
@@ -263,7 +263,7 @@ unsafe fn execute_e1_impl<
 
 unsafe fn execute_e2_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const A_IS_IMM: bool,
     const B_IS_IMM: bool,
     const IS_NE: bool,
@@ -281,7 +281,7 @@ unsafe fn execute_e2_impl<
 #[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const A_IS_IMM: bool,
     const B_IS_IMM: bool,
     const IS_NE: bool,

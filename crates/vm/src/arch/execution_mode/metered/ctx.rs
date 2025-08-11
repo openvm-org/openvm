@@ -9,7 +9,7 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{
-            metered::segment_ctx::SegmentationLimits, E1ExecutionCtx, E2ExecutionCtx,
+            metered::segment_ctx::SegmentationLimits, ExecutionCtxTrait, MeteredExecutionCtxTrait,
         },
         VmExecState,
     },
@@ -180,7 +180,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
@@ -228,7 +228,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
         debug_assert!(

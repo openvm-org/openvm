@@ -368,7 +368,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -403,7 +403,7 @@ where
     }
 
     #[inline(always)]
-    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -430,7 +430,7 @@ where
     }
 }
 
-unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -438,7 +438,7 @@ unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     execute_jal_e12_impl(pre_compute, vm_state);
 }
 
-unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -449,7 +449,7 @@ unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
     execute_jal_e12_impl(&pre_compute.data, vm_state);
 }
 
-unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -457,7 +457,7 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     execute_range_check_e12_impl(pre_compute, vm_state);
 }
 
-unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -469,7 +469,7 @@ unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
 }
 
 #[inline(always)]
-unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &JalPreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -480,7 +480,7 @@ unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &RangeCheckPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {

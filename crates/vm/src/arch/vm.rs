@@ -37,14 +37,14 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::e1::E1Ctx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
+    execution_mode::normal::ExecutionCtx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
     CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
 };
 use crate::{
     arch::{
         execution_mode::{
             metered::{MeteredCtx, Segment},
-            tracegen::TracegenCtx,
+            preflight::PreflightCtx,
         },
         hasher::poseidon2::vm_poseidon2_hasher,
         interpreter::InterpretedInstance,
@@ -238,7 +238,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, E1Ctx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 }
@@ -418,7 +418,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();

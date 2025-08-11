@@ -259,7 +259,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -292,7 +292,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
@@ -307,7 +307,7 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &BranchEqualPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -321,14 +321,14 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bo
     vm_state.instret += 1;
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BranchEqualPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, IS_NE>(pre_compute, vm_state);
 }
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_NE: bool>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {

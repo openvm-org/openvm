@@ -307,7 +307,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -325,7 +325,7 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &AuiPcPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -352,7 +352,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<AuiPcPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;

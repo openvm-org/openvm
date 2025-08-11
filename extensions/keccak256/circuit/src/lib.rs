@@ -94,7 +94,7 @@ impl<F: PrimeField32> Executor<F> for KeccakVmExecutor {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut KeccakPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
@@ -115,7 +115,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<KeccakPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
@@ -125,7 +125,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bool>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &KeccakPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
@@ -163,7 +163,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_E1: bo
     height
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -171,7 +171,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
 }
 
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {

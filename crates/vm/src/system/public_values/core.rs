@@ -22,7 +22,7 @@ use openvm_stark_backend::{
 
 use crate::{
     arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc, ExecutionError,
         Executor, MeteredExecutor, MinimalInstruction, PreflightExecutor, RecordArena,
@@ -279,7 +279,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut PublicValuesPreCompute = data.borrow_mut();
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
@@ -310,7 +310,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<PublicValuesPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
@@ -331,7 +331,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     pre_compute: &[u8],
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
 {
     let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, state);
@@ -342,7 +342,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     pre_compute: &[u8],
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
 {
     let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
@@ -354,7 +354,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     pre_compute: &PublicValuesPreCompute,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
 {
     let value = if B_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)

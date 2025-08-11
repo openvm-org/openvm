@@ -1,7 +1,7 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::E1ExecutionCtx, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut},
     system::memory::{
         merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, TracingMemory},
@@ -189,7 +189,7 @@ pub fn memory_read_from_state<F, Ctx, const N: usize>(
     ptr: u32,
 ) -> [u8; N]
 where
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
@@ -203,7 +203,7 @@ pub fn memory_write_from_state<F, Ctx, const N: usize>(
     ptr: u32,
     data: [u8; N],
 ) where
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     state.ctx.on_memory_operation(address_space, ptr, N as u32);
 
@@ -216,7 +216,7 @@ pub fn read_rv32_register_from_state<F, Ctx>(
     ptr: u32,
 ) -> u32
 where
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     u32::from_le_bytes(memory_read_from_state(state, RV32_REGISTER_AS, ptr))
 }

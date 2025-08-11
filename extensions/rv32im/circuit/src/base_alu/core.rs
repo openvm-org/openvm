@@ -321,7 +321,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
@@ -347,7 +347,12 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e12_impl<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp,
+>(
     pre_compute: &BaseAluPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -367,7 +372,12 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: b
 }
 
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -376,7 +386,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_IMM: bo
 }
 
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const IS_IMM: bool,
+    OP: AluOp,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -406,7 +421,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;

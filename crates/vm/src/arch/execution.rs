@@ -11,11 +11,11 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1ExecutionCtx, Streams, VmExecState};
+use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
+    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError, MatrixRecordArena},
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::ProgramBus,
@@ -107,7 +107,7 @@ pub trait Executor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx;
+        Ctx: ExecutionCtxTrait;
 }
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -125,7 +125,7 @@ pub trait MeteredExecutor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx;
+        Ctx: MeteredExecutionCtxTrait;
 }
 
 // TODO[jpw]: Avoid Clone by making executors stateless?

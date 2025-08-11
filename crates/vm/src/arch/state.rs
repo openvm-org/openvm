@@ -10,7 +10,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, SystemConfig},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig},
     system::memory::online::GuestMemory,
 };
 
@@ -106,7 +106,7 @@ impl<F, MEM, CTX> DerefMut for VmExecState<F, MEM, CTX> {
 
 impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
 {
     /// Runtime read operation for a block of memory
     #[inline(always)]
