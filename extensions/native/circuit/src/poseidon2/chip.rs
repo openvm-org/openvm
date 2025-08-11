@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
+use itertools::Itertools;
 use openvm_circuit::{
     arch::*,
     system::{
@@ -14,7 +15,9 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, NATIVE_AS,
+};
 use openvm_native_compiler::{
     conversion::AS,
     Poseidon2Opcode::{COMP_POS2, PERM_POS2},
@@ -153,6 +156,7 @@ where
         NativePoseidon2RecordMut<'buf, F, SBOX_REGISTERS>,
     >,
 {
+    /// Preflight execution will always be **optimistic**, which means it does not verify the merkle proofs. This is because preflight execution is always done together with proof generation, and the AIR constraints will constrain merkle proof verification.
     fn execute(
         &mut self,
         state: VmStateMut<F, TracingMemory, RA>,
@@ -328,42 +332,164 @@ where
             let initial_log_height_u32 = initial_log_height.as_canonical_u32();
             let mut log_height = initial_log_height_u32 as i32;
 
-            // Number of non-inside rows, this is used to compute the offset of the inside row
-            // section.
-            let (num_inside_rows, num_non_inside_rows) = {
-                let opened_element_size_u32 = opened_element_size.as_canonical_u32();
-                let mut num_non_inside_rows = initial_log_height_u32 as usize;
-                let mut num_inside_rows = 0;
-                let mut log_height = initial_log_height_u32;
-                let mut opened_index = 0;
-                loop {
-                    let mut total_len = 0;
-                    while opened_index < opened_length {
-                        let [height]: [F; 1] = memory_read_native(
-                            state.memory.data(),
-                            dim_base_pointer_u32 + opened_index as u32,
-                        );
-                        if height.as_canonical_u32() != log_height {
-                            break;
-                        }
-                        let [row_len]: [F; 1] = memory_read_native(
-                            state.memory.data(),
-                            opened_base_pointer_u32 + 2 * opened_index as u32 + 1,
-                        );
-                        total_len += row_len.as_canonical_u32() * opened_element_size_u32;
-                        opened_index += 1;
-                    }
-                    if total_len != 0 {
-                        num_non_inside_rows += 1;
-                        num_inside_rows += (total_len as usize).div_ceil(CHUNK);
-                    }
-                    if log_height == 0 {
-                        break;
-                    }
-                    log_height -= 1;
-                }
-                (num_inside_rows, num_non_inside_rows)
+            let opened_element_size_u32 = opened_element_size.as_canonical_u32();
+            // struct to represent output of a timed_read
+            #[derive(Clone, derive_new::new)]
+            struct Offline<T> {
+                value: T,
+                prev_t: u32,
+            }
+            // NOTE: `log_heights` and `opened_values` correspond to a list of trace matrices with descending heights, but there can be multiple matrices for each height and some heights may have no matrices. Meanwhile the Merkle proof will have length exactly equal to `initial_log_height` and there will be one p2_compress with a sibling node per height.
+            // Refer to the vector capacities (which are fixed lengths) to avoid confusion.
+
+            // log_heights[i] is the log height of the i-th matrix, these are assumed to be (non-strictly) descending
+            // - `log_heights` is contiguous in guest memory starting from `dim_base_pointer`
+            let log_heights: &[F] = unsafe {
+                state
+                    .memory
+                    .data()
+                    .get_slice::<F>(NATIVE_AS, dim_base_pointer_u32, opened_length)
             };
+            let log_heights = log_heights
+                .iter()
+                .map(|x| x.as_canonical_u32() as usize)
+                .collect_vec();
+            let max_log_height = log_heights[0];
+            // opened_values_fat_ptrs[i] = (ptr, len) for the "slice" referencing the actual opened values
+            // - the actual opened_values is a vector of either F or EF, determined by opened_element_size = 1 or 4
+            // - here `len` refers to the length as a typed slice of either F or EF
+            // - `opened_values_fat_ptrs` are contiguous in guest memory starting from `opened_base_pointer`
+            let mut opened_values_fat_ptrs: Vec<Offline<[F; 2]>> =
+                Vec::with_capacity(opened_length);
+            // opened_values[i] is the vector of opened values for the i-th matrix
+            // - opened_values[i] is flattening of vector of either F or EF, determined by opened_element_size_u32 = 1 or 4
+            // - for each i, `opened_values[i]` is contiguous in guest memory starting from `opened_values_fat_ptrs[i].0` but for different `i` the vectors may be spread out in heap guest memory
+            let mut opened_values: Vec<Vec<Offline<F>>> = Vec::with_capacity(opened_length);
+            // sibling_is_on_right[i] has the boolean for the left/right side of the merkle proof at log_height=i
+            // - `sibling_is_on_right` is contiguous in guest memory starting from `index_base_pointer`
+            let mut sibling_is_on_right: Vec<Offline<F>> = Vec::with_capacity(max_log_height);
+
+            struct PerMatrixMeta<F> {
+                // Optional: only on last_of_height.
+                // TODO: remove Option and use prev_t == u32::MAX
+                log_height_checks: Option<[Offline<F>; 2]>,
+                incorporate_start_timestamp: u32, // annoying
+                start_timestamp: u32,
+                inside_row_idx: u32, // total number of columns across all matrices can be large
+                non_inside_row_idx: u8, // bounded by 2 * max height
+            }
+            let mut per_mat_metas: Vec<PerMatrixMeta<F>> = Vec::with_capacity(opened_length);
+            struct PerHeightMeta {
+                non_inside_row_idx: u8,
+            }
+            let mut per_height_metas: Vec<PerHeightMeta> = Vec::with_capacity(max_log_height + 1);
+            let mut initial_opened_index = 0;
+            let mut incorporate_start_timestamp = 0;
+            let mut num_inside_rows = 0;
+            let mut running_len = 0;
+            let mut num_non_inside_rows = 0;
+            for i in 0..opened_length {
+                let is_last = i == opened_length - 1;
+                let next_log_height = if is_last { 0 } else { log_heights[i + 1] };
+                debug_assert!(next_log_height <= log_heights[i]);
+                let first_of_height = i == 0 || log_heights[i] != log_heights[i - 1];
+                let last_of_height = i == opened_length - 1 || log_heights[i] != log_heights[i + 1];
+                // start timestamp of this opening idx = i
+                let start_timestamp = state.memory.timestamp();
+                if first_of_height {
+                    initial_opened_index = i;
+                    state
+                        .memory
+                        .increment_timestamp_by(NUM_INITIAL_READS as u32);
+                    incorporate_start_timestamp = start_timestamp;
+                }
+                let mut prev_ts = 0u32;
+                let [ptr, len] = tracing_read_native(
+                    state.memory,
+                    opened_base_pointer_u32 + 2 * i as u32,
+                    &mut prev_ts,
+                );
+                opened_values_fat_ptrs.push(Offline::new([ptr, len], prev_ts));
+                let ptr = ptr.as_canonical_u32();
+                let len = len.as_canonical_u32() as usize;
+                let flat_len = len * (opened_element_size_u32 as usize);
+                let mut flat_vec = Vec::with_capacity(flat_len);
+                // NOTE: unfortunately the timestamp increments are interleaved between the fat_ptr reads and the reads of the actual slice values
+                for j in 0..flat_len {
+                    if j != 0 {
+                        state.memory.increment_timestamp();
+                    }
+                    let mut prev_ts = 0;
+                    let [value] = tracing_read_native(state.memory, ptr + j as u32, &mut prev_ts);
+                    flat_vec.push(Offline::new(value, prev_ts));
+                }
+                opened_values.push(flat_vec);
+
+                running_len += flat_len;
+                let mut log_height_checks = None;
+                if last_of_height {
+                    let rem = running_len % CHUNK;
+                    if rem != 0 {
+                        // TODO: explain why
+                        state
+                            .memory
+                            .increment_timestamp_by(2 * (CHUNK - rem) as u32);
+                    }
+                    // Note: this is so weird
+                    let mut prev_ts = 0;
+                    let [log_height] = tracing_read_native(
+                        state.memory,
+                        dim_base_pointer_u32 + initial_opened_index as u32,
+                        &mut prev_ts,
+                    );
+                    let initial_lh = Offline::new(log_height, prev_ts);
+                    let [log_height] = tracing_read_native(
+                        state.memory,
+                        dim_base_pointer_u32 + i as u32,
+                        &mut prev_ts,
+                    );
+                    let final_lh = Offline::new(log_height, prev_ts);
+                    log_height_checks = Some([initial_lh, final_lh]);
+                }
+                per_mat_metas.push(PerMatrixMeta {
+                    log_height_checks,
+                    incorporate_start_timestamp,
+                    start_timestamp,
+                    inside_row_idx: num_inside_rows,
+                    non_inside_row_idx: num_non_inside_rows,
+                });
+                if last_of_height {
+                    // if either last or last of this height, need to compress
+                    num_inside_rows += running_len.div_ceil(CHUNK) as u32;
+                    running_len = 0;
+
+                    // Need an extra compress for compress(node, concat_hash) at heights with a new matrix
+                    num_non_inside_rows += 1;
+                    // TODO: there is an unfortunate tension between the matrix index `i` and the sibling index (corresponding to merkle proof height in the tree) because the reads are interleaved and timestamp increments between everything. We'll separate this out with some manual timestamp manipulation.
+                    for h in (next_log_height + 1..=log_heights[i]).rev() {
+                        let mut prev_ts = 0;
+                        let [value] = tracing_read_native(
+                            state.memory,
+                            index_base_pointer_u32 + (max_log_height - h) as u32,
+                            &mut prev_ts,
+                        );
+                        sibling_is_on_right.push(Offline::new(value, prev_ts));
+                        per_height_metas.push(PerHeightMeta {
+                            non_inside_row_idx: num_non_inside_rows - u8::from(h == log_heights[i]), // for the extra compression
+                        });
+                        num_non_inside_rows += 1;
+                    }
+                }
+            }
+            debug_assert_eq!(per_height_metas.len(), max_log_height);
+            // There could still be a final compress if there are matrices of log_height=0
+            per_height_metas.push(PerHeightMeta {
+                non_inside_row_idx: num_non_inside_rows,
+            });
+            debug_assert_eq!(opened_values_fat_ptrs.len(), opened_values.len());
+            debug_assert_eq!(opened_values.len(), log_heights.len());
+            debug_assert_eq!(sibling_is_on_right.len(), max_log_height);
+
             let mut proof_index = 0;
             let mut opened_index = 0;
 
@@ -376,6 +502,8 @@ where
                     .collect()
             };
 
+            let num_inside_rows = num_inside_rows as usize;
+            let num_non_inside_rows = num_non_inside_rows as usize;
             let total_num_row = num_inside_rows + num_non_inside_rows;
             let allocated_rows = arena
                 .alloc(MultiRowLayout::new(NativePoseidon2Metadata {
@@ -393,9 +521,9 @@ where
                         dim_base_pointer_u32 + opened_index as u32,
                     )[0] == F::from_canonical_u32(log_height as u32)
                 {
-                    state
-                        .memory
-                        .increment_timestamp_by(NUM_INITIAL_READS as u32);
+                    // state
+                    //     .memory
+                    //     .increment_timestamp_by(NUM_INITIAL_READS as u32);
                     let incorporate_start_timestamp = state.memory.timestamp;
                     let initial_opened_index = opened_index;
                     let mut row_pointer = 0;
@@ -562,6 +690,7 @@ where
                 }
 
                 if log_height != 0 {
+                    // read in sibling_is_on_right; if not optimistic, do poseidon2_compress on sibling
                     let row_start_timestamp = state.memory.timestamp;
                     state
                         .memory
@@ -580,13 +709,6 @@ where
                             .as_mut(),
                     );
                     let sibling = sibling_proof[proof_index];
-                    if !self.optimistic {
-                        root = if sibling_is_on_right == F::ONE {
-                            compress(&self.subchip, sibling, root).1
-                        } else {
-                            compress(&self.subchip, root, sibling).1
-                        };
-                    }
 
                     non_inside_row_idx += 1;
 
