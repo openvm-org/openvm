@@ -18,7 +18,8 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{
-            ExecutionCtx, ExecutionCtxTrait, MeteredCtx, MeteredExecutionCtxTrait, Segment,
+            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCtx, MeteredExecutionCtxTrait,
+            Segment,
         },
         ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
@@ -268,6 +269,51 @@ where
         check_termination(exec_state.exit_code)?;
         let VmExecState { vm_state, ctx, .. } = exec_state;
         Ok((ctx.into_segments(), vm_state))
+    }
+}
+
+impl<F> InterpretedInstance<'_, F, MeteredCostCtx>
+where
+    F: PrimeField32,
+{
+    /// Metered cost execution for the given `inputs`. Execution begins from the initial
+    /// state specified by the `VmExe`. This function executes the program until termination.
+    ///
+    /// Returns the trace cost when execution stops.
+    pub fn execute_metered_cost(
+        &self,
+        inputs: impl Into<Streams<F>>,
+        ctx: MeteredCostCtx,
+    ) -> Result<u64, ExecutionError> {
+        let vm_state = VmState::initial(
+            &self.system_config,
+            self.init_memory.clone(),
+            self.pc_start,
+            inputs,
+        );
+        self.execute_metered_cost_from_state(vm_state, ctx)
+    }
+
+    /// Metered cost execution for the given `VmState`. This function executes the program until
+    /// termination.
+    ///
+    /// Returns the trace cost when execution stops.
+    pub fn execute_metered_cost_from_state(
+        &self,
+        from_state: VmState<F, GuestMemory>,
+        ctx: MeteredCostCtx,
+    ) -> Result<u64, ExecutionError> {
+        let mut exec_state = VmExecState::new(from_state, ctx);
+        // Start execution
+        execute_with_metrics!(
+            "execute_metered_cost",
+            self.pc_base,
+            &mut exec_state,
+            &self.pre_compute_insns
+        );
+        check_termination(exec_state.exit_code)?;
+        let VmExecState { ctx, .. } = exec_state;
+        Ok(ctx.cost)
     }
 }
 

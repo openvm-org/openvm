@@ -37,7 +37,7 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::{ExecutionCtx, MeteredCtx, PreflightCtx, Segment},
+    execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
@@ -243,13 +243,22 @@ where
     VC: VmExecutionConfig<F>,
     VC::Executor: MeteredExecutor<F>,
 {
-    /// Creates an instance of the interpreter specialized for pure execution, without metering, of
-    /// the given `exe`.
+    /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    /// Creates an instance of the interpreter specialized for cost metering execution of the given
+    /// `exe`.
+    pub fn metered_cost_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
