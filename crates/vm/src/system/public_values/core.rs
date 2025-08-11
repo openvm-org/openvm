@@ -164,11 +164,11 @@ impl<F: Clone, A> PublicValuesFiller<F, A> {
         }
     }
 
-    pub(crate) fn set_public_values(&mut self, mut public_values: Vec<F>)
+    pub(crate) fn set_public_values(&mut self, public_values: Vec<F>)
     where
         F: Field,
     {
-        public_values.resize(self.num_custom_pvs, F::ZERO);
+        assert_eq!(public_values.len(), self.num_custom_pvs);
         self.public_values = public_values;
     }
 }
@@ -205,7 +205,6 @@ where
         {
             let idx: usize = core_record.index.as_canonical_u32() as usize;
             let custom_pvs = state.system_public_values;
-            custom_pvs.resize(self.num_custom_pvs, None);
 
             if custom_pvs[idx].is_none() {
                 custom_pvs[idx] = Some(core_record.value);
@@ -373,8 +372,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
 
     let idx: usize = index.as_canonical_u32() as usize;
     {
-        let custom_pvs = &mut state.vm_state.system_public_values;
-        custom_pvs.resize(pre_compute.num_custom_pvs as usize, None);
+        let custom_pvs = &mut state.vm_state.custom_pvs;
 
         if custom_pvs[idx].is_none() {
             custom_pvs[idx] = Some(value);

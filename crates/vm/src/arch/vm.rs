@@ -440,7 +440,7 @@ where
             memory,
             streams: state.streams,
             rng: state.rng,
-            system_public_values: state.system_public_values,
+            custom_pvs: state.custom_pvs,
             #[cfg(feature = "metrics")]
             metrics: state.metrics,
         };
@@ -458,7 +458,7 @@ where
         let to_state = ExecutionState::new(exec_state.vm_state.pc, memory.timestamp());
         let public_values = exec_state
             .vm_state
-            .system_public_values
+            .custom_pvs
             .iter()
             .map(|&x| x.unwrap_or(Val::<E::SC>::ZERO))
             .collect();
@@ -479,7 +479,7 @@ where
             memory: memory.data,
             streams: exec_state.vm_state.streams,
             rng: exec_state.vm_state.rng,
-            system_public_values: exec_state.vm_state.system_public_values,
+            custom_pvs: exec_state.vm_state.custom_pvs,
             #[cfg(feature = "metrics")]
             metrics: exec_state.vm_state.metrics,
         };
@@ -497,10 +497,13 @@ where
         exe: &VmExe<Val<E::SC>>,
         inputs: impl Into<Streams<Val<E::SC>>>,
     ) -> VmState<Val<E::SC>, GuestMemory> {
-        let memory_config = &self.config().as_ref().memory_config;
         #[allow(unused_mut)]
-        let mut state =
-            VmState::initial(memory_config, exe.init_memory.clone(), exe.pc_start, inputs);
+        let mut state = VmState::initial(
+            self.config().as_ref(),
+            exe.init_memory.clone(),
+            exe.pc_start,
+            inputs,
+        );
         // Add backtrace information for either:
         // - debugging
         // - performance metrics
