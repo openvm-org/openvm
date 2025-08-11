@@ -46,7 +46,9 @@ mod tests {
         riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
         LocalOpcode, VmOpcode,
     };
-    use openvm_mod_circuit_builder::{utils::biguint_to_limbs_vec, ExprBuilderConfig};
+    use openvm_mod_circuit_builder::{
+        test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
+    };
     use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -175,29 +177,11 @@ mod tests {
                 },
             )
         } else {
-            let a_c0_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut a_c0 = BigUint::new(a_c0_digits);
-            a_c0 %= modulus;
+            let a_c0 = generate_random_biguint(modulus);
+            let a_c1 = generate_random_biguint(modulus);
 
-            let a_c1_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut a_c1 = BigUint::new(a_c1_digits);
-            a_c1 %= modulus;
-
-            let b_c0_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut b_c0 = BigUint::new(b_c0_digits);
-            b_c0 %= modulus;
-
-            let b_c1_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut b_c1 = BigUint::new(b_c1_digits);
-            b_c1 %= modulus;
+            let b_c0 = generate_random_biguint(modulus);
+            let b_c1 = generate_random_biguint(modulus);
 
             let op = rng.gen_range(0..2);
             let op = if is_addsub {

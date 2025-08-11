@@ -1,5 +1,11 @@
 use std::{borrow::BorrowMut, str::FromStr, sync::Arc};
 
+use crate::modular_chip::{
+    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+    ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
+    ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
+};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
@@ -21,8 +27,9 @@ use openvm_instructions::{
     VmOpcode,
 };
 use openvm_mod_circuit_builder::{
-    test_utils::generate_field_element, utils::biguint_to_limbs_vec, ExprBuilderConfig,
-    FieldExpressionCoreRecordMut,
+    test_utils::{generate_field_element, generate_random_biguint},
+    utils::biguint_to_limbs_vec,
+    ExprBuilderConfig, FieldExpressionCoreRecordMut,
 };
 use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
 use openvm_rv32_adapters::{rv32_write_heap_default, write_ptr_reg, Rv32VecHeapAdapterRecord};
@@ -31,19 +38,13 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use crate::modular_chip::{
-    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-    ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
-};
-
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 
 #[cfg(test)]
 mod addsub_tests {
+
     use test_case::test_case;
 
     use super::*;
@@ -118,18 +119,10 @@ mod addsub_tests {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), ADD_LOCAL + 2)
         } else {
-            let a_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut a = BigUint::new(a_digits.clone());
-            let b_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut b = BigUint::new(b_digits.clone());
+            let a = generate_random_biguint(modulus);
+            let b = generate_random_biguint(modulus);
 
             let op = rng.gen_range(0..2) + ADD_LOCAL; // 0 for add, 1 for sub
-            a %= modulus;
-            b %= modulus;
             (a, b, op)
         };
 
@@ -388,18 +381,11 @@ mod muldiv_tests {
         let (a, b, op) = if is_setup {
             (modulus.clone(), BigUint::zero(), MUL_LOCAL + 2)
         } else {
-            let a_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut a = BigUint::new(a_digits.clone());
-            let b_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut b = BigUint::new(b_digits.clone());
+            let a = generate_random_biguint(modulus);
+            let b = generate_random_biguint(modulus);
 
             let op = rng.gen_range(0..2) + MUL_LOCAL; // 0 for add, 1 for sub
-            a %= modulus;
-            b %= modulus;
+
             (a, b, op)
         };
 

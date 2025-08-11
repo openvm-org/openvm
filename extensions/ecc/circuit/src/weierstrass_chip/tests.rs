@@ -20,7 +20,9 @@ use openvm_instructions::{
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode, VmOpcode,
 };
-use openvm_mod_circuit_builder::{utils::biguint_to_limbs_vec, ExprBuilderConfig};
+use openvm_mod_circuit_builder::{
+    test_utils::generate_random_biguint, utils::biguint_to_limbs_vec, ExprBuilderConfig,
+};
 use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
@@ -177,29 +179,11 @@ mod ec_addne_tests {
                 (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             }
         } else {
-            let x1_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut x1 = BigUint::new(x1_digits);
-            x1 %= modulus;
+            let x1 = generate_random_biguint(modulus);
+            let x2 = generate_random_biguint(modulus);
 
-            let x2_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut x2 = BigUint::new(x2_digits);
-            x2 %= modulus;
-
-            let y1_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut y1 = BigUint::new(y1_digits);
-            y1 %= modulus;
-
-            let y2_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut y2 = BigUint::new(y2_digits);
-            y2 %= modulus;
+            let y1 = generate_random_biguint(modulus);
+            let y2 = generate_random_biguint(modulus);
 
             (x1, y1, x2, y2, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
         };
@@ -494,17 +478,8 @@ mod ec_double_tests {
             let y = y % modulus;
             (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
         } else {
-            let x_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut x = BigUint::new(x_digits);
-            x %= modulus;
-
-            let y_digits: Vec<_> = (0..NUM_LIMBS)
-                .map(|_| rng.gen_range(0..(1 << LIMB_BITS)))
-                .collect();
-            let mut y = BigUint::new(y_digits);
-            y %= modulus;
+            let x = generate_random_biguint(modulus);
+            let y = generate_random_biguint(modulus);
 
             (x, y, Rv32WeierstrassOpcode::EC_DOUBLE as usize)
         };
