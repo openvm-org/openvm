@@ -70,10 +70,7 @@ impl<'a, F: Field, E> ProgramHandler<'a, F, E> {
     pub fn new(
         program: &Program<F>,
         inventory: &'a ExecutorInventory<E>,
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: Clone,
-    {
+    ) -> Result<Self, StaticProgramError> {
         if inventory.executors().len() > u32::MAX as usize {
             // This would mean we cannot use u32::MAX as an "undefined" executor index
             return Err(StaticProgramError::TooManyExecutors);

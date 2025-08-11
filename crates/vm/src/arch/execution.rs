@@ -128,13 +128,12 @@ pub trait MeteredExecutor<F> {
         Ctx: E2ExecutionCtx;
 }
 
-// TODO[jpw]: Avoid Clone by making executors stateless?
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
 /// instructions via enum dispatch within an interpreter. This execution is specialized to record
 /// "records" of execution which will be ingested later for trace matrix generation. The records are
 /// stored in a record arena, which is provided in the [VmStateMut] argument.
-// @dev: In the codebase this is sometimes referred to as (E3).
-pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>>: Clone {
+// NOTE: In the codebase this is sometimes referred to as (E3).
+pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
