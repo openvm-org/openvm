@@ -24,6 +24,7 @@ sha2 = { version = "0.10", default-features = false }
 strum = { workspace = true }
 
 [dev-dependencies]
+hex = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
