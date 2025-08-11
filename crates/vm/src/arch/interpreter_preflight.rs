@@ -99,6 +99,7 @@ where
             memory: &mut state.vm_state.memory,
             streams: &mut state.vm_state.streams,
             rng: &mut state.vm_state.rng,
+            system_public_values: &mut state.vm_state.system_public_values,
             ctx: arena,
             #[cfg(feature = "metrics")]
             metrics: &mut state.vm_state.metrics,

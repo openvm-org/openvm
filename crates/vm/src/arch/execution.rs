@@ -138,7 +138,7 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
@@ -157,6 +157,8 @@ pub struct VmStateMut<'a, F, MEM, RA> {
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
+    /// Custom public values to be set by the system PublicValuesExecutor
+    pub(crate) system_public_values: &'a mut Vec<Option<F>>,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,

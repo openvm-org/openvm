@@ -1,8 +1,9 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    sync::Mutex,
+    marker::PhantomData,
 };
 
+use getset::Setters;
 use openvm_circuit_primitives::{encoder::Encoder, AlignedBytesBorrow, SubAir};
 use openvm_instructions::{
     instruction::Instruction,
@@ -125,14 +126,33 @@ pub struct PublicValuesRecord<F> {
 
 /// ATTENTION: If a specific public value is not provided, a default 0 will be used when generating
 /// the proof but in the perspective of constraints, it could be any value.
+#[derive(Clone)]
 pub struct PublicValuesExecutor<F, A = NativeAdapterExecutor<F, 2, 0>> {
     adapter: A,
+    num_custom_pvs: usize,
+    phantom: PhantomData<F>,
+}
+
+#[derive(Clone, Setters)]
+pub struct PublicValuesFiller<F, A = NativeAdapterExecutor<F, 2, 0>> {
+    adapter: A,
     encoder: Encoder,
-    // Mutex is to make the struct Sync. But it actually won't be accessed by multiple threads.
-    pub(crate) custom_pvs: Mutex<Vec<Option<F>>>,
+    num_custom_pvs: usize,
+    #[getset(set = "pub")]
+    public_values: Vec<F>,
 }
 
 impl<F: Clone, A> PublicValuesExecutor<F, A> {
+    pub fn new(adapter: A, num_custom_pvs: usize) -> Self {
+        Self {
+            adapter,
+            num_custom_pvs,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<F: Clone, A> PublicValuesFiller<F, A> {
     /// **Note:** `max_degree` is the maximum degree of the constraint polynomials to represent the
     /// flags. If you want the overall AIR's constraint degree to be `<= max_constraint_degree`,
     /// then typically you should set `max_degree` to `max_constraint_degree - 1`.
@@ -140,26 +160,8 @@ impl<F: Clone, A> PublicValuesExecutor<F, A> {
         Self {
             adapter,
             encoder: Encoder::new(num_custom_pvs, max_degree, true),
-            custom_pvs: Mutex::new(vec![None; num_custom_pvs]),
-        }
-    }
-
-    pub(crate) fn set_public_values(&mut self, public_values: &[F]) {
-        let mut custom_pvs = self.custom_pvs.lock().unwrap();
-        assert_eq!(public_values.len(), custom_pvs.len());
-        for (pv_mut, value) in custom_pvs.iter_mut().zip(public_values) {
-            *pv_mut = Some(value.clone());
-        }
-    }
-}
-
-// We clone when we want to run a new instance of the program, so we reset the custom public values.
-impl<F: Clone, A: Clone> Clone for PublicValuesExecutor<F, A> {
-    fn clone(&self) -> Self {
-        Self {
-            adapter: self.adapter.clone(),
-            encoder: self.encoder.clone(),
-            custom_pvs: Mutex::new(vec![None; self.custom_pvs.lock().unwrap().len()]),
+            num_custom_pvs,
+            public_values: Vec::new(),
         }
     }
 }
@@ -182,7 +184,7 @@ where
     }
 
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
@@ -195,7 +197,8 @@ where
                 .read(state.memory, instruction, &mut adapter_record);
         {
             let idx: usize = core_record.index.as_canonical_u32() as usize;
-            let mut custom_pvs = self.custom_pvs.lock().unwrap();
+            let custom_pvs = state.system_public_values;
+            custom_pvs.resize(self.num_custom_pvs, None);
 
             if custom_pvs[idx].is_none() {
                 custom_pvs[idx] = Some(core_record.value);
@@ -212,7 +215,7 @@ where
     }
 }
 
-impl<F, A> TraceFiller<F> for PublicValuesExecutor<F, A>
+impl<F, A> TraceFiller<F> for PublicValuesFiller<F, A>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -239,17 +242,21 @@ where
     }
 
     fn generate_public_values(&self) -> Vec<F> {
-        let custom_pvs = self.custom_pvs.lock().unwrap();
-        custom_pvs.iter().map(|&x| x.unwrap_or(F::ZERO)).collect()
+        assert_eq!(
+            self.public_values.len(),
+            self.num_custom_pvs,
+            "Did not set public values"
+        );
+        self.public_values.clone()
     }
 }
 
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
-struct PublicValuesPreCompute<F> {
+struct PublicValuesPreCompute {
     b_or_imm: u32,
     c_or_imm: u32,
-    pvs: *const Mutex<Vec<Option<F>>>,
+    num_custom_pvs: u32,
 }
 
 impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
@@ -258,7 +265,7 @@ where
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<PublicValuesPreCompute<F>>()
+        size_of::<PublicValuesPreCompute>()
     }
 
     #[inline(always)]
@@ -271,7 +278,7 @@ where
     where
         Ctx: E1ExecutionCtx,
     {
-        let data: &mut PublicValuesPreCompute<F> = data.borrow_mut();
+        let data: &mut PublicValuesPreCompute = data.borrow_mut();
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
 
         let fn_ptr = match (b_is_imm, c_is_imm) {
@@ -289,7 +296,7 @@ where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<PublicValuesPreCompute<F>>>()
+        size_of::<E2PreCompute<PublicValuesPreCompute>>()
     }
 
     fn metered_pre_compute<Ctx>(
@@ -302,7 +309,7 @@ where
     where
         Ctx: E2ExecutionCtx,
     {
-        let data: &mut E2PreCompute<PublicValuesPreCompute<F>> = data.borrow_mut();
+        let data: &mut E2PreCompute<PublicValuesPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
 
@@ -323,7 +330,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 ) where
     CTX: E1ExecutionCtx,
 {
-    let pre_compute: &PublicValuesPreCompute<F> = pre_compute.borrow();
+    let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, state);
 }
 
@@ -334,14 +341,14 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
 ) where
     CTX: E2ExecutionCtx,
 {
-    let pre_compute: &E2PreCompute<PublicValuesPreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, state);
 }
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
-    pre_compute: &PublicValuesPreCompute<F>,
+    pre_compute: &PublicValuesPreCompute,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: E1ExecutionCtx,
@@ -359,8 +366,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
 
     let idx: usize = index.as_canonical_u32() as usize;
     {
-        let custom_pvs = unsafe { &*pre_compute.pvs };
-        let mut custom_pvs = custom_pvs.lock().unwrap();
+        let custom_pvs = &mut state.vm_state.system_public_values;
+        custom_pvs.resize(pre_compute.num_custom_pvs as usize, None);
 
         if custom_pvs[idx].is_none() {
             custom_pvs[idx] = Some(value);
@@ -381,7 +388,7 @@ where
     fn pre_compute_impl(
         &self,
         inst: &Instruction<F>,
-        data: &mut PublicValuesPreCompute<F>,
+        data: &mut PublicValuesPreCompute,
     ) -> (bool, bool) {
         let &Instruction { b, c, e, f, .. } = inst;
 
@@ -405,7 +412,7 @@ where
         *data = PublicValuesPreCompute {
             b_or_imm,
             c_or_imm,
-            pvs: &self.custom_pvs,
+            num_custom_pvs: self.num_custom_pvs.try_into().unwrap(),
         };
 
         (b_is_imm, c_is_imm)

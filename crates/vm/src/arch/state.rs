@@ -21,6 +21,7 @@ pub struct VmState<F, MEM = GuestMemory> {
     pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
+    pub(crate) system_public_values: Vec<Option<F>>,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
 }
@@ -39,6 +40,7 @@ impl<F, MEM> VmState<F, MEM> {
             memory,
             streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
+            system_public_values: Vec::new(),
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }

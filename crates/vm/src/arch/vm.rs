@@ -49,10 +49,10 @@ use crate::{
         hasher::poseidon2::vm_poseidon2_hasher,
         interpreter::InterpretedInstance,
         interpreter_preflight::PreflightInterpretedInstance,
-        AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
+        AirInventoryError, ChipInventoryError, ExecutionState, ExecutorInventory,
         ExecutorInventoryError, MeteredExecutor, PreflightExecutor, StaticProgramError,
-        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig,
-        VmState, PUBLIC_VALUES_AIR_ID,
+        SystemConfig, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig, VmState,
+        PUBLIC_VALUES_AIR_ID,
     },
     execute_spanned,
     system::{
@@ -67,8 +67,7 @@ use crate::{
             AddressMap, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
-        public_values::PublicValuesExecutor,
-        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
+        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
 
@@ -441,6 +440,7 @@ where
             memory,
             streams: state.streams,
             rng: state.rng,
+            system_public_values: state.system_public_values,
             #[cfg(feature = "metrics")]
             metrics: state.metrics,
         };
@@ -456,16 +456,12 @@ where
 
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(exec_state.vm_state.pc, memory.timestamp());
-        let public_values = system_config
-            .has_public_values_chip()
-            .then(|| {
-                instance.handler.executors[PV_EXECUTOR_IDX]
-                    .as_any_kind()
-                    .downcast_ref::<PublicValuesExecutor<Val<E::SC>>>()
-                    .unwrap()
-                    .generate_public_values()
-            })
-            .unwrap_or_default();
+        let public_values = exec_state
+            .vm_state
+            .system_public_values
+            .iter()
+            .map(|&x| x.unwrap_or(Val::<E::SC>::ZERO))
+            .collect();
         let exit_code = exec_state.exit_code?;
         let system_records = SystemRecords {
             from_state,
@@ -483,6 +479,7 @@ where
             memory: memory.data,
             streams: exec_state.vm_state.streams,
             rng: exec_state.vm_state.rng,
+            system_public_values: exec_state.vm_state.system_public_values,
             #[cfg(feature = "metrics")]
             metrics: exec_state.vm_state.metrics,
         };
