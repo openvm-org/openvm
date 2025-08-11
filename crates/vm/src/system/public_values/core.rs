@@ -138,7 +138,6 @@ pub struct PublicValuesFiller<F, A = NativeAdapterExecutor<F, 2, 0>> {
     adapter: A,
     encoder: Encoder,
     num_custom_pvs: usize,
-    #[getset(set = "pub")]
     public_values: Vec<F>,
 }
 
@@ -163,6 +162,14 @@ impl<F: Clone, A> PublicValuesFiller<F, A> {
             num_custom_pvs,
             public_values: Vec::new(),
         }
+    }
+
+    pub(crate) fn set_public_values(&mut self, mut public_values: Vec<F>)
+    where
+        F: Field,
+    {
+        public_values.resize(self.num_custom_pvs, F::ZERO);
+        self.public_values = public_values;
     }
 }
 
