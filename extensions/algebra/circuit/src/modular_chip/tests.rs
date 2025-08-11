@@ -1,11 +1,5 @@
 use std::{borrow::BorrowMut, str::FromStr, sync::Arc};
 
-use crate::modular_chip::{
-    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
-    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
-    ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
-    ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
-};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
@@ -37,6 +31,13 @@ use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+
+use crate::modular_chip::{
+    get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
+    get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
+    ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
+    ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
+};
 
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
