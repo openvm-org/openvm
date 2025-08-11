@@ -248,8 +248,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
-            let public_values =
-                PublicValuesExecutor::new(NativeAdapterExecutor::default(), self.num_public_values);
+            let public_values = PublicValuesExecutor::new(NativeAdapterExecutor::default());
             inventory.add_executor(public_values, [PublishOpcode::PUBLISH.global_opcode()])?;
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();

@@ -129,7 +129,6 @@ pub struct PublicValuesRecord<F> {
 #[derive(Clone)]
 pub struct PublicValuesExecutor<F, A = NativeAdapterExecutor<F, 2, 0>> {
     adapter: A,
-    num_custom_pvs: usize,
     phantom: PhantomData<F>,
 }
 
@@ -142,10 +141,9 @@ pub struct PublicValuesFiller<F, A = NativeAdapterExecutor<F, 2, 0>> {
 }
 
 impl<F: Clone, A> PublicValuesExecutor<F, A> {
-    pub fn new(adapter: A, num_custom_pvs: usize) -> Self {
+    pub fn new(adapter: A) -> Self {
         Self {
             adapter,
-            num_custom_pvs,
             phantom: PhantomData,
         }
     }
@@ -262,7 +260,6 @@ where
 struct PublicValuesPreCompute {
     b_or_imm: u32,
     c_or_imm: u32,
-    num_custom_pvs: u32,
 }
 
 impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
@@ -414,11 +411,7 @@ where
             c.as_canonical_u32()
         };
 
-        *data = PublicValuesPreCompute {
-            b_or_imm,
-            c_or_imm,
-            num_custom_pvs: self.num_custom_pvs.try_into().unwrap(),
-        };
+        *data = PublicValuesPreCompute { b_or_imm, c_or_imm };
 
         (b_is_imm, c_is_imm)
     }
