@@ -154,7 +154,7 @@ impl Default for AggConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppFriParams {
     pub fri_params: FriParameters,
 }
@@ -175,7 +175,7 @@ impl From<FriParameters> for AppFriParams {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LeafFriParams {
     pub fri_params: FriParameters,
 }
