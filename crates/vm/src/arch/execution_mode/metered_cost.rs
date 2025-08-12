@@ -3,9 +3,21 @@ use std::num::NonZero;
 use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
-    arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState, PUBLIC_VALUES_AIR_ID},
+    arch::{
+        execution_mode::metered::segment_ctx::DEFAULT_MAX_CELLS as DEFAULT_SEGMENT_MAX_CELLS,
+        ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState, PUBLIC_VALUES_AIR_ID,
+    },
     system::memory::online::GuestMemory,
 };
+
+const DEFAULT_MAX_SEGMENTS: u64 = 100;
+const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
+
+#[derive(Debug, Copy, Clone, derive_new::new)]
+pub struct MeteredCostExecutionOutput {
+    pub instret: u64,
+    pub cost: u64,
+}
 
 #[derive(Clone, Debug)]
 pub struct AccessAdapterCtx {
@@ -112,6 +124,14 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             "size must be a power of 2, got {}",
             size
         );
+        // Prevent unbounded memory accesses per instruction
+        if self.cost > 2 * DEFAULT_MAX_COST {
+            panic!(
+                "Execution cost {} exceeded maximum allowed cost of {}",
+                self.cost,
+                2 * DEFAULT_MAX_COST
+            );
+        }
 
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
@@ -124,8 +144,8 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         );
     }
 
-    fn should_suspend<F>(_vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        false
+    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        vm_state.ctx.cost > DEFAULT_MAX_COST
     }
 }
 
