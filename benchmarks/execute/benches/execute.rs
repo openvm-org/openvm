@@ -234,25 +234,7 @@ fn metered_cost_setup() -> &'static (MeteredCostCtx, Vec<usize>) {
         let config = ExecuteConfig::default();
         let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
         let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
-
-        let widths: Vec<usize> = vm
-            .pk()
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.params.width.total_width(4)) // Challenge degree is typically 4
-            .collect();
-
-        let config = vm.config();
-        let as_byte_alignment_bits = config
-            .system
-            .memory_config
-            .addr_spaces
-            .iter()
-            .map(|addr_sp| (addr_sp.min_block_size as u32).trailing_zeros() as u8)
-            .collect();
-        let idx_offset = config.system.access_adapter_air_id_offset();
-
-        let ctx = MeteredCostCtx::new(widths, as_byte_alignment_bits, idx_offset);
+        let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         (ctx, executor_idx_to_air_idx)
     })

@@ -3,7 +3,7 @@ use std::num::NonZero;
 use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
-    arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState},
+    arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState, PUBLIC_VALUES_AIR_ID},
     system::memory::online::GuestMemory,
 };
 
@@ -14,7 +14,22 @@ pub struct AccessAdapterCtx {
 }
 
 impl AccessAdapterCtx {
-    pub fn new(as_byte_alignment_bits: Vec<u8>, idx_offset: usize) -> Self {
+    pub fn new(
+        as_byte_alignment_bits: Vec<u8>,
+        has_public_values_chip: bool,
+        continuations_enabled: bool,
+    ) -> Self {
+        let boundary_idx = if has_public_values_chip {
+            PUBLIC_VALUES_AIR_ID + 1
+        } else {
+            PUBLIC_VALUES_AIR_ID
+        };
+        let idx_offset = if continuations_enabled {
+            boundary_idx + 2
+        } else {
+            boundary_idx + 1
+        };
+
         Self {
             as_byte_alignment_bits,
             idx_offset,
@@ -65,8 +80,17 @@ pub struct MeteredCostCtx {
 }
 
 impl MeteredCostCtx {
-    pub fn new(widths: Vec<usize>, as_byte_alignment_bits: Vec<u8>, idx_offset: usize) -> Self {
-        let access_adapter_ctx = AccessAdapterCtx::new(as_byte_alignment_bits, idx_offset);
+    pub fn new(
+        widths: Vec<usize>,
+        as_byte_alignment_bits: Vec<u8>,
+        has_public_values_chip: bool,
+        continuations_enabled: bool,
+    ) -> Self {
+        let access_adapter_ctx = AccessAdapterCtx::new(
+            as_byte_alignment_bits,
+            has_public_values_chip,
+            continuations_enabled,
+        );
         Self {
             widths,
             access_adapter_ctx,
