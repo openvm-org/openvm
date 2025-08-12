@@ -115,7 +115,7 @@ impl MeteredCostCtx {
 
     #[cold]
     fn check_cost_limit(&self) {
-        if self.cost > 2 * DEFAULT_MAX_COST {
+        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
             panic!(
                 "Execution cost {} exceeded maximum allowed cost of {}",
                 self.cost,
