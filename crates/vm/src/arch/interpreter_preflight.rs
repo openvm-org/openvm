@@ -22,7 +22,8 @@ pub struct PreflightInterpretedInstance<F, E> {
     inventory: Arc<ExecutorInventory<E>>,
 
     /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
-    /// We will map to `u32::MAX` if the program has no instruction at that pc.
+    /// We will set `executor_idx` to `u32::MAX` in the [PcEntry] if the program has no instruction
+    /// at that pc.
     // PERF[jpw/ayush]: We could map directly to the raw pointer(u64) for executor, but storing the
     // u32 may be better for cache efficiency.
     pc_handler: Vec<PcEntry<F>>,
