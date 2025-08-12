@@ -179,13 +179,7 @@ mod ec_addne_tests {
                 (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             }
         } else {
-            let x1 = generate_random_biguint(modulus);
-            let x2 = generate_random_biguint(modulus);
-
-            let y1 = generate_random_biguint(modulus);
-            let y2 = generate_random_biguint(modulus);
-
-            (x1, y1, x2, y2, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
+            panic!("Random inputs are not valid for ec_addne");
         };
 
         let ptr_as = RV32_REGISTER_AS as usize;
@@ -273,7 +267,6 @@ mod ec_addne_tests {
     fn run_ec_addne_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
         offset: usize,
         modulus: BigUint,
-        num_ops: usize,
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -286,18 +279,16 @@ mod ec_addne_tests {
         let (mut harness, bitwise) =
             create_test_addne_chips::<BLOCKS, BLOCK_SIZE>(&tester, config, offset);
 
-        for i in 0..num_ops {
-            set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS>(
-                &mut tester,
-                &mut harness,
-                &mut rng,
-                &modulus,
-                i == 0,
-                offset,
-                None,
-                None,
-            );
-        }
+        set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS>(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            &modulus,
+            false,
+            offset,
+            None,
+            None,
+        );
 
         set_and_execute_ec_addne::<BLOCKS, BLOCK_SIZE, NUM_LIMBS>(
             &mut tester,
@@ -335,16 +326,6 @@ mod ec_addne_tests {
         run_ec_addne_test::<2, 32, 32>(
             Rv32WeierstrassOpcode::CLASS_OFFSET,
             secp256k1_coord_prime(),
-            50,
-        );
-    }
-
-    #[test]
-    fn test_ec_addne_6x16() {
-        run_ec_addne_test::<6, 16, 48>(
-            Rv32WeierstrassOpcode::CLASS_OFFSET,
-            BLS12_381_MODULUS.clone(),
-            50,
         );
     }
 

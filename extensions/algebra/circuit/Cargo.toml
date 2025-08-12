@@ -21,7 +21,6 @@ openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
-itertools = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = { workspace = true }
 rand = { workspace = true }
