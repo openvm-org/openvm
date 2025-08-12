@@ -97,12 +97,10 @@ pub mod test_utils {
         let engine = E::new(FriParameters::new_for_testing(1));
         let (vm, _) = VirtualMachine::new_with_keygen(engine, builder, config)?;
         let ctx = vm.build_metered_ctx();
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let exe = VmExe::new(program);
-        let interpreter = vm
-            .executor()
-            .metered_instance(&exe, &executor_idx_to_air_idx)?;
-        let (mut segments, _) = interpreter.execute_metered(input.clone(), ctx)?;
+        let (mut segments, _) = vm
+            .metered_interpreter(&exe)?
+            .execute_metered(input.clone(), ctx)?;
         assert_eq!(segments.len(), 1, "test only supports one segment");
         let Segment {
             instret_start,
@@ -111,7 +109,9 @@ pub mod test_utils {
         } = segments.pop().unwrap();
         assert_eq!(instret_start, 0);
         let state = vm.create_initial_state(&exe, input);
-        let output = vm.execute_preflight(&exe, state, None, &trace_heights)?;
+        let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
+        let output =
+            vm.execute_preflight(&mut preflight_interpreter, state, None, &trace_heights)?;
         assert_eq!(
             output.to_state.instret, num_insns,
             "metered execution insn count doesn't match preflight execution"

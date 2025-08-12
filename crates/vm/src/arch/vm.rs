@@ -145,6 +145,10 @@ impl<F> From<Vec<Vec<F>>> for Streams<F> {
     }
 }
 
+/// Typedef for [PreflightInterpretedInstance] that is generic in `VC: VmExecutionConfig<F>`
+type PreflightInterpretedInstance2<F, VC> =
+    PreflightInterpretedInstance<F, <VC as VmExecutionConfig<F>>::Executor>;
+
 /// [VmExecutor] is the struct that can execute an _arbitrary_ program, provided in the form of a
 /// [VmExe], for a fixed set of OpenVM instructions corresponding to a [VmExecutionConfig].
 /// Internally once it is given a program, it will preprocess the program to rewrite it into a more
@@ -155,10 +159,7 @@ where
     VC: VmExecutionConfig<F>,
 {
     pub config: VC,
-    /// If any executors are stateful (i.e., they mutate during execution), then the `inventory`
-    /// must store the executors in their initialized state. Internally, the executors are cloned
-    /// into a separate instance before running a program.
-    inventory: ExecutorInventory<VC::Executor>,
+    inventory: Arc<ExecutorInventory<VC::Executor>>,
     phantom: PhantomData<F>,
 }
 
@@ -186,7 +187,7 @@ where
         let inventory = config.create_executors()?;
         Ok(Self {
             config,
-            inventory,
+            inventory: Arc::new(inventory),
             phantom: PhantomData,
         })
     }
@@ -378,8 +379,41 @@ where
         &self.executor.config
     }
 
-    // TODO[jpw]: I'd like to make a VmInstance struct that has a loaded program
-    //
+    pub fn pure_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, E1Ctx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().instance(exe)
+    }
+
+    pub fn metered_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    pub fn preflight_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>, StaticProgramError> {
+        PreflightInterpretedInstance::new(
+            &exe.program,
+            self.executor.inventory.clone(),
+            self.executor_idx_to_air_idx(),
+        )
+    }
+
     /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
     /// using an interpreter. Preflight execution must be provided with `trace_heights`
     /// instrumentation data that was collected from a previous run of metered execution so that the
@@ -390,7 +424,7 @@ where
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight(
         &self,
-        exe: &VmExe<Val<E::SC>>,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         state: VmState<Val<E::SC>, GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -400,15 +434,10 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        debug_assert!(executor_idx_to_air_idx
+        debug_assert!(interpreter
+            .executor_idx_to_air_idx
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
-        let mut instance = PreflightInterpretedInstance::new(
-            &exe.program,
-            &self.executor.inventory,
-            executor_idx_to_air_idx,
-        )?;
 
         let instret_end = num_insns.map(|ni| state.instret.saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
@@ -448,9 +477,9 @@ where
             metrics: state.metrics,
         };
         let mut exec_state = VmExecState::new(vm_state, ctx);
-        execute_spanned!("execute_preflight", instance, &mut exec_state)?;
-        let filtered_exec_frequencies = instance.filtered_execution_frequencies();
-        instance.reset_execution_frequencies();
+        interpreter.reset_execution_frequencies();
+        execute_spanned!("execute_preflight", interpreter, &mut exec_state)?;
+        let filtered_exec_frequencies = interpreter.filtered_execution_frequencies();
         let touched_memory = exec_state
             .vm_state
             .memory
@@ -496,6 +525,7 @@ where
 
     /// Calls [`VmState::initial`] but sets more information for
     /// performance metrics when feature "perf-metrics" is enabled.
+    #[instrument(name = "vm_create_initial_state", skip_all)]
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -617,7 +647,7 @@ where
     ///   final memory state may be used to extract user public values afterwards.
     pub fn prove(
         &mut self,
-        exe: &VmExe<Val<E::SC>>,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         state: VmState<Val<E::SC>, GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
@@ -633,7 +663,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = self.execute_preflight(exe, state, num_insns, trace_heights)?;
+        } = self.execute_preflight(interpreter, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
@@ -792,40 +822,42 @@ pub trait SingleSegmentVmProver<SC: StarkGenericConfig> {
 /// Virtual machine prover instance for a fixed VM config and a fixed program. For use in proving a
 /// program directly on bare metal.
 #[derive(Getters)]
-pub struct VmLocalProver<E, VB>
+pub struct VmInstance<E, VB>
 where
     E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub vm: VirtualMachine<E, VB>,
+    pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub")]
     exe_commitment: Com<E::SC>,
-    // TODO: store immutable parts of program handler here
     #[getset(get = "pub")]
-    exe: VmExe<Val<E::SC>>,
+    exe: Arc<VmExe<Val<E::SC>>>,
 }
 
-impl<E, VB> VmLocalProver<E, VB>
+impl<E, VB> VmInstance<E, VB>
 where
     E: StarkEngine,
     VB: VmBuilder<E>,
 {
     pub fn new(
         mut vm: VirtualMachine<E, VB>,
-        exe: VmExe<Val<E::SC>>,
+        exe: Arc<VmExe<Val<E::SC>>>,
         cached_program_trace: CommittedTraceData<E::PB>,
-    ) -> Self {
+    ) -> Result<Self, StaticProgramError> {
         let exe_commitment = cached_program_trace.commitment.clone();
         vm.load_program(cached_program_trace);
-        Self {
+        let interpreter = vm.preflight_interpreter(&exe)?;
+        Ok(Self {
             vm,
-            exe,
+            interpreter,
             exe_commitment,
-        }
+            exe,
+        })
     }
 }
 
-impl<E, VB> ContinuationVmProver<E::SC> for VmLocalProver<E, VB>
+impl<E, VB> ContinuationVmProver<E::SC> for VmInstance<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
@@ -845,7 +877,7 @@ where
     }
 }
 
-impl<E, VB> VmLocalProver<E, VB>
+impl<E, VB> VmInstance<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
@@ -865,12 +897,9 @@ where
         let input = input.into();
         let vm = &mut self.vm;
         let exe = &self.exe;
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         let e2_ctx = vm.build_metered_ctx();
-        let interpreter = vm
-            .executor()
-            .metered_instance(&self.exe, &executor_idx_to_air_idx)?;
-        let (segments, _) = interpreter.execute_metered(input.clone(), e2_ctx)?;
+        let metered_interpreter = vm.metered_interpreter(&self.exe)?;
+        let (segments, _) = metered_interpreter.execute_metered(input.clone(), e2_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = Some(vm.create_initial_state(exe, input));
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -889,7 +918,12 @@ where
                 system_records,
                 record_arenas,
                 to_state,
-            } = vm.execute_preflight(exe, from_state, Some(num_insns), &trace_heights)?;
+            } = vm.execute_preflight(
+                &mut self.interpreter,
+                from_state,
+                Some(num_insns),
+                &trace_heights,
+            )?;
             state = Some(to_state);
 
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
@@ -912,7 +946,7 @@ where
     }
 }
 
-impl<E, VB> SingleSegmentVmProver<E::SC> for VmLocalProver<E, VB>
+impl<E, VB> SingleSegmentVmProver<E::SC> for VmInstance<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
@@ -933,7 +967,7 @@ where
         let mut trace_heights = trace_heights.to_vec();
         trace_heights[PUBLIC_VALUES_AIR_ID] = vm.config().as_ref().num_public_values as u32;
         let state = vm.create_initial_state(exe, input);
-        let (proof, _) = vm.prove(exe, state, None, &trace_heights)?;
+        let (proof, _) = vm.prove(&mut self.interpreter, state, None, &trace_heights)?;
         Ok(proof)
     }
 }

@@ -1,5 +1,5 @@
 use openvm_circuit::{
-    arch::{VirtualMachine, VirtualMachineError, VmBuilder, VmLocalProver},
+    arch::{VirtualMachine, VirtualMachineError, VmBuilder, VmInstance},
     system::program::trace::VmCommittedExe,
 };
 use openvm_stark_backend::prover::hal::DeviceDataTransporter;
@@ -13,7 +13,7 @@ pub fn new_local_prover<E, VB>(
     vm_builder: VB,
     vm_pk: &VmProvingKey<E::SC, VB::VmConfig>,
     committed_exe: &VmCommittedExe<E::SC>,
-) -> Result<VmLocalProver<E, VB>, VirtualMachineError>
+) -> Result<VmInstance<E, VB>, VirtualMachineError>
 where
     E: StarkFriEngine,
     VB: VmBuilder<E>,
@@ -23,9 +23,6 @@ where
     let vm = VirtualMachine::new(engine, vm_builder, vm_pk.vm_config.clone(), d_pk)?;
     let cached_program_trace = vm.transport_committed_exe_to_device(committed_exe);
     // TODO[jpw]: remove this clone
-    Ok(VmLocalProver::new(
-        vm,
-        committed_exe.exe.clone(),
-        cached_program_trace,
-    ))
+    let instance = VmInstance::new(vm, committed_exe.exe.clone(), cached_program_trace)?;
+    Ok(instance)
 }

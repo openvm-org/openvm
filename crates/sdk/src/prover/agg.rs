@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{
     ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
-    VmExecutionConfig, VmLocalProver,
+    VmExecutionConfig, VmInstance,
 };
 #[cfg(feature = "evm-prove")]
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
@@ -27,10 +27,10 @@ where
     E: StarkFriEngine<SC = SC>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
 {
-    leaf_prover: VmLocalProver<E, NativeBuilder>,
+    leaf_prover: VmInstance<E, NativeBuilder>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmLocalProver<E, NativeBuilder>,
+    internal_prover: VmInstance<E, NativeBuilder>,
     #[cfg(feature = "evm-prove")]
     root_prover: RootVerifierLocalProver,
     pub num_children_internal: usize,
@@ -261,7 +261,7 @@ impl LeafProvingController {
     #[instrument(name = "agg_layer", skip_all, fields(group = "leaf"))]
     pub fn generate_proof<E, NativeBuilder>(
         &self,
-        prover: &mut VmLocalProver<E, NativeBuilder>,
+        prover: &mut VmInstance<E, NativeBuilder>,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError>
     where

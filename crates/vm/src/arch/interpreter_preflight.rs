@@ -1,5 +1,10 @@
+use std::sync::Arc;
+
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
-use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
+use openvm_stark_backend::{
+    p3_field::{Field, PrimeField32},
+    p3_maybe_rayon::prelude::*,
+};
 
 use crate::{
     arch::{
@@ -12,8 +17,10 @@ use crate::{
 
 /// VM preflight executor (E3 executor) for use with trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
-pub struct PreflightInterpretedInstance<'a, F, E> {
-    pub(crate) executors: &'a [E],
+pub struct PreflightInterpretedInstance<F, E> {
+    // NOTE[jpw]: we use an Arc so that VmInstance can hold both VirtualMachine and
+    // PreflightInterpretedInstance. All we really need is to borrow `executors: &'a [E]`.
+    inventory: Arc<ExecutorInventory<E>>,
 
     /// This is a map from (pc - pc_base) / pc_step -> [PcEntry].
     /// We will map to `u32::MAX` if the program has no instruction at that pc.
@@ -25,7 +32,7 @@ pub struct PreflightInterpretedInstance<'a, F, E> {
     execution_frequencies: Vec<u32>,
     pc_base: u32,
 
-    executor_idx_to_air_idx: Vec<usize>,
+    pub(super) executor_idx_to_air_idx: Vec<usize>,
 }
 
 #[repr(C)]
@@ -37,10 +44,7 @@ pub struct PcEntry<F> {
     pub executor_idx: ExecutorId,
 }
 
-impl<'a, F, E> PreflightInterpretedInstance<'a, F, E>
-where
-    F: PrimeField32,
-{
+impl<F: Field, E> PreflightInterpretedInstance<F, E> {
     /// Creates a new interpreter instance for preflight execution.
     /// Rewrites the program into an internal table specialized for enum dispatch.
     ///
@@ -48,7 +52,7 @@ where
     /// There are less than `u32::MAX` total AIRs.
     pub fn new(
         program: &Program<F>,
-        inventory: &'a ExecutorInventory<E>,
+        inventory: Arc<ExecutorInventory<E>>,
         executor_idx_to_air_idx: Vec<usize>,
     ) -> Result<Self, StaticProgramError> {
         if inventory.executors().len() > u32::MAX as usize {
@@ -81,7 +85,7 @@ where
             }
         }
         Ok(Self {
-            executors: &inventory.executors,
+            inventory,
             execution_frequencies: vec![0u32; len],
             pc_handler,
             pc_base: program.pc_base,
@@ -89,6 +93,28 @@ where
         })
     }
 
+    pub fn executors(&self) -> &[E] {
+        &self.inventory.executors
+    }
+
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
+    where
+        E: Send + Sync,
+    {
+        self.pc_handler
+            .par_iter()
+            .enumerate()
+            .filter(|(_, entry)| entry.is_some())
+            .map(|(i, _)| self.execution_frequencies[i])
+            .collect()
+    }
+
+    pub fn reset_execution_frequencies(&mut self) {
+        self.execution_frequencies.fill(0);
+    }
+}
+
+impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
@@ -147,7 +173,11 @@ where
         };
         // SAFETY: the `executor_idx` comes from ExecutorInventory, which ensures that
         // `executor_idx` is within bounds
-        let executor = unsafe { self.executors.get_unchecked(pc_entry.executor_idx as usize) };
+        let executor = unsafe {
+            self.inventory
+                .executors
+                .get_unchecked(pc_entry.executor_idx as usize)
+        };
         tracing::trace!("pc: {pc:#x} | {:?}", pc_entry.insn);
 
         let opcode = pc_entry.insn.opcode;
@@ -191,21 +221,6 @@ where
         }
 
         Ok(())
-    }
-
-    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
-    where
-        E: Sync,
-    {
-        self.pc_handler
-            .par_iter()
-            .enumerate()
-            .filter_map(|(i, entry)| entry.is_some().then(|| self.execution_frequencies[i]))
-            .collect()
-    }
-
-    pub fn reset_execution_frequencies(&mut self) {
-        self.execution_frequencies.fill(0);
     }
 }
 

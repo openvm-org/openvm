@@ -355,12 +355,13 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
         .with_inputs(|| {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
             let state = vm.create_initial_state(&leaf_exe, input_stream);
+            let interpreter = vm.preflight_interpreter(&leaf_exe).unwrap();
 
-            (vm, leaf_exe, state)
+            (vm, state, interpreter)
         })
-        .bench_values(|(vm, leaf_exe, state)| {
+        .bench_values(|(vm, state, mut interpreter)| {
             let _out = vm
-                .execute_preflight(&leaf_exe, state, None, NATIVE_MAX_TRACE_HEIGHTS)
+                .execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
                 .expect("Failed to execute preflight");
         });
 }

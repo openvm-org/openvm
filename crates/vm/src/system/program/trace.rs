@@ -46,7 +46,7 @@ use crate::{
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct VmCommittedExe<SC: StarkGenericConfig> {
     /// Raw executable.
-    pub exe: VmExe<Val<SC>>,
+    pub exe: Arc<VmExe<Val<SC>>>,
     pub commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
@@ -62,7 +62,7 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
 
         let (commitment, data) = pcs.commit(vec![(domain, trace.clone())]);
         Self {
-            exe,
+            exe: Arc::new(exe),
             commitment,
             trace: Arc::new(trace),
             prover_data: Arc::new(data),

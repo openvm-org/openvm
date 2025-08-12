@@ -70,7 +70,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
-    let program = committed_exe.exe.program;
+    let program = &committed_exe.exe.program;
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {

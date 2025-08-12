@@ -13,7 +13,7 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
-        VmCircuitConfig, VmExecutor, VmLocalProver, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
     utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -134,11 +134,12 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
     vm.transport_init_memory_to_device(&state.memory);
     let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
     vm.load_program(cached_program_trace);
+    let mut preflight_interpreter = vm.preflight_interpreter(&committed_exe.exe)?;
     let PreflightExecutionOutput {
         system_records,
         mut record_arenas,
         ..
-    } = vm.execute_preflight(&committed_exe.exe, state, None, &fixed_air_heights)?;
+    } = vm.execute_preflight(&mut preflight_interpreter, state, None, &fixed_air_heights)?;
 
     let mut expected_actual_heights = vec![0; vk.inner.per_air.len()];
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
@@ -192,7 +193,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
 
     let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
     let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
-    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let mut prover = VmInstance::new(vm, com_exe.exe, cached_program_trace)?;
     let proof = SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; num_airs])?;
     assert!(proof.per_air.len() < num_airs, "Expect less used AIRs");
     verify_single(&prover.vm.engine, &pk.get_vk(), &proof)?;
@@ -215,7 +216,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     ];
     let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
     let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
-    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let mut prover = VmInstance::new(vm, com_exe.exe, cached_program_trace)?;
     let proof = SingleSegmentVmProver::prove(&mut prover, vec![], &vec![256; pk.per_air.len()])?;
     assert_eq!(
         proof.per_air[PUBLIC_VALUES_AIR_ID].air_id,
@@ -300,7 +301,7 @@ fn test_vm_1_persistent() -> eyre::Result<()> {
 
     let com_exe = vm.commit_exe(VmExe::new(Program::from_instructions(&instructions)));
     let cached_program_trace = vm.transport_committed_exe_to_device(&com_exe);
-    let mut prover = VmLocalProver::new(vm, com_exe.exe, cached_program_trace);
+    let mut prover = VmInstance::new(vm, com_exe.exe, cached_program_trace)?;
     let proof = ContinuationVmProver::prove(&mut prover, vec![])?;
 
     {

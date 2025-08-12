@@ -5,7 +5,7 @@ use openvm_circuit::{
     arch::{
         verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
         PreflightExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmLocalProver,
+        VmExecutionConfig, VmInstance,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
 };
@@ -31,7 +31,7 @@ where
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
-    app_prover: VmLocalProver<E, VB>,
+    app_prover: VmInstance<E, VB>,
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
 }

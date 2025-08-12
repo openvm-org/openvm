@@ -2,7 +2,7 @@ use getset::Getters;
 use itertools::zip_eq;
 use openvm_circuit::arch::{
     GenerationError, PreflightExecutionOutput, SingleSegmentVmProver, Streams, VirtualMachine,
-    VirtualMachineError, VmLocalProver,
+    VirtualMachineError, VmInstance,
 };
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
@@ -25,7 +25,7 @@ pub struct RootVerifierLocalProver {
     /// The proving key in `inner` should always have ordering of AIRs in the sorted order by fixed
     /// trace heights outside of the `prove` function.
     // This is CPU-only for now because it uses RootSC
-    inner: VmLocalProver<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
+    inner: VmInstance<BabyBearPoseidon2RootEngine, NativeCpuBuilder>,
     /// The constant trace heights, ordered by AIR ID (the original ordering from VmConfig).
     #[getset(get = "pub")]
     fixed_air_heights: Vec<u32>,
@@ -79,7 +79,12 @@ impl RootVerifierLocalProver {
             system_records,
             record_arenas,
             ..
-        } = vm.execute_preflight(&exe, state, None, NATIVE_MAX_TRACE_HEIGHTS)?;
+        } = vm.execute_preflight(
+            &mut self.inner.interpreter,
+            state,
+            None,
+            NATIVE_MAX_TRACE_HEIGHTS,
+        )?;
         // Note[jpw]: we could in theory extract trace heights from just preflight execution, but
         // that requires special logic in the chips so we will just generate the traces for now
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
@@ -141,7 +146,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
             system_records,
             mut record_arenas,
             ..
-        } = vm.execute_preflight(&exe, state, None, trace_heights)?;
+        } = vm.execute_preflight(&mut self.inner.interpreter, state, None, trace_heights)?;
         // record_arenas are created with capacity specified by trace_heights. we must ensure
         // `generate_proving_ctx` does not resize the trace matrices to make them smaller:
         for ra in &mut record_arenas {

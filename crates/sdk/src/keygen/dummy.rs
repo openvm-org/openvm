@@ -72,11 +72,12 @@ pub(super) fn compute_root_proof_heights(
     let cached_program_trace = root_vm.transport_committed_exe_to_device(root_committed_exe);
     root_vm.load_program(cached_program_trace);
     root_vm.transport_init_memory_to_device(&state.memory);
+    let mut preflight_interpreter = root_vm.preflight_interpreter(&root_committed_exe.exe)?;
     let PreflightExecutionOutput {
         system_records,
         record_arenas,
         ..
-    } = root_vm.execute_preflight(&root_committed_exe.exe, state, None, &trace_heights)?;
+    } = root_vm.execute_preflight(&mut preflight_interpreter, state, None, &trace_heights)?;
     let ctx = root_vm.generate_proving_ctx(system_records, record_arenas)?;
     let air_heights = ctx
         .into_iter()
