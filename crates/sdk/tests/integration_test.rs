@@ -6,7 +6,7 @@ use openvm_circuit::{
     self,
     arch::{ContinuationVmProof, ExecutionError, VirtualMachineError},
     system::program::trace::VmCommittedExe,
-    utils::test_system_config_with_continuations,
+    utils::test_system_config,
 };
 use openvm_continuations::verifier::{
     common::types::VmVerifierPvs,
@@ -148,7 +148,7 @@ fn agg_stark_config_for_test() -> AggStarkConfig {
 }
 
 fn app_vm_config_for_test() -> SdkVmConfig {
-    let config = test_system_config_with_continuations()
+    let config = test_system_config()
         .with_max_segment_len(200)
         .with_public_values(NUM_PUB_VALUES);
     SdkVmConfig::builder()

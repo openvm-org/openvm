@@ -6,7 +6,7 @@ mod tests {
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
         system::memory::merkle::public_values::UserPublicValuesProof,
-        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
+        utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
     #[cfg(test)]
@@ -32,7 +32,7 @@ mod tests {
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
-                system: test_system_config_with_continuations(),
+                system: test_system_config(),
                 ..Default::default()
             },
             ..Default::default()

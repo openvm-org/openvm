@@ -31,7 +31,7 @@ mod tests {
 
         let vm_config = SdkVmConfig::builder()
             .system(SdkSystemConfig {
-                config: SystemConfig::default().with_continuations(),
+                config: SystemConfig::default(),
             })
             .rv32i(Default::default())
             .rv32m(Default::default())

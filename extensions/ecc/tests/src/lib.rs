@@ -11,7 +11,7 @@ mod tests {
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
-        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
+        utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_ecc_circuit::{
         CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassCpuBuilder, P256_CONFIG,
@@ -41,7 +41,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32weierstrass_config(curves: Vec<CurveConfig>) -> Rv32WeierstrassConfig {
         let mut config = Rv32WeierstrassConfig::new(curves);
-        *config.as_mut() = test_system_config_with_continuations();
+        *config.as_mut() = test_system_config();
         config
     }
 

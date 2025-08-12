@@ -42,7 +42,7 @@ pub struct Sha256Rv32Config {
 impl Default for Sha256Rv32Config {
     fn default() -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,

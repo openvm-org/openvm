@@ -79,7 +79,7 @@ impl InitFileGenerator for Rv32ImConfig {}
 
 impl Default for Rv32IConfig {
     fn default() -> Self {
-        let system = SystemConfig::default().with_continuations();
+        let system = SystemConfig::default();
         Self {
             system,
             base: Default::default(),
@@ -90,9 +90,7 @@ impl Default for Rv32IConfig {
 
 impl Rv32IConfig {
     pub fn with_public_values(public_values: usize) -> Self {
-        let system = SystemConfig::default()
-            .with_continuations()
-            .with_public_values(public_values);
+        let system = SystemConfig::default().with_public_values(public_values);
         Self {
             system,
             base: Default::default(),
@@ -102,7 +100,6 @@ impl Rv32IConfig {
 
     pub fn with_public_values_and_segment_len(public_values: usize, segment_len: usize) -> Self {
         let system = SystemConfig::default()
-            .with_continuations()
             .with_public_values(public_values)
             .with_max_segment_len(segment_len);
         Self {

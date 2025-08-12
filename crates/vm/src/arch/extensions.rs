@@ -842,7 +842,7 @@ mod tests {
 
     #[test]
     fn test_system_bus_indices() {
-        let config = SystemConfig::default().with_continuations();
+        let config = SystemConfig::default();
         let inventory: AirInventory<BabyBearPoseidon2Config> = config.create_airs().unwrap();
         let system = inventory.system();
         let port = system.port();

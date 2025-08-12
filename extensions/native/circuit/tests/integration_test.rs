@@ -14,7 +14,7 @@ use openvm_circuit::{
         VmCircuitConfig, VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
-    utils::{air_test, air_test_with_min_segments, test_system_config},
+    utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
 };
 use openvm_instructions::{
     exe::VmExe,
@@ -202,7 +202,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
 fn test_vm_public_values() -> eyre::Result<()> {
     setup_tracing();
     let num_public_values = 100;
-    let config = test_system_config().with_public_values(num_public_values);
+    let config = test_system_config_without_continuations().with_public_values(num_public_values);
     assert!(!config.continuation_enabled);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));

@@ -328,21 +328,13 @@ impl InitFileGenerator for SdkVmConfigInner {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct SdkSystemConfig {
     pub config: SystemConfig,
 }
 
 // Default implementation uses no init file
 impl InitFileGenerator for SdkSystemConfig {}
-
-impl Default for SdkSystemConfig {
-    fn default() -> Self {
-        Self {
-            config: SystemConfig::default().with_continuations(),
-        }
-    }
-}
 
 impl From<SystemConfig> for SdkSystemConfig {
     fn from(config: SystemConfig) -> Self {

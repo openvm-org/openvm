@@ -16,7 +16,7 @@ pub mod test_utils {
             MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
             VirtualMachineError, VmBuilder, VmState,
         },
-        utils::test_system_config,
+        utils::test_system_config_without_continuations,
     };
     use openvm_instructions::{
         exe::VmExe,
@@ -137,7 +137,7 @@ pub mod test_utils {
     }
 
     pub fn test_native_config() -> NativeConfig {
-        let mut system = test_system_config();
+        let mut system = test_system_config_without_continuations();
         system.memory_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 0;
         system.memory_config.addr_spaces[RV32_MEMORY_AS as usize].num_cells = 0;
         NativeConfig {
@@ -148,14 +148,14 @@ pub mod test_utils {
 
     pub fn test_native_continuations_config() -> NativeConfig {
         NativeConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_without_continuations().with_continuations(),
             native: Default::default(),
         }
     }
 
     pub fn test_rv32_with_kernels_config() -> Rv32WithKernelsConfig {
         Rv32WithKernelsConfig {
-            system: test_system_config().with_continuations(),
+            system: test_system_config_without_continuations().with_continuations(),
             ..Default::default()
         }
     }

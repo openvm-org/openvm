@@ -109,7 +109,7 @@ impl Default for ExecuteConfig {
     fn default() -> Self {
         let bn_config = PairingCurve::Bn254.curve_config();
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,

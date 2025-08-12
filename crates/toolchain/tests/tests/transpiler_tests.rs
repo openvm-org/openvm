@@ -101,7 +101,7 @@ pub struct Rv32ModularFp2Int256Config {
 impl Rv32ModularFp2Int256Config {
     pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),

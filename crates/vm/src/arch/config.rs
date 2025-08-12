@@ -277,7 +277,7 @@ impl SystemConfig {
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
-            continuation_enabled: false,
+            continuation_enabled: true,
             memory_config,
             num_public_values,
             profiling: false,

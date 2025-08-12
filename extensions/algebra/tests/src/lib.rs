@@ -9,7 +9,7 @@ mod tests {
         Rv32ModularWithFp2CpuBuilder,
     };
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::utils::{air_test, test_system_config_with_continuations};
+    use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
@@ -24,7 +24,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32modular_config(moduli: Vec<BigUint>) -> Rv32ModularConfig {
         let mut config = Rv32ModularConfig::new(moduli);
-        config.system = test_system_config_with_continuations();
+        config.system = test_system_config();
         config
     }
 
@@ -33,7 +33,7 @@ mod tests {
         moduli_with_names: Vec<(String, BigUint)>,
     ) -> Rv32ModularWithFp2Config {
         let mut config = Rv32ModularWithFp2Config::new(moduli_with_names);
-        *config.as_mut() = test_system_config_with_continuations();
+        *config.as_mut() = test_system_config();
         config
     }
 

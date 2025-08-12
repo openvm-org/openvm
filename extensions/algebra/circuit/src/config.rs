@@ -51,7 +51,7 @@ impl InitFileGenerator for Rv32ModularConfig {
 impl Rv32ModularConfig {
     pub fn new(moduli: Vec<BigUint>) -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),

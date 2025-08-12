@@ -61,6 +61,7 @@ impl NativeConfig {
                 MemoryConfig::aggregation(),
                 num_public_values,
             )
+            .without_continuations()
             .with_max_segment_len((1 << 24) - 100),
             native: Default::default(),
         }
@@ -122,7 +123,7 @@ pub struct Rv32WithKernelsConfig {
 impl Default for Rv32WithKernelsConfig {
     fn default() -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             rv32i: Rv32I,
             rv32m: Rv32M::default(),
             io: Rv32Io,
