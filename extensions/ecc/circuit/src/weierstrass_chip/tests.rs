@@ -284,7 +284,7 @@ mod ec_addne_tests {
             &mut harness,
             &mut rng,
             &modulus,
-            false,
+            true,
             offset,
             None,
             None,
