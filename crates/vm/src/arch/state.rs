@@ -27,6 +27,8 @@ pub struct VmState<F, MEM = GuestMemory> {
     pub metrics: VmMetrics,
 }
 
+pub(super) const DEFAULT_RNG_SEED: u64 = 0;
+
 impl<F: Clone, MEM> VmState<F, MEM> {
     /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new(
@@ -58,13 +60,33 @@ impl<F: Clone> VmState<F, GuestMemory> {
         inputs: impl Into<Streams<F>>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
-        let seed = 0;
         let num_custom_pvs = if system_config.has_public_values_chip() {
             system_config.num_public_values
         } else {
             0
         };
-        VmState::new(0, pc_start, memory, inputs.into(), seed, num_custom_pvs)
+        VmState::new(
+            0,
+            pc_start,
+            memory,
+            inputs.into(),
+            DEFAULT_RNG_SEED,
+            num_custom_pvs,
+        )
+    }
+
+    pub fn reset(
+        &mut self,
+        init_memory: SparseMemoryImage,
+        pc_start: u32,
+        streams: impl Into<Streams<F>>,
+    ) {
+        self.instret = 0;
+        self.pc = pc_start;
+        self.memory.memory.fill_zero();
+        self.memory.memory.set_from_sparse(init_memory);
+        self.streams = streams.into();
+        self.rng = StdRng::seed_from_u64(DEFAULT_RNG_SEED);
     }
 }
 

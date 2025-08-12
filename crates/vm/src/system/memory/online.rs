@@ -63,6 +63,10 @@ pub trait LinearMemory {
     fn as_slice(&self) -> &[u8];
     /// Returns the entire memory as a raw byte slice.
     fn as_mut_slice(&mut self) -> &mut [u8];
+    /// Fill the memory with zeros.
+    fn fill_zero(&mut self) {
+        self.as_mut_slice().fill(0);
+    }
     /// Read `BLOCK` from `self` at `from` address without moving it.
     ///
     /// Panics or segfaults if `from..from + size_of::<BLOCK>()` is out of bounds.
@@ -178,6 +182,13 @@ impl<M: LinearMemory> AddressMap<M> {
         &mut self.mem
     }
 
+    /// Fill each address space memory with zeros. Does not change the config.
+    pub fn fill_zero(&mut self) {
+        for mem in &mut self.mem {
+            mem.fill_zero();
+        }
+    }
+
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
@@ -259,18 +270,16 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub fn from_sparse(config: Vec<AddressSpaceHostConfig>, sparse_map: SparseMemoryImage) -> Self {
-        let mut vec = Self::new(config);
+    pub fn set_from_sparse(&mut self, sparse_map: SparseMemoryImage) {
         for ((addr_space, index), data_byte) in sparse_map.into_iter() {
             // SAFETY:
             // - safety assumptions in function doc comments
             unsafe {
-                vec.mem
+                self.mem
                     .get_unchecked_mut(addr_space as usize)
                     .write_unaligned(index as usize, data_byte);
             }
         }
-        vec
     }
 }
 

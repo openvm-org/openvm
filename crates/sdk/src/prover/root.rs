@@ -128,8 +128,12 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         // The following is unrolled from SingleSegmentVmProver for VmLocalProver and
         // VirtualMachine::prove to add special logic around ensuring trace heights are fixed and
         // then reordering the trace matrices so the heights are sorted.
-        let input = input.into();
-        let exe = self.inner.exe().clone();
+        self.inner.reset_state(input);
+        let state = self
+            .inner
+            .state_mut()
+            .take()
+            .expect("State should always be present");
         let vm = &mut self.inner.vm;
         // The root_verifier_pk has the AIRs ordered by the fixed AIR height sorted ordering, but
         // execute_preflight and generate_proving_ctx still expect the original AIR ID ordering from
@@ -138,14 +142,13 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         // permutation is conceptually simpler to track.
         Self::permute_pk(vm, &self.air_id_inv_perm);
         assert!(!vm.config().as_ref().continuation_enabled);
-        let state = vm.create_initial_state(&exe, input);
         vm.transport_init_memory_to_device(&state.memory);
 
         let trace_heights = &self.fixed_air_heights;
         let PreflightExecutionOutput {
             system_records,
             mut record_arenas,
-            ..
+            to_state,
         } = vm.execute_preflight(&mut self.inner.interpreter, state, None, trace_heights)?;
         // record_arenas are created with capacity specified by trace_heights. we must ensure
         // `generate_proving_ctx` does not resize the trace matrices to make them smaller:
@@ -185,6 +188,7 @@ impl SingleSegmentVmProver<RootSC> for RootVerifierLocalProver {
         // We also undo the permutation on pk because `prove` needs pk and ctx ordering to match.
         Self::permute_pk(vm, &self.air_id_perm);
         let proof = vm.engine.prove(vm.pk(), ctx);
+        *self.inner.state_mut() = Some(to_state);
         Ok(proof)
     }
 }
