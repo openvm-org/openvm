@@ -11,11 +11,11 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::{execution_mode::E1ExecutionCtx, Streams, VmExecState};
+use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E2ExecutionCtx, ExecutorInventoryError, MatrixRecordArena},
+    arch::{execution_mode::MeteredExecutionCtxTrait, ExecutorInventoryError, MatrixRecordArena},
     system::{
         memory::online::{GuestMemory, TracingMemory},
         program::ProgramBus,
@@ -107,7 +107,7 @@ pub trait Executor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx;
+        Ctx: ExecutionCtxTrait;
 }
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -125,7 +125,7 @@ pub trait MeteredExecutor<F> {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx;
+        Ctx: MeteredExecutionCtxTrait;
 }
 
 // TODO[jpw]: Avoid Clone by making executors stateless?
@@ -138,7 +138,7 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>>: Clone {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
@@ -157,6 +157,8 @@ pub struct VmStateMut<'a, F, MEM, RA> {
     pub memory: &'a mut MEM,
     pub streams: &'a mut Streams<F>,
     pub rng: &'a mut StdRng,
+    /// Custom public values to be set by the system PublicValuesExecutor
+    pub(crate) custom_pvs: &'a mut Vec<Option<F>>,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
     pub metrics: &'a mut VmMetrics,

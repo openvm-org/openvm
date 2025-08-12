@@ -233,7 +233,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut EcDoublePreCompute = data.borrow_mut();
 
@@ -328,7 +328,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<EcDoublePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -382,7 +382,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 
 unsafe fn execute_e2_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
@@ -405,7 +405,7 @@ unsafe fn execute_e2_impl<
 
 unsafe fn execute_e2_setup_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
@@ -428,7 +428,7 @@ unsafe fn execute_e2_setup_impl<
 
 unsafe fn execute_e12_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,

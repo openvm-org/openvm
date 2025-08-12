@@ -37,23 +37,17 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::e1::E1Ctx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
-    CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    execution_mode::{ExecutionCtx, MeteredCtx, PreflightCtx, Segment},
+    hasher::poseidon2::vm_poseidon2_hasher,
+    interpreter::InterpretedInstance,
+    interpreter_preflight::PreflightInterpretedInstance,
+    AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
+    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
+    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
+    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
-    arch::{
-        execution_mode::{
-            metered::{MeteredCtx, Segment},
-            tracegen::TracegenCtx,
-        },
-        hasher::poseidon2::vm_poseidon2_hasher,
-        interpreter::InterpretedInstance,
-        interpreter_preflight::PreflightInterpretedInstance,
-        AirInventoryError, AnyEnum, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, MeteredExecutor, PreflightExecutor, StaticProgramError,
-        SystemConfig, TraceFiller, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig,
-        VmState, PUBLIC_VALUES_AIR_ID,
-    },
     execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -67,8 +61,7 @@ use crate::{
             AddressMap, CHUNK,
         },
         program::{trace::VmCommittedExe, ProgramHandler},
-        public_values::PublicValuesExecutor,
-        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights, PV_EXECUTOR_IDX,
+        SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
 
@@ -239,7 +232,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, E1Ctx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 }
@@ -419,7 +412,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -441,6 +434,7 @@ where
             memory,
             streams: state.streams,
             rng: state.rng,
+            custom_pvs: state.custom_pvs,
             #[cfg(feature = "metrics")]
             metrics: state.metrics,
         };
@@ -456,16 +450,12 @@ where
 
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(exec_state.vm_state.pc, memory.timestamp());
-        let public_values = system_config
-            .has_public_values_chip()
-            .then(|| {
-                instance.handler.executors[PV_EXECUTOR_IDX]
-                    .as_any_kind()
-                    .downcast_ref::<PublicValuesExecutor<Val<E::SC>>>()
-                    .unwrap()
-                    .generate_public_values()
-            })
-            .unwrap_or_default();
+        let public_values = exec_state
+            .vm_state
+            .custom_pvs
+            .iter()
+            .map(|&x| x.unwrap_or(Val::<E::SC>::ZERO))
+            .collect();
         let exit_code = exec_state.exit_code?;
         let system_records = SystemRecords {
             from_state,
@@ -483,6 +473,7 @@ where
             memory: memory.data,
             streams: exec_state.vm_state.streams,
             rng: exec_state.vm_state.rng,
+            custom_pvs: exec_state.vm_state.custom_pvs,
             #[cfg(feature = "metrics")]
             metrics: exec_state.vm_state.metrics,
         };
@@ -500,10 +491,13 @@ where
         exe: &VmExe<Val<E::SC>>,
         inputs: impl Into<Streams<Val<E::SC>>>,
     ) -> VmState<Val<E::SC>, GuestMemory> {
-        let memory_config = &self.config().as_ref().memory_config;
         #[allow(unused_mut)]
-        let mut state =
-            VmState::initial(memory_config, exe.init_memory.clone(), exe.pc_start, inputs);
+        let mut state = VmState::initial(
+            self.config().as_ref(),
+            exe.init_memory.clone(),
+            exe.pc_start,
+            inputs,
+        );
         // Add backtrace information for either:
         // - debugging
         // - performance metrics

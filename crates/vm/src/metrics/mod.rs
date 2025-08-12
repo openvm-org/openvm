@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
 
 use crate::{
-    arch::{execution_mode::tracegen::TracegenCtx, Arena, PreflightExecutor, VmExecState},
+    arch::{execution_mode::PreflightCtx, Arena, PreflightExecutor, VmExecState},
     system::{memory::online::TracingMemory, program::PcEntry},
 };
 
@@ -52,7 +52,7 @@ pub struct VmMetrics {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>,
+    state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
     executor: &mut Executor,
     prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
@@ -100,7 +100,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 // We also clear the current trace cell counts so there aren't negative diffs at the start of the
 // next segment.
 #[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, TracegenCtx<RA>>)
+pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>)
 where
     F: Clone + Send + Sync,
     RA: Arena,

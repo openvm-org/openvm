@@ -49,7 +49,9 @@ use crate::{
             air::Poseidon2PeripheryAir, new_poseidon2_periphery_air, Poseidon2PeripheryChip,
         },
         program::{ProgramBus, ProgramChip},
-        public_values::{PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor},
+        public_values::{
+            PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor, PublicValuesFiller,
+        },
     },
 };
 
@@ -246,11 +248,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
         if self.has_public_values_chip() {
             assert_eq!(inventory.executors().len(), PV_EXECUTOR_IDX);
 
-            let public_values = PublicValuesExecutor::new(
-                NativeAdapterExecutor::default(),
-                self.num_public_values,
-                (self.max_constraint_degree as u32).checked_sub(1).unwrap(),
-            );
+            let public_values = PublicValuesExecutor::new(NativeAdapterExecutor::default());
             inventory.add_executor(public_values, [PublishOpcode::PUBLISH.global_opcode()])?;
         }
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
@@ -397,10 +395,12 @@ where
 
         let public_values_chip = config.has_public_values_chip().then(|| {
             VmChipWrapper::new(
-                PublicValuesExecutor::new(
+                PublicValuesFiller::new(
                     NativeAdapterExecutor::default(),
                     config.num_public_values,
-                    config.max_constraint_degree as u32 - 1,
+                    (config.max_constraint_degree as u32)
+                        .checked_sub(1)
+                        .unwrap(),
                 ),
                 memory_controller.helper(),
             )
@@ -446,7 +446,7 @@ where
         } = system_records;
 
         if let Some(chip) = &mut self.public_values_chip {
-            chip.inner.set_public_values(&public_values);
+            chip.inner.set_public_values(public_values);
         }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
         let program_ctx = self.program_chip.generate_proving_ctx(());

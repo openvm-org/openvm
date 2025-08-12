@@ -10,7 +10,7 @@ use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, MemoryConfig},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig},
     system::memory::online::GuestMemory,
 };
 
@@ -21,17 +21,21 @@ pub struct VmState<F, MEM = GuestMemory> {
     pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
+    /// The public values of the PublicValuesAir when it exists
+    pub(crate) custom_pvs: Vec<Option<F>>,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
 }
 
-impl<F, MEM> VmState<F, MEM> {
+impl<F: Clone, MEM> VmState<F, MEM> {
+    /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new(
         instret: u64,
         pc: u32,
         memory: MEM,
         streams: impl Into<Streams<F>>,
         seed: u64,
+        num_custom_pvs: usize,
     ) -> Self {
         Self {
             instret,
@@ -39,22 +43,28 @@ impl<F, MEM> VmState<F, MEM> {
             memory,
             streams: streams.into(),
             rng: StdRng::seed_from_u64(seed),
+            custom_pvs: vec![None; num_custom_pvs],
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
     }
 }
 
-impl<F> VmState<F, GuestMemory> {
+impl<F: Clone> VmState<F, GuestMemory> {
     pub fn initial(
-        memory_config: &MemoryConfig,
+        system_config: &SystemConfig,
         init_memory: SparseMemoryImage,
         pc_start: u32,
         inputs: impl Into<Streams<F>>,
     ) -> Self {
-        let memory = create_memory_image(memory_config, init_memory);
+        let memory = create_memory_image(&system_config.memory_config, init_memory);
         let seed = 0;
-        VmState::new(0, pc_start, memory, inputs.into(), seed)
+        let num_custom_pvs = if system_config.has_public_values_chip() {
+            system_config.num_public_values
+        } else {
+            0
+        };
+        VmState::new(0, pc_start, memory, inputs.into(), seed, num_custom_pvs)
     }
 }
 
@@ -96,7 +106,7 @@ impl<F, MEM, CTX> DerefMut for VmExecState<F, MEM, CTX> {
 
 impl<F, CTX> VmExecState<F, GuestMemory, CTX>
 where
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
 {
     /// Runtime read operation for a block of memory
     #[inline(always)]

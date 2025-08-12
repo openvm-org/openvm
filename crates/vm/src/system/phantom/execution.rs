@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 
 use crate::{
     arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+        execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
         E2PreCompute, ExecuteFunc, ExecutionError, Executor, MeteredExecutor, PhantomSubExecutor,
         StaticProgramError, Streams, VmExecState,
     },
@@ -47,7 +47,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut PhantomPreCompute<F> = data.borrow_mut();
         self.pre_compute_impl(inst, data);
@@ -63,7 +63,7 @@ pub(super) struct PhantomStateMut<'a, F> {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &PhantomPreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -86,7 +86,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -95,7 +95,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
 }
 
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -182,7 +182,7 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;

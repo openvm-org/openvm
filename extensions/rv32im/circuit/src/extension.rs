@@ -757,6 +757,11 @@ mod phantom {
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
+            static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+            WARN_ONCE.call_once(|| {
+                eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
+            });
+
             let len = read_rv32_register(memory, a) as usize;
             streams.hint_stream.clear();
             streams.hint_stream.extend(

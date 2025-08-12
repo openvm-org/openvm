@@ -1,15 +1,15 @@
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, VmExecState},
+    arch::{execution_mode::ExecutionCtxTrait, VmExecState},
     system::memory::online::GuestMemory,
 };
 
-pub struct E1Ctx {
+pub struct ExecutionCtx {
     instret_end: u64,
 }
 
-impl E1Ctx {
+impl ExecutionCtx {
     pub fn new(instret_end: Option<u64>) -> Self {
-        E1Ctx {
+        ExecutionCtx {
             instret_end: if let Some(end) = instret_end {
                 end
             } else {
@@ -19,13 +19,13 @@ impl E1Ctx {
     }
 }
 
-impl Default for E1Ctx {
+impl Default for ExecutionCtx {
     fn default() -> Self {
         Self::new(None)
     }
 }
 
-impl E1ExecutionCtx for E1Ctx {
+impl ExecutionCtxTrait for ExecutionCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
     #[inline(always)]
