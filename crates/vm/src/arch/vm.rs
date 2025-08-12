@@ -37,23 +37,17 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::normal::ExecutionCtx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
-    CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    execution_mode::{ExecutionCtx, MeteredCtx, PreflightCtx, Segment},
+    hasher::poseidon2::vm_poseidon2_hasher,
+    interpreter::InterpretedInstance,
+    interpreter_preflight::PreflightInterpretedInstance,
+    AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
+    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
+    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
+    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
-    arch::{
-        execution_mode::{
-            metered::{MeteredCtx, Segment},
-            preflight::PreflightCtx,
-        },
-        hasher::poseidon2::vm_poseidon2_hasher,
-        interpreter::InterpretedInstance,
-        interpreter_preflight::PreflightInterpretedInstance,
-        AirInventoryError, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, MeteredExecutor, PreflightExecutor, StaticProgramError,
-        SystemConfig, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig, VmState,
-        PUBLIC_VALUES_AIR_ID,
-    },
     execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},

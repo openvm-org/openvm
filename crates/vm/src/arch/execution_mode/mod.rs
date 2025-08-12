@@ -1,8 +1,12 @@
 use crate::{arch::VmExecState, system::memory::online::GuestMemory};
 
 pub mod metered;
-pub mod normal;
-pub mod preflight;
+mod preflight;
+mod pure;
+
+pub use metered::{ctx::MeteredCtx, segment_ctx::Segment};
+pub use preflight::PreflightCtx;
+pub use pure::ExecutionCtx;
 
 pub trait ExecutionCtxTrait: Sized {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32);

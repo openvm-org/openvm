@@ -11,7 +11,7 @@ use openvm_instructions::{
 use openvm_stark_backend::prover::{hal::ProverBackend, types::DeviceMultiStarkProvingKey};
 
 use crate::{
-    arch::{execution_mode::preflight::PreflightCtx, Arena, PreflightExecutor, VmExecState},
+    arch::{execution_mode::PreflightCtx, Arena, PreflightExecutor, VmExecState},
     system::{memory::online::TracingMemory, program::PcEntry},
 };
 

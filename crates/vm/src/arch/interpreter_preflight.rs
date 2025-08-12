@@ -3,8 +3,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::ExecutionError;
 use crate::{
     arch::{
-        execution_mode::preflight::PreflightCtx, instructions::*, Arena, PreflightExecutor,
-        VmExecState, VmStateMut,
+        execution_mode::PreflightCtx, instructions::*, Arena, PreflightExecutor, VmExecState,
+        VmStateMut,
     },
     system::{memory::online::TracingMemory, program::ProgramHandler},
 };

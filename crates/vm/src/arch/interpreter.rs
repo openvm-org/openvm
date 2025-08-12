@@ -18,9 +18,7 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{
-            metered::{MeteredCtx, Segment},
-            normal::ExecutionCtx,
-            ExecutionCtxTrait, MeteredExecutionCtxTrait,
+            ExecutionCtx, ExecutionCtxTrait, MeteredCtx, MeteredExecutionCtxTrait, Segment,
         },
         ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
