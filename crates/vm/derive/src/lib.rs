@@ -169,7 +169,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         self.0.pre_compute(pc, inst, data)
                     }
                 }
@@ -242,7 +242,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E1ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         match self {
                             #(#pre_compute_arms,)*
                         }
@@ -297,7 +297,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         self.0.metered_pre_compute(chip_idx, pc, inst, data)
                     }
                 }
@@ -371,7 +371,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         data: &mut [u8],
                     ) -> Result<::openvm_circuit::arch::ExecuteFunc<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
                     where
-                        Ctx: ::openvm_circuit::arch::execution_mode::E2ExecutionCtx, {
+                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         match self {
                             #(#metered_pre_compute_arms,)*
                         }

@@ -27,7 +27,7 @@ pub mod testing;
 
 pub use config::*;
 pub use execution::*;
-pub use execution_mode::{E1ExecutionCtx, E2ExecutionCtx};
+pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use integration_api::*;
 pub use openvm_instructions as instructions;

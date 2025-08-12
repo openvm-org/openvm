@@ -261,7 +261,7 @@ where
     }
 
     #[inline(always)]
-    fn pre_compute<Ctx: E1ExecutionCtx>(
+    fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
@@ -291,7 +291,7 @@ where
     }
 
     #[inline(always)]
-    fn metered_pre_compute<Ctx: E2ExecutionCtx>(
+    fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
         pc: u32,
@@ -313,7 +313,7 @@ where
     }
 }
 
-unsafe fn execute_e1_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -321,7 +321,7 @@ unsafe fn execute_e1_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS
     execute_e12_loadw::<_, _, NUM_CELLS>(pre_compute, vm_state);
 }
 
-unsafe fn execute_e1_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -329,7 +329,11 @@ unsafe fn execute_e1_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELL
     execute_e12_storew::<_, _, NUM_CELLS>(pre_compute, vm_state);
 }
 
-unsafe fn execute_e1_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e1_hint_storew<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const NUM_CELLS: usize,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -337,7 +341,11 @@ unsafe fn execute_e1_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM
     execute_e12_hint_storew::<_, _, NUM_CELLS>(pre_compute, vm_state);
 }
 
-unsafe fn execute_e2_loadw<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e2_loadw<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const NUM_CELLS: usize,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -348,7 +356,11 @@ unsafe fn execute_e2_loadw<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS
     execute_e12_loadw::<_, _, NUM_CELLS>(&pre_compute.data, vm_state);
 }
 
-unsafe fn execute_e2_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e2_storew<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const NUM_CELLS: usize,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -359,7 +371,11 @@ unsafe fn execute_e2_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELL
     execute_e12_storew::<_, _, NUM_CELLS>(&pre_compute.data, vm_state);
 }
 
-unsafe fn execute_e2_hint_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e2_hint_storew<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const NUM_CELLS: usize,
+>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -371,7 +387,7 @@ unsafe fn execute_e2_hint_storew<F: PrimeField32, CTX: E2ExecutionCtx, const NUM
 }
 
 #[inline(always)]
-unsafe fn execute_e12_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e12_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &NativeLoadStorePreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -387,7 +403,7 @@ unsafe fn execute_e12_loadw<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELL
 }
 
 #[inline(always)]
-unsafe fn execute_e12_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e12_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &NativeLoadStorePreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -402,7 +418,11 @@ unsafe fn execute_e12_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CEL
 }
 
 #[inline(always)]
-unsafe fn execute_e12_hint_storew<F: PrimeField32, CTX: E1ExecutionCtx, const NUM_CELLS: usize>(
+unsafe fn execute_e12_hint_storew<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const NUM_CELLS: usize,
+>(
     pre_compute: &NativeLoadStorePreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {

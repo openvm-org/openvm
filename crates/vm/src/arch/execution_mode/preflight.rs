@@ -1,11 +1,11 @@
 use crate::arch::Arena;
 
-pub struct TracegenCtx<RA> {
+pub struct PreflightCtx<RA> {
     pub arenas: Vec<RA>,
     pub instret_end: Option<u64>,
 }
 
-impl<RA: Arena> TracegenCtx<RA> {
+impl<RA: Arena> PreflightCtx<RA> {
     /// `capacities` is list of `(height, width)` dimensions for each arena, indexed by AIR index.
     /// The length of `capacities` must equal the number of AIRs.
     /// Here `height` will always mean an overestimate of the trace height for that AIR, while

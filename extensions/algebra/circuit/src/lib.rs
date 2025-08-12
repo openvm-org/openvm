@@ -215,7 +215,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
 
@@ -312,7 +312,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -395,7 +395,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
 }
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -409,7 +409,7 @@ unsafe fn execute_e1_setup_impl<
 
 unsafe fn execute_e2_setup_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -426,7 +426,7 @@ unsafe fn execute_e2_setup_impl<
 
 unsafe fn execute_e1_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -442,7 +442,7 @@ unsafe fn execute_e1_impl<
 
 unsafe fn execute_e2_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -464,7 +464,7 @@ unsafe fn execute_e2_impl<
 
 unsafe fn execute_e1_generic_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -478,7 +478,7 @@ unsafe fn execute_e1_generic_impl<
 
 unsafe fn execute_e2_generic_impl<
     F: PrimeField32,
-    CTX: E2ExecutionCtx,
+    CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -495,7 +495,7 @@ unsafe fn execute_e2_generic_impl<
 
 unsafe fn execute_e12_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
@@ -533,7 +533,7 @@ unsafe fn execute_e12_impl<
 
 unsafe fn execute_e12_generic_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
 >(
@@ -570,7 +570,7 @@ unsafe fn execute_e12_generic_impl<
 
 unsafe fn execute_e12_setup_impl<
     F: PrimeField32,
-    CTX: E1ExecutionCtx,
+    CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,

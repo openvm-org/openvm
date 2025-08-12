@@ -1,3 +1,5 @@
+use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
+
 use crate::{
     arch::PUBLIC_VALUES_AIR_ID,
     system::memory::{dimensions::MemoryDimensions, CHUNK},
@@ -105,6 +107,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
+    continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
     page_access_count: usize,
@@ -158,6 +161,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             chunk,
             chunk_bits,
             memory_dimensions,
+            continuations_enabled,
             page_access_count: 0,
             addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
         }
@@ -166,6 +170,17 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
     #[inline(always)]
     pub fn clear(&mut self) {
         self.page_indices.clear();
+    }
+
+    #[inline(always)]
+    pub(crate) fn add_register_merkle_heights(&mut self) {
+        if self.continuations_enabled {
+            self.update_boundary_merkle_heights(
+                RV32_REGISTER_AS,
+                0,
+                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
+            );
+        }
     }
 
     /// For each memory access, record the minimal necessary data to update heights of
@@ -252,7 +267,6 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         }
     }
 
-    // TODO(ayush): check if batching is actually even faster
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
     pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {

@@ -12,8 +12,8 @@ use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::metered::MeteredCtx, instructions::exe::VmExe,
-        interpreter::InterpretedInstance, ContinuationVmProof, *,
+        execution_mode::MeteredCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
+        ContinuationVmProof, *,
     },
     derive::VmConfig,
     system::*,

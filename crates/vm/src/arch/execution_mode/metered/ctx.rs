@@ -1,9 +1,6 @@
 use std::num::NonZero;
 
-use getset::WithSetters;
-use openvm_instructions::riscv::{
-    RV32_IMM_AS, RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS,
-};
+use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 
 use super::{
     memory_ctx::MemoryCtx,
@@ -12,7 +9,7 @@ use super::{
 use crate::{
     arch::{
         execution_mode::{
-            metered::segment_ctx::SegmentationLimits, E1ExecutionCtx, E2ExecutionCtx,
+            metered::segment_ctx::SegmentationLimits, ExecutionCtxTrait, MeteredExecutionCtxTrait,
         },
         VmExecState,
     },
@@ -20,19 +17,13 @@ use crate::{
 };
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-#[derive(Clone, Debug, WithSetters)]
+#[derive(Clone, Debug)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
-
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    pub continuations_enabled: bool,
-    instret_last_segment_check: u64,
-    #[getset(set_with = "pub")]
-    segment_check_insns: u64,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -96,37 +87,23 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
-            continuations_enabled,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
         };
         if !continuations_enabled {
             // force single segment
-            ctx.segment_check_insns = u64::MAX;
+            ctx.segmentation_ctx.segment_check_insns = u64::MAX;
         }
 
         // Add merkle height contributions for all registers
-        ctx.add_register_merkle_heights();
+        ctx.memory_ctx.add_register_merkle_heights();
 
         ctx
-    }
-
-    #[inline(always)]
-    fn add_register_merkle_heights(&mut self) {
-        if self.continuations_enabled {
-            self.memory_ctx.update_boundary_merkle_heights(
-                RV32_REGISTER_AS,
-                0,
-                (RV32_NUM_REGISTERS * RV32_REGISTER_NUM_LIMBS) as u32,
-            );
-        }
     }
 
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
-        if max_check_freq < self.segment_check_insns {
-            self.segment_check_insns = max_check_freq;
+        if max_check_freq < self.segmentation_ctx.segment_check_insns {
+            self.segmentation_ctx.segment_check_insns = max_check_freq;
         }
         self
     }
@@ -156,18 +133,18 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 self.trace_heights[i] = 0;
             }
         }
-
         // Add merkle height contributions for all registers
-        self.add_register_merkle_heights();
+        self.memory_ctx.add_register_merkle_heights();
     }
 
     #[inline(always)]
     pub fn check_and_segment(&mut self, instret: u64) {
         let threshold = self
+            .segmentation_ctx
             .instret_last_segment_check
-            .wrapping_add(self.segment_check_insns);
+            .wrapping_add(self.segmentation_ctx.segment_check_insns);
         debug_assert!(
-            threshold >= self.instret_last_segment_check,
+            threshold >= self.segmentation_ctx.instret_last_segment_check,
             "overflow in segment check threshold calculation"
         );
         if instret < threshold {
@@ -182,7 +159,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             &self.is_trace_height_constant,
         );
 
-        self.instret_last_segment_check = instret;
         if did_segment {
             self.reset_segment();
         }
@@ -204,7 +180,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
@@ -252,7 +228,7 @@ impl<const PAGE_BITS: usize> E1ExecutionCtx for MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> E2ExecutionCtx for MeteredCtx<PAGE_BITS> {
+impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
         debug_assert!(

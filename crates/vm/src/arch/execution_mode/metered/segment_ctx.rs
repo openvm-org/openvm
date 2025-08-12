@@ -3,6 +3,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
+
 const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 10000;
 const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
@@ -34,13 +36,16 @@ impl Default for SegmentationLimits {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
     widths: Vec<usize>,
     interactions: Vec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
+    pub instret_last_segment_check: u64,
+    #[getset(set_with = "pub")]
+    pub segment_check_insns: u64,
 }
 
 impl SegmentationCtx {
@@ -59,6 +64,8 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits,
+            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
+            instret_last_segment_check: 0,
         }
     }
 
@@ -76,6 +83,8 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits: SegmentationLimits::default(),
+            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
+            instret_last_segment_check: 0,
         }
     }
 
@@ -202,6 +211,8 @@ impl SegmentationCtx {
         if ret {
             self.segment(instret, trace_heights);
         }
+        self.instret_last_segment_check = instret;
+
         ret
     }
 

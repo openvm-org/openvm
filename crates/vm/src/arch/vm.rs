@@ -37,23 +37,17 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
-    execution_mode::e1::E1Ctx, ExecutionError, Executor, MemoryConfig, VmChipComplex,
-    CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX,
+    execution_mode::{ExecutionCtx, MeteredCtx, PreflightCtx, Segment},
+    hasher::poseidon2::vm_poseidon2_hasher,
+    interpreter::InterpretedInstance,
+    interpreter_preflight::PreflightInterpretedInstance,
+    AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
+    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
+    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
+    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
-    arch::{
-        execution_mode::{
-            metered::{MeteredCtx, Segment},
-            tracegen::TracegenCtx,
-        },
-        hasher::poseidon2::vm_poseidon2_hasher,
-        interpreter::InterpretedInstance,
-        interpreter_preflight::PreflightInterpretedInstance,
-        AirInventoryError, ChipInventoryError, ExecutionState, ExecutorInventory,
-        ExecutorInventoryError, MeteredExecutor, PreflightExecutor, StaticProgramError,
-        SystemConfig, VmBuilder, VmCircuitConfig, VmExecState, VmExecutionConfig, VmState,
-        PUBLIC_VALUES_AIR_ID,
-    },
     execute_spanned,
     system::{
         connector::{VmConnectorPvs, DEFAULT_SUSPEND_EXIT_CODE},
@@ -239,7 +233,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, E1Ctx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
 }
@@ -379,10 +373,11 @@ where
         &self.executor.config
     }
 
-    pub fn pure_interpreter(
+    /// Pure interpreter.
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, E1Ctx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -450,7 +445,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = TracegenCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
