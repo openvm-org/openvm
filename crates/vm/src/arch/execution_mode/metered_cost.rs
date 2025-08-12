@@ -109,6 +109,17 @@ impl MeteredCostCtx {
             cost: 0,
         }
     }
+
+    #[cold]
+    fn check_cost_limit(&self) {
+        if self.cost > 2 * DEFAULT_MAX_COST {
+            panic!(
+                "Execution cost {} exceeded maximum allowed cost of {}",
+                self.cost,
+                2 * DEFAULT_MAX_COST
+            );
+        }
+    }
 }
 
 impl ExecutionCtxTrait for MeteredCostCtx {
@@ -125,13 +136,7 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             size
         );
         // Prevent unbounded memory accesses per instruction
-        if self.cost > 2 * DEFAULT_MAX_COST {
-            panic!(
-                "Execution cost {} exceeded maximum allowed cost of {}",
-                self.cost,
-                2 * DEFAULT_MAX_COST
-            );
-        }
+        self.check_cost_limit();
 
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
