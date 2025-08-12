@@ -162,7 +162,7 @@ impl<F: Clone, A> PublicValuesFiller<F, A> {
         }
     }
 
-    pub(crate) fn set_public_values(&mut self, public_values: Vec<F>)
+    pub fn set_public_values(&mut self, public_values: Vec<F>)
     where
         F: Field,
     {
