@@ -311,7 +311,7 @@ where
             &mut exec_state,
             &self.pre_compute_insns
         );
-        check_termination(exec_state.exit_code)?;
+        check_exit_code(exec_state.exit_code)?;
         let VmExecState { ctx, vm_state, .. } = exec_state;
         let output = MeteredCostExecutionOutput::new(vm_state.instret, ctx.cost);
         Ok(output)

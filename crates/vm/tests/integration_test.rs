@@ -944,6 +944,61 @@ fn test_vm_execute_metered_cost_native_chips() {
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(output.instret, 5);
+    assert_eq!(output.instret, instructions.len() as u64);
     assert!(output.cost > 0);
+}
+
+#[test]
+fn test_vm_execute_metered_cost_halt() {
+    type F = BabyBear;
+
+    setup_tracing();
+    let mut config = test_native_config();
+
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, NativeCpuBuilder, config.clone()).unwrap();
+
+    let instructions = vec![
+        // Field Arithmetic operations (FieldArithmeticChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::large_from_isize(DIV.global_opcode(), 3, 20, 5, 4, 0, 0, 0),
+        // Terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::<F>::from_instructions(&instructions));
+
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let instance = vm
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap();
+    let ctx = vm.build_metered_cost_ctx();
+    let output1 = instance
+        .execute_metered_cost(vec![], ctx)
+        .expect("Failed to execute");
+
+    assert_eq!(output1.instret, instructions.len() as u64);
+
+    // Create a new VM with limited execution cost
+    config.system.set_max_execution_cost(1);
+    let engine2 = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
+    let (vm2, _) = VirtualMachine::new_with_keygen(engine2, NativeCpuBuilder, config).unwrap();
+
+    let executor_idx_to_air_idx2 = vm2.executor_idx_to_air_idx();
+    let instance2 = vm2
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
+        .unwrap();
+    let ctx2 = vm2.build_metered_cost_ctx();
+    let output2 = instance2
+        .execute_metered_cost(vec![], ctx2)
+        .expect("Failed to execute");
+
+    assert_eq!(output2.instret, 1);
+
+    assert!(output2.cost < output1.cost);
 }

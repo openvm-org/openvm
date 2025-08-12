@@ -11,7 +11,7 @@ use crate::{
 };
 
 const DEFAULT_MAX_SEGMENTS: u64 = 100;
-const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
+pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
 
 #[derive(Debug, Copy, Clone, derive_new::new)]
 pub struct MeteredCostExecutionOutput {
@@ -85,6 +85,7 @@ impl AccessAdapterCtx {
 
 #[derive(Clone, Debug)]
 pub struct MeteredCostCtx {
+    pub max_execution_cost: u64,
     pub widths: Vec<usize>,
     pub access_adapter_ctx: AccessAdapterCtx,
     // Cost is number of trace cells (height * width)
@@ -93,6 +94,7 @@ pub struct MeteredCostCtx {
 
 impl MeteredCostCtx {
     pub fn new(
+        max_execution_cost: u64,
         widths: Vec<usize>,
         as_byte_alignment_bits: Vec<u8>,
         has_public_values_chip: bool,
@@ -104,6 +106,7 @@ impl MeteredCostCtx {
             continuations_enabled,
         );
         Self {
+            max_execution_cost,
             widths,
             access_adapter_ctx,
             cost: 0,
@@ -150,7 +153,7 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     }
 
     fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        vm_state.ctx.cost > DEFAULT_MAX_COST
+        vm_state.ctx.cost > vm_state.ctx.max_execution_cost
     }
 }
 

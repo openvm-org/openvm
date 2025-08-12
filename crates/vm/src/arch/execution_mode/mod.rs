@@ -1,7 +1,7 @@
 use crate::{arch::VmExecState, system::memory::online::GuestMemory};
 
 pub mod metered;
-mod metered_cost;
+pub mod metered_cost;
 mod preflight;
 mod pure;
 

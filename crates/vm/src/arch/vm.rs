@@ -230,6 +230,7 @@ where
             .collect();
 
         MeteredCostCtx::new(
+            system_config.max_execution_cost,
             widths.to_vec(),
             as_byte_alignment_bits,
             system_config.has_public_values_chip(),
