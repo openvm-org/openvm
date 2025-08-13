@@ -246,52 +246,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
     }
 }
 
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
-    vm_state
-        .ctx
-        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    let pre_compute = unsafe {
-        std::slice::from_raw_parts(
-            &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
-        )
-    };
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, false>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_setup_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
-    vm_state
-        .ctx
-        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    let pre_compute = unsafe {
-        std::slice::from_raw_parts(
-            &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
-        )
-    };
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(pre_compute, vm_state);
-}
-
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -361,4 +315,50 @@ unsafe fn execute_e12_impl<
 
     vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
     vm_state.instret += 1;
+}
+
+unsafe fn execute_e2_impl<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<EcDoublePreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, false>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_setup_impl<
+    F: PrimeField32,
+    CTX: MeteredExecutionCtxTrait,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    vm_state
+        .ctx
+        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
+    let pre_compute = unsafe {
+        std::slice::from_raw_parts(
+            &e2_pre_compute.data as *const _ as *const u8,
+            std::mem::size_of::<EcDoublePreCompute>(),
+        )
+    };
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(pre_compute, vm_state);
 }
