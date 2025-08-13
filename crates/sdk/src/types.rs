@@ -218,6 +218,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VmStarkProofBytes {
+    // TODO[jpw]: this should not be in proof but output when committing to exe
     #[serde(flatten)]
     pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]

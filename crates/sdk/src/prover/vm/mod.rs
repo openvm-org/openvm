@@ -1,11 +1,8 @@
-use openvm_circuit::{
-    arch::{VirtualMachine, VirtualMachineError, VmBuilder, VmInstance},
-    system::program::trace::VmCommittedExe,
-};
+use openvm_circuit::arch::{VirtualMachine, VirtualMachineError, VmBuilder, VmInstance};
 use openvm_stark_backend::prover::hal::DeviceDataTransporter;
 use openvm_stark_sdk::engine::StarkFriEngine;
 
-use crate::prover::vm::types::VmProvingKey;
+use crate::{commit::VmCommittedExe, prover::vm::types::VmProvingKey};
 
 pub mod types;
 

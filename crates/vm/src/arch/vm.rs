@@ -149,6 +149,7 @@ type PreflightInterpretedInstance2<F, VC> =
 /// Internally once it is given a program, it will preprocess the program to rewrite it into a more
 /// optimized format for runtime execution. This **instance** of the executor will be a separate
 /// struct specialized to running a _fixed_ program on different program inputs.
+#[derive(Clone)]
 pub struct VmExecutor<F, VC>
 where
     VC: VmExecutionConfig<F>,
@@ -279,6 +280,9 @@ pub enum VmVerificationError {
 
     #[error("AIR has unexpected public values (expected: {expected}, actual: {actual})")]
     UnexpectedPvs { expected: usize, actual: usize },
+
+    #[error("Invalid number of AIRs: expected at least 3, got {0}")]
+    NotEnoughAirs(usize),
 
     #[error("missing system AIR with ID {air_id}")]
     SystemAirMissing { air_id: usize },

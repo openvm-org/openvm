@@ -16,8 +16,8 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::{info_span, instrument};
 
 use crate::{
-    config::AggregationTreeConfig, keygen::AggStarkProvingKey, prover::vm::new_local_prover,
-    NonRootCommittedExe, F, SC,
+    commit::VmCommittedExe, config::AggregationTreeConfig, keygen::AggStarkProvingKey,
+    prover::vm::new_local_prover, F, SC,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
@@ -52,7 +52,7 @@ where
     pub fn new(
         native_builder: NativeBuilder,
         agg_stark_pk: AggStarkProvingKey,
-        leaf_committed_exe: Arc<NonRootCommittedExe>,
+        leaf_committed_exe: Arc<VmCommittedExe<SC>>,
         tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
         let leaf_prover = new_local_prover(

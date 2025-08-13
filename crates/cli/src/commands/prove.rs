@@ -13,7 +13,7 @@ use openvm_sdk::{
     },
     keygen::AppProvingKey,
     types::VmStarkProofBytes,
-    NonRootCommittedExe, Sdk,
+    VmCommittedExe<SC>, Sdk,
 };
 
 use super::{RunArgs, RunCargoArgs};
@@ -253,7 +253,7 @@ pub(crate) fn load_or_build_and_commit_exe(
     run_args: &RunArgs,
     cargo_args: &RunCargoArgs,
     app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
-) -> Result<(Arc<NonRootCommittedExe>, String)> {
+) -> Result<(Arc<VmCommittedExe<SC>>, String)> {
     let exe_path = if let Some(exe) = &run_args.exe {
         exe
     } else {

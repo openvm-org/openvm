@@ -227,7 +227,7 @@ where
     let app_vk = app_pk.get_app_vk();
     let mut prover = AppProver::<E, _>::new(app_vm_builder, app_pk.app_vm_pk, committed_exe)?
         .with_program_name(bench_name);
-    let app_proof = prover.generate_app_proof(input_stream)?;
+    let app_proof = prover.prove(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
     let sdk = GenericSdk::<E, NativeBuilder>::new();
     sdk.verify_app_proof(&app_vk, &app_proof)?;

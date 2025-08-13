@@ -31,11 +31,12 @@ mod evm {
 
     use super::{Halo2Prover, StarkProver};
     use crate::{
+        commit::VmCommittedExe,
         config::AggregationTreeConfig,
         keygen::{AggProvingKey, AppProvingKey},
         stdin::StdIn,
         types::EvmProof,
-        NonRootCommittedExe, F, SC,
+        F, SC,
     };
 
     pub struct EvmHalo2Prover<E, VB, NativeBuilder>
@@ -63,8 +64,8 @@ mod evm {
             reader: &impl Halo2ParamsReader,
             app_vm_builder: VB,
             native_builder: NativeBuilder,
-            app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-            app_committed_exe: Arc<NonRootCommittedExe>,
+            app_pk: AppProvingKey<VB::VmConfig>,
+            app_committed_exe: Arc<VmCommittedExe<SC>>,
             agg_pk: AggProvingKey,
             agg_tree_config: AggregationTreeConfig,
         ) -> Result<Self, VirtualMachineError> {

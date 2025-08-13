@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app_committed_exe.clone(),
     )?
     .with_program_name("test_program");
-    let proof = app_prover.generate_app_proof(stdin.clone())?;
+    let proof = app_prover.prove(stdin.clone())?;
     // ANCHOR_END: proof_generation
 
     // ANCHOR: verification

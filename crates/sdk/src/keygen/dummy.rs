@@ -41,7 +41,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     prover::vm::{new_local_prover, types::VmProvingKey},
-    NonRootCommittedExe, F, SC,
+    F, SC,
 };
 
 /// Given a dummy internal proof, which is the input to the root verifier circuit, we will run
@@ -92,7 +92,7 @@ pub(super) fn compute_root_proof_heights(
 
 pub(super) fn dummy_internal_proof(
     internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    internal_exe: Arc<NonRootCommittedExe>,
+    internal_exe: Arc<VmCommittedExe<SC>>,
     leaf_proof: Proof<SC>,
 ) -> Result<Proof<SC>, VirtualMachineError> {
     let mut internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
@@ -116,7 +116,7 @@ pub(super) fn dummy_internal_proof(
 pub(super) fn dummy_internal_proof_riscv_app_vm(
     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    internal_exe: Arc<NonRootCommittedExe>,
+    internal_exe: Arc<VmCommittedExe<SC>>,
     num_public_values: usize,
 ) -> Result<Proof<SC>, VirtualMachineError> {
     let fri_params = standard_fri_params_with_100_bits_conjectured_security(1);
@@ -214,7 +214,7 @@ where
     Ok(dummy_proof)
 }
 
-fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<NonRootCommittedExe> {
+fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<VmCommittedExe<SC>> {
     let program = dummy_app_program();
     let e = BabyBearPoseidon2Engine::new(fri_params);
     Arc::new(VmCommittedExe::<SC>::commit(

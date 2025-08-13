@@ -6,7 +6,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::config::FriParameters;
 use serde::{Deserialize, Serialize};
 
-///Proving key for a specific VM.
+/// Proving key for a specific VM.
 #[derive(Serialize, Deserialize, Derivative)]
 #[serde(bound(
     serialize = "MultiStarkProvingKey<SC>: Serialize, VC: Serialize",

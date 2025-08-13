@@ -4,7 +4,7 @@ use derivative::Derivative;
 // use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig},
-    system::{memory::dimensions::MemoryDimensions, program::trace::VmCommittedExe},
+    system::memory::dimensions::MemoryDimensions,
 };
 use openvm_continuations::verifier::{
     internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
@@ -42,14 +42,14 @@ use {
 };
 
 use crate::{
-    commit::babybear_digest_to_bn254,
+    commit::{babybear_digest_to_bn254, VmCommittedExe},
     config::{AggStarkConfig, AppConfig},
     keygen::{
         dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm},
         perm::AirIdPermutation,
     },
     prover::vm::types::VmProvingKey,
-    NonRootCommittedExe, RootSC, F, SC,
+    RootSC, F, SC,
 };
 
 pub mod asm;
@@ -60,7 +60,9 @@ pub mod static_verifier;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppProvingKey<VC> {
-    pub leaf_committed_exe: Arc<NonRootCommittedExe>,
+    /// The committed executable of the leaf verifier program that verifies proofs of the App VM
+    /// circuit. The App VM circuit constraints are statically compiled into this executable.
+    pub leaf_committed_exe: Arc<VmCommittedExe<SC>>,
     pub leaf_fri_params: FriParameters,
     pub app_vm_pk: Arc<VmProvingKey<SC, VC>>,
 }
@@ -83,9 +85,11 @@ pub struct AggProvingKey {
 pub struct AggStarkProvingKey {
     pub leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     pub internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    pub internal_committed_exe: Arc<NonRootCommittedExe>,
+    pub internal_committed_exe: Arc<VmCommittedExe<SC>>,
     pub root_verifier_pk: RootVerifierProvingKey,
 }
+
+// TODO AggVerifyingKey
 
 /// Attention: the size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]

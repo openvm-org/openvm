@@ -12,10 +12,11 @@ use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
+    commit::VmCommittedExe,
     config::AggregationTreeConfig,
     keygen::{AggStarkProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
-    NonRootCommittedExe, StdIn, F, SC,
+    StdIn, F, SC,
 };
 
 pub struct StarkProver<E, VB, NativeBuilder>
@@ -40,8 +41,8 @@ where
     pub fn new(
         app_vm_builder: VB,
         native_builder: NativeBuilder,
-        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-        app_committed_exe: Arc<NonRootCommittedExe>,
+        app_pk: AppProvingKey<VB::VmConfig>,
+        app_committed_exe: Arc<VmCommittedExe<SC>>,
         agg_stark_pk: AggStarkProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
@@ -78,7 +79,7 @@ where
         &mut self,
         input: StdIn,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
-        let app_proof = self.app_prover.generate_app_proof(input)?;
+        let app_proof = self.app_prover.prove(input)?;
         self.agg_prover.generate_root_proof(app_proof)
     }
     #[cfg(feature = "evm-prove")]
@@ -86,15 +87,12 @@ where
         &mut self,
         input: StdIn,
     ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
-        let app_proof = self.app_prover.generate_app_proof(input)?;
+        let app_proof = self.app_prover.prove(input)?;
         self.agg_prover.generate_root_verifier_input(app_proof)
     }
 
-    pub fn generate_e2e_stark_proof(
-        &mut self,
-        input: StdIn,
-    ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
-        let app_proof = self.app_prover.generate_app_proof(input)?;
+    pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {
+        let app_proof = self.app_prover.prove(input)?;
         let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof)?;
         self.agg_prover
             .aggregate_leaf_proofs(leaf_proofs, app_proof.user_public_values.public_values)

@@ -1,4 +1,10 @@
-use std::{borrow::Borrow, fs::read, marker::PhantomData, path::Path, sync::Arc};
+use std::{
+    borrow::Borrow,
+    fs::read,
+    marker::PhantomData,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
@@ -15,11 +21,14 @@ use openvm_circuit::{
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, Executor, InitFileGenerator, MeteredExecutor,
         PreflightExecutor, SystemConfig, VerifiedExecutionPayload, VirtualMachineError, VmBuilder,
-        VmCircuitConfig, VmExecutionConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
-        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        VmCircuitConfig, VmExecutionConfig, VmExecutor, VmVerificationError, CONNECTOR_AIR_ID,
+        PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
-        memory::{merkle::public_values::extract_public_values, CHUNK},
+        memory::{
+            merkle::public_values::{extract_public_values, UserPublicValuesProofError},
+            CHUNK,
+        },
         program::trace::{compute_exe_commit, VmCommittedExe},
     },
 };
@@ -37,43 +46,38 @@ pub use openvm_continuations::{RootSC, C, F, SC};
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 #[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
-use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
     p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::{
-    elf::Elf,
-    openvm_platform::memory::MEM_SIZE,
-    transpiler::{Transpiler, TranspilerError},
-    FromElf,
+    elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
-use thiserror::Error;
 
+use crate::{
+    commit::CommitBytes,
+    config::{AggStarkConfig, SdkVmCpuBuilder},
+    keygen::{asm::program_to_asm, AggStarkProvingKey},
+    prover::{AppProver, StarkProver, VerifiedAppArtifacts},
+};
 #[cfg(feature = "evm-prove")]
 use crate::{config::AggConfig, keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
-use crate::{
-    config::{AggStarkConfig, SdkVmConfig, SdkVmCpuBuilder},
-    keygen::{asm::program_to_asm, AggStarkProvingKey},
-    prover::{AppProver, StarkProver},
-};
 
 pub mod codec;
 pub mod commit;
 pub mod config;
+pub mod fs;
 pub mod keygen;
 pub mod prover;
-
-mod stdin;
-pub use stdin::*;
-
-pub mod fs;
 pub mod types;
 
-pub type NonRootCommittedExe = VmCommittedExe<SC>;
+mod error;
+mod stdin;
+pub use error::SdkError;
+pub use stdin::*;
 
 pub const EVM_HALO2_VERIFIER_INTERFACE: &str =
     include_str!("../contracts/src/IOpenVmHalo2Verifier.sol");
@@ -91,27 +95,13 @@ sol! {
     concat!(env!("CARGO_MANIFEST_DIR"), "/contracts/abi/IOpenVmHalo2Verifier.json"),
 }
 
-/// The payload of a verified guest VM execution with user public values extracted and
-/// verified.
-pub struct VerifiedContinuationVmPayload {
-    /// The Merklelized hash of:
-    /// - Program code commitment (commitment of the cached trace)
-    /// - Merkle root of the initial memory
-    /// - Starting program counter (`pc_start`)
-    ///
-    /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
-    /// and a cryptographic compression function (for internal nodes).
-    pub exe_commit: [F; CHUNK],
-    pub user_public_values: Vec<F>,
-}
-
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
 // BabyBearPoseidon2RootEngine right now.
 #[derive(Getters, MutGetters, WithSetters)]
-pub struct GenericSdk<Engine, VB, NativeBuilder>
+pub struct GenericSdk<E, VB, NativeBuilder>
 where
-    Engine: StarkEngine<SC = SC>,
-    VB: VmBuilder<Engine>,
+    E: StarkEngine<SC = SC>,
+    VB: VmBuilder<E>,
     VB::VmConfig: VmExecutionConfig<F>,
 {
     #[getset(get = "pub", set_with = "pub")]
@@ -119,35 +109,40 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     app_config: AppConfig<VB::VmConfig>,
 
-    pub(crate) app_vm_builder: VB,
-    pub(crate) native_builder: NativeBuilder,
-    transpiler: Option<Transpiler<F>>,
-
+    /// The `executor` may be used to construct different types of interpreters, given the program,
+    /// for more specific execution purposes. By default, it is recommended to use the
+    /// [`execute`](GenericSdk::execute) method.
+    #[getset(get = "pub")]
     executor: VmExecutor<F, VB::VmConfig>,
 
-    _phantom: PhantomData<Engine>,
+    app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
+
+    pub(crate) app_vm_builder: VB,
+    pub(crate) native_builder: NativeBuilder,
+    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    transpiler: Option<Transpiler<F>>,
+
+    _phantom: PhantomData<E>,
 }
 
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
 impl Sdk {
     pub fn standard() -> Self {
-        GenericSdk::new(AppConfig::standard())
+        let app_config = AppConfig::standard();
+        let transpiler = app_config.app_vm_config.transpiler();
+        GenericSdk::new(app_config)
+            .expect("standard config is valid")
+            .with_transpiler(Some(transpiler))
     }
-}
 
-#[derive(Error, Debug)]
-pub enum SdkError {
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Failed to build guest: code = {0}")]
-    BuildFailedWithCode(i32),
-    #[error("Failed to build guest (OPENVM_SKIP_BUILD is set)")]
-    BuildFailed,
-    #[error("VM error: {0}")]
-    Vm(#[from] VirtualMachineError),
-    #[error("Other error: {0}")]
-    Other(eyre::Error),
+    pub fn riscv32() -> Self {
+        let app_config = AppConfig::riscv32();
+        let transpiler = app_config.app_vm_config.transpiler();
+        GenericSdk::new(app_config)
+            .expect("riscv32 config is valid")
+            .with_transpiler(Some(transpiler))
+    }
 }
 
 // The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
@@ -155,26 +150,34 @@ pub enum SdkError {
 impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    VB: VmBuilder<E>,
+    VB: VmBuilder<E> + Clone,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor:
         Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
         PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
-    pub fn new(app_config: AppConfig<VB::VmConfig>) -> Self
+    /// Creates SDK custom to the given [AppConfig].
+    ///
+    /// **Note**: This function does not set the transpiler, which must be done separately to
+    /// support RISC-V ELFs.
+    pub fn new(app_config: AppConfig<VB::VmConfig>) -> Result<Self, SdkError>
     where
         VB: Default,
         NativeBuilder: Default,
     {
-        Self {
+        let executor = VmExecutor::new(app_config.app_vm_config.clone())
+            .map_err(|e| SdkError::Vm(e.into()))?;
+        Ok(Self {
             app_config,
             app_vm_builder: Default::default(),
             native_builder: Default::default(),
             agg_tree_config: Default::default(),
             transpiler: None,
+            executor,
+            app_pk: OnceLock::new(),
             _phantom: PhantomData,
-        }
+        })
     }
 
     /// Builds the guest package located at `pkg_dir`. This function requires that the build target
@@ -206,87 +209,61 @@ where
         Elf::decode(&data, MEM_SIZE as u32).map_err(SdkError::Other)
     }
 
-    pub fn transpile(
-        &self,
-        elf: Elf,
-        transpiler: Transpiler<F>,
-    ) -> Result<VmExe<F>, TranspilerError> {
-        VmExe::from_elf(elf, transpiler)
+    /// Transpiles RISC-V ELF to OpenVM executable.
+    pub fn transpile(&self, elf: Elf) -> Result<VmExe<F>, SdkError> {
+        let transpiler = self
+            .transpiler
+            .clone()
+            .ok_or(SdkError::TranspilerNotAvailable)?;
+        let exe = VmExe::from_elf(elf, transpiler)?;
+        Ok(exe)
     }
 
     /// Returns the user public values as field elements.
-    pub fn execute<VC>(&self, exe: VmExe<F>, inputs: StdIn) -> Result<Vec<F>, SdkError>
-    where
-        VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
-        VC::Executor: Clone + Executor<F> + MeteredExecutor<F>,
-    {
-        let executor = VmExecutor::new(vm_config)?;
-        let instance = executor.instance(&exe)?;
-        let final_memory = instance.execute(inputs, None)?.memory;
+    pub fn execute(&self, exe: VmExe<F>, inputs: StdIn) -> Result<Vec<F>, SdkError> {
+        let instance = self
+            .executor
+            .instance(&exe)
+            .map_err(VirtualMachineError::from)?;
+        let final_memory = instance
+            .execute(inputs, None)
+            .map_err(VirtualMachineError::from)?
+            .memory;
         let public_values = extract_public_values(
-            executor.config.as_ref().num_public_values,
+            self.executor.config.as_ref().num_public_values,
             &final_memory.memory,
         );
         Ok(public_values)
     }
 
-    pub fn commit_app_exe(
+    // TODO: switch committed_exe to just exe
+    pub fn app_prover(
         &self,
-        app_fri_params: FriParameters,
-        exe: VmExe<F>,
-    ) -> Result<Arc<NonRootCommittedExe>> {
-        let committed_exe = commit_app_exe(app_fri_params, exe);
-        Ok(committed_exe)
+        app_committed_exe: Arc<VmCommittedExe<SC>>,
+    ) -> Result<AppProver<E, VB>, SdkError> {
+        let vm_pk = self.app_pk().app_vm_pk.clone();
+        let prover =
+            AppProver::<E, VB>::new(self.app_vm_builder.clone(), vm_pk, app_committed_exe)?;
+        Ok(prover)
     }
 
-    pub fn app_keygen<VC>(&self, config: AppConfig<VC>) -> Result<AppProvingKey<VC>>
-    where
-        VC: Clone + VmCircuitConfig<SC> + AsRef<SystemConfig>,
-    {
-        let app_pk = AppProvingKey::keygen(config)?;
-        Ok(app_pk)
-    }
-
-    pub fn generate_app_proof(
-        &self,
-        app_vm_builder: VB,
-        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-        app_committed_exe: Arc<NonRootCommittedExe>,
-        inputs: StdIn,
-    ) -> Result<ContinuationVmProof<SC>> {
-        let mut app_prover =
-            AppProver::<E, VB>::new(app_vm_builder, app_pk.app_vm_pk.clone(), app_committed_exe)?;
-        let proof = app_prover.generate_app_proof(inputs)?;
-        Ok(proof)
-    }
-
-    /// Verifies the [ContinuationVmProof], which is a collection of STARK proofs as well as
-    /// additional Merkle proof for user public values.
+    /// Generates the app proving key once and caches it. Future calls will return the cached key.
     ///
-    /// This function verifies the STARK proofs and additional conditions to ensure that the
-    /// `proof` is a valid proof of guest VM execution that terminates successfully (exit code 0)
-    /// _with respect to_ a commitment to some VM executable.
-    /// It is the responsibility of the caller to check that the commitment matches the expected
-    /// VM executable.
-    pub fn verify_app_proof(
-        &self,
-        app_vk: &AppVerifyingKey,
-        proof: &ContinuationVmProof<SC>,
-    ) -> Result<VerifiedContinuationVmPayload> {
-        let engine = E::new(app_vk.fri_params);
-        let VerifiedExecutionPayload {
-            exe_commit,
-            final_memory_root,
-        } = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
+    /// # Panics
+    /// This function will panic if the app keygen fails.
+    pub fn app_keygen(&self) -> (AppProvingKey<VB::VmConfig>, AppVerifyingKey) {
+        let pk = self.app_pk().clone();
+        let vk = pk.get_app_vk();
+        (pk, vk)
+    }
 
-        let hasher = vm_poseidon2_hasher();
-        proof
-            .user_public_values
-            .verify(&hasher, app_vk.memory_dimensions, final_memory_root)?;
-
-        Ok(VerifiedContinuationVmPayload {
-            exe_commit,
-            user_public_values: proof.user_public_values.public_values.clone(),
+    /// Generates the app proving key once and caches it. Future calls will return the cached key.
+    ///
+    /// # Panics
+    /// This function will panic if the app keygen fails.
+    pub fn app_pk(&self) -> &AppProvingKey<VB::VmConfig> {
+        self.app_pk.get_or_init(|| {
+            AppProvingKey::keygen(self.app_config.clone()).expect("app_keygen failed")
         })
     }
 
@@ -296,12 +273,12 @@ where
         config: AggConfig,
         reader: &impl Halo2ParamsReader,
         pv_handler: &impl StaticVerifierPvHandler,
-    ) -> Result<AggProvingKey> {
+    ) -> Result<AggProvingKey, SdkError> {
         let agg_pk = AggProvingKey::keygen(config, reader, pv_handler)?;
         Ok(agg_pk)
     }
 
-    pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey> {
+    pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey, SdkError> {
         let agg_pk = AggStarkProvingKey::keygen(config)?;
         Ok(agg_pk)
     }
@@ -326,42 +303,46 @@ where
 
     pub fn generate_e2e_stark_proof(
         &self,
-        app_vm_builder: VB,
-        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-        app_exe: Arc<NonRootCommittedExe>,
+        app_exe: Arc<VmCommittedExe<SC>>,
         agg_stark_pk: AggStarkProvingKey,
         inputs: StdIn,
-    ) -> Result<VmStarkProof<SC>> {
+    ) -> Result<VmStarkProof<SC>, SdkError> {
+        let (app_pk, _) = self.app_keygen();
         let mut stark_prover = StarkProver::<E, _, _>::new(
-            app_vm_builder,
+            self.app_vm_builder.clone(),
             self.native_builder.clone(),
             app_pk,
             app_exe,
             agg_stark_pk,
             self.agg_tree_config,
         )?;
-        let proof = stark_prover.generate_e2e_stark_proof(inputs)?;
+        let proof = stark_prover.prove(inputs)?;
         Ok(proof)
     }
 
-    pub fn verify_e2e_stark_proof(
+    pub fn verify_stark_proof(
         &self,
         agg_stark_pk: &AggStarkProvingKey,
+        expected_app_commit: AppExecutionCommit,
         proof: &VmStarkProof<SC>,
-        expected_exe_commit: &Bn254Fr,
-        expected_vm_commit: &Bn254Fr,
-    ) -> Result<AppExecutionCommit> {
+    ) -> Result<(), SdkError> {
         if proof.proof.per_air.len() < 3 {
-            return Err(eyre::eyre!(
-                "Invalid number of AIRs: expected at least 3, got {}",
-                proof.proof.per_air.len()
-            ));
+            return Err(VmVerificationError::NotEnoughAirs(proof.proof.per_air.len()).into());
         } else if proof.proof.per_air[0].air_id != PROGRAM_AIR_ID {
-            return Err(eyre::eyre!("Missing program AIR"));
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: PROGRAM_AIR_ID,
+            }
+            .into());
         } else if proof.proof.per_air[1].air_id != CONNECTOR_AIR_ID {
-            return Err(eyre::eyre!("Missing connector AIR"));
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: CONNECTOR_AIR_ID,
+            }
+            .into());
         } else if proof.proof.per_air[2].air_id != PUBLIC_VALUES_AIR_ID {
-            return Err(eyre::eyre!("Missing public values AIR"));
+            return Err(VmVerificationError::SystemAirMissing {
+                air_id: PUBLIC_VALUES_AIR_ID,
+            }
+            .into());
         }
         let public_values_air_proof_data = &proof.proof.per_air[2];
 
@@ -378,11 +359,12 @@ where
                 .as_slice()
                 .borrow();
             if internal_commit != &internal_pvs.extra_pvs.internal_program_commit {
-                return Err(eyre::eyre!(
+                tracing::debug!(
                     "Invalid internal program commit: expected {:?}, got {:?}",
                     internal_commit,
                     internal_pvs.extra_pvs.internal_program_commit
-                ));
+                );
+                return Err(VmVerificationError::ProgramCommitMismatch { index: 0 }.into());
             }
             (
                 &agg_stark_pk.internal_vm_pk,
@@ -392,30 +374,40 @@ where
             (&agg_stark_pk.leaf_vm_pk, *program_commit)
         };
         let e = E::new(vm_pk.fri_params);
-        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)?;
+        e.verify(&vm_pk.vm_pk.get_vk(), &proof.proof)
+            .map_err(VmVerificationError::from)?;
 
         let pvs: &VmVerifierPvs<_> =
             public_values_air_proof_data.public_values[..VmVerifierPvs::<u8>::width()].borrow();
 
         if let Some(exit_code) = pvs.connector.exit_code() {
             if exit_code != 0 {
-                return Err(eyre::eyre!(
-                    "Invalid exit code: expected 0, got {}",
-                    exit_code
-                ));
+                return Err(VmVerificationError::ExitCodeMismatch {
+                    expected: 0,
+                    actual: exit_code,
+                }
+                .into());
             }
         } else {
-            return Err(eyre::eyre!("Program did not terminate"));
+            return Err(VmVerificationError::IsTerminateMismatch {
+                expected: true,
+                actual: false,
+            }
+            .into());
         }
 
         let hasher = vm_poseidon2_hasher();
         let public_values_root = hasher.merkle_root(&proof.user_public_values);
         if public_values_root != pvs.public_values_commit {
-            return Err(eyre::eyre!(
+            tracing::debug!(
                 "Invalid public values root: expected {:?}, got {:?}",
                 pvs.public_values_commit,
                 public_values_root
-            ));
+            );
+            return Err(VmVerificationError::UserPublicValuesError(
+                UserPublicValuesProofError::UserPublicValuesCommitMismatch,
+            )
+            .into());
         }
 
         let exe_commit = compute_exe_commit(
@@ -428,20 +420,18 @@ where
         let exe_commit_bn254 = app_commit.app_exe_commit.to_bn254();
         let vm_commit_bn254 = app_commit.app_vm_commit.to_bn254();
 
-        if exe_commit_bn254 != *expected_exe_commit {
-            return Err(eyre::eyre!(
-                "Invalid app exe commit: expected {:?}, got {:?}",
-                expected_exe_commit,
-                exe_commit_bn254
-            ));
-        } else if vm_commit_bn254 != *expected_vm_commit {
-            return Err(eyre::eyre!(
-                "Invalid app vm commit: expected {:?}, got {:?}",
-                expected_vm_commit,
-                vm_commit_bn254
-            ));
+        if exe_commit_bn254 != expected_app_commit.app_exe_commit.to_bn254() {
+            return Err(SdkError::InvalidAppExeCommit {
+                expected: expected_app_commit.app_exe_commit,
+                actual: app_commit.app_exe_commit,
+            });
+        } else if vm_commit_bn254 != expected_app_commit.app_vm_commit.to_bn254() {
+            return Err(SdkError::InvalidAppVmCommit {
+                expected: expected_app_commit.app_vm_commit,
+                actual: app_commit.app_vm_commit,
+            });
         }
-        Ok(app_commit)
+        Ok(())
     }
 
     #[cfg(feature = "evm-prove")]
@@ -449,11 +439,11 @@ where
         &self,
         reader: &impl Halo2ParamsReader,
         app_vm_builder: VB,
-        app_pk: Arc<AppProvingKey<VB::VmConfig>>,
-        app_exe: Arc<NonRootCommittedExe>,
+        app_pk: AppProvingKey<VB::VmConfig>,
+        app_exe: Arc<VmCommittedExe<SC>>,
         agg_pk: AggProvingKey,
         inputs: StdIn,
-    ) -> Result<EvmProof>
+    ) -> Result<EvmProof, SdkError>
     where
         VB: VmBuilder<E>,
         <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F>
@@ -478,7 +468,7 @@ where
         &self,
         reader: &impl Halo2ParamsReader,
         agg_pk: &AggProvingKey,
-    ) -> Result<types::EvmHalo2Verifier> {
+    ) -> Result<types::EvmHalo2Verifier, SdkError> {
         use std::{
             fs::{create_dir_all, write},
             io::Write,
@@ -583,7 +573,9 @@ where
         .expect("Failed to format openvm verifier code");
 
         // Create temp dir
-        let temp_dir = tempdir().wrap_err("Failed to create temp dir")?;
+        let temp_dir = tempdir()
+            .wrap_err("Failed to create temp dir")
+            .map_err(SdkError::Other)?;
         let temp_path = temp_dir.path();
         let root_path = Path::new("src").join(format!("v{}", OPENVM_VERSION));
 
@@ -663,14 +655,15 @@ where
         let output = child.wait_with_output().expect("Failed to read output");
 
         if !output.status.success() {
-            eyre::bail!(
+            return Err(SdkError::Other(eyre::eyre!(
                 "solc exited with status {}: {}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
-            );
+            )));
         }
 
-        let parsed: Value = serde_json::from_slice(&output.stdout)?;
+        let parsed: Value =
+            serde_json::from_slice(&output.stdout).map_err(|e| SdkError::Other(e.into()))?;
 
         let bytecode = parsed
             .get("contracts")
@@ -714,12 +707,14 @@ where
         &self,
         openvm_verifier: &types::EvmHalo2Verifier,
         evm_proof: EvmProof,
-    ) -> Result<u64> {
+    ) -> Result<u64, SdkError> {
         let calldata = evm_proof.verifier_calldata();
         let deployment_code = openvm_verifier.artifact.bytecode.clone();
 
         let gas_cost = snark_verifier::loader::evm::deploy_and_call(deployment_code, calldata)
-            .map_err(|reason| eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))?;
+            .map_err(|reason| {
+                SdkError::Other(eyre::eyre!("Sdk::verify_openvm_evm_proof: {reason:?}"))
+            })?;
 
         Ok(gas_cost)
     }
