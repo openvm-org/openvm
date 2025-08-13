@@ -7,6 +7,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use super::adapters::RV32_REGISTER_NUM_LIMBS;
 use crate::adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor};
 
+mod execution;
 #[cfg(test)]
 mod tests;
 

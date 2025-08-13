@@ -25,7 +25,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
-use super::{core::run_cmp, Rv32BranchLessThanChip};
+use super::{run_cmp, Rv32BranchLessThanChip};
 use crate::{
     adapters::{
         Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller, RV32_CELL_BITS,

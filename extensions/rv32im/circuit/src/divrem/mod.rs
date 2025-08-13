@@ -4,6 +4,7 @@ use super::adapters::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
 use crate::adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller};
 
 mod core;
+mod execution;
 pub use core::*;
 
 #[cfg(test)]
