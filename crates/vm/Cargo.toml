@@ -46,7 +46,6 @@ test-log.workspace = true
 
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
-openvm-native-circuit = { workspace = true, features = ["test-utils"] }
 openvm-native-compiler.workspace = true
 openvm-rv32im-transpiler.workspace = true
 

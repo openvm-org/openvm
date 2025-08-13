@@ -33,7 +33,11 @@ static_assertions.workspace = true
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
-test-case.workspace = true
+openvm-native-circuit = { workspace = true, features = ["test-utils"] }
+openvm-native-compiler-derive = { workspace = true }
+p3-symmetric = { workspace = true }
+test-case = { workspace = true }
+test-log = { workspace = true }
 
 [features]
 default = ["parallel"]
