@@ -63,9 +63,7 @@ mod tests {
     use openvm_circuit_primitives::{
         bitwise_op_lookup::BitwiseOperationLookupChip, var_range::VariableRangeCheckerChip,
     };
-    use openvm_instructions::{
-        instruction::Instruction, program::PC_BITS, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
-    };
+    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
     use openvm_rv32im_circuit::{
         adapters::{
             Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
@@ -82,8 +80,8 @@ mod tests {
 
     use super::*;
     use crate::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, memory::gen_pointer,
-        GpuChipTestBuilder, GpuTestChipHarness,
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
     };
 
     const IMM_BITS: usize = 12;
@@ -135,21 +133,20 @@ mod tests {
         let imm_sign = rng.gen_range(0..2) as usize; // 0 or 1
         let imm_ext = imm + (imm_sign * 0xffff0000);
 
-        let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        let b = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-        let initial_pc = rng.gen_range(0..(1 << PC_BITS));
+        let a = rng.gen_range(0..32) << 2;
+        let b = rng.gen_range(1..32) << 2;
         let to_pc = rng.gen_range(0..(1 << PC_BITS));
 
         let rs1_val = (to_pc as u32).wrapping_sub(imm_ext as u32);
-        let rs1_bytes = rs1_val.to_le_bytes().map(F::from_canonical_u8);
+        tester.write(1, b, rs1_val.to_le_bytes().map(F::from_canonical_u8));
 
-        tester.write(1, b, rs1_bytes);
-
-        tester.execute_with_pc(
+        tester.execute(
             &mut harness.executor,
             &mut harness.dense_arena,
-            &Instruction::from_usize(opcode.global_opcode(), [a, b, imm, 1, 0, 1, imm_sign]),
-            initial_pc,
+            &Instruction::from_usize(
+                opcode.global_opcode(),
+                [a, b, imm, 1, 0, (a != 0) as usize, imm_sign],
+            ),
         );
     }
 
