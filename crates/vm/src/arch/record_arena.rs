@@ -11,6 +11,8 @@ use openvm_stark_backend::{
     p3_matrix::dense::RowMajorMatrix,
 };
 
+use crate::system::memory::online::{LinearMemory, MemoryBackend};
+
 pub trait Arena {
     /// Currently `width` always refers to the main trace width.
     fn with_capacity(height: usize, width: usize) -> Self;
@@ -163,15 +165,25 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
 }
 
 pub struct DenseRecordArena {
-    pub records_buffer: Cursor<Vec<u8>>,
+    pub records_buffer: Cursor<MemoryBackend>,
 }
 
 const MAX_ALIGNMENT: usize = 32;
 
+impl Arena for DenseRecordArena {
+    fn with_capacity(height: usize, width: usize) -> Self {
+        Self::with_byte_capacity(height * width * size_of::<u32>())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.allocated().is_empty()
+    }
+}
+
 impl DenseRecordArena {
     /// Creates a new [DenseRecordArena] with the given capacity in bytes.
     pub fn with_byte_capacity(size_bytes: usize) -> Self {
-        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let buffer = MemoryBackend::new(size_bytes + MAX_ALIGNMENT);
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
@@ -181,7 +193,7 @@ impl DenseRecordArena {
     }
 
     pub fn set_byte_capacity(&mut self, size_bytes: usize) {
-        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let buffer = MemoryBackend::new(size_bytes + MAX_ALIGNMENT);
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         let mut cursor = Cursor::new(buffer);
         cursor.set_position(offset as u64);
@@ -192,18 +204,19 @@ impl DenseRecordArena {
     ///
     /// **Note**: This may include additional bytes for alignment.
     pub fn capacity(&self) -> usize {
-        self.records_buffer.get_ref().len()
+        self.records_buffer.get_ref().size()
     }
 
     /// Allocates `count` bytes and returns as a mutable slice.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
         let begin = self.records_buffer.position();
         debug_assert!(
-            begin as usize + count <= self.records_buffer.get_ref().len(),
+            begin as usize + count <= self.records_buffer.get_ref().size(),
             "failed to allocate {count} bytes from {begin} when the capacity is {}",
-            self.records_buffer.get_ref().len()
+            self.records_buffer.get_ref().size()
         );
         self.records_buffer.set_position(begin + count as u64);
+
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.records_buffer
@@ -220,7 +233,11 @@ impl DenseRecordArena {
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
             % MAX_ALIGNMENT;
-        &self.records_buffer.get_ref()[offset..size]
+        unsafe {
+            self.records_buffer
+                .get_ref()
+                .get_aligned_slice(offset, size - offset)
+        }
     }
 
     pub fn allocated_mut(&mut self) -> &mut [u8] {
@@ -228,7 +245,16 @@ impl DenseRecordArena {
         let offset = (MAX_ALIGNMENT
             - (self.records_buffer.get_ref().as_ptr() as usize % MAX_ALIGNMENT))
             % MAX_ALIGNMENT;
-        &mut self.records_buffer.get_mut()[offset..size]
+        // &mut self.records_buffer.get_mut()[offset..size]
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.records_buffer
+                    .get_mut()
+                    .as_mut_ptr()
+                    .add(offset as usize),
+                size,
+            )
+        }
     }
 
     pub fn align_to(&mut self, alignment: usize) {
@@ -241,18 +267,6 @@ impl DenseRecordArena {
     // Returns a [RecordSeeker] on the allocated buffer
     pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
-    }
-}
-
-impl Arena for DenseRecordArena {
-    // TODO[jpw]: treat `width` as AIR width in number of columns for now
-    fn with_capacity(height: usize, width: usize) -> Self {
-        let size_bytes = height * (width * size_of::<u32>());
-        Self::with_byte_capacity(size_bytes)
-    }
-
-    fn is_empty(&self) -> bool {
-        self.allocated().is_empty()
     }
 }
 

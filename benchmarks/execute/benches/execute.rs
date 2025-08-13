@@ -351,16 +351,32 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
 
 #[divan::bench(sample_count = 5)]
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
+    let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+    let mut interpreter = vm.preflight_interpreter(&leaf_exe).unwrap();
+    for _ in 0..5 {
+        let state = vm.create_initial_state(&leaf_exe, input_stream.clone());
+        {
+            let start = std::time::Instant::now();
+            let _out = vm
+                .execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
+                .expect("Failed to execute preflight");
+            println!("before {}ms", start.elapsed().as_millis());
+        }
+    }
+
     bencher
         .with_inputs(|| {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
             let state = vm.create_initial_state(&leaf_exe, input_stream);
+            let interpreter = vm.preflight_interpreter(&leaf_exe).unwrap();
 
-            (vm, leaf_exe, state)
+            (vm, state, interpreter)
         })
-        .bench_values(|(vm, leaf_exe, state)| {
+        .bench_values(|(vm, state, mut interpreter)| {
+            let start = std::time::Instant::now();
             let _out = vm
-                .execute_preflight(&leaf_exe, state, None, NATIVE_MAX_TRACE_HEIGHTS)
+                .execute_preflight_dense(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
                 .expect("Failed to execute preflight");
+            println!("{}ms", start.elapsed().as_millis());
         });
 }
