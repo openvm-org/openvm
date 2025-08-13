@@ -8,12 +8,10 @@ use super::{
 };
 use crate::{
     arch::{
-        execution_mode::{
-            metered::segment_ctx::SegmentationLimits, ExecutionCtxTrait, MeteredExecutionCtxTrait,
-        },
-        VmExecState,
+        execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
+        SystemConfig, VmExecState,
     },
-    system::memory::{dimensions::MemoryDimensions, online::GuestMemory},
+    system::memory::online::GuestMemory,
 };
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
@@ -27,19 +25,13 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
-    // Note[jpw]: this is indeed too many arguments, prefer to use `build_metered_ctx` in
-    // `VmExecutor` or `VirtualMachine`.
-    #[allow(clippy::too_many_arguments)]
+    // Note[jpw]: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
     pub fn new(
         constant_trace_heights: Vec<Option<usize>>,
-        has_public_values_chip: bool,
-        continuations_enabled: bool,
-        as_byte_alignment_bits: Vec<u8>,
-        memory_dimensions: MemoryDimensions,
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
-        segmentation_limits: SegmentationLimits,
+        config: &SystemConfig,
     ) -> Self {
         let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) =
             constant_trace_heights
@@ -53,12 +45,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
-        let memory_ctx = MemoryCtx::new(
-            has_public_values_chip,
-            continuations_enabled,
-            as_byte_alignment_bits,
-            memory_dimensions,
-        );
+        let memory_ctx = MemoryCtx::new(config);
 
         // Assert that the indices are correct
         debug_assert!(
@@ -80,7 +67,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         );
 
         let segmentation_ctx =
-            SegmentationCtx::new(air_names, widths, interactions, segmentation_limits);
+            SegmentationCtx::new(air_names, widths, interactions, config.segmentation_limits);
 
         let mut ctx = Self {
             trace_heights,
@@ -88,7 +75,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             memory_ctx,
             segmentation_ctx,
         };
-        if !continuations_enabled {
+        if !config.continuation_enabled {
             // force single segment
             ctx.segmentation_ctx.segment_check_insns = u64::MAX;
         }
