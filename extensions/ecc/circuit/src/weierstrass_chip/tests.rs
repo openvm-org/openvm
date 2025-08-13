@@ -179,7 +179,7 @@ mod ec_addne_tests {
                 (x2, y2, x1, y1, Rv32WeierstrassOpcode::EC_ADD_NE as usize)
             }
         } else {
-            panic!("Random inputs are not valid for ec_addne");
+            panic!("Generating random inputs generically is harder because the input points need to be on the curve.");
         };
 
         let ptr_as = RV32_REGISTER_AS as usize;
