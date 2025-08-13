@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use getset::Setters;
+use getset::WithSetters;
 use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
@@ -69,11 +69,11 @@ impl AccessAdapterCtx {
     }
 }
 
-#[derive(Clone, Debug, Setters)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
     pub access_adapter_ctx: AccessAdapterCtx,
-    #[getset(set = "pub")]
+    #[getset(set_with = "pub")]
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
     pub cost: u64,
