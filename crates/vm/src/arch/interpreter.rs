@@ -188,7 +188,7 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let vm_state = VmState::initial(
             &self.system_config,
-            self.init_memory.clone(),
+            &self.init_memory,
             self.pc_start,
             inputs,
         );
@@ -238,7 +238,7 @@ where
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = VmState::initial(
             &self.system_config,
-            self.init_memory.clone(),
+            &self.init_memory,
             self.pc_start,
             inputs,
         );
@@ -287,7 +287,7 @@ where
     ) -> Result<u64, ExecutionError> {
         let vm_state = VmState::initial(
             &self.system_config,
-            self.init_memory.clone(),
+            &self.init_memory,
             self.pc_start,
             inputs,
         );

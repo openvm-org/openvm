@@ -55,7 +55,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
 impl<F: Clone> VmState<F, GuestMemory> {
     pub fn initial(
         system_config: &SystemConfig,
-        init_memory: SparseMemoryImage,
+        init_memory: &SparseMemoryImage,
         pc_start: u32,
         inputs: impl Into<Streams<F>>,
     ) -> Self {
@@ -77,7 +77,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
 
     pub fn reset(
         &mut self,
-        init_memory: SparseMemoryImage,
+        init_memory: &SparseMemoryImage,
         pc_start: u32,
         streams: impl Into<Streams<F>>,
     ) {

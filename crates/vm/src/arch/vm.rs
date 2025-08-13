@@ -556,7 +556,7 @@ where
         #[allow(unused_mut)]
         let mut state = VmState::initial(
             self.config().as_ref(),
-            exe.init_memory.clone(),
+            &exe.init_memory,
             exe.pc_start,
             inputs,
         );
@@ -907,7 +907,7 @@ where
         self.state
             .as_mut()
             .unwrap()
-            .reset(self.exe.init_memory.clone(), self.exe.pc_start, inputs);
+            .reset(&self.exe.init_memory, self.exe.pc_start, inputs);
     }
 }
 
@@ -1230,7 +1230,7 @@ where
 
 pub(super) fn create_memory_image(
     memory_config: &MemoryConfig,
-    init_memory: SparseMemoryImage,
+    init_memory: &SparseMemoryImage,
 ) -> GuestMemory {
     let mut inner = AddressMap::new(memory_config.addr_spaces.clone());
     inner.set_from_sparse(init_memory);
