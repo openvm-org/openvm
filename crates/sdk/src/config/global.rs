@@ -272,7 +272,7 @@ impl SdkVmConfig {
 // ======================= Implementation of VmConfig and VmBuilder ====================
 
 /// SDK CPU VmBuilder
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Default)]
 pub struct SdkVmCpuBuilder;
 
 /// Internal struct to use for the VmConfig derive macro.

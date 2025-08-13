@@ -4,8 +4,7 @@ use std::{borrow::Borrow, fs::read, marker::PhantomData, path::Path, sync::Arc};
 use alloy_sol_types::sol;
 use commit::{commit_app_exe, AppExecutionCommit};
 use config::{AggregationTreeConfig, AppConfig};
-use eyre::Result;
-use getset::{Getters, WithSetters};
+use getset::{Getters, MutGetters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
 use openvm_build::{
     build_guest_package, find_unique_executable, get_package, GuestOptions, TargetFilter,
@@ -15,8 +14,8 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, Executor, InitFileGenerator, MeteredExecutor,
-        PreflightExecutor, SystemConfig, VerifiedExecutionPayload, VmBuilder, VmCircuitConfig,
-        VmExecutionConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PreflightExecutor, SystemConfig, VerifiedExecutionPayload, VirtualMachineError, VmBuilder,
+        VmCircuitConfig, VmExecutionConfig, VmExecutor, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
         PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
@@ -41,7 +40,7 @@ use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
+    engine::{StarkEngine, StarkFriEngine},
     p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::{
@@ -52,11 +51,12 @@ use openvm_transpiler::{
 };
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
+use thiserror::Error;
 
 #[cfg(feature = "evm-prove")]
 use crate::{config::AggConfig, keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 use crate::{
-    config::{AggStarkConfig, SdkVmConfig},
+    config::{AggStarkConfig, SdkVmConfig, SdkVmCpuBuilder},
     keygen::{asm::program_to_asm, AggStarkProvingKey},
     prover::{AppProver, StarkProver},
 };
@@ -107,68 +107,103 @@ pub struct VerifiedContinuationVmPayload {
 
 // The SDK is only generic in the engine for the non-root SC. The root SC is fixed to
 // BabyBearPoseidon2RootEngine right now.
-#[derive(Getters, WithSetters)]
-pub struct GenericSdk<E, NativeBuilder> {
+#[derive(Getters, MutGetters, WithSetters)]
+pub struct GenericSdk<Engine, VB, NativeBuilder>
+where
+    Engine: StarkEngine<SC = SC>,
+    VB: VmBuilder<Engine>,
+    VB::VmConfig: VmExecutionConfig<F>,
+{
     #[getset(get = "pub", set_with = "pub")]
     agg_tree_config: AggregationTreeConfig,
-    #[getset(get = "pub")]
-    native_builder: NativeBuilder,
-    _phantom: PhantomData<E>,
+    #[getset(get = "pub", get_mut = "pub")]
+    app_config: AppConfig<VB::VmConfig>,
+
+    pub(crate) app_vm_builder: VB,
+    pub(crate) native_builder: NativeBuilder,
+    transpiler: Option<Transpiler<F>>,
+
+    executor: VmExecutor<F, VB::VmConfig>,
+
+    _phantom: PhantomData<Engine>,
 }
 
-pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, NativeCpuBuilder>;
+pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
-impl<E, NativeBuilder> Default for GenericSdk<E, NativeBuilder>
-where
-    NativeBuilder: Default,
-{
-    fn default() -> Self {
-        Self {
-            agg_tree_config: AggregationTreeConfig::default(),
-            native_builder: NativeBuilder::default(),
-            _phantom: PhantomData,
-        }
+impl Sdk {
+    pub fn standard() -> Self {
+        GenericSdk::new(AppConfig::standard())
     }
+}
+
+#[derive(Error, Debug)]
+pub enum SdkError {
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Failed to build guest: code = {0}")]
+    BuildFailedWithCode(i32),
+    #[error("Failed to build guest (OPENVM_SKIP_BUILD is set)")]
+    BuildFailed,
+    #[error("VM error: {0}")]
+    Vm(#[from] VirtualMachineError),
+    #[error("Other error: {0}")]
+    Other(eyre::Error),
 }
 
 // The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
 // aggregation supports.
-impl<E, NativeBuilder> GenericSdk<E, NativeBuilder>
+impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
     <NativeConfig as VmExecutionConfig<F>>::Executor:
         PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(app_config: AppConfig<VB::VmConfig>) -> Self
+    where
+        VB: Default,
+        NativeBuilder: Default,
+    {
+        Self {
+            app_config,
+            app_vm_builder: Default::default(),
+            native_builder: Default::default(),
+            agg_tree_config: Default::default(),
+            transpiler: None,
+            _phantom: PhantomData,
+        }
     }
 
+    /// Builds the guest package located at `pkg_dir`. This function requires that the build target
+    /// is unique and errors otherwise. Returns the built ELF file decoded in the [Elf] type.
     pub fn build<P: AsRef<Path>>(
         &self,
         guest_opts: GuestOptions,
-        vm_config: &SdkVmConfig,
         pkg_dir: P,
         target_filter: &Option<TargetFilter>,
         init_file_name: Option<&str>, // If None, we use "openvm-init.rs"
-    ) -> Result<Elf> {
-        vm_config.write_to_init_file(pkg_dir.as_ref(), init_file_name)?;
+    ) -> Result<Elf, SdkError> {
+        self.app_config
+            .app_vm_config
+            .write_to_init_file(pkg_dir.as_ref(), init_file_name)?;
         let pkg = get_package(pkg_dir.as_ref());
         let target_dir = match build_guest_package(&pkg, &guest_opts, None, target_filter) {
             Ok(target_dir) => target_dir,
             Err(Some(code)) => {
-                return Err(eyre::eyre!("Failed to build guest: code = {}", code));
+                return Err(SdkError::BuildFailedWithCode(code));
             }
             Err(None) => {
-                return Err(eyre::eyre!(
-                    "Failed to build guest (OPENVM_SKIP_BUILD is set)"
-                ));
+                return Err(SdkError::BuildFailed);
             }
         };
 
-        let elf_path = find_unique_executable(pkg_dir, target_dir, target_filter)?;
+        let elf_path =
+            find_unique_executable(pkg_dir, target_dir, target_filter).map_err(SdkError::Other)?;
         let data = read(&elf_path)?;
-        Elf::decode(&data, MEM_SIZE as u32)
+        Elf::decode(&data, MEM_SIZE as u32).map_err(SdkError::Other)
     }
 
     pub fn transpile(
@@ -180,7 +215,7 @@ where
     }
 
     /// Returns the user public values as field elements.
-    pub fn execute<VC>(&self, exe: VmExe<F>, vm_config: VC, inputs: StdIn) -> Result<Vec<F>>
+    pub fn execute<VC>(&self, exe: VmExe<F>, inputs: StdIn) -> Result<Vec<F>, SdkError>
     where
         VC: VmExecutionConfig<F> + AsRef<SystemConfig> + Clone,
         VC::Executor: Clone + Executor<F> + MeteredExecutor<F>,
@@ -212,19 +247,13 @@ where
         Ok(app_pk)
     }
 
-    pub fn generate_app_proof<VB>(
+    pub fn generate_app_proof(
         &self,
         app_vm_builder: VB,
         app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_committed_exe: Arc<NonRootCommittedExe>,
         inputs: StdIn,
-    ) -> Result<ContinuationVmProof<SC>>
-    where
-        VB: VmBuilder<E>,
-        VB::VmConfig: VmExecutionConfig<F> + VmCircuitConfig<SC>,
-        <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
-    {
+    ) -> Result<ContinuationVmProof<SC>> {
         let mut app_prover =
             AppProver::<E, VB>::new(app_vm_builder, app_pk.app_vm_pk.clone(), app_committed_exe)?;
         let proof = app_prover.generate_app_proof(inputs)?;
@@ -261,16 +290,6 @@ where
         })
     }
 
-    pub fn verify_app_proof_without_continuations(
-        &self,
-        app_vk: &AppVerifyingKey,
-        proof: &Proof<SC>,
-    ) -> Result<()> {
-        let e = E::new(app_vk.fri_params);
-        e.verify(&app_vk.app_vm_vk, proof)?;
-        Ok(())
-    }
-
     #[cfg(feature = "evm-prove")]
     pub fn agg_keygen(
         &self,
@@ -305,20 +324,14 @@ where
         program_to_asm(kernel_asm)
     }
 
-    pub fn generate_e2e_stark_proof<VB>(
+    pub fn generate_e2e_stark_proof(
         &self,
         app_vm_builder: VB,
         app_pk: Arc<AppProvingKey<VB::VmConfig>>,
         app_exe: Arc<NonRootCommittedExe>,
         agg_stark_pk: AggStarkProvingKey,
         inputs: StdIn,
-    ) -> Result<VmStarkProof<SC>>
-    where
-        VB: VmBuilder<E>,
-        <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F>
-            + MeteredExecutor<F>
-            + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
-    {
+    ) -> Result<VmStarkProof<SC>> {
         let mut stark_prover = StarkProver::<E, _, _>::new(
             app_vm_builder,
             self.native_builder.clone(),
@@ -432,7 +445,7 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn generate_evm_proof<VB>(
+    pub fn generate_evm_proof(
         &self,
         reader: &impl Halo2ParamsReader,
         app_vm_builder: VB,

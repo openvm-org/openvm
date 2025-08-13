@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::OnceLock};
+use std::{fs, io, path::Path, sync::OnceLock};
 
 use divan::Bencher;
 use eyre::Result;
@@ -135,7 +135,7 @@ impl InitFileGenerator for ExecuteConfig {
         &self,
         _manifest_dir: &Path,
         _init_file_name: Option<&str>,
-    ) -> eyre::Result<()> {
+    ) -> io::Result<()> {
         Ok(())
     }
 }

@@ -1,4 +1,8 @@
-use std::{fs::File, io::Write, path::Path};
+use std::{
+    fs::File,
+    io::{self, Write},
+    path::Path,
+};
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
@@ -131,7 +135,7 @@ pub trait InitFileGenerator {
         &self,
         manifest_dir: &Path,
         init_file_name: Option<&str>,
-    ) -> eyre::Result<()> {
+    ) -> io::Result<()> {
         if let Some(contents) = self.generate_init_file_contents() {
             let dest_path = Path::new(manifest_dir)
                 .join(init_file_name.unwrap_or(OPENVM_DEFAULT_INIT_FILE_NAME));
