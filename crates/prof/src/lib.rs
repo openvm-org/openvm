@@ -38,12 +38,15 @@ impl MetricDb {
             let labels = Labels::from(entry.labels);
             let is_e1 = labels.get(EXECUTE_MODE_LABEL) == Some(EXECUTE_E1_PREFIX);
             let has_segment = labels.get("segment").is_some();
+            let is_keygen = labels
+                .get("group")
+                .is_some_and(|value| value.contains("keygen"));
 
             if is_insns {
                 if is_e1 {
                     insns_e1 = entry.value as u64;
                     continue;
-                } else if has_segment {
+                } else if has_segment && !is_keygen {
                     insns_preflight += entry.value as u64;
                 }
             }
