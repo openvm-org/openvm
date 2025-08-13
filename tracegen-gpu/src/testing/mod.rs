@@ -129,6 +129,7 @@ pub struct GpuChipTestBuilder {
     range_tuple_checker: Option<Arc<RangeTupleCheckerChipGPU<2>>>,
 
     rng: StdRng,
+    pub custom_pvs: Vec<Option<F>>,
     default_register: usize,
     default_pointer: usize,
     #[cfg(feature = "metrics")]
@@ -170,6 +171,7 @@ impl GpuChipTestBuilder {
             bitwise_op_lookup: None,
             range_tuple_checker: None,
             rng: StdRng::seed_from_u64(0),
+            custom_pvs: Vec::new(),
             default_register: 0,
             default_pointer: 0,
             #[cfg(feature = "metrics")]
@@ -197,6 +199,7 @@ impl GpuChipTestBuilder {
             bitwise_op_lookup: None,
             range_tuple_checker: None,
             rng: StdRng::seed_from_u64(0),
+            custom_pvs: Vec::new(),
             default_register: 0,
             default_pointer: 0,
             #[cfg(feature = "metrics")]
@@ -256,15 +259,16 @@ impl GpuChipTestBuilder {
         tracing::debug!("initial_timestamp={}", initial_state.timestamp);
 
         let mut pc = initial_pc;
-        let state_mut = VmStateMut {
-            pc: &mut pc,
-            memory: &mut self.memory.memory,
-            streams: &mut self.streams,
-            rng: &mut self.rng,
-            ctx: arena,
+        let state_mut = VmStateMut::new(
+            &mut pc,
+            &mut self.memory.memory,
+            &mut self.streams,
+            &mut self.rng,
+            &mut self.custom_pvs,
+            arena,
             #[cfg(feature = "metrics")]
-            metrics: &mut self.metrics,
-        };
+            &mut self.metrics,
+        );
 
         executor
             .execute(state_mut, instruction)

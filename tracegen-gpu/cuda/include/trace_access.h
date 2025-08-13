@@ -25,8 +25,11 @@ struct RowSlice {
     }
 
     template <typename T>
-    __device__ __forceinline__ void write_array(size_t column_index, size_t length, const T *values)
-        const {
+    __device__ __forceinline__ void write_array(
+        size_t column_index,
+        size_t length,
+        const T *values
+    ) const {
 #pragma unroll
         for (size_t i = 0; i < length; i++) {
             ptr[(column_index + i) * stride] = values[i];

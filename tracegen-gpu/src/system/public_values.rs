@@ -98,6 +98,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
     use openvm_circuit::{
         arch::{
             testing::{memory::gen_pointer, RANGE_CHECKER_BUS},
@@ -107,7 +108,7 @@ mod tests {
             native_adapter::{NativeAdapterAir, NativeAdapterExecutor, NativeAdapterRecord},
             public_values::{
                 PublicValuesAir, PublicValuesChip, PublicValuesCoreAir, PublicValuesExecutor,
-                PublicValuesRecord,
+                PublicValuesFiller, PublicValuesRecord,
             },
         },
     };
@@ -147,14 +148,10 @@ mod tests {
             PublicValuesCoreAir::new(num_custom_pvs, max_degree),
         );
 
-        let executor = PublicValuesExecutor::new(
-            NativeAdapterExecutor::<F, 2, 0>::default(),
-            num_custom_pvs,
-            max_degree,
-        );
+        let executor = PublicValuesExecutor::new(NativeAdapterExecutor::<F, 2, 0>::default());
 
         let cpu_chip = VmChipWrapper::new(
-            PublicValuesExecutor::new(
+            PublicValuesFiller::new(
                 NativeAdapterExecutor::<F, 2, 0>::default(),
                 num_custom_pvs,
                 max_degree,
@@ -178,6 +175,7 @@ mod tests {
         let mem_config = MemoryConfig::default();
         let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
         let mut tester = GpuChipTestBuilder::volatile(mem_config.clone(), bus);
+        tester.custom_pvs = vec![None; system_config.num_public_values];
 
         let mut harness = create_test_harness(&tester, &mem_config, &system_config);
         let mut public_values = vec![];
@@ -228,6 +226,16 @@ mod tests {
                 &instruction,
             );
         }
+        let exec_pvs = tester
+            .custom_pvs
+            .iter()
+            .map(|&x| x.unwrap_or(F::ZERO))
+            .collect_vec();
+        assert_eq!(exec_pvs, public_values);
+        harness
+            .cpu_chip
+            .inner
+            .set_public_values(public_values.clone());
         harness.gpu_chip.public_values = public_values;
 
         type Record<'a> = (
