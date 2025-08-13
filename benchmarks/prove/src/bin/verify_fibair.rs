@@ -74,7 +74,7 @@ fn main() -> Result<()> {
                 .absolute(prover.vm.engine.fri_params().log_blowup as u64);
             SingleSegmentVmProver::prove(&mut prover, input_stream, NATIVE_MAX_TRACE_HEIGHTS)
         })?;
-        verify_single(&prover.vm.engine, &app_vk.app_vm_vk, &proof)?;
+        verify_single(&prover.vm.engine, &app_vk.vk, &proof)?;
         Ok(())
     })?;
     Ok(())

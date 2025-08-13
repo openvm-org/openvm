@@ -48,7 +48,7 @@ pub struct AggregationConfig {
     pub root_max_constraint_degree: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Halo2Config {
     /// Log degree for the outer recursion verifier circuit.
     pub verifier_k: usize,

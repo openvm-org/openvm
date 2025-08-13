@@ -172,7 +172,7 @@ where
         }
         let proof = proofs.pop().unwrap();
         Ok(VmStarkProof {
-            proof,
+            inner: proof,
             user_public_values: public_values,
         })
     }
@@ -193,7 +193,7 @@ where
         }
 
         let VmStarkProof {
-            mut proof,
+            inner: mut proof,
             user_public_values,
         } = e2e_stark_proof;
         let mut wrapper_layers = 0;

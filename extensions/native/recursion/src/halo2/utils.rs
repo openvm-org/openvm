@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    env::var,
     io::BufReader,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -28,7 +29,6 @@ use snark_verifier_sdk::{
 };
 
 use crate::halo2::Halo2Params;
-pub const DEFAULT_PARAMS_DIR: &str = "./params";
 static TESTING_KZG_PARAMS_23: Lazy<Halo2Params> = Lazy::new(|| gen_kzg_params(23));
 
 pub(crate) fn gen_kzg_params(k: u32) -> Halo2Params {
@@ -91,6 +91,7 @@ pub trait Halo2ParamsReader {
     fn read_params(&self, k: usize) -> Arc<Halo2Params>;
 }
 
+#[derive(Clone)]
 pub struct CacheHalo2ParamsReader {
     params_dir: PathBuf,
     cached_params: Arc<Mutex<HashMap<usize, Arc<Halo2Params>>>>,
@@ -114,10 +115,10 @@ impl CacheHalo2ParamsReader {
         }
     }
     pub fn new_with_default_params_dir() -> Self {
-        Self {
-            params_dir: PathBuf::from(DEFAULT_PARAMS_DIR),
-            cached_params: Default::default(),
-        }
+        let default_params_dir = PathBuf::from(var("HOME").unwrap())
+            .join(".openvm")
+            .join("params");
+        CacheHalo2ParamsReader::new(default_params_dir)
     }
     fn read_params_from_folder(&self, k: usize) -> Halo2Params {
         let file_path = self.params_dir.as_path().join(format!("kzg_bn254_{k}.srs"));

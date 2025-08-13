@@ -42,7 +42,7 @@ assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, De
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct VmStarkProof<SC: StarkGenericConfig> {
     /// STARK backend proof
-    pub proof: Proof<SC>,
+    pub inner: Proof<SC>,
     pub user_public_values: Vec<Val<SC>>,
 }
 

@@ -93,8 +93,7 @@ pub(crate) fn keygen(
     output_dir: Option<impl AsRef<Path>>,
 ) -> Result<()> {
     let app_config = read_config_toml_or_default(config)?;
-    let app_pk = Sdk::new().app_keygen(app_config)?;
-    let app_vk = app_pk.get_app_vk();
+    let (app_pk, app_vk) = Sdk::new(app_config)?.app_keygen();
     write_app_vk_to_file(app_vk, &app_vk_path)?;
     write_app_pk_to_file(app_pk, &app_pk_path)?;
 

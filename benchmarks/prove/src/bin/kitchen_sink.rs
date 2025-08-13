@@ -102,7 +102,6 @@ fn main() -> Result<()> {
             .clone()
             .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
     );
-    let halo2_pk = sdk.halo2_keygen(&halo2_params_reader, &DefaultStaticVerifierPvHandler)?;
 
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     verify_native_max_trace_heights(
@@ -114,16 +113,9 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || {
-        let mut prover = EvmHalo2Prover::<BabyBearPoseidon2Engine, _, _>::new(
-            &halo2_params_reader,
-            SdkVmCpuBuilder,
-            NativeCpuBuilder,
-            app_pk,
-            app_committed_exe,
-            full_agg_pk,
-            args.agg_tree_config,
-        )?;
-        prover.set_program_name("kitchen_sink");
+        let mut prover = sdk
+            .evm_prover(app_committed_exe)?
+            .with_program_name("kitchen_sink");
         let stdin = StdIn::default();
         prover.prove_evm(stdin)
     })?;

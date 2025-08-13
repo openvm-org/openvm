@@ -234,7 +234,7 @@ impl VmStarkProofBytes {
         Ok(Self {
             app_commit,
             user_public_values,
-            proof: proof.proof.encode_to_vec()?,
+            proof: proof.inner.encode_to_vec()?,
         })
     }
 }
@@ -251,7 +251,7 @@ impl TryFrom<VmStarkProofBytes> for VmStarkProof<SC> {
         let user_public_values = decode_vec(&mut reader)?;
         Ok(Self {
             user_public_values,
-            proof: Proof::decode_from_bytes(&proof)?,
+            inner: Proof::decode_from_bytes(&proof)?,
         })
     }
 }

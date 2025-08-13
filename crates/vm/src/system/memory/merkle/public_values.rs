@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -23,7 +24,7 @@ pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of
     /// sequence of sibling node hashes.
     pub proof: Vec<[F; CHUNK]>,
-    /// Raw public values. Its length should be a power of two * CHUNK.
+    /// Raw public values. Its length should be (a power of two) * CHUNK.
     pub public_values: Vec<F>,
     /// Merkle root of public values. The computation of this value follows the same logic of
     /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
@@ -62,7 +63,10 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             hasher,
             final_memory,
         );
-        let public_values = extract_public_values(num_public_values, final_memory);
+        let public_values = extract_public_values(num_public_values, final_memory)
+            .iter()
+            .map(|&x| F::from_canonical_u8(x))
+            .collect_vec();
         let public_values_commit = hasher.merkle_root(&public_values);
         UserPublicValuesProof {
             proof,
@@ -161,20 +165,15 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     proof
 }
 
-pub fn extract_public_values<F: PrimeField32>(
-    num_public_values: usize,
-    final_memory: &MemoryImage,
-) -> Vec<F> {
-    let mut public_values: Vec<F> = {
+pub fn extract_public_values(num_public_values: usize, final_memory: &MemoryImage) -> Vec<u8> {
+    let mut public_values: Vec<u8> = {
         assert_eq!(
             final_memory.config[PUBLIC_VALUES_AS as usize].layout,
             MemoryCellType::U8
         );
         final_memory.mem[PUBLIC_VALUES_AS as usize]
             .as_slice()
-            .iter()
-            .map(|&x| F::from_canonical_u8(x))
-            .collect()
+            .to_vec()
     };
 
     assert!(

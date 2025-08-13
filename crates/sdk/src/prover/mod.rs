@@ -60,6 +60,7 @@ mod evm {
         <NativeConfig as VmExecutionConfig<F>>::Executor:
             PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
     {
+        #[allow(clippy::too_many_arguments)]
         pub fn new(
             reader: &impl Halo2ParamsReader,
             app_vm_builder: VB,
@@ -84,6 +85,10 @@ mod evm {
             })
         }
 
+        pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+            self.set_program_name(program_name);
+            self
+        }
         pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
             self.stark_prover.set_program_name(program_name);
             self

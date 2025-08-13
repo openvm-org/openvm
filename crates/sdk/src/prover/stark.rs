@@ -70,10 +70,22 @@ where
             )?,
         })
     }
+    pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
+        self.set_program_name(program_name);
+        self
+    }
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.app_prover.set_program_name(program_name);
         self
     }
+
+    pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {
+        let app_proof = self.app_prover.prove(input)?;
+        let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof)?;
+        self.agg_prover
+            .aggregate_leaf_proofs(leaf_proofs, app_proof.user_public_values.public_values)
+    }
+
     #[cfg(feature = "evm-prove")]
     pub fn generate_proof_for_outer_recursion(
         &mut self,
@@ -89,12 +101,5 @@ where
     ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
         let app_proof = self.app_prover.prove(input)?;
         self.agg_prover.generate_root_verifier_input(app_proof)
-    }
-
-    pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {
-        let app_proof = self.app_prover.prove(input)?;
-        let leaf_proofs = self.agg_prover.generate_leaf_proofs(&app_proof)?;
-        self.agg_prover
-            .aggregate_leaf_proofs(leaf_proofs, app_proof.user_public_values.public_values)
     }
 }

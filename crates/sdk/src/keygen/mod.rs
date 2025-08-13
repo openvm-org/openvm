@@ -27,7 +27,6 @@ use openvm_stark_sdk::{
         keygen::types::MultiStarkVerifyingKey,
         proof::Proof,
     },
-    p3_bn254_fr::Bn254Fr,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{info_span, instrument};
@@ -40,15 +39,17 @@ use {
     },
 };
 
+#[cfg(feature = "evm-prove")]
+use crate::config::Halo2Config;
 use crate::{
-    commit::{babybear_digest_to_bn254, VmCommittedExe},
+    commit::VmCommittedExe,
     config::{AggregationConfig, AppConfig},
     keygen::{
         dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm},
         perm::AirIdPermutation,
     },
     prover::vm::types::VmProvingKey,
-    RootSC, F, SC,
+    RootSC, SC,
 };
 
 pub mod asm;
@@ -69,8 +70,10 @@ pub struct AppProvingKey<VC> {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AppVerifyingKey {
+    /// We store the FRI parameters used to generate the proof separately.
     pub fri_params: FriParameters,
-    pub app_vm_vk: MultiStarkVerifyingKey<SC>,
+    /// STARK backend verifying key
+    pub vk: MultiStarkVerifyingKey<SC>,
     pub memory_dimensions: MemoryDimensions,
 }
 
@@ -86,7 +89,15 @@ pub struct AggProvingKey {
     pub root_verifier_pk: RootVerifierProvingKey,
 }
 
-// TODO AggVerifyingKey
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AggVerifyingKey {
+    pub(super) leaf_fri_params: FriParameters,
+    pub(super) leaf_vk: MultiStarkVerifyingKey<SC>,
+    /// FRI parameters used to generate the last internal proof.
+    pub(super) internal_fri_params: FriParameters,
+    pub(super) internal_vk: MultiStarkVerifyingKey<SC>,
+    pub(super) internal_verifier_program_commit: Com<SC>,
+}
 
 /// Attention: the serialized size of this struct is VERY large, usually >10GB.
 ///
@@ -153,7 +164,7 @@ where
     pub fn get_app_vk(&self) -> AppVerifyingKey {
         AppVerifyingKey {
             fri_params: self.app_vm_pk.fri_params,
-            app_vm_vk: self.app_vm_pk.vm_pk.get_vk(),
+            vk: self.app_vm_pk.vm_pk.get_vk(),
             memory_dimensions: self
                 .app_vm_pk
                 .vm_config
@@ -166,14 +177,6 @@ where
     pub fn app_fri_params(&self) -> FriParameters {
         self.app_vm_pk.fri_params
     }
-
-    // pub fn commit_in_bn254(&self) -> Bn254Fr {
-    //     babybear_digest_to_bn254(&self.commit_in_babybear())
-    // }
-
-    // pub fn commit_in_babybear(&self) -> [F; DIGEST_SIZE] {
-    //     self.leaf_committed_exe.get_program_commit().into()
-    // }
 }
 
 /// Try to determine statically if there will be an issue with the recursive verifier size and log
@@ -270,7 +273,8 @@ impl AggProvingKey {
         Ok(pk)
     }
 
-    fn dummy_proof_and_keygen(
+    #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
+    pub(crate) fn dummy_proof_and_keygen(
         config: AggregationConfig,
     ) -> Result<(Self, Proof<SC>), VirtualMachineError> {
         let leaf_vm_config = config.leaf_vm_config();
@@ -383,8 +387,19 @@ impl AggProvingKey {
         ))
     }
 
-    pub fn internal_program_commit(&self) -> [F; DIGEST_SIZE] {
-        self.internal_committed_exe.get_program_commit().into()
+    pub fn get_agg_vk(&self) -> AggVerifyingKey {
+        let leaf_fri_params = self.leaf_vm_pk.fri_params;
+        let leaf_vk = self.leaf_vm_pk.vm_pk.get_vk();
+        let internal_fri_params = self.internal_vm_pk.fri_params;
+        let internal_vk = self.internal_vm_pk.vm_pk.get_vk();
+        let internal_verifier_program_commit = self.internal_committed_exe.get_program_commit();
+        AggVerifyingKey {
+            leaf_fri_params,
+            leaf_vk,
+            internal_fri_params,
+            internal_vk,
+            internal_verifier_program_commit,
+        }
     }
 
     pub fn num_user_public_values(&self) -> usize {
@@ -422,50 +437,43 @@ impl RootVerifierProvingKey {
     }
 }
 
-// #[cfg(feature = "evm-prove")]
-// impl AggProvingKey {
-//     /// Attention:
-//     /// - This function is very expensive. Usually it requires >64GB memory and takes >10
-// minutes.     /// - Please make sure SRS(KZG parameters) is already downloaded.
-//     #[tracing::instrument(level = "info", fields(group = "agg_keygen"), skip_all)]
-//     pub fn keygen(
-//         config: AggConfig,
-//         reader: &impl Halo2ParamsReader,
-//         pv_handler: &impl StaticVerifierPvHandler,
-//     ) -> Result<Self, VirtualMachineError> {
-//         let AggConfig {
-//             agg_stark_config,
-//             halo2_config,
-//         } = config;
-//         let (agg_stark_pk, dummy_internal_proof) =
-//             AggProvingKey::dummy_proof_and_keygen(agg_stark_config)?;
-//         let dummy_root_proof = agg_stark_pk
-//             .root_verifier_pk
-//             .generate_dummy_root_proof(dummy_internal_proof)?;
-//         let verifier = agg_stark_pk.root_verifier_pk.keygen_static_verifier(
-//             &reader.read_params(halo2_config.verifier_k),
-//             dummy_root_proof,
-//             pv_handler,
-//         );
-//         let dummy_snark = verifier.generate_dummy_snark(reader);
-//         let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
-//             Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
-//         } else {
-//             Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
-//         };
-//         let halo2_pk = Halo2ProvingKey {
-//             verifier,
-//             wrapper,
-//             profiling: halo2_config.profiling,
-//         };
-//         Ok(Self {
-//             agg_stark_pk,
-//             halo2_pk,
-//         })
-//     }
-// }
+#[cfg(feature = "evm-prove")]
+impl Halo2ProvingKey {
+    /// Attention:
+    /// - This function is very expensive. Usually it requires >64GB memory and takes >10 minutes.
+    ///   /// - Please make sure SRS(KZG parameters) is already downloaded.
+    #[tracing::instrument(level = "info", fields(group = "halo2_keygen"), skip_all)]
+    pub fn keygen(
+        halo2_config: Halo2Config,
+        reader: &impl Halo2ParamsReader,
+        pv_handler: &impl StaticVerifierPvHandler,
+        agg_pk: &AggProvingKey,
+        dummy_internal_proof: Proof<SC>,
+    ) -> Result<Self, VirtualMachineError> {
+        let dummy_root_proof = agg_pk
+            .root_verifier_pk
+            .generate_dummy_root_proof(dummy_internal_proof)?;
+        let verifier = agg_pk.root_verifier_pk.keygen_static_verifier(
+            &reader.read_params(halo2_config.verifier_k),
+            dummy_root_proof,
+            pv_handler,
+        );
+        let dummy_snark = verifier.generate_dummy_snark(reader);
+        let wrapper = if let Some(wrapper_k) = halo2_config.wrapper_k {
+            Halo2WrapperProvingKey::keygen(&reader.read_params(wrapper_k), dummy_snark)
+        } else {
+            Halo2WrapperProvingKey::keygen_auto_tune(reader, dummy_snark)
+        };
+        Ok(Halo2ProvingKey {
+            verifier: Arc::new(verifier),
+            wrapper: Arc::new(wrapper),
+            profiling: halo2_config.profiling,
+        })
+    }
+}
 
-pub fn leaf_keygen(
+/// For internal use only.
+pub fn _leaf_keygen(
     fri_params: FriParameters,
     leaf_vm_config: NativeConfig,
 ) -> Result<Arc<VmProvingKey<SC, NativeConfig>>, AirInventoryError> {

@@ -44,7 +44,7 @@ where
 
 impl<E, VB> AppProver<E, VB>
 where
-    E: StarkFriEngine<SC = SC>,
+    E: StarkFriEngine,
     VB: VmBuilder<E>,
     Val<E::SC>: PrimeField32,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
@@ -149,7 +149,7 @@ pub fn verify_app_proof(
     let VerifiedExecutionPayload {
         exe_commit,
         final_memory_root,
-    } = verify_segments(&engine, &app_vk.app_vm_vk, &proof.per_segment)?;
+    } = verify_segments(&engine, &app_vk.vk, &proof.per_segment)?;
 
     proof.user_public_values.verify(
         POSEIDON2_HASHER.get_or_init(vm_poseidon2_hasher),

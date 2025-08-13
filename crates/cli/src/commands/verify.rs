@@ -7,6 +7,7 @@ use openvm_sdk::{
         read_agg_stark_pk_from_file, read_app_proof_from_file, read_app_vk_from_file,
         read_from_file_json,
     },
+    prover::verify_app_proof,
     types::VmStarkProofBytes,
     Sdk,
 };
@@ -71,7 +72,6 @@ enum VerifySubCommand {
 
 impl VerifyCmd {
     pub fn run(&self) -> Result<()> {
-        let sdk = Sdk::new();
         match &self.command {
             VerifySubCommand::App {
                 app_vk,
@@ -100,7 +100,7 @@ impl VerifyCmd {
                 };
                 println!("Verifying application proof at {}", proof_path.display());
                 let app_proof = read_app_proof_from_file(proof_path)?;
-                sdk.verify_app_proof(&app_vk, &app_proof)?;
+                verify_app_proof(&app_vk, &app_proof)?;
             }
             VerifySubCommand::Stark { proof } => {
                 let agg_stark_pk = read_agg_stark_pk_from_file(default_agg_stark_pk_path())
@@ -123,13 +123,13 @@ impl VerifyCmd {
                 };
                 println!("Verifying STARK proof at {}", proof_path.display());
                 let stark_proof_bytes: VmStarkProofBytes = read_from_file_json(proof_path)?;
-                let expected_exe_commit = stark_proof_bytes.app_commit.app_exe_commit.to_bn254();
-                let expected_vm_commit = stark_proof_bytes.app_commit.app_vm_commit.to_bn254();
-                sdk.verify_e2e_stark_proof(
+                let expected_app_commit = stark_proof_bytes.app_commit;
+                // The app config used here doesn't matter, it is ignored in verification
+                let sdk = Sdk::standard();
+                sdk.verify_proof(
                     &agg_stark_pk,
+                    expected_app_commit,
                     &stark_proof_bytes.try_into()?,
-                    &expected_exe_commit,
-                    &expected_vm_commit,
                 )?;
             }
             #[cfg(feature = "evm-verify")]
@@ -158,6 +158,8 @@ impl VerifyCmd {
                     }
                     files[0].clone()
                 };
+                // The app config used here doesn't matter, it is ignored in verification
+                let sdk = Sdk::standard();
                 println!("Verifying EVM proof at {}", proof_path.display());
                 let evm_proof = read_evm_proof_from_file(proof_path)?;
                 sdk.verify_evm_halo2_proof(&evm_verifier, evm_proof)?;

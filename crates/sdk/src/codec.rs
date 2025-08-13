@@ -63,7 +63,7 @@ impl Encode for ContinuationVmProof<SC> {
 
 impl Encode for VmStarkProof<SC> {
     fn encode<W: Write>(&self, writer: &mut W) -> Result<()> {
-        self.proof.encode(writer)?;
+        self.inner.encode(writer)?;
         encode_slice(&self.user_public_values, writer)
     }
 }
@@ -334,10 +334,10 @@ impl Decode for ContinuationVmProof<SC> {
 
 impl Decode for VmStarkProof<SC> {
     fn decode<R: Read>(reader: &mut R) -> Result<Self> {
-        let proof = Proof::decode(reader)?;
+        let inner = Proof::decode(reader)?;
         let user_public_values = decode_vec(reader)?;
         Ok(Self {
-            proof,
+            inner,
             user_public_values,
         })
     }

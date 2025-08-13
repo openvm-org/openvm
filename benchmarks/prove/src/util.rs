@@ -17,7 +17,7 @@ use openvm_sdk::{
         DEFAULT_HALO2_VERIFIER_K, DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP,
         DEFAULT_ROOT_LOG_BLOWUP,
     },
-    keygen::leaf_keygen,
+    keygen::_leaf_keygen,
     prover::{verify_app_proof, vm::new_local_prover, LeafProvingController},
     GenericSdk, StdIn,
 };
@@ -229,7 +229,7 @@ where
     // 6. Verify STARK proofs, including boundary conditions.
     verify_app_proof(&app_vk, &app_proof)?;
     if let Some(leaf_vm_config) = leaf_vm_config {
-        let leaf_vm_pk = leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
+        let leaf_vm_pk = _leaf_keygen(app_config.leaf_fri_params.fri_params, leaf_vm_config)?;
         let vk = leaf_vm_pk.vm_pk.get_vk();
         let mut leaf_prover = new_local_prover(
             sdk.native_builder().clone(),

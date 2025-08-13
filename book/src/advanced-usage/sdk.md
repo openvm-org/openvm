@@ -9,7 +9,7 @@ For more information on the basic CLI flow, see [Overview of Basic Usage](../wri
 If you have a guest program and would like to try running the **host program** specified in the next section, you can do so by adding the following imports and setup at the top of the file. You may need to modify the imports and/or the `SomeStruct` struct to match your program.
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:dependencies }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:dependencies }}
 ```
 
 ## Building and Transpiling a Program
@@ -17,10 +17,10 @@ If you have a guest program and would like to try running the **host program** s
 The SDK provides lower-level control over the building and transpiling process.
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:build }}
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:read_elf}}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:build }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:read_elf}}
 
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:transpilation }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:transpilation }}
 ```
 
 ### Using `SdkVmConfig`
@@ -28,7 +28,7 @@ The SDK provides lower-level control over the building and transpiling process.
 The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the extensions and system configuration you want.
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:vm_config }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:vm_config }}
 ```
 
 > ℹ️
@@ -39,7 +39,7 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
 To run your program and see the public value output, you can do the following:
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:execution }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:execution }}
 ```
 
 ### Using `StdIn`
@@ -63,7 +63,7 @@ There are two types of proofs that you can generate, with the sections below con
 After building and transpiling a program, you can then generate a proof. To do so, you need to commit your `VmExe`, generate an `AppProvingKey`, format your input into `StdIn`, and then generate a proof.
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:proof_generation }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:proof_generation }}
 ```
 
 For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
@@ -73,7 +73,7 @@ For large guest programs, the program will be proved in multiple continuation se
 After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from your `AppProvingKey`) and the output of your `generate_app_proof` call.
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:verification }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:verification }}
 ```
 
 ## EVM Proof
@@ -94,7 +94,7 @@ cargo openvm setup
 <summary>Also note that there are additional dependencies for the EVM Proof flow. Click here to view.</summary>
 
 ```rust,no_run,noplayground
-{{ #include ../../../crates/sdk/examples/sdk_app.rs:dependencies }}
+{{ #include ../../../crates/sdk/examples/sdk_stark.rs:dependencies }}
 ```
 
 </details>

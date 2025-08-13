@@ -34,14 +34,11 @@ pub fn read_config_toml_or_default(config: impl AsRef<Path>) -> Result<AppConfig
 }
 
 #[cfg(feature = "evm-prove")]
-pub fn read_default_agg_pk() -> Result<AggProvingKey> {
+pub fn read_default_agg_pk() -> Result<(AggProvingKey, Halo2ProvingKey)> {
     let agg_stark_pk = read_agg_stark_pk_from_file(crate::default::default_agg_stark_pk_path())?;
     let halo2_pk =
         openvm_sdk::fs::read_agg_halo2_pk_from_file(crate::default::default_agg_halo2_pk_path())?;
-    Ok(AggProvingKey {
-        agg_stark_pk,
-        halo2_pk,
-    })
+    Ok((agg_stark_pk, halo2_pk))
 }
 
 pub fn find_manifest_dir(mut current_dir: PathBuf) -> Result<PathBuf> {

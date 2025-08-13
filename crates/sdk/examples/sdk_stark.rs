@@ -1,7 +1,6 @@
 // ANCHOR: dependencies
 use std::{fs, sync::Arc};
 
-use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
 use openvm_build::GuestOptions;
 use openvm_sdk::{
@@ -21,7 +20,7 @@ pub struct SomeStruct {
 // ANCHOR_END: dependencies
 
 #[allow(dead_code, unused_variables)]
-fn read_elf() -> Result<(), Box<dyn std::error::Error>> {
+fn read_elf() -> eyre::Result<()> {
     // ANCHOR: read_elf
     // 2b. Load the ELF from a file
     let elf_bytes = fs::read("your_path_to_elf")?;
@@ -31,7 +30,7 @@ fn read_elf() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[allow(unused_variables, unused_doc_comments)]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> eyre::Result<()> {
     // ANCHOR: vm_config
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
@@ -51,23 +50,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// ```
     // ANCHOR: build
     // 1. Build the VmConfig with the extensions needed.
-    let sdk = Sdk::new();
+    let sdk = Sdk::riscv32();
 
     // 2a. Build the ELF with guest options and a target filter.
     let guest_opts = GuestOptions::default();
     let target_path = "your_path_project_root";
-    let elf = sdk.build(
-        guest_opts,
-        &vm_config,
-        target_path,
-        &Default::default(),
-        None,
-    )?;
+    let elf = sdk.build(guest_opts, target_path, &None, None)?;
     // ANCHOR_END: build
 
     // ANCHOR: transpilation
     // 3. Transpile the ELF into a VmExe
-    let exe = sdk.transpile(elf, vm_config.transpiler())?;
+    let exe = sdk.transpile(elf)?;
     // ANCHOR_END: transpilation
 
     // ANCHOR: execution
@@ -77,45 +70,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stdin.write(&my_input);
 
     // 5. Run the program
-    let output = sdk.execute(exe.clone(), vm_config.clone(), stdin.clone())?;
+    let output = sdk.execute(exe.clone(), stdin.clone())?;
     println!("public values output: {:?}", output);
     // ANCHOR_END: execution
 
     // ANCHOR: proof_generation
-    // 6. Set app configuration
-    let app_log_blowup = 2;
-    let app_fri_params = FriParameters::standard_with_100_bits_conjectured_security(app_log_blowup);
-    let app_config = AppConfig::new(app_fri_params, vm_config);
-
-    // 7. Commit the exe
+    // 6. Commit the exe
     let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
 
-    // 8. Generate an AppProvingKey
-    let app_pk = Arc::new(sdk.app_keygen(app_config)?);
-
-    // Choose a VmBuilder that matches the VmConfig
-    let builder = SdkVmCpuBuilder;
-    // 9a. Generate a proof
-    let proof = sdk.generate_app_proof(
-        builder,
-        app_pk.clone(),
-        app_committed_exe.clone(),
-        stdin.clone(),
-    )?;
-    // 9b. Generate a proof with an AppProver with custom fields
-    let mut app_prover = AppProver::<BabyBearPoseidon2Engine, _>::new(
-        builder,
-        app_pk.app_vm_pk.clone(),
-        app_committed_exe.clone(),
-    )?
-    .with_program_name("test_program");
-    let proof = app_prover.prove(stdin.clone())?;
+    // 7a. Generate a proof
+    let proof = sdk.prove(app_committed_exe.clone(), stdin.clone())?;
+    // 7b. Generate a proof with a StarkProver with custom fields
+    let mut prover = sdk
+        .prover(app_committed_exe)?
+        .with_program_name("test_program");
+    let proof = prover.prove(stdin.clone())?;
     // ANCHOR_END: proof_generation
 
     // ANCHOR: verification
-    // 10. Verify your program
-    let app_vk = app_pk.get_app_vk();
-    sdk.verify_app_proof(&app_vk, &proof)?;
+    // 8. Do this once to save the agg_vk, independent of the proof.
+    let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
+    let app_commit = todo!();
+    // 8. Verify your program
+    Sdk::verify_proof(&agg_vk, app_commit, &proof)?;
     // ANCHOR_END: verification
 
     Ok(())

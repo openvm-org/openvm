@@ -170,7 +170,7 @@ jobs:
             ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             bash ./extensions/native/recursion/trusted_setup_s3.sh
-            PARAMS_DIR=$(pwd)/params
+            PARAMS_DIR=$HOME/.openvm/params
             PARAMS_ARG="--kzg-params-dir $PARAMS_DIR"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${PARAMS_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
           fi
