@@ -310,6 +310,10 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
         self.write_heap(register, pointer, writes);
         (register, pointer)
     }
+
+    pub fn set_num_public_values(&mut self, num_public_values: usize) {
+        self.custom_pvs.resize(num_public_values, None);
+    }
 }
 
 // Use Blake3 as hash for faster tests.
