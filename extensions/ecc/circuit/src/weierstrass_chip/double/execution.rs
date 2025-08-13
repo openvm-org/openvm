@@ -112,24 +112,17 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         } {
             match (is_setup, curve_type) {
                 (true, CurveType::K256) => {
-                    Ok(
-                        execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>,
-                    )
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>)
                 }
                 (true, CurveType::P256) => {
+                    Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>)
+                }
+                (true, CurveType::BN254) => {
                     Ok(
-                        execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>,
+                        execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, true>,
                     )
                 }
-                (true, CurveType::BN254) => Ok(execute_e12_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { CurveType::BN254 as u8 },
-                    true,
-                >),
-                (true, CurveType::BLS12_381) => Ok(execute_e12_impl::<
+                (true, CurveType::BLS12_381) => Ok(execute_e1_impl::<
                     _,
                     _,
                     BLOCKS,
@@ -137,23 +130,17 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
                     { CurveType::BLS12_381 as u8 },
                     true,
                 >),
-                (false, CurveType::K256) => Ok(execute_e12_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { CurveType::K256 as u8 },
-                    false,
-                >),
-                (false, CurveType::P256) => Ok(execute_e12_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { CurveType::P256 as u8 },
-                    false,
-                >),
-                (false, CurveType::BN254) => Ok(execute_e12_impl::<
+                (false, CurveType::K256) => {
+                    Ok(
+                        execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, false>,
+                    )
+                }
+                (false, CurveType::P256) => {
+                    Ok(
+                        execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, false>,
+                    )
+                }
+                (false, CurveType::BN254) => Ok(execute_e1_impl::<
                     _,
                     _,
                     BLOCKS,
@@ -161,7 +148,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
                     { CurveType::BN254 as u8 },
                     false,
                 >),
-                (false, CurveType::BLS12_381) => Ok(execute_e12_impl::<
+                (false, CurveType::BLS12_381) => Ok(execute_e1_impl::<
                     _,
                     _,
                     BLOCKS,
@@ -171,9 +158,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
                 >),
             }
         } else if is_setup {
-            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
+            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
         } else {
-            Ok(execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
+            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
         }
     }
 }
@@ -208,40 +195,55 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         } {
             match (is_setup, curve_type) {
                 (true, CurveType::K256) => {
-                    Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, true>)
                 }
                 (true, CurveType::P256) => {
-                    Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
+                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, true>)
                 }
                 (true, CurveType::BN254) => {
                     Ok(
-                        execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>,
+                        execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }, true>,
                     )
                 }
-                (true, CurveType::BLS12_381) => Ok(execute_e2_setup_impl::<
+                (true, CurveType::BLS12_381) => Ok(execute_e2_impl::<
                     _,
                     _,
                     BLOCKS,
                     BLOCK_SIZE,
                     { CurveType::BLS12_381 as u8 },
+                    true,
                 >),
                 (false, CurveType::K256) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }>)
+                    Ok(
+                        execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::K256 as u8 }, false>,
+                    )
                 }
                 (false, CurveType::P256) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }>)
+                    Ok(
+                        execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::P256 as u8 }, false>,
+                    )
                 }
-                (false, CurveType::BN254) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BN254 as u8 }>)
-                }
-                (false, CurveType::BLS12_381) => {
-                    Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { CurveType::BLS12_381 as u8 }>)
-                }
+                (false, CurveType::BN254) => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BN254 as u8 },
+                    false,
+                >),
+                (false, CurveType::BLS12_381) => Ok(execute_e2_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BLS12_381 as u8 },
+                    false,
+                >),
             }
         } else if is_setup {
-            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
+            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
         } else {
-            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }>)
+            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
         }
     }
 }
@@ -254,10 +256,9 @@ unsafe fn execute_e12_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: &EcDoublePreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -317,12 +318,28 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+unsafe fn execute_e1_impl<
+    F: PrimeField32,
+    CTX: ExecutionCtxTrait,
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const CURVE_TYPE: u8,
+    const IS_SETUP: bool,
+>(
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, vm_state);
+}
+
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const BLOCK_SIZE: usize,
     const CURVE_TYPE: u8,
+    const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -331,34 +348,8 @@ unsafe fn execute_e2_impl<
     vm_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    let pre_compute = unsafe {
-        std::slice::from_raw_parts(
-            &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
-        )
-    };
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, false>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_setup_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-    const CURVE_TYPE: u8,
->(
-    pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
-    vm_state
-        .ctx
-        .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    let pre_compute = unsafe {
-        std::slice::from_raw_parts(
-            &e2_pre_compute.data as *const _ as *const u8,
-            std::mem::size_of::<EcDoublePreCompute>(),
-        )
-    };
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, true>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
+        &e2_pre_compute.data,
+        vm_state,
+    );
 }
