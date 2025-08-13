@@ -19,6 +19,7 @@ members = [
     "crates/circuits/poseidon2-air",
     "crates/circuits/primitives",
     "crates/circuits/primitives/derive",
+    "crates/to_rocq",
     "crates/toolchain/transpiler",
     "crates/toolchain/openvm",
     "crates/toolchain/build",

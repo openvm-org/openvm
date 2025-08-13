@@ -1,0 +1,39 @@
+[package]
+name = "openvm-to-rocq"
+description = "Tool for pretty printing OpenVM AIR circuits"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "to-rocq"
+path = "src/main.rs"
+
+[dependencies]
+# OpenVM circuit crates for accessing AIR circuits
+openvm-poseidon2-air = { workspace = true }
+openvm-sha256-air = { workspace = true }
+openvm-circuit-primitives = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
+
+# Standard dependencies
+clap = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = "0.3"
+eyre = { workspace = true }
+thiserror = { workspace = true }
+
+# Plonky3 dependencies for circuit inspection
+p3-poseidon2-air = { workspace = true }
+p3-keccak-air = { workspace = true }
+p3-field = { workspace = true }
+p3-baby-bear = { workspace = true }
+
+[features]
+default = ["parallel"]
+parallel = ["openvm-stark-backend/parallel"]

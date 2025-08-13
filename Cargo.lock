@@ -4971,6 +4971,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-to-rocq"
+version = "1.2.0"
+dependencies = [
+ "clap",
+ "eyre",
+ "openvm-circuit-primitives",
+ "openvm-poseidon2-air",
+ "openvm-sha256-air",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "p3-baby-bear",
+ "p3-field",
+ "p3-keccak-air",
+ "p3-poseidon2-air",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "openvm-toolchain-tests"
 version = "1.2.0"
 dependencies = [
