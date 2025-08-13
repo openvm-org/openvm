@@ -56,6 +56,33 @@ impl LinearMemory for MmapMemory {
         &mut self.mmap
     }
 
+    #[cfg(target_os = "linux")]
+    fn fill_zero(&mut self) {
+        use libc::{madvise, MADV_DONTNEED};
+
+        let mmap = &mut self.mmap;
+        // SAFETY: our mmap is a memory-backed (not file-backed) anonymous private mapping.
+        // When we madvise MADV_DONTNEED, according to https://man7.org/linux/man-pages/man2/madvise.2.html
+        // > subsequent accesses of pages in the range will succeed, but
+        // > will result in either repopulating the memory contents from
+        // > the up-to-date contents of the underlying mapped file (for
+        // > shared file mappings, shared anonymous mappings, and shmem-
+        // > based techniques such as System V shared memory segments)
+        // > or zero-fill-on-demand pages for anonymous private
+        // > mappings.
+        unsafe {
+            let ret = madvise(
+                mmap.as_ptr() as *mut libc::c_void,
+                mmap.len(),
+                MADV_DONTNEED,
+            );
+            if ret != 0 {
+                // Fallback to write_bytes if madvise fails
+                std::ptr::write_bytes(mmap.as_mut_ptr(), 0, mmap.len());
+            }
+        }
+    }
+
     #[inline(always)]
     unsafe fn read<BLOCK: Copy>(&self, from: usize) -> BLOCK {
         debug_assert!(

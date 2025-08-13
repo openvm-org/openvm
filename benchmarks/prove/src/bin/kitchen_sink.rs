@@ -42,15 +42,13 @@ fn verify_native_max_trace_heights(
         &leaf_vm_pk,
         &app_pk.leaf_committed_exe,
     )?;
-    let executor_idx_to_air_idx = leaf_prover.vm.executor_idx_to_air_idx();
 
     for leaf_input in leaf_inputs {
         let exe = leaf_prover.exe().clone();
         let vm = &mut leaf_prover.vm;
         let metered_ctx = vm.build_metered_ctx();
         let (segments, _) = vm
-            .executor()
-            .metered_instance(&exe, &executor_idx_to_air_idx)?
+            .metered_interpreter(&exe)?
             .execute_metered(leaf_input.write_to_stream(), metered_ctx)?;
         assert_eq!(segments.len(), 1);
         let estimated_trace_heights = &segments[0].trace_heights;
@@ -59,7 +57,8 @@ fn verify_native_max_trace_heights(
         // Tracegen without proving since leaf proofs take a while
         let state = vm.create_initial_state(&exe, leaf_input.write_to_stream());
         vm.transport_init_memory_to_device(&state.memory);
-        let out = vm.execute_preflight(&exe, state, None, estimated_trace_heights)?;
+        let mut interpreter = vm.preflight_interpreter(&exe)?;
+        let out = vm.execute_preflight(&mut interpreter, state, None, estimated_trace_heights)?;
         let actual_trace_heights = vm
             .generate_proving_ctx(out.system_records, out.record_arenas)?
             .per_air

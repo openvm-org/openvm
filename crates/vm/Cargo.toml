@@ -38,6 +38,8 @@ dashmap.workspace = true
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
