@@ -21,6 +21,6 @@ fn main() -> Result<()> {
         let n = 100_000u64;
         let mut stdin = StdIn::default();
         stdin.write(&n);
-        args.bench_from_exe("fibonacci_program", SdkVmCpuBuilder, config, exe, stdin)
+        args.bench_from_exe::<SdkVmCpuBuilder, _>("fibonacci_program", config, exe, stdin)
     })
 }

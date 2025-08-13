@@ -14,7 +14,7 @@ use openvm_stark_sdk::engine::StarkFriEngine;
 use crate::{
     commit::VmCommittedExe,
     config::AggregationTreeConfig,
-    keygen::{AggStarkProvingKey, AppProvingKey},
+    keygen::{AggProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
     StdIn, F, SC,
 };
@@ -43,7 +43,7 @@ where
         native_builder: NativeBuilder,
         app_pk: AppProvingKey<VB::VmConfig>,
         app_committed_exe: Arc<VmCommittedExe<SC>>,
-        agg_stark_pk: AggStarkProvingKey,
+        agg_stark_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
         assert_eq!(

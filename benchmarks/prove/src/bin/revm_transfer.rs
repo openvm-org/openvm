@@ -16,9 +16,8 @@ fn main() -> Result<()> {
     let elf = args.build_bench_program("revm_transfer", &config, None)?;
     let exe = VmExe::from_elf(elf, config.transpiler())?;
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmCpuBuilder, _>(
             "revm_100_transfers",
-            SdkVmCpuBuilder,
             config,
             exe,
             StdIn::default(),

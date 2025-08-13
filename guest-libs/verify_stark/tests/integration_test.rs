@@ -7,8 +7,8 @@ mod tests {
     use openvm_native_compiler::conversion::CompilerOptions;
     use openvm_sdk::{
         commit::AppExecutionCommit,
-        config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
-        keygen::AggStarkProvingKey,
+        config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
+        keygen::AggProvingKey,
         Sdk, StdIn,
     };
     use openvm_stark_sdk::config::FriParameters;
@@ -60,7 +60,7 @@ mod tests {
         let exe_commit = commits.app_exe_commit.to_u32_digest();
         let vm_commit = commits.app_vm_commit.to_u32_digest();
 
-        let agg_pk = AggStarkProvingKey::keygen(AggStarkConfig {
+        let agg_pk = AggProvingKey::keygen(AggregationConfig {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
             leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
             internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),

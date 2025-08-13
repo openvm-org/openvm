@@ -15,6 +15,7 @@ pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
+pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
 
 // Aggregation Tree Defaults
 const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
@@ -33,16 +34,8 @@ pub struct AppConfig<VC> {
     pub compiler_options: CompilerOptions,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AggConfig {
-    /// STARK aggregation config
-    pub agg_stark_config: AggStarkConfig,
-    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
-    pub halo2_config: Halo2Config,
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct AggStarkConfig {
+pub struct AggregationConfig {
     pub max_num_user_public_values: usize,
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
@@ -121,7 +114,7 @@ impl<VC> AppConfig<VC> {
     }
 }
 
-impl Default for AggStarkConfig {
+impl Default for AggregationConfig {
     fn default() -> Self {
         Self {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
@@ -141,15 +134,12 @@ impl Default for AggStarkConfig {
     }
 }
 
-impl Default for AggConfig {
+impl Default for Halo2Config {
     fn default() -> Self {
         Self {
-            agg_stark_config: AggStarkConfig::default(),
-            halo2_config: Halo2Config {
-                verifier_k: 24,
-                wrapper_k: None,
-                profiling: false,
-            },
+            verifier_k: DEFAULT_HALO2_VERIFIER_K,
+            wrapper_k: None,
+            profiling: false,
         }
     }
 }
@@ -198,7 +188,7 @@ impl From<FriParameters> for LeafFriParams {
 
 pub const SBOX_SIZE: usize = 7;
 
-impl AggStarkConfig {
+impl AggregationConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {
         let mut config = NativeConfig::aggregation(
             VmVerifierPvs::<u8>::width(),

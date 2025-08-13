@@ -12,7 +12,7 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
     codec::{Decode, Encode},
-    keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
+    keygen::{AggProvingKey, AppProvingKey, AppVerifyingKey},
     F, SC,
 };
 #[cfg(feature = "evm-prove")]
@@ -80,11 +80,11 @@ pub fn write_root_verifier_input_to_file<P: AsRef<Path>>(
     encode_to_file(&path, input)
 }
 
-pub fn read_agg_stark_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggStarkProvingKey> {
+pub fn read_agg_stark_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggProvingKey> {
     read_from_file_bitcode(&path)
 }
 
-pub fn write_agg_stark_pk_to_file<P: AsRef<Path>>(pk: &AggStarkProvingKey, path: P) -> Result<()> {
+pub fn write_agg_stark_pk_to_file<P: AsRef<Path>>(pk: &AggProvingKey, path: P) -> Result<()> {
     write_to_file_bitcode(&path, pk)
 }
 

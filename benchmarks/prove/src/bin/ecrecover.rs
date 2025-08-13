@@ -58,9 +58,8 @@ fn main() -> Result<()> {
                 .map(|s| make_input(&signing_key, s.as_bytes()))
                 .collect::<Vec<_>>(),
         );
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmCpuBuilder, _>(
             "ecrecover_program",
-            SdkVmCpuBuilder,
             config,
             exe,
             input_stream.into(),

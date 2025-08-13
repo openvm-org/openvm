@@ -9,7 +9,7 @@ use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
-    config::{AggConfig, AggStarkConfig},
+    config::{AggConfig, AggregationConfig},
     fs::{
         write_agg_halo2_pk_to_file, write_agg_stark_pk_to_file, write_evm_halo2_verifier_to_folder,
         EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
@@ -57,7 +57,7 @@ impl SetupCmd {
                 println!("Aggregation stark proving key already exists");
                 return Ok(());
             }
-            let agg_stark_config = AggStarkConfig::default();
+            let agg_stark_config = AggregationConfig::default();
             let sdk = Sdk::new();
             let agg_stark_pk = sdk.agg_stark_keygen(agg_stark_config)?;
 

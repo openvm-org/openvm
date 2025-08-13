@@ -1,14 +1,15 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
+use openvm_circuit::arch::{verify_single, SingleSegmentVmProver, DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::{
+    commit::commit_app_exe,
     config::{AppConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP},
-    prover::AppProver,
-    Sdk,
+    keygen::AppProvingKey,
+    prover::vm::new_local_prover,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection,
@@ -17,6 +18,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     openvm_stark_backend::Chip,
 };
+use tracing::info_span;
 
 /// Benchmark of aggregation VM performance.
 /// Proofs:
@@ -58,21 +60,21 @@ fn main() -> Result<()> {
             compiler_options,
         };
         let (program, input_stream) = build_verification_program(vdata, compiler_options);
-        let sdk = Sdk::new();
-        let app_pk = sdk.app_keygen(app_config)?;
+        let app_pk = AppProvingKey::keygen(app_config.clone())?;
         let app_vk = app_pk.get_app_vk();
-        let committed_exe = sdk.commit_app_exe(app_fri_params, program.into())?;
-        let mut prover = AppProver::<BabyBearPoseidon2Engine, _>::new(
+        let committed_exe = commit_app_exe(app_fri_params, program);
+        let mut prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
             NativeCpuBuilder,
-            app_pk.app_vm_pk,
-            committed_exe,
-        )?
-        .with_program_name("verify_fibair");
-        let proof = prover.generate_app_proof_without_continuations(
-            input_stream.into(),
-            NATIVE_MAX_TRACE_HEIGHTS,
+            &app_pk.app_vm_pk,
+            &committed_exe,
         )?;
-        sdk.verify_app_proof_without_continuations(&app_vk, &proof)?;
+        let proof = info_span!("verify_fibair", group = "verify_fibair").in_scope(|| {
+            #[cfg(feature = "metrics")]
+            metrics::counter!("fri.log_blowup")
+                .absolute(prover.vm.engine.fri_params().log_blowup as u64);
+            SingleSegmentVmProver::prove(&mut prover, input_stream, NATIVE_MAX_TRACE_HEIGHTS)
+        })?;
+        verify_single(&prover.vm.engine, &app_vk.app_vm_vk, &proof)?;
         Ok(())
     })?;
     Ok(())

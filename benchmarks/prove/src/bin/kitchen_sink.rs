@@ -91,29 +91,25 @@ fn main() -> Result<()> {
     let elf = args.build_bench_program("kitchen-sink", &vm_config, None)?;
     let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
 
-    let sdk = Sdk::new();
     let app_config = args.app_config(vm_config.clone());
-    let app_pk = Arc::new(sdk.app_keygen(app_config)?);
+    let sdk = Sdk::new(app_config)?;
+    let (app_pk, app_vk) = sdk.app_keygen();
     let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
 
-    let agg_config = args.agg_config();
+    let agg_pk = sdk.agg_keygen()?;
     let halo2_params_reader = CacheHalo2ParamsReader::new(
         args.kzg_params_dir
             .clone()
             .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
     );
-    let full_agg_pk = sdk.agg_keygen(
-        agg_config,
-        &halo2_params_reader,
-        &DefaultStaticVerifierPvHandler,
-    )?;
+    let halo2_pk = sdk.halo2_keygen(&halo2_params_reader, &DefaultStaticVerifierPvHandler)?;
 
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     verify_native_max_trace_heights(
         &sdk,
         app_pk.clone(),
         app_committed_exe.clone(),
-        full_agg_pk.agg_stark_pk.leaf_vm_pk.clone(),
+        agg_pk.leaf_vm_pk.clone(),
         args.agg_tree_config.num_children_leaf,
     )?;
 
@@ -129,7 +125,7 @@ fn main() -> Result<()> {
         )?;
         prover.set_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        prover.generate_proof_for_evm(stdin)
+        prover.prove_evm(stdin)
     })?;
     Ok(())
 }

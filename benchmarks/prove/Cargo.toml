@@ -28,6 +28,7 @@ tiny-keccak.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 tracing.workspace = true
+metrics.workspace = true
 
 [dev-dependencies]
 

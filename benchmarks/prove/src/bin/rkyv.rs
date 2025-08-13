@@ -20,6 +20,6 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let file_data = include_bytes!("../../../guest/rkyv/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe("rkyv", SdkVmCpuBuilder, config, exe, stdin)
+        args.bench_from_exe::<SdkVmCpuBuilder, _>("rkyv", config, exe, stdin)
     })
 }

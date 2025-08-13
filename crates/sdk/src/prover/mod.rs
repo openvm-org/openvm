@@ -33,7 +33,7 @@ mod evm {
     use crate::{
         commit::VmCommittedExe,
         config::AggregationTreeConfig,
-        keygen::{AggProvingKey, AppProvingKey},
+        keygen::{AggProvingKey, AppProvingKey, Halo2ProvingKey},
         stdin::StdIn,
         types::EvmProof,
         F, SC,
@@ -67,18 +67,15 @@ mod evm {
             app_pk: AppProvingKey<VB::VmConfig>,
             app_committed_exe: Arc<VmCommittedExe<SC>>,
             agg_pk: AggProvingKey,
+            halo2_pk: Halo2ProvingKey,
             agg_tree_config: AggregationTreeConfig,
         ) -> Result<Self, VirtualMachineError> {
-            let AggProvingKey {
-                agg_stark_pk,
-                halo2_pk,
-            } = agg_pk;
             let stark_prover = StarkProver::new(
                 app_vm_builder,
                 native_builder,
                 app_pk,
                 app_committed_exe,
-                agg_stark_pk,
+                agg_pk,
                 agg_tree_config,
             )?;
             Ok(Self {
@@ -92,10 +89,7 @@ mod evm {
             self
         }
 
-        pub fn generate_proof_for_evm(
-            &mut self,
-            input: StdIn,
-        ) -> Result<EvmProof, VirtualMachineError> {
+        pub fn prove_evm(&mut self, input: StdIn) -> Result<EvmProof, VirtualMachineError> {
             let root_proof = self
                 .stark_prover
                 .generate_proof_for_outer_recursion(input)?;

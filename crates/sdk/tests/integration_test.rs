@@ -19,7 +19,7 @@ use openvm_rv32im_transpiler::{
 };
 use openvm_sdk::{
     codec::{Decode, Encode},
-    config::{AggStarkConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
+    config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmConfig, SdkVmCpuBuilder},
     keygen::AppProvingKey,
     Sdk, StdIn,
 };
@@ -132,8 +132,8 @@ fn agg_config_for_test() -> AggConfig {
     }
 }
 
-fn agg_stark_config_for_test() -> AggStarkConfig {
-    AggStarkConfig {
+fn agg_stark_config_for_test() -> AggregationConfig {
+    AggregationConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
         leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
         internal_fri_params: FriParameters::new_for_testing(INTERNAL_LOG_BLOWUP),

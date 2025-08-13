@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
             args.agg_tree_config,
         )?;
         e2e_prover.set_program_name("fib_e2e");
-        e2e_prover.generate_proof_for_evm(stdin)
+        e2e_prover.prove_evm(stdin)
     })?;
 
     Ok(())

@@ -5145,6 +5145,7 @@ dependencies = [
  "derive_more 1.0.0",
  "eyre",
  "k256 0.13.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "metrics",
  "openvm-benchmarks-utils",
  "openvm-circuit",
  "openvm-continuations",

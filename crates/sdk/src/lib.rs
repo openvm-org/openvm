@@ -8,7 +8,7 @@ use std::{
 
 #[cfg(feature = "evm-verify")]
 use alloy_sol_types::sol;
-use commit::{commit_app_exe, AppExecutionCommit};
+use commit::AppExecutionCommit;
 use config::{AggregationTreeConfig, AppConfig};
 use getset::{Getters, MutGetters, WithSetters};
 use keygen::{AppProvingKey, AppVerifyingKey};
@@ -20,9 +20,9 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, Executor, InitFileGenerator, MeteredExecutor,
-        PreflightExecutor, SystemConfig, VerifiedExecutionPayload, VirtualMachineError, VmBuilder,
-        VmCircuitConfig, VmExecutionConfig, VmExecutor, VmVerificationError, CONNECTOR_AIR_ID,
-        PROGRAM_AIR_ID, PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
+        PreflightExecutor, SystemConfig, VirtualMachineError, VmBuilder, VmExecutionConfig,
+        VmExecutor, VmVerificationError, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+        PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
     },
     system::{
         memory::{
@@ -49,7 +49,6 @@ use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
-    p3_bn254_fr::Bn254Fr,
 };
 use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
@@ -58,13 +57,12 @@ use openvm_transpiler::{
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
 use crate::{
-    commit::CommitBytes,
-    config::{AggStarkConfig, SdkVmCpuBuilder},
-    keygen::{asm::program_to_asm, AggStarkProvingKey},
-    prover::{AppProver, StarkProver, VerifiedAppArtifacts},
+    config::{AggregationConfig, SdkVmCpuBuilder},
+    keygen::{asm::program_to_asm, AggProvingKey},
+    prover::{AppProver, StarkProver},
 };
 #[cfg(feature = "evm-prove")]
-use crate::{config::AggConfig, keygen::AggProvingKey, prover::EvmHalo2Prover, types::EvmProof};
+use crate::{keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -104,10 +102,12 @@ where
     VB: VmBuilder<E>,
     VB::VmConfig: VmExecutionConfig<F>,
 {
-    #[getset(get = "pub", set_with = "pub")]
-    agg_tree_config: AggregationTreeConfig,
     #[getset(get = "pub", get_mut = "pub")]
     app_config: AppConfig<VB::VmConfig>,
+    #[getset(get = "pub", get_mut = "pub")]
+    agg_config: AggregationConfig,
+    #[getset(get = "pub", set_with = "pub")]
+    agg_tree_config: AggregationTreeConfig,
 
     /// The `executor` may be used to construct different types of interpreters, given the program,
     /// for more specific execution purposes. By default, it is recommended to use the
@@ -116,8 +116,11 @@ where
     executor: VmExecutor<F, VB::VmConfig>,
 
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
+    agg_pk: OnceLock<AggProvingKey>,
 
+    #[getset(get = "pub")]
     pub(crate) app_vm_builder: VB,
+    #[getset(get = "pub")]
     pub(crate) native_builder: NativeBuilder,
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     transpiler: Option<Transpiler<F>>,
@@ -170,12 +173,14 @@ where
             .map_err(|e| SdkError::Vm(e.into()))?;
         Ok(Self {
             app_config,
+            agg_config: Default::default(),
+            agg_tree_config: Default::default(),
             app_vm_builder: Default::default(),
             native_builder: Default::default(),
-            agg_tree_config: Default::default(),
             transpiler: None,
             executor,
             app_pk: OnceLock::new(),
+            agg_pk: OnceLock::new(),
             _phantom: PhantomData,
         })
     }
@@ -236,7 +241,86 @@ where
         Ok(public_values)
     }
 
-    // TODO: switch committed_exe to just exe
+    // ======================== Proving Methods ============================
+
+    /// Generates a single aggregate STARK proof of the full program execution of the given
+    /// `app_exe` with program inputs `inputs`.
+    ///
+    /// The returned STARK proof is not intended for EVM verification. For EVM verification, use the
+    /// [`prove_evm`](Self::prove_evm) method, which requires the `"evm-prove"` feature to be
+    /// enabled.
+    pub fn prove(
+        &self,
+        app_committed_exe: Arc<VmCommittedExe<SC>>,
+        inputs: StdIn,
+    ) -> Result<VmStarkProof<SC>, SdkError> {
+        let mut prover = self.prover(app_committed_exe)?;
+        let proof = prover.prove(inputs)?;
+        Ok(proof)
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn prove_evm(
+        &self,
+        reader: &impl Halo2ParamsReader,
+        halo2_pk: Halo2ProvingKey,
+        app_committed_exe: Arc<VmCommittedExe<SC>>,
+        inputs: StdIn,
+    ) -> Result<EvmProof, SdkError> {
+        let mut evm_prover = self.evm_prover(reader, halo2_pk, app_committed_exe)?;
+        let proof = evm_prover.prove_evm(inputs)?;
+        Ok(proof)
+    }
+
+    // ========================= Prover Constructors =========================
+
+    /// Constructs a new [StarkProver] instance for the given executable.
+    /// This function will generate the [AppProvingKey] and [AggProvingKey] if they do not already
+    /// exist.
+    pub fn prover(
+        &self,
+        app_committed_exe: Arc<VmCommittedExe<SC>>,
+    ) -> Result<StarkProver<E, VB, NativeBuilder>, SdkError> {
+        let app_pk = self.app_pk().clone();
+        let agg_pk = self.agg_pk().clone();
+        let stark_prover = StarkProver::<E, _, _>::new(
+            self.app_vm_builder.clone(),
+            self.native_builder.clone(),
+            app_pk,
+            app_committed_exe,
+            agg_pk,
+            self.agg_tree_config,
+        )?;
+        Ok(stark_prover)
+    }
+
+    #[cfg(feature = "evm-prove")]
+    pub fn evm_prover(
+        &self,
+        reader: &impl Halo2ParamsReader,
+        halo2_pk: Halo2ProvingKey,
+        app_exe: Arc<VmCommittedExe<SC>>,
+    ) -> Result<EvmHalo2Prover<E, VB, NativeBuilder>, SdkError> {
+        let evm_prover = EvmHalo2Prover::<E, _, _>::new(
+            reader,
+            self.app_vm_builder.clone(),
+            self.native_builder.clone(),
+            self.app_pk().clone(),
+            app_exe,
+            self.agg_pk().clone(),
+            halo2_pk,
+            self.agg_tree_config,
+        )?;
+        Ok(evm_prover)
+    }
+
+    /// This constructor is for generating app proofs that do not require a single aggregate STARK
+    /// proof of the full program execution. For a single STARK proof, use the
+    /// [`prove`](Self::prove) method instead.
+    ///
+    /// Creates an app prover instance specific to the provided exe.
+    /// This function will generate the [AppProvingKey] if it doesn't already exist and use it to
+    /// construct the [AppProver].
     pub fn app_prover(
         &self,
         app_committed_exe: Arc<VmCommittedExe<SC>>,
@@ -246,6 +330,8 @@ where
             AppProver::<E, VB>::new(self.app_vm_builder.clone(), vm_pk, app_committed_exe)?;
         Ok(prover)
     }
+
+    // ======================== Keygen Related Methods ========================
 
     /// Generates the app proving key once and caches it. Future calls will return the cached key.
     ///
@@ -267,23 +353,18 @@ where
         })
     }
 
-    #[cfg(feature = "evm-prove")]
-    pub fn agg_keygen(
-        &self,
-        config: AggConfig,
-        reader: &impl Halo2ParamsReader,
-        pv_handler: &impl StaticVerifierPvHandler,
-    ) -> Result<AggProvingKey, SdkError> {
-        let agg_pk = AggProvingKey::keygen(config, reader, pv_handler)?;
+    // TODO: verifying key
+    pub fn agg_keygen(&self) -> Result<AggProvingKey, SdkError> {
+        let agg_pk = self.agg_pk().clone();
         Ok(agg_pk)
     }
 
-    pub fn agg_stark_keygen(&self, config: AggStarkConfig) -> Result<AggStarkProvingKey, SdkError> {
-        let agg_pk = AggStarkProvingKey::keygen(config)?;
-        Ok(agg_pk)
+    pub fn agg_pk(&self) -> &AggProvingKey {
+        self.agg_pk
+            .get_or_init(|| AggProvingKey::keygen(self.agg_config).expect("agg_keygen failed"))
     }
 
-    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggStarkProvingKey) -> String {
+    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggProvingKey) -> String {
         let kernel_asm = RootVmVerifierConfig {
             leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
             internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
@@ -301,28 +382,11 @@ where
         program_to_asm(kernel_asm)
     }
 
-    pub fn generate_e2e_stark_proof(
-        &self,
-        app_exe: Arc<VmCommittedExe<SC>>,
-        agg_stark_pk: AggStarkProvingKey,
-        inputs: StdIn,
-    ) -> Result<VmStarkProof<SC>, SdkError> {
-        let (app_pk, _) = self.app_keygen();
-        let mut stark_prover = StarkProver::<E, _, _>::new(
-            self.app_vm_builder.clone(),
-            self.native_builder.clone(),
-            app_pk,
-            app_exe,
-            agg_stark_pk,
-            self.agg_tree_config,
-        )?;
-        let proof = stark_prover.prove(inputs)?;
-        Ok(proof)
-    }
+    // ======================== Verification Methods ========================
 
-    pub fn verify_stark_proof(
+    pub fn verify_proof(
         &self,
-        agg_stark_pk: &AggStarkProvingKey,
+        agg_stark_pk: &AggProvingKey,
         expected_app_commit: AppExecutionCommit,
         proof: &VmStarkProof<SC>,
     ) -> Result<(), SdkError> {
@@ -434,40 +498,11 @@ where
         Ok(())
     }
 
-    #[cfg(feature = "evm-prove")]
-    pub fn generate_evm_proof(
-        &self,
-        reader: &impl Halo2ParamsReader,
-        app_vm_builder: VB,
-        app_pk: AppProvingKey<VB::VmConfig>,
-        app_exe: Arc<VmCommittedExe<SC>>,
-        agg_pk: AggProvingKey,
-        inputs: StdIn,
-    ) -> Result<EvmProof, SdkError>
-    where
-        VB: VmBuilder<E>,
-        <VB::VmConfig as VmExecutionConfig<F>>::Executor: Executor<F>
-            + MeteredExecutor<F>
-            + PreflightExecutor<F, <VB as VmBuilder<E>>::RecordArena>,
-    {
-        let mut e2e_prover = EvmHalo2Prover::<E, _, _>::new(
-            reader,
-            app_vm_builder,
-            self.native_builder.clone(),
-            app_pk,
-            app_exe,
-            agg_pk,
-            self.agg_tree_config,
-        )?;
-        let proof = e2e_prover.generate_proof_for_evm(inputs)?;
-        Ok(proof)
-    }
-
     #[cfg(feature = "evm-verify")]
     pub fn generate_halo2_verifier_solidity(
         &self,
         reader: &impl Halo2ParamsReader,
-        agg_pk: &AggProvingKey,
+        halo2_pk: &Halo2ProvingKey,
     ) -> Result<types::EvmHalo2Verifier, SdkError> {
         use std::{
             fs::{create_dir_all, write},
@@ -492,8 +527,8 @@ where
             EVM_HALO2_VERIFIER_PARENT_NAME,
         };
 
-        let params = reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
-        let pinning = &agg_pk.halo2_pk.wrapper.pinning;
+        let params = reader.read_params(halo2_pk.wrapper.pinning.metadata.config_params.k);
+        let pinning = &halo2_pk.wrapper.pinning;
 
         assert_eq!(
             pinning.metadata.config_params.k as u32,
@@ -507,7 +542,7 @@ where
             pinning.metadata.num_pvs.clone(),
         );
 
-        let wrapper_pvs = agg_pk.halo2_pk.wrapper.pinning.metadata.num_pvs.clone();
+        let wrapper_pvs = halo2_pk.wrapper.pinning.metadata.num_pvs.clone();
         let pvs_length = match wrapper_pvs.first() {
             // We subtract 14 to exclude the KZG accumulator and the app exe
             // and vm commits.

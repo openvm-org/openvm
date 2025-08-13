@@ -20,9 +20,8 @@ fn main() -> Result<()> {
         let data = include_str!("../../../guest/regex/regex_email.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmCpuBuilder, _>(
             "regex_program",
-            SdkVmCpuBuilder,
             config,
             exe,
             StdIn::from_bytes(&fe_bytes),

@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 10. Generate an EVM proof
     let builder = SdkVmCpuBuilder;
-    let proof = sdk.generate_evm_proof(
+    let proof = sdk.prove_evm(
         &halo2_params_reader,
         builder,
         app_pk,

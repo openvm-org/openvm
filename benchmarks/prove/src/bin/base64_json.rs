@@ -21,9 +21,8 @@ fn main() -> Result<()> {
         let data = include_str!("../../../guest/base64_json/json_payload_encoded.txt");
 
         let fe_bytes = data.to_owned().into_bytes();
-        args.bench_from_exe(
+        args.bench_from_exe::<SdkVmCpuBuilder, _>(
             "base64_json",
-            SdkVmCpuBuilder,
             config,
             exe,
             StdIn::from_bytes(&fe_bytes),
