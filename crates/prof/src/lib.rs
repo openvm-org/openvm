@@ -24,42 +24,13 @@ impl MetricDb {
 
         let mut db = MetricDb::default();
 
-        // Track e1 insns and per-segment preflight sum
-        let mut insns_e1: u64 = 0;
-        let mut insns_preflight: u64 = 0;
-
         // Process counters
         for entry in metrics.counter {
             if entry.value == 0.0 {
                 continue;
             }
-            let is_insns = entry.metric == INSNS_LABEL;
-
             let labels = Labels::from(entry.labels);
-            let is_e1 = labels.get(EXECUTE_MODE_LABEL) == Some(EXECUTE_E1_PREFIX);
-            let has_segment = labels.get("segment").is_some();
-            let is_keygen = labels
-                .get("group")
-                .is_some_and(|value| value.contains("keygen"));
-
-            if is_insns {
-                if is_e1 {
-                    insns_e1 = entry.value as u64;
-                    continue;
-                } else if has_segment && !is_keygen {
-                    insns_preflight += entry.value as u64;
-                }
-            }
-
             db.add_to_flat_dict(labels, entry.metric, entry.value);
-        }
-
-        // Validate that sum(insns within segment) == insns e1
-        if insns_preflight > 0 && insns_e1 > 0 {
-            assert_eq!(
-                insns_preflight, insns_e1,
-                "insns mismatch: preflight segments sum ({insns_preflight}) != e1 ({insns_e1})",
-            );
         }
 
         // Process gauges

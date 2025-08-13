@@ -125,11 +125,17 @@ impl GroupedMetrics {
                 let group_summaries: HashMap<MetricName, Stats> = metrics
                     .iter()
                     .map(|(metric_name, metrics)| {
-                        let mut summary = Stats::new();
-                        for (value, _) in metrics {
-                            summary.push(*value);
-                        }
-                        summary.finalize();
+                        let summary = if metric_name == INSNS_LABEL {
+                            Self::handle_insns(metrics)
+                        } else {
+                            let mut summary = Stats::new();
+                            for (value, _) in metrics {
+                                summary.push(*value);
+                            }
+
+                            summary.finalize();
+                            summary
+                        };
                         (metric_name.clone(), summary)
                     })
                     .collect();
@@ -142,6 +148,43 @@ impl GroupedMetrics {
         };
         metrics.compute_total();
         metrics
+    }
+
+    /// Special handling for insns metrics.
+    ///
+    /// For instruction count metrics, we may have both segmented and non-segmented data
+    /// in the same group. We validate that the non-segmented count equals the sum
+    /// of all segmented counts, then use only the segmented data for aggregation to
+    /// avoid double-counting.
+    fn handle_insns(metrics: &Vec<(f64, Labels)>) -> Stats {
+        let mut summary = Stats::new();
+        let mut insns_no_segment: u64 = 0;
+        let mut insns_segment_sum: u64 = 0;
+
+        for (value, labels) in metrics {
+            // app prove use segment as label, internal and leaf use idx as label
+            if labels
+                .0
+                .iter()
+                .any(|label_entry| label_entry.0 == "segment" || label_entry.0 == "idx")
+            {
+                insns_segment_sum += *value as u64;
+                summary.push(*value);
+            } else {
+                insns_no_segment = *value as u64;
+                // do not push the data to the summary, otherwise it will be double-counted
+            }
+        }
+        // Validate that sum(insns within segment) == insns without segment label
+        if insns_no_segment > 0 && insns_segment_sum > 0 {
+            assert_eq!(
+                insns_no_segment, insns_segment_sum,
+                "insns mismatch: insns without segment label {insns_no_segment} != sum of insns within segment {insns_segment_sum}",
+            );
+        }
+
+        summary.finalize();
+        summary
     }
 }
 
