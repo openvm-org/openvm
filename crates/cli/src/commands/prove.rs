@@ -13,7 +13,7 @@ use openvm_sdk::{
     },
     keygen::AppProvingKey,
     types::VmStarkProofBytes,
-    VmCommittedExe<SC>, Sdk,
+    Sdk,
 };
 
 use super::{RunArgs, RunCargoArgs};
