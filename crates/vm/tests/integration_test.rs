@@ -953,7 +953,7 @@ fn test_vm_execute_metered_cost_halt() {
     type F = BabyBear;
 
     setup_tracing();
-    let mut config = test_native_config();
+    let config = test_native_config();
 
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
     let (vm, _) =
@@ -983,17 +983,13 @@ fn test_vm_execute_metered_cost_halt() {
 
     assert_eq!(output1.instret, instructions.len() as u64);
 
-    // Create a new VM with limited execution cost
-    config.system.set_max_execution_cost(1);
-    let engine2 = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
-    let (vm2, _) = VirtualMachine::new_with_keygen(engine2, NativeCpuBuilder, config).unwrap();
-
-    let executor_idx_to_air_idx2 = vm2.executor_idx_to_air_idx();
-    let instance2 = vm2
+    let executor_idx_to_air_idx2 = vm.executor_idx_to_air_idx();
+    let instance2 = vm
         .executor()
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
-    let ctx2 = vm2.build_metered_cost_ctx();
+    let mut ctx2 = vm.build_metered_cost_ctx();
+    ctx2.set_max_execution_cost(0);
     let output2 = instance2
         .execute_metered_cost(vec![], ctx2)
         .expect("Failed to execute");

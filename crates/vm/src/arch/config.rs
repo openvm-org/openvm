@@ -17,11 +17,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use super::{AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID};
 use crate::{
     arch::{
-        execution_mode::{
-            metered::segment_ctx::SegmentationLimits, metered_cost::DEFAULT_MAX_COST,
-        },
-        AirInventory, AirInventoryError, Arena, ChipInventoryError, ExecutorInventory,
-        ExecutorInventoryError,
+        execution_mode::metered::segment_ctx::SegmentationLimits, AirInventory, AirInventoryError,
+        Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
         memory::{
@@ -257,11 +254,6 @@ pub struct SystemConfig {
     #[serde(skip, default = "SegmentationLimits::default")]
     #[getset(set = "pub")]
     pub segmentation_limits: SegmentationLimits,
-    /// This field is skipped in serde as it's only used in execution and
-    /// not needed after any serialize/deserialize.
-    #[serde(skip, default)]
-    #[getset(set = "pub")]
-    pub max_execution_cost: u64,
 }
 
 impl SystemConfig {
@@ -282,7 +274,6 @@ impl SystemConfig {
             num_public_values,
             profiling: false,
             segmentation_limits: SegmentationLimits::default(),
-            max_execution_cost: DEFAULT_MAX_COST,
         }
     }
 
