@@ -5,6 +5,7 @@ use crate::chip::NativePoseidon2Filler;
 pub mod air;
 pub mod chip;
 pub mod columns;
+mod execution;
 #[cfg(test)]
 mod tests;
 

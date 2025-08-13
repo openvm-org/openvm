@@ -2,11 +2,12 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller};
 
+mod core;
+mod execution;
+pub use core::*;
+
 #[cfg(test)]
 mod tests;
-
-mod core;
-pub use core::*;
 
 pub type FieldArithmeticAir = VmAirWrapper<AluNativeAdapterAir, FieldArithmeticCoreAir>;
 pub type FieldArithmeticExecutor = FieldArithmeticCoreExecutor<AluNativeAdapterExecutor>;

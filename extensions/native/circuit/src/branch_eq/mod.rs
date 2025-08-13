@@ -2,6 +2,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 
 mod core;
+mod execution;
 pub use core::*;
 
 use crate::adapters::{

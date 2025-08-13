@@ -3,6 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller};
 
 mod core;
+mod execution;
 pub use core::*;
 
 #[cfg(test)]
