@@ -1,8 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_stark_backend::p3_field::PrimeField32;
-use p3_keccak_air::NUM_ROUNDS;
-
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -12,6 +9,8 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
+use p3_keccak_air::NUM_ROUNDS;
 
 use super::{KeccakVmExecutor, KECCAK_WORD_SIZE};
 use crate::utils::{keccak256, num_keccak_f};

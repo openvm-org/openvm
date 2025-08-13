@@ -6,6 +6,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use super::PublicValuesExecutor;
 use crate::{
     arch::{
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
@@ -14,8 +15,6 @@ use crate::{
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
-
-use super::PublicValuesExecutor;
 
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
