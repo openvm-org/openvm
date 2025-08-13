@@ -5,7 +5,7 @@ use eyre::Result;
 use memmap2::Mmap;
 
 use crate::{
-    aggregate::{EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL},
+    aggregate::{EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL, INSNS_LABEL},
     types::{Labels, Metric, MetricDb, MetricsFile},
 };
 
@@ -21,13 +21,42 @@ impl MetricDb {
 
         let mut db = MetricDb::default();
 
+        // For special-casing `insns`: track e1 insns (which has no `segment` label) and per-segment
+        // sums.
+        let mut insns_e1: f64 = 0.0;
+        let mut insns_sum_with_segment: f64 = 0.0;
+
         // Process counters
         for entry in metrics.counter {
             if entry.value == 0.0 {
                 continue;
             }
+            let is_insns = entry.metric == INSNS_LABEL;
+
             let labels = Labels::from(entry.labels);
-            db.add_to_flat_dict(labels, entry.metric, entry.value);
+            let has_segment = labels.get("segment").is_some();
+
+            if is_insns && has_segment {
+                insns_sum_with_segment += entry.value;
+                db.add_to_flat_dict(labels, entry.metric, entry.value);
+            } else if is_insns {
+                // We do not add the value to the dict to avoid double-counting
+                insns_e1 = entry.value;
+            } else {
+                db.add_to_flat_dict(labels, entry.metric, entry.value);
+            }
+        }
+
+        // Validate that sum(insns with segment) == insns e1
+        if insns_sum_with_segment > 0.0 && insns_e1 > 0.0 {
+            let eps = 0.01;
+            assert!(
+                (insns_sum_with_segment - insns_e1).abs() <= eps,
+                "insns mismatch: segments sum ({}) != total ({}) (eps {})",
+                insns_sum_with_segment,
+                insns_e1,
+                eps
+            );
         }
 
         // Process gauges
