@@ -4,13 +4,12 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::system::memory::POINTER_MAX_BITS;
 use openvm_circuit::{
     arch::{
         E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError, Executor,
         MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, VmExecState,
     },
-    system::memory::online::GuestMemory,
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
