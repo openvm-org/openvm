@@ -18,8 +18,8 @@ use tracing::info_span;
 use crate::{
     arch::{
         execution_mode::{
-            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCtx, MeteredExecutionCtxTrait,
-            Segment,
+            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCostExecutionOutput,
+            MeteredCtx, MeteredExecutionCtxTrait, Segment,
         },
         ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
@@ -284,7 +284,7 @@ where
         &self,
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCostCtx,
-    ) -> Result<u64, ExecutionError> {
+    ) -> Result<MeteredCostExecutionOutput, ExecutionError> {
         let vm_state = VmState::initial(
             &self.system_config,
             &self.init_memory,
@@ -302,7 +302,7 @@ where
         &self,
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<u64, ExecutionError> {
+    ) -> Result<MeteredCostExecutionOutput, ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
         // Start execution
         execute_with_metrics!(
@@ -311,9 +311,10 @@ where
             &mut exec_state,
             &self.pre_compute_insns
         );
-        check_termination(exec_state.exit_code)?;
-        let VmExecState { ctx, .. } = exec_state;
-        Ok(ctx.cost)
+        check_exit_code(exec_state.exit_code)?;
+        let VmExecState { ctx, vm_state, .. } = exec_state;
+        let output = MeteredCostExecutionOutput::new(vm_state.instret, ctx.cost);
+        Ok(output)
     }
 }
 

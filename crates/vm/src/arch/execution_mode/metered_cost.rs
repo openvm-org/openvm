@@ -1,38 +1,36 @@
 use std::num::NonZero;
 
+use getset::WithSetters;
 use openvm_instructions::riscv::RV32_IMM_AS;
 
 use crate::{
-    arch::{ExecutionCtxTrait, MeteredExecutionCtxTrait, VmExecState, PUBLIC_VALUES_AIR_ID},
+    arch::{
+        execution_mode::metered::segment_ctx::DEFAULT_MAX_CELLS as DEFAULT_SEGMENT_MAX_CELLS,
+        ExecutionCtxTrait, MeteredExecutionCtxTrait, SystemConfig, VmExecState,
+    },
     system::memory::online::GuestMemory,
 };
 
+const DEFAULT_MAX_SEGMENTS: u64 = 100;
+pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
+
+#[derive(Debug, Copy, Clone, derive_new::new)]
+pub struct MeteredCostExecutionOutput {
+    pub instret: u64,
+    pub cost: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct AccessAdapterCtx {
-    as_byte_alignment_bits: Vec<u8>,
+    min_block_size_bits: Vec<u8>,
     idx_offset: usize,
 }
 
 impl AccessAdapterCtx {
-    pub fn new(
-        as_byte_alignment_bits: Vec<u8>,
-        has_public_values_chip: bool,
-        continuations_enabled: bool,
-    ) -> Self {
-        let boundary_idx = if has_public_values_chip {
-            PUBLIC_VALUES_AIR_ID + 1
-        } else {
-            PUBLIC_VALUES_AIR_ID
-        };
-        let idx_offset = if continuations_enabled {
-            boundary_idx + 2
-        } else {
-            boundary_idx + 1
-        };
-
+    pub fn new(config: &SystemConfig) -> Self {
         Self {
-            as_byte_alignment_bits,
-            idx_offset,
+            min_block_size_bits: config.memory_config.min_block_size_bits(),
+            idx_offset: config.access_adapter_air_id_offset(),
         }
     }
 
@@ -44,13 +42,13 @@ impl AccessAdapterCtx {
         size_bits: u32,
         widths: &[usize],
     ) {
-        debug_assert!((address_space as usize) < self.as_byte_alignment_bits.len());
+        debug_assert!((address_space as usize) < self.min_block_size_bits.len());
 
         // SAFETY: address_space passed is usually a hardcoded constant or derived from an
         // Instruction where it is bounds checked before passing
         let align_bits = unsafe {
             *self
-                .as_byte_alignment_bits
+                .min_block_size_bits
                 .get_unchecked(address_space as usize)
         };
         debug_assert!(
@@ -71,30 +69,35 @@ impl AccessAdapterCtx {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
     pub access_adapter_ctx: AccessAdapterCtx,
+    #[getset(set_with = "pub")]
+    pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
     pub cost: u64,
 }
 
 impl MeteredCostCtx {
-    pub fn new(
-        widths: Vec<usize>,
-        as_byte_alignment_bits: Vec<u8>,
-        has_public_values_chip: bool,
-        continuations_enabled: bool,
-    ) -> Self {
-        let access_adapter_ctx = AccessAdapterCtx::new(
-            as_byte_alignment_bits,
-            has_public_values_chip,
-            continuations_enabled,
-        );
+    pub fn new(widths: Vec<usize>, config: &SystemConfig) -> Self {
+        let access_adapter_ctx = AccessAdapterCtx::new(config);
         Self {
             widths,
             access_adapter_ctx,
+            max_execution_cost: DEFAULT_MAX_COST,
             cost: 0,
+        }
+    }
+
+    #[cold]
+    fn check_cost_limit(&self) {
+        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
+            panic!(
+                "Execution cost {} exceeded maximum allowed cost of {}",
+                self.cost,
+                2 * DEFAULT_MAX_COST
+            );
         }
     }
 }
@@ -112,6 +115,8 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             "size must be a power of 2, got {}",
             size
         );
+        // Prevent unbounded memory accesses per instruction
+        self.check_cost_limit();
 
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
@@ -124,8 +129,8 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         );
     }
 
-    fn should_suspend<F>(_vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        false
+    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        vm_state.ctx.cost > vm_state.ctx.max_execution_cost
     }
 }
 

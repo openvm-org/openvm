@@ -280,7 +280,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(ignore, args = AVAILABLE_PROGRAMS, sample_count=5)]
+#[divan::bench(ignore = true, args = AVAILABLE_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {

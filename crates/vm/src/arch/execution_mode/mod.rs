@@ -1,12 +1,12 @@
 use crate::{arch::VmExecState, system::memory::online::GuestMemory};
 
 pub mod metered;
-mod metered_cost;
+pub mod metered_cost;
 mod preflight;
 mod pure;
 
 pub use metered::{ctx::MeteredCtx, segment_ctx::Segment};
-pub use metered_cost::MeteredCostCtx;
+pub use metered_cost::{MeteredCostCtx, MeteredCostExecutionOutput};
 pub use preflight::PreflightCtx;
 pub use pure::ExecutionCtx;
 

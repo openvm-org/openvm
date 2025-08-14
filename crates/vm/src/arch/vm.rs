@@ -199,42 +199,17 @@ where
         widths: &[usize],
         interactions: &[usize],
     ) -> MeteredCtx {
-        let system_config = self.config.as_ref();
-        let as_byte_alignment_bits = system_config
-            .memory_config
-            .addr_spaces
-            .iter()
-            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
-            .collect();
-
         MeteredCtx::new(
             constant_trace_heights.to_vec(),
-            system_config.has_public_values_chip(),
-            system_config.continuation_enabled,
-            as_byte_alignment_bits,
-            system_config.memory_config.memory_dimensions(),
             air_names.to_vec(),
             widths.to_vec(),
             interactions.to_vec(),
-            system_config.segmentation_limits,
+            self.config.as_ref(),
         )
     }
 
     pub fn build_metered_cost_ctx(&self, widths: &[usize]) -> MeteredCostCtx {
-        let system_config = self.config.as_ref();
-        let as_byte_alignment_bits = system_config
-            .memory_config
-            .addr_spaces
-            .iter()
-            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
-            .collect();
-
-        MeteredCostCtx::new(
-            widths.to_vec(),
-            as_byte_alignment_bits,
-            system_config.has_public_values_chip(),
-            system_config.continuation_enabled,
-        )
+        MeteredCostCtx::new(widths.to_vec(), self.config.as_ref())
     }
 }
 

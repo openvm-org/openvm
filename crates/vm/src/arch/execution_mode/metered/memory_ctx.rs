@@ -1,9 +1,6 @@
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
-use crate::{
-    arch::PUBLIC_VALUES_AIR_ID,
-    system::memory::{dimensions::MemoryDimensions, CHUNK},
-};
+use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
 #[derive(Clone, Debug)]
 pub struct BitSet {
@@ -103,7 +100,7 @@ impl BitSet {
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
-    as_byte_alignment_bits: Vec<u8>,
+    min_block_size_bits: Vec<u8>,
     pub boundary_idx: usize,
     pub merkle_tree_index: Option<usize>,
     pub adapter_offset: usize,
@@ -116,52 +113,24 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
-    pub fn new(
-        has_public_values_chip: bool,
-        continuations_enabled: bool,
-        as_byte_alignment_bits: Vec<u8>,
-        memory_dimensions: MemoryDimensions,
-    ) -> Self {
-        let boundary_idx = if has_public_values_chip {
-            PUBLIC_VALUES_AIR_ID + 1
-        } else {
-            PUBLIC_VALUES_AIR_ID
-        };
-
-        let merkle_tree_index = if continuations_enabled {
-            Some(boundary_idx + 1)
-        } else {
-            None
-        };
-
-        let adapter_offset = if continuations_enabled {
-            boundary_idx + 2
-        } else {
-            boundary_idx + 1
-        };
-
-        let chunk = if continuations_enabled {
-            // Persistent memory uses CHUNK-sized blocks
-            CHUNK as u32
-        } else {
-            // Volatile memory uses single units
-            1
-        };
-
+    pub fn new(config: &SystemConfig) -> Self {
+        let chunk = config.initial_block_size() as u32;
         let chunk_bits = chunk.ilog2();
+
+        let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
         Self {
             // Address height already considers `chunk_bits`.
             page_indices: BitSet::new(1 << (merkle_height.saturating_sub(PAGE_BITS))),
-            as_byte_alignment_bits,
-            boundary_idx,
-            merkle_tree_index,
-            adapter_offset,
+            min_block_size_bits: config.memory_config.min_block_size_bits(),
+            boundary_idx: config.memory_boundary_air_id(),
+            merkle_tree_index: config.memory_merkle_air_id(),
+            adapter_offset: config.access_adapter_air_id_offset(),
             chunk,
             chunk_bits,
             memory_dimensions,
-            continuations_enabled,
+            continuations_enabled: config.continuation_enabled,
             page_access_count: 0,
             addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
         }
@@ -240,13 +209,13 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         size_bits: u32,
         num: u32,
     ) {
-        debug_assert!((address_space as usize) < self.as_byte_alignment_bits.len());
+        debug_assert!((address_space as usize) < self.min_block_size_bits.len());
 
         // SAFETY: address_space passed is usually a hardcoded constant or derived from an
         // Instruction where it is bounds checked before passing
         let align_bits = unsafe {
             *self
-                .as_byte_alignment_bits
+                .min_block_size_bits
                 .get_unchecked(address_space as usize)
         };
         debug_assert!(

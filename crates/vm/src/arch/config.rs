@@ -11,6 +11,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
     p3_field::Field,
+    p3_util::log2_strict_usize,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -220,6 +221,13 @@ impl MemoryConfig {
         addr_spaces[NATIVE_AS as usize].num_cells = 1 << 29;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17, 8)
     }
+
+    pub fn min_block_size_bits(&self) -> Vec<u8> {
+        self.addr_spaces
+            .iter()
+            .map(|addr_sp| log2_strict_usize(addr_sp.min_block_size) as u8)
+            .collect()
+    }
 }
 
 /// System-level configuration for the virtual machine. Contains all configuration parameters that
@@ -323,6 +331,16 @@ impl SystemConfig {
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
     pub fn memory_boundary_air_id(&self) -> usize {
         PUBLIC_VALUES_AIR_ID + usize::from(self.has_public_values_chip())
+    }
+
+    /// Returns the AIR ID of the memory merkle AIR. Returns None if continuations are not enabled.
+    pub fn memory_merkle_air_id(&self) -> Option<usize> {
+        let boundary_idx = self.memory_boundary_air_id();
+        if self.continuation_enabled {
+            Some(boundary_idx + 1)
+        } else {
+            None
+        }
     }
 
     /// AIR ID for the first memory access adapter AIR.
