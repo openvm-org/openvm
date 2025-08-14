@@ -12,6 +12,10 @@ pub fn default_agg_stark_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/agg_stark.pk"
 }
 
+pub fn default_agg_stark_vk_path() -> String {
+    env::var("HOME").unwrap() + "/.openvm/agg_stark.vk"
+}
+
 pub fn default_agg_halo2_pk_path() -> String {
     env::var("HOME").unwrap() + "/.openvm/agg_halo2.pk"
 }

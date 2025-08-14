@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use eyre::Result;
-use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
-use openvm_sdk::{fs::read_exe_from_file, Sdk};
+use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
+use openvm_sdk::{fs::read_object_from_file, Sdk, F};
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
@@ -247,14 +247,10 @@ impl RunCmd {
                 .to_owned()
                 .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
         )?;
-        let exe = read_exe_from_file(exe_path)?;
+        let exe: VmExe<F> = read_object_from_file(exe_path)?;
 
-        let sdk = Sdk::new();
-        let output = sdk.execute(
-            exe,
-            app_config.app_vm_config,
-            read_to_stdin(&self.run_args.input)?,
-        )?;
+        let sdk = Sdk::new(app_config)?;
+        let output = sdk.execute(exe, read_to_stdin(&self.run_args.input)?)?;
         println!("Execution output: {:?}", output);
         Ok(())
     }

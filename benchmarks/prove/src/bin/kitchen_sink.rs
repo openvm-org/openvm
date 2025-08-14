@@ -1,46 +1,33 @@
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::{arch::instructions::exe::VmExe, system::program::trace::VmCommittedExe};
+use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, DEFAULT_PARAMS_DIR};
 use openvm_sdk::{
-    commit::commit_app_exe,
-    config::{SdkVmConfig, SdkVmCpuBuilder},
-    keygen::AppProvingKey,
-    prover::{
-        vm::{new_local_prover, types::VmProvingKey},
-        EvmHalo2Prover,
-    },
-    DefaultStaticVerifierPvHandler, Sdk, StdIn, SC,
+    config::SdkVmConfig,
+    prover::vm::{new_local_prover, types::VmProvingKey},
+    Sdk, StdIn, F, SC,
 };
 use openvm_stark_sdk::{
     bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
 };
-use openvm_transpiler::FromElf;
 
 fn verify_native_max_trace_heights(
     sdk: &Sdk,
-    app_pk: Arc<AppProvingKey<SdkVmConfig>>,
-    app_committed_exe: Arc<VmCommittedExe<SC>>,
+    app_exe: Arc<VmExe<F>>,
     leaf_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
     num_children_leaf: usize,
 ) -> Result<()> {
-    let app_proof = sdk.generate_app_proof(
-        SdkVmCpuBuilder,
-        app_pk.clone(),
-        app_committed_exe.clone(),
-        StdIn::default(),
-    )?;
+    let app_proof = sdk.app_prover(app_exe)?.prove(StdIn::default())?;
     let leaf_inputs =
         LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
     let mut leaf_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
         NativeCpuBuilder,
         &leaf_vm_pk,
-        &app_pk.leaf_committed_exe,
+        sdk.app_pk().leaf_committed_exe.exe.clone(),
     )?;
 
     for leaf_input in leaf_inputs {
@@ -88,36 +75,24 @@ fn main() -> Result<()> {
     let vm_config =
         SdkVmConfig::from_toml(include_str!("../../../guest/kitchen-sink/openvm.toml"))?
             .app_vm_config;
-    let elf = args.build_bench_program("kitchen-sink", &vm_config, None)?;
-    let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-
     let app_config = args.app_config(vm_config.clone());
+    let elf = args.build_bench_program("kitchen-sink", &vm_config, None)?;
     let sdk = Sdk::new(app_config)?;
-    let (app_pk, app_vk) = sdk.app_keygen();
-    let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
+    let exe = sdk.convert_to_exe(elf)?;
 
-    let agg_pk = sdk.agg_keygen()?;
-    let halo2_params_reader = CacheHalo2ParamsReader::new(
-        args.kzg_params_dir
-            .clone()
-            .unwrap_or(PathBuf::from(DEFAULT_PARAMS_DIR)),
-    );
-
+    let agg_pk = sdk.agg_pk();
     // Verify that NATIVE_MAX_TRACE_HEIGHTS remains valid
     verify_native_max_trace_heights(
         &sdk,
-        app_pk.clone(),
-        app_committed_exe.clone(),
+        exe.clone(),
         agg_pk.leaf_vm_pk.clone(),
         args.agg_tree_config.num_children_leaf,
     )?;
 
-    run_with_metric_collection("OUTPUT_PATH", || {
-        let mut prover = sdk
-            .evm_prover(app_committed_exe)?
-            .with_program_name("kitchen_sink");
+    run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<()> {
+        let mut prover = sdk.evm_prover(exe)?.with_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        prover.prove_evm(stdin)
-    })?;
-    Ok(())
+        let _proof = prover.prove_evm(stdin)?;
+        Ok(())
+    })
 }

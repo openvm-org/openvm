@@ -11,17 +11,14 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 #[cfg(feature = "evm-prove")]
 use {
-    crate::commit::CommitBytes,
+    crate::commit::{AppExecutionCommit, CommitBytes},
     itertools::Itertools,
     openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
     std::iter::{once, repeat_n},
     thiserror::Error,
 };
 
-use crate::{
-    codec::{decode_vec, encode_slice, Decode, Encode},
-    commit::AppExecutionCommit,
-};
+use crate::codec::{decode_vec, encode_slice, Decode, Encode};
 
 /// Number of bytes in a Bn254Fr.
 pub(crate) const BN254_BYTES: usize = 32;
@@ -139,6 +136,8 @@ impl TryFrom<RawEvmProof> for EvmProof {
     type Error = EvmProofConversionError;
 
     fn try_from(evm_proof: RawEvmProof) -> Result<Self, Self::Error> {
+        use crate::commit::AppExecutionCommit;
+
         let RawEvmProof { instances, proof } = evm_proof;
         if NUM_BN254_ACCUMULATOR + 2 >= instances.len() {
             return Err(EvmProofConversionError::InvalidLengthInstances);
@@ -238,12 +237,10 @@ impl TryFrom<EvmProof> for RawEvmProof {
     }
 }
 
+/// Struct purely for encoding and decoding of [VmStarkProof].
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VmStarkProofBytes {
-    // TODO[jpw]: this should not be in proof but output when committing to exe
-    #[serde(flatten)]
-    pub app_commit: AppExecutionCommit,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub user_public_values: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
@@ -251,11 +248,10 @@ pub struct VmStarkProofBytes {
 }
 
 impl VmStarkProofBytes {
-    pub fn new(app_commit: AppExecutionCommit, proof: VmStarkProof<SC>) -> Result<Self> {
+    pub fn new(proof: VmStarkProof<SC>) -> Result<Self> {
         let mut user_public_values = Vec::new();
         encode_slice(&proof.user_public_values, &mut user_public_values)?;
         Ok(Self {
-            app_commit,
             user_public_values,
             proof: proof.inner.encode_to_vec()?,
         })

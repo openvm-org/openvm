@@ -4,21 +4,21 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::SegmentationLimits, instructions::exe::VmExe,
-    verify_single, Executor, MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig,
-    VmBuilder, VmConfig, VmExecutionConfig,
+    execution_mode::metered::segment_ctx::SegmentationLimits, verify_single, Executor,
+    MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmConfig,
+    VmExecutionConfig,
 };
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
-    commit::commit_app_exe,
     config::{
-        AggregationConfig, AggregationTreeConfig, AppConfig, Halo2Config, DEFAULT_APP_LOG_BLOWUP,
-        DEFAULT_HALO2_VERIFIER_K, DEFAULT_INTERNAL_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP,
-        DEFAULT_ROOT_LOG_BLOWUP,
+        AggregationConfig, AggregationTreeConfig, AppConfig, Halo2Config, TranspilerConfig,
+        DEFAULT_APP_LOG_BLOWUP, DEFAULT_HALO2_VERIFIER_K, DEFAULT_INTERNAL_LOG_BLOWUP,
+        DEFAULT_LEAF_LOG_BLOWUP, DEFAULT_ROOT_LOG_BLOWUP,
     },
     keygen::_leaf_keygen,
     prover::{verify_app_proof, vm::new_local_prover, LeafProvingController},
+    types::ExecutableFormat,
     GenericSdk, StdIn,
 };
 use openvm_stark_sdk::{
@@ -164,14 +164,14 @@ impl BenchmarkCli {
         &self,
         bench_name: impl ToString,
         vm_config: VC,
-        exe: impl Into<VmExe<F>>,
+        exe: impl Into<ExecutableFormat>,
         input_stream: StdIn,
     ) -> Result<()>
     where
         VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>
             + Clone
             + Default,
-        VC: VmExecutionConfig<F> + VmConfig<SC>,
+        VC: VmExecutionConfig<F> + VmConfig<SC> + TranspilerConfig<F>,
         <VC as VmExecutionConfig<F>>::Executor:
             Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
     {
@@ -200,13 +200,14 @@ impl BenchmarkCli {
 pub fn bench_from_exe<E, VB, NativeBuilder>(
     bench_name: impl ToString,
     app_config: AppConfig<VB::VmConfig>,
-    exe: impl Into<VmExe<F>>,
+    exe: impl Into<ExecutableFormat>,
     input_stream: StdIn,
     leaf_vm_config: Option<NativeConfig>,
 ) -> Result<()>
 where
     E: StarkFriEngine<SC = SC>,
     VB: VmBuilder<E> + Clone + Default,
+    VB::VmConfig: TranspilerConfig<F>,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor:
         Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone + Default,
@@ -217,14 +218,11 @@ where
     let sdk = GenericSdk::<E, VB, NativeBuilder>::new(app_config.clone())?;
     // 1. Generate proving key from config.
     let (app_pk, app_vk) = info_span!("keygen", group = &bench_name).in_scope(|| sdk.app_keygen());
-    // 2. Commit to the exe by generating cached trace for program.
-    let committed_exe = info_span!("commit_exe", group = &bench_name)
-        .in_scope(|| commit_app_exe(app_config.app_fri_params.fri_params, exe));
     // 3. Executes runtime
     // 4. Generate trace
     // 5. Generate STARK proofs for each segment (segmentation is determined by `config`), with
     //    timer.
-    let mut prover = sdk.app_prover(committed_exe)?.with_program_name(bench_name);
+    let mut prover = sdk.app_prover(exe)?.with_program_name(bench_name);
     let app_proof = prover.prove(input_stream)?;
     // 6. Verify STARK proofs, including boundary conditions.
     verify_app_proof(&app_vk, &app_proof)?;
@@ -234,7 +232,7 @@ where
         let mut leaf_prover = new_local_prover(
             sdk.native_builder().clone(),
             &leaf_vm_pk,
-            &app_pk.leaf_committed_exe,
+            app_pk.leaf_committed_exe.exe.clone(),
         )?;
         let leaf_controller = LeafProvingController {
             num_children: AggregationTreeConfig::default().num_children_leaf,

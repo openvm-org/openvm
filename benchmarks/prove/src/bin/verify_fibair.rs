@@ -1,12 +1,15 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::{verify_single, SingleSegmentVmProver, DEFAULT_MAX_NUM_PUBLIC_VALUES};
+use openvm_circuit::arch::{
+    instructions::exe::VmExe, verify_single, SingleSegmentVmProver, DEFAULT_MAX_NUM_PUBLIC_VALUES,
+};
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::{
-    commit::commit_app_exe,
     config::{AppConfig, DEFAULT_APP_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP},
     keygen::AppProvingKey,
     prover::vm::new_local_prover,
@@ -62,11 +65,11 @@ fn main() -> Result<()> {
         let (program, input_stream) = build_verification_program(vdata, compiler_options);
         let app_pk = AppProvingKey::keygen(app_config.clone())?;
         let app_vk = app_pk.get_app_vk();
-        let committed_exe = commit_app_exe(app_fri_params, program);
+        let exe = Arc::new(VmExe::new(program));
         let mut prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
             NativeCpuBuilder,
             &app_pk.app_vm_pk,
-            &committed_exe,
+            exe,
         )?;
         let proof = info_span!("verify_fibair", group = "verify_fibair").in_scope(|| {
             #[cfg(feature = "metrics")]

@@ -181,6 +181,19 @@ where
     pub fn app_fri_params(&self) -> FriParameters {
         self.app_vm_pk.fri_params
     }
+
+    pub fn vm_config(&self) -> &VC {
+        &self.app_vm_pk.vm_config
+    }
+
+    pub fn app_config(&self) -> AppConfig<VC> {
+        AppConfig {
+            app_fri_params: self.app_fri_params().into(),
+            app_vm_config: self.vm_config().clone(),
+            leaf_fri_params: self.leaf_fri_params.into(),
+            compiler_options: Default::default(),
+        }
+    }
 }
 
 /// Try to determine statically if there will be an issue with the recursive verifier size and log

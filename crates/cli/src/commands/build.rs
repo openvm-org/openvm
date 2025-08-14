@@ -13,7 +13,7 @@ use openvm_build::{
 use openvm_circuit::arch::{
     instructions::exe::VmExe, InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME,
 };
-use openvm_sdk::{fs::write_exe_to_file, Sdk};
+use openvm_sdk::{config::TranspilerConfig, fs::write_object_to_file};
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, FromElf};
 
 use crate::util::{
@@ -444,7 +444,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         let file_name = format!("{}.vmexe", target_name);
         let file_path = target_output_dir.join(&file_name);
 
-        write_exe_to_file(exe, &file_path)?;
+        write_object_to_file(&file_path, exe)?;
         if let Some(output_dir) = &build_args.output_dir {
             create_dir_all(output_dir)?;
             copy(file_path, output_dir.join(file_name))?;

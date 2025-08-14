@@ -134,7 +134,8 @@ where
     /// STARK aggregation proving key and dummy internal proof. Dummy internal proof is saved for
     /// halo2 pkey generation usage.
     #[getset(get_mut = "pub")]
-    agg_pk_and_dummy_internal_proof: OnceLock<(AggProvingKey, Proof<SC>)>,
+    agg_pk: OnceLock<AggProvingKey>,
+    dummy_internal_proof: OnceLock<Proof<SC>>,
 
     #[cfg(feature = "evm-prove")]
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
@@ -227,7 +228,8 @@ where
             transpiler: None,
             executor,
             app_pk: OnceLock::new(),
-            agg_pk_and_dummy_internal_proof: OnceLock::new(),
+            agg_pk: OnceLock::new(),
+            dummy_internal_proof: OnceLock::new(),
             #[cfg(feature = "evm-prove")]
             halo2_params_reader: CacheHalo2ParamsReader::new_with_default_params_dir(),
             #[cfg(feature = "evm-prove")]
@@ -452,14 +454,31 @@ where
     }
 
     pub fn agg_pk(&self) -> &AggProvingKey {
-        let (agg_pk, _) = self.agg_pk_and_dummy_internal_proof();
-        agg_pk
-    }
-    pub fn agg_pk_and_dummy_internal_proof(&self) -> &(AggProvingKey, Proof<SC>) {
         // TODO[jpw]: use `get_or_try_init` once it is stable
-        self.agg_pk_and_dummy_internal_proof.get_or_init(|| {
-            AggProvingKey::dummy_proof_and_keygen(self.agg_config).expect("agg_keygen failed")
+        self.agg_pk.get_or_init(|| {
+            let (agg_pk, dummy_proof) =
+                AggProvingKey::dummy_proof_and_keygen(self.agg_config).expect("agg_keygen failed");
+            let prev = self.dummy_internal_proof.set(dummy_proof);
+            if prev.is_err() {
+                tracing::debug!("dummy proof already exists, did not overwrite");
+            }
+            agg_pk
         })
+    }
+    // We have this function in case agg_pk is set externally without setting dummy proof.
+    fn dummy_internal_proof(&self) -> &Proof<SC> {
+        self.dummy_internal_proof.get_or_init(|| {
+            let (agg_pk, dummy_proof) =
+                AggProvingKey::dummy_proof_and_keygen(self.agg_config).expect("agg_keygen failed");
+            let prev = self.agg_pk.set(agg_pk);
+            if prev.is_err() {
+                tracing::debug!("agg_pk already exists, did not overwrite");
+            }
+            dummy_proof
+        })
+    }
+    pub fn agg_pk_and_dummy_internal_proof(&self) -> (&AggProvingKey, &Proof<SC>) {
+        (self.agg_pk(), self.dummy_internal_proof())
     }
 
     pub fn generate_root_verifier_asm(&self) -> String {

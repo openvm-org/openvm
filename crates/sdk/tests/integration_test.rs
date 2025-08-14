@@ -114,19 +114,7 @@ fn app_exe_for_test() -> Arc<VmExe<F>> {
     .clone()
 }
 
-#[cfg(feature = "evm-verify")]
-fn agg_config_for_test() -> AggConfig {
-    AggConfig {
-        agg_stark_config: agg_stark_config_for_test(),
-        halo2_config: Halo2Config {
-            verifier_k: 24,
-            wrapper_k: None,
-            profiling: false,
-        },
-    }
-}
-
-fn agg_stark_config_for_test() -> AggregationConfig {
+fn agg_config_for_test() -> AggregationConfig {
     AggregationConfig {
         max_num_user_public_values: NUM_PUB_VALUES,
         leaf_fri_params: FriParameters::new_for_testing(LEAF_LOG_BLOWUP),
@@ -173,8 +161,8 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
     let exe = app_exe_for_test();
     let pc_start = exe.pc_start;
 
-    let agg_stark_config = agg_stark_config_for_test();
-    let leaf_vm_config = agg_stark_config.leaf_vm_config();
+    let agg_config = agg_config_for_test();
+    let leaf_vm_config = agg_config.leaf_vm_config();
 
     let sdk = Sdk::new(app_config)?;
     let app_pk = sdk.app_pk();
@@ -289,7 +277,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
 #[cfg(feature = "evm-verify")]
 #[test]
 #[ignore = "slow"]
-fn test_static_verifier_custom_pv_handler() {
+fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     use openvm_sdk::keygen::{AggProvingKey, Halo2ProvingKey};
 
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
@@ -356,7 +344,7 @@ fn test_static_verifier_custom_pv_handler() {
     let halo2_pk = Halo2ProvingKey::keygen(
         *sdk.halo2_config(),
         params_reader,
-        pv_handler,
+        &pv_handler,
         agg_pk,
         dummy_internal_proof.clone(),
     )?;
@@ -376,7 +364,8 @@ fn test_static_verifier_custom_pv_handler() {
         .clone()
         .try_into()
         .expect("failed to convert evm proof");
-    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
+    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof)?;
+    Ok(())
 }
 
 #[cfg(feature = "evm-verify")]
@@ -388,7 +377,7 @@ fn test_e2e_proof_generation_and_verification_with_pvs() -> eyre::Result<()> {
     sdk.agg_config_mut().leaf_fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
 
     let evm_verifier = sdk.generate_halo2_verifier_solidity()?;
-    let evm_proof = sdk.generate_evm_proof(app_exe_for_test(), StdIn::default())?;
+    let evm_proof = sdk.prove_evm(app_exe_for_test(), StdIn::default())?;
 
     verify_evm_halo2_proof_with_fallback(&evm_verifier, &evm_proof)?;
     Sdk::verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
