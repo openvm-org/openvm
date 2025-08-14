@@ -16,7 +16,6 @@ pub mod boundary {
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
-            sbox_regs: usize,
         ) -> i32;
 
         fn _volatile_boundary_tracegen(
@@ -42,7 +41,6 @@ pub mod boundary {
         num_records: usize,
         d_poseidon2_raw_buffer: &DeviceBuffer<T>,
         d_poseidon2_buffer_idx: &DeviceBuffer<u32>,
-        sbox_regs: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_persistent_boundary_tracegen(
             d_trace.as_mut_raw_ptr(),
@@ -54,7 +52,6 @@ pub mod boundary {
             d_poseidon2_raw_buffer.as_mut_raw_ptr(),
             d_poseidon2_buffer_idx.as_mut_ptr(),
             d_poseidon2_raw_buffer.len(),
-            sbox_regs,
         ))
     }
 

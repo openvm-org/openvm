@@ -1,7 +1,6 @@
 #include "launcher.cuh"
 #include "less_than.cuh"
 #include "poseidon2/fp_array.cuh"
-#include "poseidon2/params.cuh"
 #include "shared_buffer.cuh"
 #include "trace_access.h"
 
@@ -39,7 +38,6 @@ template <typename T> struct VolatileBoundaryCols {
     LessThanArrayAuxCols<T, ADDR_ELTS, AUX_LEN> addr_lt_aux;
 };
 
-template <typename PoseidonParams>
 __global__ void cukernel_persistent_boundary_tracegen(
     Fp *trace,
     size_t height,
@@ -57,7 +55,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
 
     if (record_idx < num_records) {
         BoundaryRecord<PERSISTENT_CHUNK> record = records[record_idx];
-        Poseidon2Buffer<PoseidonParams> poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
+        Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
         if (row_idx % 2 == 0) {
@@ -176,45 +174,23 @@ extern "C" int _persistent_boundary_tracegen(
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
-    size_t poseidon2_capacity,
-    size_t sbox_regs
+    size_t poseidon2_capacity
 ) {
     auto [grid, block] = kernel_launch_params(height);
     BoundaryRecord<PERSISTENT_CHUNK> *d_records =
         reinterpret_cast<BoundaryRecord<PERSISTENT_CHUNK> *>(d_raw_records);
     FpArray<16> *d_poseidon2_buffer = reinterpret_cast<FpArray<16> *>(d_poseidon2_raw_buffer);
-
-    switch (sbox_regs) {
-    case 1:
-        cukernel_persistent_boundary_tracegen<Poseidon2ParamsS1><<<grid, block>>>(
-            d_trace,
-            height,
-            width,
-            d_initial_mem,
-            d_records,
-            num_records,
-            d_poseidon2_buffer,
-            d_poseidon2_buffer_idx,
-            poseidon2_capacity
-        );
-        break;
-    case 0:
-        cukernel_persistent_boundary_tracegen<Poseidon2ParamsS0><<<grid, block>>>(
-            d_trace,
-            height,
-            width,
-            d_initial_mem,
-            d_records,
-            num_records,
-            d_poseidon2_buffer,
-            d_poseidon2_buffer_idx,
-            poseidon2_capacity
-        );
-        break;
-    default:
-        return cudaErrorInvalidConfiguration;
-    }
-
+    cukernel_persistent_boundary_tracegen<<<grid, block>>>(
+        d_trace,
+        height,
+        width,
+        d_initial_mem,
+        d_records,
+        num_records,
+        d_poseidon2_buffer,
+        d_poseidon2_buffer_idx,
+        poseidon2_capacity
+    );
     return cudaGetLastError();
 }
 

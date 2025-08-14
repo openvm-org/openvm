@@ -198,7 +198,6 @@ pub struct MemoryMerkleTree {
     zero_hash: DeviceBuffer<H>,
     pub height: usize,
     pub hasher_buffer: SharedBuffer<F>,
-    pub sbox_regs: usize,
     mem_config: MemoryConfig,
 }
 
@@ -246,7 +245,6 @@ impl MemoryMerkleTree {
             height: label_max_bits + log2_ceil_usize(num_addr_spaces),
             zero_hash,
             hasher_buffer: hasher_chip.shared_buffer(),
-            sbox_regs: hasher_chip.sbox_registers(),
             mem_config,
         }
     }
@@ -355,7 +353,6 @@ impl MemoryMerkleTree {
                     &actual_heights,
                     unpadded_height,
                     &self.hasher_buffer,
-                    self.sbox_regs,
                 )
                 .unwrap();
             }

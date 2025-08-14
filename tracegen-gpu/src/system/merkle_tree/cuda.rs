@@ -52,7 +52,6 @@ pub mod merkle_tree {
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
-            sbox_regs: usize,
         ) -> i32;
     }
 
@@ -122,7 +121,6 @@ pub mod merkle_tree {
         actual_heights: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
-        sbox_regs: usize,
     ) -> Result<(), CudaError> {
         let num_leaves = touched_blocks.len() / TIMESTAMPED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
@@ -144,7 +142,6 @@ pub mod merkle_tree {
             hasher_buffer.buffer.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             hasher_buffer.buffer.len(),
-            sbox_regs,
         ))
     }
 }
