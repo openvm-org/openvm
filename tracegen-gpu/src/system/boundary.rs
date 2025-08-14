@@ -32,7 +32,6 @@ use crate::{
 
 pub struct PersistentBoundary {
     pub poseidon2_buffer: SharedBuffer<F>,
-    pub sbox_regs: usize,
     /// A `Vec` of pointers to the copied guest memory on device.
     /// This struct cannot own the device memory, hence we take extra care not to use memory we
     /// don't own. TODO: use `Arc<DeviceBuffer>` instead?
@@ -59,11 +58,10 @@ pub struct BoundaryChipGPU {
 }
 
 impl BoundaryChipGPU {
-    pub fn persistent(poseidon2_buffer: SharedBuffer<F>, sbox_regs: usize) -> Self {
+    pub fn persistent(poseidon2_buffer: SharedBuffer<F>) -> Self {
         Self {
             fields: BoundaryFields::Persistent(PersistentBoundary {
                 poseidon2_buffer,
-                sbox_regs,
                 initial_leaves: Vec::new(),
                 touched_blocks: None,
             }),
@@ -158,7 +156,6 @@ impl<RA> Chip<RA, GpuBackend> for BoundaryChipGPU {
                         num_records,
                         &boundary.poseidon2_buffer.buffer,
                         &boundary.poseidon2_buffer.idx,
-                        boundary.sbox_regs,
                     )
                     .expect("Failed to generate persistent boundary trace");
                 }

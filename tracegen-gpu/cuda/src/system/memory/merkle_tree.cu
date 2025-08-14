@@ -2,8 +2,6 @@
 #include "poseidon2.cuh"
 #include "trace_access.h"
 #include "shared_buffer.cuh"
-#include "poseidon2/params.cuh"
-
 #include "launcher.cuh"
 
 using poseidon2::poseidon2_mix;
@@ -231,7 +229,6 @@ __global__ void mark_parents(
     *out_num_parents = num_parents;
 }
 
-template <typename PoseidonParams>
 __device__ void fill_merkle_trace_row(
     RowSlice row,
     bool new_values,
@@ -241,7 +238,7 @@ __device__ void fill_merkle_trace_row(
     Fp* digests,
     bool left_new,
     bool right_new,
-    Poseidon2Buffer<PoseidonParams>& poseidon2
+    Poseidon2Buffer& poseidon2
 ) {
     COL_WRITE_VALUE(row, MerkleCols, expand_direction, new_values ? Fp::neg_one() : Fp::one());
     COL_WRITE_VALUE(row, MerkleCols, height_section, false);
@@ -270,7 +267,6 @@ __device__ digest_t const* layer_value_on_height(
         : zero_hash + height;
 }
 
-template <typename PoseidonParams>
 __global__ void update_merkle_layer(
     uint32_t layer_height,
     digest_t const* zero_hash,
@@ -299,7 +295,7 @@ __global__ void update_merkle_layer(
     uint32_t const address_space_idx = layer[parent_ptr].address_space_idx;
     uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
     auto const subtree_layer = subtree_layers[address_space_idx];
-    Poseidon2Buffer<PoseidonParams> poseidon2(
+    Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16>*>(poseidon2_buffer),
         poseidon2_buffer_idx,
         poseidon2_capacity
@@ -322,7 +318,7 @@ __global__ void update_merkle_layer(
         COPY_DIGEST(cells, old_left_digest);
         COPY_DIGEST(cells + CELLS_OUT, old_right_digest);
         RowSlice row(merkle_trace + 2 * idx, trace_height);
-        fill_merkle_trace_row<PoseidonParams>(
+        fill_merkle_trace_row(
             row,
             false,
             address_space_idx,
@@ -349,7 +345,7 @@ __global__ void update_merkle_layer(
         }
         COPY_DIGEST(cells + CELLS_OUT, old_right_digest);
         RowSlice row(merkle_trace + 2 * idx + 1, trace_height);
-        fill_merkle_trace_row<PoseidonParams>(
+        fill_merkle_trace_row(
             row,
             true,
             address_space_idx,
@@ -368,7 +364,6 @@ __device__ uint32_t drop_highest_bit(uint32_t x) {
     return x & ~(1 << (31 - __clz(x)));
 }
 
-template <typename PoseidonParams>
 __global__ void update_to_root(
     uint32_t* layer_ids,
     LabeledDigest* layer,
@@ -399,7 +394,7 @@ __global__ void update_to_root(
     }
 
     Fp cells[CELLS];
-    Poseidon2Buffer<PoseidonParams> poseidon2(
+    Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16>*>(poseidon2_buffer),
         poseidon2_buffer_idx,
         poseidon2_capacity
@@ -420,7 +415,7 @@ __global__ void update_to_root(
             RowSlice row(merkle_trace + merkle_trace_offset, trace_height);
             COPY_DIGEST(cells, &out[2 * out_idx + 1]);
             COPY_DIGEST(cells + CELLS_OUT, &out[2 * out_idx + 2]);
-            fill_merkle_trace_row<PoseidonParams>(
+            fill_merkle_trace_row(
                 row,
                 false,
                 drop_highest_bit(out_idx + 1),
@@ -448,7 +443,7 @@ __global__ void update_to_root(
         layer[layer_ids[surely_surviving_child]].label = out_idx;
         {
             RowSlice row(merkle_trace + merkle_trace_offset + 1, trace_height);
-            fill_merkle_trace_row<PoseidonParams>(
+            fill_merkle_trace_row(
                 row,
                 true,
                 drop_highest_bit(out_idx + 1),
@@ -593,8 +588,7 @@ extern "C" int _update_merkle_tree(
     size_t const* actual_subtree_heights,
     Fp* d_poseidon2_raw_buffer,
     uint32_t* d_poseidon2_buffer_idx,
-    size_t poseidon2_capacity,
-    size_t sbox_regs
+    size_t poseidon2_capacity
 ) {
     assert(num_leaves > 0);
     uint32_t num_children = num_leaves;
@@ -642,85 +636,39 @@ extern "C" int _update_merkle_tree(
         }
         merkle_trace_offset -= 2 * num_parents;
         auto [grid, block] = kernel_launch_params(num_parents, 256);
-        switch (sbox_regs) {
-        case 1:
-            update_merkle_layer<Poseidon2ParamsS1><<<grid, block>>>(
-                h,
-                zero_hash,
-                actual_subtree_heights,
-                layer,
-                tmp_buf,
-                child_buf,
-                num_parents,
-                subtrees,
-                merkle_trace + merkle_trace_offset,
-                trace_height,
-                d_poseidon2_raw_buffer,
-                d_poseidon2_buffer_idx,
-                poseidon2_capacity
-            );
-            break;
-        case 0:
-            update_merkle_layer<Poseidon2ParamsS0><<<grid, block>>>(
-                h,
-                zero_hash,
-                actual_subtree_heights,
-                layer,
-                tmp_buf,
-                child_buf,
-                num_parents,
-                subtrees,
-                merkle_trace + merkle_trace_offset,
-                trace_height,
-                d_poseidon2_raw_buffer,
-                d_poseidon2_buffer_idx,
-                poseidon2_capacity
-            );
-            break;
-        default:
-            return cudaErrorInvalidConfiguration;
-        }
+        update_merkle_layer<<<grid, block>>>(
+            h,
+            zero_hash,
+            actual_subtree_heights,
+            layer,
+            tmp_buf,
+            child_buf,
+            num_parents,
+            subtrees,
+            merkle_trace + merkle_trace_offset,
+            trace_height,
+            d_poseidon2_raw_buffer,
+            d_poseidon2_buffer_idx,
+            poseidon2_capacity
+        );
         num_children = num_parents;
     }
     cudaFreeAsync(d_num_parents, cudaStreamPerThread);
-    switch (sbox_regs) {
-    case 1:
-        update_to_root<Poseidon2ParamsS1><<<1, 1>>>(
-            child_buf,
-            layer,
-            num_children,
-            num_subtrees,
-            subtrees,
-            top_roots,
-            merkle_trace,
-            merkle_trace_offset,
-            trace_height,
-            subtree_height + __builtin_ctz(num_subtrees),
-            d_poseidon2_raw_buffer,
-            d_poseidon2_buffer_idx,
-            poseidon2_capacity
-        );
-        break;
-    case 0:
-        update_to_root<Poseidon2ParamsS0><<<1, 1>>>(
-            child_buf,
-            layer,
-            num_children,
-            num_subtrees,
-            subtrees,
-            top_roots,
-            merkle_trace,
-            merkle_trace_offset,
-            trace_height,
-            subtree_height + __builtin_ctz(num_subtrees),
-            d_poseidon2_raw_buffer,
-            d_poseidon2_buffer_idx,
-            poseidon2_capacity
-        );
-        break;
-    default:
-        return cudaErrorInvalidConfiguration;
-    }
+    update_to_root<<<1, 1>>>(
+        child_buf,
+        layer,
+        num_children,
+        num_subtrees,
+        subtrees,
+        top_roots,
+        merkle_trace,
+        merkle_trace_offset,
+        trace_height,
+        subtree_height + __builtin_ctz(num_subtrees),
+        d_poseidon2_raw_buffer,
+        d_poseidon2_buffer_idx,
+        poseidon2_capacity
+    );
     
     return cudaGetLastError();
 }

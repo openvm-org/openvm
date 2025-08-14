@@ -70,10 +70,7 @@ impl MemoryInventoryGPU {
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     ) -> Self {
         Self {
-            boundary: BoundaryChipGPU::persistent(
-                hasher_chip.shared_buffer(),
-                hasher_chip.sbox_registers(),
-            ),
+            boundary: BoundaryChipGPU::persistent(hasher_chip.shared_buffer()),
             access_adapters: AccessAdapterInventoryGPU::new(
                 range_checker,
                 config.max_access_adapter_n,
