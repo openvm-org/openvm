@@ -6,6 +6,7 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_sdk::config::FriParameters;
+use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
 mod global;
@@ -21,6 +22,10 @@ pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
 const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
 const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
 const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
+
+pub trait TranspilerConfig<F> {
+    fn transpiler(&self) -> Transpiler<F>;
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {

@@ -38,11 +38,13 @@ where
 {
     pub program_name: Option<String>,
     #[getset(get = "pub")]
-    app_prover: VmInstance<E, VB>,
+    instance: VmInstance<E, VB>,
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
     #[getset(get = "pub")]
     leaf_verifier_program_commit: Com<E::SC>,
+
+    app_execution_commit: OnceLock<AppExecutionCommit>,
 }
 
 impl<E, VB> AppProver<E, VB>
@@ -50,7 +52,7 @@ where
     E: StarkFriEngine,
     VB: VmBuilder<E>,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]> + Into<[Val<E::SC>; CHUNK]>,
 {
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
     /// If a cached version of the program already exists on device, then directly use the
@@ -66,6 +68,7 @@ where
     ) -> Result<Self, VirtualMachineError> {
         let instance = new_local_prover(vm_builder, app_vm_pk, app_exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
+
         Ok(Self::new_from_instance(
             instance,
             app_vm_vk,
@@ -80,9 +83,10 @@ where
     ) -> Self {
         Self {
             program_name: None,
-            app_prover: instance,
+            instance,
             app_vm_vk,
             leaf_verifier_program_commit,
+            app_execution_commit: OnceLock::new(),
         }
     }
 
@@ -97,16 +101,19 @@ where
 
     /// Returns [AppExecutionCommit], which is a commitment to **both** the App VM and the App
     /// VmExe.
-    pub fn execution_commit(&self) -> AppExecutionCommit
-    where
-        Com<E::SC>: From<[Val<E::SC>; CHUNK]> + Into<[Val<E::SC>; CHUNK]>,
-    {
-        AppExecutionCommit::compute::<E::SC>(
-            &self.app_prover().vm.config().as_ref().memory_config,
-            self.app_prover().exe(),
-            self.app_prover().program_commitment().clone(),
-            self.leaf_verifier_program_commit.clone(),
-        )
+    pub fn app_commit(&self) -> AppExecutionCommit {
+        *self.app_execution_commit.get_or_init(|| {
+            AppExecutionCommit::compute::<E::SC>(
+                &self.instance().vm.config().as_ref().memory_config,
+                self.instance().exe(),
+                self.instance().program_commitment().clone(),
+                self.leaf_verifier_program_commit.clone(),
+            )
+        })
+    }
+
+    pub fn app_program_commit(&self) -> Com<E::SC> {
+        self.instance().program_commitment().clone()
     }
 
     /// Generates proof for every continuation segment
@@ -136,23 +143,31 @@ where
         .in_scope(|| {
             #[cfg(feature = "metrics")]
             metrics::counter!("fri.log_blowup")
-                .absolute(self.app_prover.vm.engine.fri_params().log_blowup as u64);
-            ContinuationVmProver::prove(&mut self.app_prover, input)
+                .absolute(self.instance.vm.engine.fri_params().log_blowup as u64);
+            ContinuationVmProver::prove(&mut self.instance, input)
         })?;
         // We skip verification of the user public values proof here because it is directly computed
         // from the merkle tree above
-        let _res = verify_segments(
-            &self.app_prover.vm.engine,
+        let res = verify_segments(
+            &self.instance.vm.engine,
             &self.app_vm_vk,
             &proofs.per_segment,
         )?;
-        // TODO: check _res.exe_commit against committed_exe commit
+        let app_exe_commit_u32s = self.app_commit().app_exe_commit.to_u32_digest();
+        let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
+        if exe_commit_u32s != app_exe_commit_u32s {
+            return Err(VmVerificationError::ExeCommitMismatch {
+                expected: app_exe_commit_u32s,
+                actual: exe_commit_u32s,
+            }
+            .into());
+        }
         Ok(proofs)
     }
 
     /// App VM config
     pub fn vm_config(&self) -> &VB::VmConfig {
-        self.app_prover.vm.config()
+        self.instance.vm.config()
     }
 }
 

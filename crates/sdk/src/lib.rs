@@ -41,6 +41,7 @@ use openvm_continuations::verifier::{
 // Re-exports:
 pub use openvm_continuations::{RootSC, C, F, SC};
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
+use openvm_native_compiler::conversion::CompilerOptions;
 #[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::utils::{CacheHalo2ParamsReader, Halo2ParamsReader};
 use openvm_stark_backend::proof::Proof;
@@ -59,7 +60,7 @@ use crate::{
     config::Halo2Config, keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof,
 };
 use crate::{
-    config::{AggregationConfig, SdkVmCpuBuilder},
+    config::{AggregationConfig, SdkVmCpuBuilder, TranspilerConfig},
     keygen::{asm::program_to_asm, AggProvingKey, AggVerifyingKey},
     prover::{AppProver, StarkProver},
     types::ExecutableFormat,
@@ -156,19 +157,11 @@ pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBui
 
 impl Sdk {
     pub fn standard() -> Self {
-        let app_config = AppConfig::standard();
-        let transpiler = app_config.app_vm_config.transpiler();
-        GenericSdk::new(app_config)
-            .expect("standard config is valid")
-            .with_transpiler(Some(transpiler))
+        GenericSdk::new(AppConfig::standard()).expect("standard config is valid")
     }
 
     pub fn riscv32() -> Self {
-        let app_config = AppConfig::riscv32();
-        let transpiler = app_config.app_vm_config.transpiler();
-        GenericSdk::new(app_config)
-            .expect("riscv32 config is valid")
-            .with_transpiler(Some(transpiler))
+        GenericSdk::new(AppConfig::riscv32()).expect("riscv32 config is valid")
     }
 }
 
@@ -184,20 +177,38 @@ where
     <NativeConfig as VmExecutionConfig<F>>::Executor:
         PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
 {
-    /// Creates SDK custom to the given [AppConfig].
-    ///
-    /// **Note**: This function does not set the transpiler, which must be done separately to
-    /// support RISC-V ELFs.
+    /// Creates SDK custom to the given [AppConfig], with a RISC-V transpiler.
     pub fn new(app_config: AppConfig<VB::VmConfig>) -> Result<Self, SdkError>
     where
         VB: Default,
         NativeBuilder: Default,
+        VB::VmConfig: TranspilerConfig<F>,
     {
-        let profiling = app_config.app_vm_config.as_ref().profiling;
+        let transpiler = app_config.app_vm_config.transpiler();
+        let sdk = Self::new_without_transpiler(app_config)?.with_transpiler(Some(transpiler));
+        Ok(sdk)
+    }
+
+    /// **Note**: This function does not set the transpiler, which must be done separately to
+    /// support RISC-V ELFs.
+    pub fn new_without_transpiler(app_config: AppConfig<VB::VmConfig>) -> Result<Self, SdkError>
+    where
+        VB: Default,
+        NativeBuilder: Default,
+    {
+        let system_config = app_config.app_vm_config.as_ref();
+        let profiling = system_config.profiling;
+        let compiler_options = CompilerOptions {
+            enable_cycle_tracker: profiling,
+            ..Default::default()
+        };
         let executor = VmExecutor::new(app_config.app_vm_config.clone())
             .map_err(|e| SdkError::Vm(e.into()))?;
         let agg_config = AggregationConfig {
+            max_num_user_public_values: system_config.num_public_values,
+            leaf_fri_params: app_config.leaf_fri_params.fri_params,
             profiling,
+            compiler_options,
             ..Default::default()
         };
         #[cfg(feature = "evm-prove")]
@@ -323,7 +334,7 @@ where
         inputs: StdIn,
     ) -> Result<(VmStarkProof<SC>, AppExecutionCommit), SdkError> {
         let mut prover = self.prover(app_exe)?;
-        let app_commit = prover.app_prover.execution_commit();
+        let app_commit = prover.app_prover.app_commit();
         let proof = prover.prove(inputs)?;
         Ok((proof, app_commit))
     }
@@ -444,7 +455,7 @@ where
         let (agg_pk, _) = self.agg_pk_and_dummy_internal_proof();
         agg_pk
     }
-    fn agg_pk_and_dummy_internal_proof(&self) -> &(AggProvingKey, Proof<SC>) {
+    pub fn agg_pk_and_dummy_internal_proof(&self) -> &(AggProvingKey, Proof<SC>) {
         // TODO[jpw]: use `get_or_try_init` once it is stable
         self.agg_pk_and_dummy_internal_proof.get_or_init(|| {
             AggProvingKey::dummy_proof_and_keygen(self.agg_config).expect("agg_keygen failed")

@@ -94,7 +94,7 @@ where
     }
 
     pub fn app_commit(&self) -> AppExecutionCommit {
-        self.app_prover.execution_commit()
+        self.app_prover.app_commit()
     }
 
     pub fn prove(&mut self, input: StdIn) -> Result<VmStarkProof<SC>, VirtualMachineError> {

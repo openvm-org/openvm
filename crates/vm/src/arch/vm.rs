@@ -269,6 +269,12 @@ pub enum VmVerificationError {
     #[error("program commit mismatch (index of mismatch proof: {index}")]
     ProgramCommitMismatch { index: usize },
 
+    #[error("exe commit mismatch (expected: {expected:?}, actual: {actual:?})")]
+    ExeCommitMismatch {
+        expected: [u32; CHUNK],
+        actual: [u32; CHUNK],
+    },
+
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
     InitialPcMismatch { initial: u32, prev_final: u32 },
 

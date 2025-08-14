@@ -45,7 +45,10 @@ use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
 use super::AppFriParams;
-use crate::{config::AppConfig, F};
+use crate::{
+    config::{AppConfig, TranspilerConfig},
+    F,
+};
 
 /// The recommended way to construct [SdkVmConfig] is using [SdkVmConfig::from_toml].
 ///
@@ -157,8 +160,8 @@ impl AppConfig<SdkVmConfig> {
     }
 }
 
-impl SdkVmConfig {
-    pub fn transpiler(&self) -> Transpiler<F> {
+impl TranspilerConfig<F> for SdkVmConfig {
+    fn transpiler(&self) -> Transpiler<F> {
         let mut transpiler = Transpiler::default();
         if self.rv32i.is_some() {
             transpiler = transpiler.with_extension(Rv32ITranspilerExtension);
