@@ -39,7 +39,6 @@ impl<RA, const NUM_BITS: usize> Chip<RA, GpuBackend> for DummyInteractionChipGPU
         unsafe {
             tracegen(
                 trace.buffer(),
-                height,
                 &self.data,
                 &self.bitwise.count,
                 NUM_BITS as u32,

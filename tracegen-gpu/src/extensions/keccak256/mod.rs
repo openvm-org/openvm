@@ -25,7 +25,7 @@ use crate::{
     },
 };
 
-mod cuda;
+pub mod cuda;
 use cuda::keccak256::*;
 
 mod extension;

@@ -1,6 +1,7 @@
 #include "launcher.cuh"
 #include "program.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 static constexpr uint32_t EXIT_CODE_FAIL = 1;
 
@@ -8,16 +9,15 @@ __global__ void program_cached_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    Fp *records,
-    size_t num_records,
+    DeviceBufferConstView<ProgramExecutionCols<Fp>> records,
     uint32_t pc_base,
     uint32_t pc_step,
     size_t terminate_opcode
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        ProgramExecutionCols<Fp> rec = reinterpret_cast<ProgramExecutionCols<Fp> *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& rec = records[idx];
         COL_WRITE_VALUE(row, ProgramExecutionCols, pc, rec.pc);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, rec.opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, rec.a);
@@ -44,8 +44,7 @@ extern "C" int _program_cached_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    Fp *d_records,
-    size_t num_records,
+    DeviceBufferConstView<ProgramExecutionCols<Fp>> d_records,
     uint32_t pc_base,
     uint32_t pc_step,
     size_t terminate_opcode
@@ -54,7 +53,7 @@ extern "C" int _program_cached_tracegen(
     assert(width == sizeof(ProgramExecutionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_cached_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, num_records, pc_base, pc_step, terminate_opcode
+        d_trace, height, width, d_records, pc_base, pc_step, terminate_opcode
     );
     return cudaGetLastError();
 }

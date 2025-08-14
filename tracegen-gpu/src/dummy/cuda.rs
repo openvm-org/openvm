@@ -1,6 +1,12 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+use stark_backend_gpu::{
+    cuda::{
+        d_buffer::{DeviceBuffer, DeviceBufferView},
+        error::CudaError,
+    },
+    prelude::F,
+};
 
 pub mod var_range {
     use super::*;
@@ -8,21 +14,21 @@ pub mod var_range {
     extern "C" {
         fn _var_range_dummy_tracegen(
             d_data: *const u32,
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             d_rc_count: *mut u32,
             data_len: usize,
             range_max_bits: usize,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
+    pub unsafe fn tracegen(
         d_data: &DeviceBuffer<u32>,
-        d_trace: &DeviceBuffer<T>,
-        d_rc_count: &DeviceBuffer<T>,
+        d_trace: &DeviceBuffer<F>,
+        d_rc_count: &DeviceBuffer<F>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_var_range_dummy_tracegen(
             d_data.as_ptr(),
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             d_rc_count.as_mut_ptr() as *mut u32,
             d_data.len(),
             d_rc_count.len(),
@@ -35,7 +41,7 @@ pub mod encoder {
 
     extern "C" {
         fn _encoder_tracegen(
-            trace: *mut std::ffi::c_void,
+            trace: *mut F,
             num_flags: u32,
             max_degree: u32,
             reserve_invalid: bool,
@@ -43,15 +49,15 @@ pub mod encoder {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         num_flags: u32,
         max_degree: u32,
         reserve_invalid: bool,
         expected_k: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_encoder_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             num_flags,
             max_degree,
             reserve_invalid,
@@ -64,21 +70,17 @@ pub mod is_zero {
     use super::*;
 
     extern "C" {
-        fn _iszero_tracegen(
-            output: *mut std::ffi::c_void,
-            inputs: *mut std::ffi::c_void,
-            n: usize,
-        ) -> i32;
+        fn _iszero_tracegen(output: *mut F, inputs: *mut F, n: u32) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_output: &DeviceBuffer<T>,
-        d_inputs: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_output: &DeviceBuffer<F>,
+        d_inputs: &DeviceBuffer<F>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_iszero_tracegen(
-            d_output.as_mut_raw_ptr(),
-            d_inputs.as_mut_raw_ptr(),
-            d_inputs.len(),
+            d_output.as_mut_ptr(),
+            d_inputs.as_mut_ptr(),
+            d_inputs.len() as u32,
         ))
     }
 }
@@ -87,47 +89,42 @@ pub mod is_equal {
     use super::*;
 
     extern "C" {
-        fn _isequal_tracegen(
-            output: *mut std::ffi::c_void,
-            inputs_x: *mut std::ffi::c_void,
-            inputs_y: *mut std::ffi::c_void,
-            n: usize,
-        ) -> i32;
+        fn _isequal_tracegen(output: *mut F, inputs_x: *mut F, inputs_y: *mut F, n: u32) -> i32;
 
         fn _isequal_array_tracegen(
-            output: *mut std::ffi::c_void,
-            inputs_x: *mut std::ffi::c_void,
-            inputs_y: *mut std::ffi::c_void,
-            array_len: usize,
-            n: usize,
+            output: *mut F,
+            inputs_x: *mut F,
+            inputs_y: *mut F,
+            array_len: u32,
+            n: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_output: &DeviceBuffer<T>,
-        d_inputs_x: &DeviceBuffer<T>,
-        d_inputs_y: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_output: &DeviceBuffer<F>,
+        d_inputs_x: &DeviceBuffer<F>,
+        d_inputs_y: &DeviceBuffer<F>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_isequal_tracegen(
-            d_output.as_mut_raw_ptr(),
-            d_inputs_x.as_mut_raw_ptr(),
-            d_inputs_y.as_mut_raw_ptr(),
-            d_inputs_x.len(),
+            d_output.as_mut_ptr(),
+            d_inputs_x.as_mut_ptr(),
+            d_inputs_y.as_mut_ptr(),
+            d_inputs_x.len() as u32,
         ))
     }
 
-    pub unsafe fn tracegen_array<T>(
-        d_output: &DeviceBuffer<T>,
-        d_inputs_x: &DeviceBuffer<T>,
-        d_inputs_y: &DeviceBuffer<T>,
+    pub unsafe fn tracegen_array(
+        d_output: &DeviceBuffer<F>,
+        d_inputs_x: &DeviceBuffer<F>,
+        d_inputs_y: &DeviceBuffer<F>,
         array_len: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_isequal_array_tracegen(
-            d_output.as_mut_raw_ptr(),
-            d_inputs_x.as_mut_raw_ptr(),
-            d_inputs_y.as_mut_raw_ptr(),
-            array_len,
-            d_inputs_x.len() / array_len,
+            d_output.as_mut_ptr(),
+            d_inputs_x.as_mut_ptr(),
+            d_inputs_y.as_mut_ptr(),
+            array_len as u32,
+            (d_inputs_x.len() / array_len) as u32,
         ))
     }
 }
@@ -138,7 +135,7 @@ pub mod range_tuple_dummy {
     extern "C" {
         fn _range_tuple_dummy_tracegen(
             d_data: *const u32,
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             d_rc_count: *mut u32,
             data_height: usize,
             sizes: *const u32,
@@ -146,15 +143,15 @@ pub mod range_tuple_dummy {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
+    pub unsafe fn tracegen(
         d_data: &DeviceBuffer<u32>,
-        d_trace: &DeviceBuffer<T>,
-        d_rc_count: &DeviceBuffer<T>,
+        d_trace: &DeviceBuffer<F>,
+        d_rc_count: &DeviceBuffer<F>,
         sizes: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_tuple_dummy_tracegen(
             d_data.as_ptr(),
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             d_rc_count.as_mut_ptr() as *mut u32,
             d_data.len() / sizes.len(),
             sizes.as_ptr(),
@@ -167,7 +164,7 @@ pub mod fibair {
     use super::*;
 
     extern "C" {
-        fn _fibair_tracegen(output: *mut std::ffi::c_void, a: u32, b: u32, n: usize) -> i32;
+        fn _fibair_tracegen(output: *mut std::ffi::c_void, a: u32, b: u32, n: u32) -> i32;
     }
 
     pub unsafe fn fibair_tracegen<F>(
@@ -177,7 +174,7 @@ pub mod fibair {
         n: usize,
     ) -> Result<(), CudaError> {
         assert!(n.is_power_of_two());
-        CudaError::from_result(_fibair_tracegen(output.as_mut_raw_ptr(), a, b, n))
+        CudaError::from_result(_fibair_tracegen(output.as_mut_raw_ptr(), a, b, n as u32))
     }
 }
 
@@ -186,38 +183,38 @@ pub mod less_than {
 
     extern "C" {
         fn _assert_less_than_tracegen(
-            trace: *mut std::ffi::c_void,
-            trace_height: usize,
+            trace: *mut F,
+            trace_height: u32,
             pairs: *const u32,
-            max_bits: usize,
-            aux_len: usize,
+            max_bits: u32,
+            aux_len: u32,
             rc_count: *mut u32,
-            rc_num_bins: usize,
+            rc_num_bins: u32,
         ) -> i32;
 
         fn _less_than_tracegen(
-            trace: *mut std::ffi::c_void,
-            trace_height: usize,
+            trace: *mut F,
+            trace_height: u32,
             pairs: *const u32,
-            max_bits: usize,
-            aux_len: usize,
+            max_bits: u32,
+            aux_len: u32,
             rc_count: *mut u32,
-            rc_num_bins: usize,
+            rc_num_bins: u32,
         ) -> i32;
 
         fn _less_than_array_tracegen(
-            trace: *mut std::ffi::c_void,
-            trace_height: usize,
+            trace: *mut F,
+            trace_height: u32,
             pairs: *const u32,
-            max_bits: usize,
-            array_len: usize,
-            aux_len: usize,
+            max_bits: u32,
+            array_len: u32,
+            aux_len: u32,
             rc_count: *mut u32,
-            rc_num_bins: usize,
+            rc_num_bins: u32,
         ) -> i32;
     }
 
-    pub unsafe fn assert_less_than_tracegen<F>(
+    pub unsafe fn assert_less_than_tracegen(
         trace: &DeviceBuffer<F>,
         trace_height: usize,
         pairs: &DeviceBuffer<u32>,
@@ -226,17 +223,17 @@ pub mod less_than {
         rc_count: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_assert_less_than_tracegen(
-            trace.as_mut_raw_ptr(),
-            trace_height,
+            trace.as_mut_ptr(),
+            trace_height as u32,
             pairs.as_ptr(),
-            max_bits,
-            aux_len,
+            max_bits as u32,
+            aux_len as u32,
             rc_count.as_mut_ptr(),
-            rc_count.len(),
+            rc_count.len() as u32,
         ))
     }
 
-    pub unsafe fn less_than_tracegen<F>(
+    pub unsafe fn less_than_tracegen(
         trace: &DeviceBuffer<F>,
         trace_height: usize,
         pairs: &DeviceBuffer<u32>,
@@ -245,17 +242,17 @@ pub mod less_than {
         rc_count: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_tracegen(
-            trace.as_mut_raw_ptr(),
-            trace_height,
+            trace.as_mut_ptr(),
+            trace_height as u32,
             pairs.as_ptr(),
-            max_bits,
-            aux_len,
+            max_bits as u32,
+            aux_len as u32,
             rc_count.as_mut_ptr(),
-            rc_count.len(),
+            rc_count.len() as u32,
         ))
     }
 
-    pub unsafe fn less_than_array_tracegen<F>(
+    pub unsafe fn less_than_array_tracegen(
         trace: &DeviceBuffer<F>,
         trace_height: usize,
         pairs: &DeviceBuffer<u32>,
@@ -265,14 +262,14 @@ pub mod less_than {
         rc_count: &DeviceBuffer<u32>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_array_tracegen(
-            trace.as_mut_raw_ptr(),
-            trace_height,
+            trace.as_mut_ptr(),
+            trace_height as u32,
             pairs.as_ptr(),
-            max_bits,
-            array_len,
-            aux_len,
+            max_bits as u32,
+            array_len as u32,
+            aux_len as u32,
             rc_count.as_mut_ptr(),
-            rc_count.len(),
+            rc_count.len() as u32,
         ))
     }
 }
@@ -298,25 +295,20 @@ pub mod poseidon2 {
     use super::*;
 
     extern "C" {
-        fn _poseidon2_tracegen(
-            output: *mut std::ffi::c_void,
-            inputs: *mut std::ffi::c_void,
-            sbox_regs: u32,
-            n: u32,
-        ) -> i32;
+        fn _poseidon2_tracegen(output: *mut F, inputs: *mut F, sbox_regs: u32, n: u32) -> i32;
 
         fn _print_poseidon2_constants() -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_output: &DeviceBuffer<T>,
-        d_inputs: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_output: &DeviceBuffer<F>,
+        d_inputs: &DeviceBuffer<F>,
         sbox_regs: u32,
         n: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_poseidon2_tracegen(
-            d_output.as_mut_raw_ptr(),
-            d_inputs.as_mut_raw_ptr(),
+            d_output.as_mut_ptr(),
+            d_inputs.as_mut_ptr(),
             sbox_regs,
             n,
         ))
@@ -328,25 +320,22 @@ pub mod bitwise_op_lookup {
 
     extern "C" {
         fn _bitwise_dummy_tracegen(
-            d_trace: *mut std::ffi::c_void,
-            height: usize,
-            records: *const u32,
+            d_trace: *mut F,
+            records: DeviceBufferView,
             bitwise_count: *mut u32,
             bitwise_num_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
-        height: usize,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         records: &DeviceBuffer<u32>,
-        bitwise_count: &DeviceBuffer<T>,
+        bitwise_count: &DeviceBuffer<F>,
         bitwise_num_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_bitwise_dummy_tracegen(
-            d_trace.as_mut_raw_ptr(),
-            height,
-            records.as_ptr(),
+            d_trace.as_mut_ptr(),
+            records.view(),
             bitwise_count.as_mut_ptr() as *mut u32,
             bitwise_num_bits,
         ))

@@ -1,6 +1,7 @@
 #include "adapters/rdwrite.cuh"
 #include "histogram.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -53,8 +54,7 @@ struct Rv32JalLuiRecord {
 __global__ void jal_lui_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32JalLuiRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t *bw_ptr,
@@ -64,8 +64,8 @@ __global__ void jal_lui_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
 
-    if (idx < num_records) {
-        auto full = reinterpret_cast<Rv32JalLuiRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& full = records[idx];
 
         Rv32CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
@@ -80,8 +80,7 @@ extern "C" int _jal_lui_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Rv32JalLuiRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t *d_bw,
@@ -89,7 +88,7 @@ extern "C" int _jal_lui_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(Rv32JalLuiRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Rv32JalLuiCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
@@ -98,7 +97,6 @@ extern "C" int _jal_lui_tracegen(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(Rv32JalLuiRecord),
         d_rc,
         rc_bins,
         d_bw,

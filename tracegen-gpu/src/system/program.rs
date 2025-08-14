@@ -67,7 +67,6 @@ impl ProgramChipGPU {
                 trace.height(),
                 trace.width(),
                 &records,
-                num_records,
                 program.pc_base,
                 DEFAULT_PC_STEP,
                 SystemOpcode::TERMINATE.global_opcode().as_usize(),

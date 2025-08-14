@@ -46,7 +46,6 @@ impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
                 trace.height(),
                 trace.width(),
                 &arena.allocated().to_device().unwrap(),
-                num_records,
             )
             .expect("Failed to generate trace");
         }

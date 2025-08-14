@@ -44,7 +44,7 @@ template <typename F, uint32_t NUM_CELLS> struct NativeLoadStoreAdapter {
 
     __device__ void fill_trace_row(
         RowSlice &row,
-        NativeLoadStoreAdapterRecord<F, NUM_CELLS> &record
+        NativeLoadStoreAdapterRecord<F, NUM_CELLS> const& record
     ) {
         bool is_hint_storew = (record.data_read.prev_timestamp == UINT32_MAX);
 

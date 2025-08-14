@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -40,7 +41,7 @@ struct FieldExtension {
 
     __device__ FieldExtension(VariableRangeChecker range_checker) : range_checker(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, FieldExtensionCoreRecord<Fp> &record) {
+    __device__ void fill_trace_row(RowSlice row, FieldExtensionCoreRecord<Fp> const& record) {
         COL_WRITE_ARRAY(row, FieldExtensionCoreCols, y, record.y);
         COL_WRITE_ARRAY(row, FieldExtensionCoreCols, z, record.z);
         FieldExtensionOpcode opcode = static_cast<FieldExtensionOpcode>(record.local_opcode);
@@ -100,16 +101,15 @@ __global__ void field_extension_tracegen(
     Fp *trace,
     uint32_t height,
     uint32_t width,
-    uint8_t *records,
-    uint32_t rows_used,
+    DeviceBufferConstView<FieldExtensionRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < rows_used) {
-        auto record = reinterpret_cast<FieldExtensionRecord<Fp> *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = NativeVectorizedAdapter<Fp, EXT_DEG>(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
@@ -129,8 +129,7 @@ extern "C" int _field_extension_tracegen(
     Fp *d_trace,
     uint32_t height,
     uint32_t width,
-    uint8_t *d_records,
-    uint32_t rows_used,
+    DeviceBufferConstView<FieldExtensionRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
@@ -139,7 +138,7 @@ extern "C" int _field_extension_tracegen(
     assert(width == sizeof(FieldExtensionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     field_extension_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, rows_used, d_range_checker,
+        d_trace, height, width, d_records, d_range_checker,
         range_checker_num_bins, timestamp_max_bits
     );
     return cudaGetLastError();

@@ -3,7 +3,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
-#include <stdio.h>
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -155,8 +155,7 @@ struct MulHRecord {
 __global__ void mulh_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<MulHRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -168,8 +167,8 @@ __global__ void mulh_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
 
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<MulHRecord *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
@@ -192,8 +191,7 @@ extern "C" int _mulh_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<MulHRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -203,17 +201,15 @@ extern "C" int _mulh_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(MulHRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(MulHCols<uint8_t>));
 
-    size_t num_records = record_len / sizeof(MulHRecord);
     auto [grid, block] = kernel_launch_params(height);
 
     mulh_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,

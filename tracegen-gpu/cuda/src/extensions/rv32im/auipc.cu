@@ -3,6 +3,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -64,8 +65,7 @@ struct Rv32AuipcRecord {
 __global__ void auipc_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32AuipcRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
@@ -74,8 +74,8 @@ __global__ void auipc_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        auto record = reinterpret_cast<Rv32AuipcRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = Rv32RdWriteAdapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins), 
@@ -94,8 +94,7 @@ extern "C" int _auipc_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Rv32AuipcRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
@@ -103,14 +102,13 @@ extern "C" int _auipc_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(Rv32AuipcRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Rv32AuipcCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     auipc_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(Rv32AuipcRecord),
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,

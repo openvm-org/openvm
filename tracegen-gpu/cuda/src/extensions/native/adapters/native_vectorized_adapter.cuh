@@ -39,7 +39,7 @@ template <typename F, size_t N> struct NativeVectorizedAdapter {
 
     template <typename T> using Cols = NativeVectorizedAdapterCols<T, N>;
 
-    __device__ void fill_trace_row(RowSlice row, NativeVectorizedAdapterRecord<F, N> &record) {
+    __device__ void fill_trace_row(RowSlice row, NativeVectorizedAdapterRecord<F, N> const& record) {
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Cols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Cols, a_pointer, record.a_ptr);

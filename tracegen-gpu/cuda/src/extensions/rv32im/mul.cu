@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -26,8 +27,7 @@ struct Rv32MultiplicationRecord {
 __global__ void mul_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
@@ -36,8 +36,8 @@ __global__ void mul_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<Rv32MultiplicationRecord *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
@@ -59,8 +59,7 @@ extern "C" int _mul_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Rv32MultiplicationRecord> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_range_tuple_ptr,
@@ -68,16 +67,14 @@ extern "C" int _mul_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(Rv32MultiplicationRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Rv32MultiplicationCols<uint8_t>));
-    size_t num_records = record_len / sizeof(Rv32MultiplicationRecord);
     auto [grid, block] = kernel_launch_params(height);
 
     mul_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_range_tuple_ptr,

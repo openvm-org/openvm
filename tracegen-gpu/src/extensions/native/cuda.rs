@@ -1,38 +1,42 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+use stark_backend_gpu::{
+    cuda::{
+        d_buffer::{DeviceBuffer, DeviceBufferView},
+        error::CudaError,
+    },
+    prelude::F,
+};
+
 pub mod castf_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _castf_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _castf_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
-            d_records: *const u8,
-            rows_used: u32,
+            d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_castf_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            rows_used,
+            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
@@ -43,34 +47,31 @@ pub mod castf_cuda {
 pub mod native_branch_eq_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _native_branch_eq_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _native_branch_eq_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
-            d_records: *const u8,
-            rows_used: u32,
+            d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_branch_eq_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            rows_used,
+            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
@@ -79,25 +80,22 @@ pub mod native_branch_eq_cuda {
 }
 
 pub mod field_arithmetic_cuda {
-    use std::ffi::c_void;
-
     use super::*;
 
     extern "C" {
         fn _field_arithmetic_tracegen(
-            d_trace: *mut c_void,
+            d_trace: *mut F,
             height: usize,
             width: usize,
-            d_records: *const u8,
-            record_len: usize,
+            d_records: DeviceBufferView,
             d_range_checker: *const u32,
             range_checker_bins: usize,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: usize,
         width: usize,
         d_records: &DeviceBuffer<u8>,
@@ -106,11 +104,10 @@ pub mod field_arithmetic_cuda {
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         let result = _field_arithmetic_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            d_records.len(),
+            d_records.view(),
             d_range_checker,
             range_bins,
             timestamp_max_bits,
@@ -122,34 +119,31 @@ pub mod field_arithmetic_cuda {
 pub mod field_extension_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _field_extension_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _field_extension_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
-            d_records: *const u8,
-            rows_used: u32,
+            d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_field_extension_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            rows_used,
+            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
@@ -161,9 +155,9 @@ pub mod fri_cuda {
     use super::*;
     use crate::extensions::native::RowInfo;
 
-    unsafe extern "C" {
-        unsafe fn _fri_reduced_opening_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _fri_reduced_opening_tracegen(
+            d_trace: *mut F,
             height: u32,
             d_records: *const u8,
             rows_used: u32,
@@ -174,17 +168,17 @@ pub mod fri_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         d_records: &DeviceBuffer<u8>,
         rows_used: u32,
         d_record_info: &DeviceBuffer<RowInfo>,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_fri_reduced_opening_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             d_records.as_ptr(),
             rows_used,
@@ -199,9 +193,9 @@ pub mod fri_cuda {
 pub mod poseidon2_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _native_poseidon2_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _native_poseidon2_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
             d_records: *const u8,
@@ -215,20 +209,20 @@ pub mod poseidon2_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
         rows_used: u32,
         d_chunk_start: &DeviceBuffer<u32>,
         num_chunks: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         sbox_regs: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_poseidon2_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
             d_records.as_ptr(),
@@ -246,13 +240,12 @@ pub mod poseidon2_cuda {
 pub mod native_loadstore_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _native_loadstore_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _native_loadstore_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
-            d_records: *const u8,
-            rows_used: u32,
+            d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
             num_cells: u32,
@@ -260,22 +253,20 @@ pub mod native_loadstore_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         num_cells: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_loadstore_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            rows_used,
+            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             num_cells,
@@ -287,34 +278,31 @@ pub mod native_loadstore_cuda {
 pub mod native_jal_rangecheck_cuda {
     use super::*;
 
-    unsafe extern "C" {
-        unsafe fn _native_jal_rangecheck_tracegen(
-            d_trace: *mut std::ffi::c_void,
+    extern "C" {
+        pub fn _native_jal_rangecheck_tracegen(
+            d_trace: *mut F,
             height: u32,
             width: u32,
-            d_records: *const u8,
-            rows_used: u32,
+            d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
             timestamp_max_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: u32,
         width: u32,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
-        d_range_checker: &DeviceBuffer<T>,
+        d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_native_jal_rangecheck_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
-            d_records.as_ptr(),
-            rows_used,
+            d_records.view(),
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,

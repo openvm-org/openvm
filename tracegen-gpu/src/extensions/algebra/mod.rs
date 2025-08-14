@@ -1,4 +1,4 @@
-mod cuda;
+pub mod cuda;
 mod extension;
 mod fp2_chip;
 mod modular_chip;

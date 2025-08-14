@@ -9,6 +9,7 @@
 #include "rv32im/cores/multiplication.cuh"
 #include "rv32im/cores/shift.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -56,8 +57,7 @@ struct BaseAlu256Record {
 __global__ void alu256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<BaseAlu256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -67,8 +67,8 @@ __global__ void alu256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<BaseAlu256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapAdapterExecutor256 adapter(
             pointer_max_bits,
@@ -89,8 +89,7 @@ extern "C" int _alu256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<BaseAlu256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -99,16 +98,14 @@ extern "C" int _alu256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(BaseAlu256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(BaseAlu256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(BaseAlu256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     alu256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
@@ -136,8 +133,7 @@ struct BranchEqual256Record {
 __global__ void branch_equal256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<BranchEqual256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -147,8 +143,8 @@ __global__ void branch_equal256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<BranchEqual256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapBranchAdapter256 adapter(
             pointer_max_bits,
@@ -169,8 +165,7 @@ extern "C" int _branch_equal256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<BranchEqual256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -179,16 +174,14 @@ extern "C" int _branch_equal256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(BranchEqual256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(BranchEqual256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(BranchEqual256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     branch_equal256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
@@ -212,8 +205,7 @@ struct LessThan256Record {
 __global__ void less_than256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<LessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -223,8 +215,8 @@ __global__ void less_than256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<LessThan256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
@@ -245,8 +237,7 @@ extern "C" int _less_than256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<LessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -255,16 +246,14 @@ extern "C" int _less_than256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(LessThan256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(LessThan256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(LessThan256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     less_than256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
@@ -288,8 +277,7 @@ struct BranchLessThan256Record {
 __global__ void branch_less_than256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<BranchLessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -299,8 +287,8 @@ __global__ void branch_less_than256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<BranchLessThan256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapBranchAdapter256 adapter(
             pointer_max_bits,
@@ -321,8 +309,7 @@ extern "C" int _branch_less_than256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<BranchLessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -331,16 +318,14 @@ extern "C" int _branch_less_than256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(BranchLessThan256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThan256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(BranchLessThan256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     branch_less_than256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
@@ -364,8 +349,7 @@ struct Shift256Record {
 __global__ void shift256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<Shift256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -375,8 +359,8 @@ __global__ void shift256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<Shift256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
@@ -400,8 +384,7 @@ extern "C" int _shift256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Shift256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -410,16 +393,14 @@ extern "C" int _shift256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(Shift256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Shift256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(Shift256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     shift256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
@@ -443,8 +424,7 @@ struct Multiplication256Record {
 __global__ void multiplication256_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<Multiplication256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -456,8 +436,8 @@ __global__ void multiplication256_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<Multiplication256Record *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
@@ -481,8 +461,7 @@ extern "C" int _multiplication256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Multiplication256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -493,16 +472,14 @@ extern "C" int _multiplication256_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(Multiplication256Record) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Multiplication256Cols<uint8_t>));
-    size_t num_records = record_len / sizeof(Multiplication256Record);
 
     auto [grid, block] = kernel_launch_params(height, 256);
     multiplication256_tracegen<<<grid, block>>>(
         d_trace,
         height,
         d_records,
-        num_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,

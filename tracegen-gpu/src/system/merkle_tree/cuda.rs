@@ -1,3 +1,5 @@
+#![allow(clippy::missing_safety_doc)]
+
 use stark_backend_gpu::{
     base::DeviceMatrix,
     cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t},

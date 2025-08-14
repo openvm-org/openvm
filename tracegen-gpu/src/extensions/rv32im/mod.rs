@@ -2,7 +2,7 @@ mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
-mod cuda;
+pub mod cuda;
 mod divrem;
 mod hintstore;
 mod jal_lui;

@@ -2,13 +2,16 @@
 #![allow(clippy::too_many_arguments)]
 
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+use stark_backend_gpu::{
+    cuda::{d_buffer::DeviceBuffer, error::CudaError},
+    prelude::F,
+};
 
 pub mod is_eq_cuda {
     use super::*;
     extern "C" {
         fn _modular_is_equal_tracegen(
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             height: usize,
             width: usize,
             d_records: *const u8,
@@ -26,23 +29,23 @@ pub mod is_eq_cuda {
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_trace: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
         d_modulus: &DeviceBuffer<u8>,
         total_limbs: usize,
         num_lanes: usize,
         lane_size: usize,
-        d_range_ctr: &DeviceBuffer<T>,
-        d_bitwise_lut: &DeviceBuffer<T>,
+        d_range_ctr: &DeviceBuffer<F>,
+        d_bitwise_lut: &DeviceBuffer<F>,
         pointer_max_bits: u32,
         timestamp_max_bits: u32,
     ) -> Result<(), CudaError> {
         let width = d_trace.len() / height;
         let record_len = d_records.len();
         let err = _modular_is_equal_tracegen(
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             height,
             width,
             d_records.as_ptr(),

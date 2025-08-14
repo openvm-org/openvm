@@ -3,6 +3,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 #include <stdio.h>
 
 using namespace riscv;
@@ -91,8 +92,7 @@ struct Rv32JalrRecord {
 __global__ void jalr_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32JalrRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
@@ -102,8 +102,8 @@ __global__ void jalr_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
 
-    if (idx < num_records) {
-        auto full = reinterpret_cast<Rv32JalrRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto full = records[idx];
 
         // adapter pass
         Rv32JalrAdapter adapter(
@@ -127,15 +127,14 @@ extern "C" int _jalr_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<Rv32JalrRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
-    assert(height * sizeof(Rv32JalrRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(Rv32JalrCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
@@ -144,7 +143,6 @@ extern "C" int _jalr_tracegen(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(Rv32JalrRecord),
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,

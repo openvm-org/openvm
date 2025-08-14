@@ -25,7 +25,7 @@ use crate::{
     utils::get_empty_air_proving_ctx,
 };
 
-mod cuda;
+pub mod cuda;
 mod extension;
 
 pub use cuda::sha256::*;
@@ -93,6 +93,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Sha256VmChipGpu {
                 &d_record_offsets,
                 &d_block_offsets,
                 &d_prev_hashes,
+                num_blocks_so_far,
             )
             .expect("Hash computation kernel failed");
         }

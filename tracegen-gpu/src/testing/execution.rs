@@ -69,8 +69,7 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
             let bytes_size = num_records * size_of::<DummyExecutionInteractionCols<F>>();
             let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
             let records = records_bytes.to_device().unwrap();
-            execution_testing::tracegen(trace.buffer(), height, width, &records, num_records)
-                .unwrap();
+            execution_testing::tracegen(trace.buffer(), height, width, &records).unwrap();
         }
         AirProvingContext::simple_no_pis(trace)
     }

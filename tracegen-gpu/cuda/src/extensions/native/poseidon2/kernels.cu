@@ -397,15 +397,15 @@ __global__ void cukernel_native_poseidon2_tracegen(
 
 extern "C" int _native_poseidon2_tracegen(
     Fp *d_trace,
-    size_t height,
-    size_t width,
+    uint32_t height,
+    uint32_t width,
     Fp *d_records,
-    size_t num_records,
+    uint32_t num_records,
     uint32_t *d_chunk_start,
     uint32_t num_chunks,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
-    size_t sbox_regs,
+    uint32_t sbox_regs,
     uint32_t timestamp_max_bits
 ) {
     auto [grid, block] = kernel_launch_params(height - num_records + num_chunks, 256);

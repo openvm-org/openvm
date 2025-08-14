@@ -4,7 +4,7 @@
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include "trace_access.h"
-#include <cstdio>
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -86,8 +86,7 @@ __global__ void jal_rangecheck_tracegen(
     Fp *__restrict__ trace,
     uint32_t height,
     uint32_t width,
-    const uint8_t *__restrict__ records,
-    uint32_t num_records,
+    DeviceBufferConstView<JalRangeCheckRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_max_bins,
     uint32_t timestamp_max_bits
@@ -96,8 +95,8 @@ __global__ void jal_rangecheck_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     
-    if (idx < num_records) {
-        auto record = reinterpret_cast<const JalRangeCheckRecord<Fp>*>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
         
         VariableRangeChecker range_checker(range_checker_ptr, range_checker_max_bins);
 
@@ -112,8 +111,7 @@ extern "C" int _native_jal_rangecheck_tracegen(
     Fp* d_trace,
     uint32_t height,
     uint32_t width,
-    const uint8_t* d_records,
-    uint32_t num_records,
+    DeviceBufferConstView<JalRangeCheckRecord<Fp>> d_records,
     uint32_t* d_range_checker,
     uint32_t range_checker_max_bins,
     uint32_t timestamp_max_bits) {
@@ -123,7 +121,7 @@ extern "C" int _native_jal_rangecheck_tracegen(
     
     auto [grid, block] = kernel_launch_params(height);
     jal_rangecheck_tracegen<<<grid, block>>>(
-        (Fp*)d_trace, height, width, d_records, num_records,
+        (Fp*)d_trace, height, width, d_records,
         d_range_checker, range_checker_max_bins, timestamp_max_bits);
     
     return cudaGetLastError();

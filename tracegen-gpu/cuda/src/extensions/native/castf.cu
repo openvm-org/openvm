@@ -3,6 +3,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -53,16 +54,15 @@ __global__ void castf_tracegen(
     Fp *trace,
     uint32_t height,
     uint32_t width,
-    uint8_t *records,
-    uint32_t rows_used,
+    DeviceBufferConstView<CastFRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < rows_used) {
-        auto record = reinterpret_cast<CastFRecord<Fp> *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = ConvertAdapter<Fp, RV32_REGISTER_NUM_LIMBS>(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
@@ -82,8 +82,7 @@ extern "C" int _castf_tracegen(
     Fp *d_trace,
     uint32_t height,
     uint32_t width,
-    uint8_t *d_records,
-    uint32_t rows_used,
+    DeviceBufferConstView<CastFRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
@@ -92,7 +91,7 @@ extern "C" int _castf_tracegen(
     assert(width == sizeof(CastFCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     castf_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, rows_used, d_range_checker, 
+        d_trace, height, width, d_records, d_range_checker, 
         range_checker_num_bins, timestamp_max_bits
     );
     return cudaGetLastError();
