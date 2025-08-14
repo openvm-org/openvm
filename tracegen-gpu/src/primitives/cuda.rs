@@ -1,6 +1,9 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+use stark_backend_gpu::{
+    cuda::{d_buffer::DeviceBuffer, error::CudaError},
+    prelude::F,
+};
 
 pub mod bitwise_op_lookup {
     use super::*;
@@ -9,15 +12,15 @@ pub mod bitwise_op_lookup {
         fn _bitwise_op_lookup_tracegen(
             d_count: *const u32,
             d_cpu_count: *const u32,
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             num_bits: u32,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_count: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
-        d_trace: &DeviceBuffer<T>,
+        d_trace: &DeviceBuffer<F>,
         num_bits: u32,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_bitwise_op_lookup_tracegen(
@@ -26,7 +29,7 @@ pub mod bitwise_op_lookup {
                 .as_ref()
                 .map(|b| b.as_ptr())
                 .unwrap_or(std::ptr::null()),
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             num_bits,
         ))
     }
@@ -39,15 +42,15 @@ pub mod var_range {
         fn _range_checker_tracegen(
             d_count: *const u32,
             d_cpu_count: *const u32,
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             num_bins: usize,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_count: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
-        d_trace: &DeviceBuffer<T>,
+        d_trace: &DeviceBuffer<F>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_checker_tracegen(
             d_count.as_ptr() as *const u32,
@@ -55,7 +58,7 @@ pub mod var_range {
                 .as_ref()
                 .map(|b| b.as_ptr())
                 .unwrap_or(std::ptr::null()),
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             d_count.len(),
         ))
     }
@@ -68,15 +71,15 @@ pub mod range_tuple {
         fn _range_tuple_checker_tracegen(
             d_count: *const u32,
             d_cpu_count: *const u32,
-            d_trace: *mut std::ffi::c_void,
+            d_trace: *mut F,
             num_bins: usize,
         ) -> i32;
     }
 
-    pub unsafe fn tracegen<T>(
-        d_count: &DeviceBuffer<T>,
+    pub unsafe fn tracegen(
+        d_count: &DeviceBuffer<F>,
         d_cpu_count: &Option<DeviceBuffer<u32>>,
-        d_trace: &DeviceBuffer<T>,
+        d_trace: &DeviceBuffer<F>,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_range_tuple_checker_tracegen(
             d_count.as_ptr() as *const u32,
@@ -84,7 +87,7 @@ pub mod range_tuple {
                 .as_ref()
                 .map(|b| b.as_ptr())
                 .unwrap_or(std::ptr::null()),
-            d_trace.as_mut_raw_ptr(),
+            d_trace.as_mut_ptr(),
             d_count.len(),
         ))
     }

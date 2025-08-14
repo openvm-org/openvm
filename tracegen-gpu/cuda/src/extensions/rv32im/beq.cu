@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -26,8 +27,7 @@ struct BranchEqualRecord {
 __global__ void beq_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<BranchEqualRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t timestamp_max_bits
@@ -35,8 +35,8 @@ __global__ void beq_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
 
-    if (idx < num_records) {
-        auto full = reinterpret_cast<BranchEqualRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& full = records[idx];
 
         Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
@@ -52,14 +52,13 @@ extern "C" int _beq_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<BranchEqualRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(BranchEqualRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(BranchEqualCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
@@ -67,7 +66,6 @@ extern "C" int _beq_tracegen(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(BranchEqualRecord),
         d_rc,
         rc_bins,
         timestamp_max_bits

@@ -4,6 +4,7 @@
 #include "launcher.cuh"
 #include "trace_access.h"
 #include "utils.cuh"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -78,7 +79,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
     )
         : bitwise_lookup(bitwise_lookup), range_tuple_checker(range_tuple_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, DivRemCoreRecords<NUM_LIMBS> &record) {
+    __device__ void fill_trace_row(RowSlice row, DivRemCoreRecords<NUM_LIMBS> const& record) {
         DivRemOpcode opcode = static_cast<DivRemOpcode>(record.local_opcode);
 
         bool is_signed = opcode == DIV || opcode == REM;
@@ -234,8 +235,7 @@ struct Rv32DivRemRecord {
 __global__ void rv32_div_rem_tracegen(
     Fp *d_trace,
     uint32_t height,
-    uint8_t *d_records,
-    uint32_t rows_used,
+    DeviceBufferConstView<Rv32DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_bits,
     uint32_t *d_bitwise_lookup_ptr,
@@ -247,8 +247,8 @@ __global__ void rv32_div_rem_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
 
-    if (idx < rows_used) {
-        auto record = reinterpret_cast<Rv32DivRemRecord *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& record = d_records[idx];
 
         Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits
@@ -272,8 +272,7 @@ extern "C" int _rv32_div_rem_tracegen(
     Fp *d_trace,
     uint32_t height,
     uint32_t width,
-    uint8_t *d_records,
-    uint32_t rows_used,
+    DeviceBufferConstView<Rv32DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
@@ -283,7 +282,7 @@ extern "C" int _rv32_div_rem_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height >= rows_used);
+    assert(height >= d_records.len());
     assert(width == sizeof(Rv32DivRemCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
@@ -291,7 +290,6 @@ extern "C" int _rv32_div_rem_tracegen(
         d_trace,
         height,
         d_records,
-        rows_used,
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,

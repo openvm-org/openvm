@@ -24,7 +24,7 @@ use stark_backend_gpu::{
 
 use crate::system::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
-mod cuda;
+pub mod cuda;
 use cuda::merkle_tree::*;
 
 type H = [F; DIGEST_WIDTH];

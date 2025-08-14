@@ -84,7 +84,6 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
                 trace.height(),
                 trace.width(),
                 &arena.allocated().to_device().unwrap(),
-                num_records,
                 &self.range_checker.count,
                 self.timestamp_max_bits,
                 self.num_custom_pvs,

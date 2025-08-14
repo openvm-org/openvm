@@ -1,5 +1,6 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
+#include "buffer_view.cuh"
 
 template <typename T> struct DummyChipCols {
     T count;
@@ -17,15 +18,15 @@ struct DummyRecord {
 
 __global__ void bitwise_dummy_tracegen(
     Fp *trace,
-    size_t height,
-    const uint32_t *records,
+    DeviceBufferConstView<DummyRecord> records,
     uint32_t *bitwise_count,
     uint32_t bitwise_num_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    auto const height = records.len();
 
     if (idx < height) {
-        DummyRecord record = reinterpret_cast<const DummyRecord *>(records)[idx];
+        auto const& record = records[idx];
         BitwiseOperationLookup bitwise(bitwise_count, bitwise_num_bits);
         RowSlice row(trace + idx, height);
 
@@ -46,14 +47,13 @@ __global__ void bitwise_dummy_tracegen(
 
 extern "C" int _bitwise_dummy_tracegen(
     Fp *d_trace,
-    size_t height,
-    const uint32_t *records,
+    DeviceBufferConstView<DummyRecord> records,
     uint32_t *bitwise_count,
     uint32_t bitwise_num_bits
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(records.len());
     bitwise_dummy_tracegen<<<grid, block>>>(
-        d_trace, height, records, bitwise_count, bitwise_num_bits
+        d_trace, records, bitwise_count, bitwise_num_bits
     );
     return cudaGetLastError();
 }

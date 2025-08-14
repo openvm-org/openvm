@@ -42,7 +42,6 @@ impl Chip<DenseRecordArena, GpuBackend> for JalRangeCheckGpu {
                 padded_height as u32,
                 width as u32,
                 &d_records,
-                height as u32,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
             )

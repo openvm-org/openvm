@@ -55,7 +55,6 @@ impl<const NUM_CELLS: usize> Chip<DenseRecordArena, GpuBackend>
                 padded_height as u32,
                 trace_width as u32,
                 &d_records,
-                height as u32,
                 &self.range_checker.count,
                 NUM_CELLS as u32,
                 self.timestamp_max_bits as u32,

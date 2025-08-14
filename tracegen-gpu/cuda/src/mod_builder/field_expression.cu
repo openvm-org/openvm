@@ -346,7 +346,7 @@ extern "C" int _field_expression_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
     uint32_t bitwise_num_bits,
-    size_t pointer_max_bits,
+    uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     uint8_t *d_workspace,
     uint32_t workspace_per_thread

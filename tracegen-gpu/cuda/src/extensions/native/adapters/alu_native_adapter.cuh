@@ -36,7 +36,7 @@ struct AluNativeAdapter {
     __device__ AluNativeAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, AluNativeAdapterRecord rec) {
+    __device__ void fill_trace_row(RowSlice row, AluNativeAdapterRecord const& rec) {
         COL_WRITE_VALUE(row, AluNativeAdapterCols, from_state.pc, Fp(rec.from_pc));
         COL_WRITE_VALUE(row, AluNativeAdapterCols, from_state.timestamp, Fp(rec.from_timestamp));
         COL_WRITE_VALUE(row, AluNativeAdapterCols, a_pointer, Fp::fromRaw(rec.a_ptr));

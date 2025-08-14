@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -26,8 +27,7 @@ struct BranchLessThanRecord {
 __global__ void blt_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<BranchLessThanRecord> records,
     uint32_t *rc_ptr,
     uint32_t rc_bins,
     uint32_t *bw_ptr,
@@ -37,14 +37,14 @@ __global__ void blt_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
 
-    if (idx < num_records) {
-        auto full = reinterpret_cast<BranchLessThanRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& full_record = records[idx];
 
         Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
-        adapter.fill_trace_row(row, full.adapter);
+        adapter.fill_trace_row(row, full_record.adapter);
 
         Rv32BranchLessThanCore core(BitwiseOperationLookup(bw_ptr, bw_bits));
-        core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), full.core);
+        core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), full_record.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThanCols<uint8_t>));
     }
@@ -54,8 +54,7 @@ extern "C" int _blt_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<BranchLessThanRecord> d_records,
     uint32_t *d_rc,
     uint32_t rc_bins,
     uint32_t *d_bw,
@@ -63,7 +62,7 @@ extern "C" int _blt_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(BranchLessThanRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThanCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
@@ -71,7 +70,6 @@ extern "C" int _blt_tracegen(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(BranchLessThanRecord),
         d_rc,
         rc_bins,
         d_bw,

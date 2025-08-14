@@ -59,7 +59,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
                 padded_height as u32,
                 trace_width as u32,
                 &d_records,
-                height as u32,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,
                 RV32_CELL_BITS as u32,

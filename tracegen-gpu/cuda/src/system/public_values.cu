@@ -2,6 +2,7 @@
 #include "launcher.cuh"
 #include "native_adapter.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 struct PublicValuesCoreRecord {
     Fp value;
@@ -28,8 +29,7 @@ __global__ void public_values_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<PublicValuesRecord> records,
     uint32_t *range_checker,
     uint32_t range_checker_bins,
     uint32_t timestamp_max_bits,
@@ -39,8 +39,8 @@ __global__ void public_values_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        PublicValuesRecord record = reinterpret_cast<PublicValuesRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = NativeAdapter<Fp, 2, 0>(
             VariableRangeChecker(range_checker, range_checker_bins), 
@@ -70,8 +70,7 @@ extern "C" int _public_values_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<PublicValuesRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_bins,
     uint32_t timestamp_max_bits,
@@ -88,7 +87,6 @@ extern "C" int _public_values_tracegen(
         height,
         width,
         d_records,
-        num_records,
         d_range_checker,
         range_checker_bins,
         timestamp_max_bits,

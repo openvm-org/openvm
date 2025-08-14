@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -26,8 +27,7 @@ struct LessThanRecord {
 __global__ void rv32_less_than_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<LessThanRecord> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *bitwise_lookup_ptr,
@@ -36,8 +36,8 @@ __global__ void rv32_less_than_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        auto record = reinterpret_cast<LessThanRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = Rv32BaseAluAdapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
@@ -57,8 +57,7 @@ extern "C" int _rv32_less_than_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<LessThanRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
@@ -67,7 +66,7 @@ extern "C" int _rv32_less_than_tracegen(
 ) {
     // We require the height to be a power of two for the tracegen to work
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(LessThanRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
@@ -75,7 +74,6 @@ extern "C" int _rv32_less_than_tracegen(
         d_trace,
         height,
         d_records,
-        record_len / sizeof(LessThanRecord),
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,

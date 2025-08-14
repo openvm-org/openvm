@@ -3,6 +3,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -88,8 +89,7 @@ __global__ void rv32_load_sign_extend_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32LoadSignExtendRecord> records,
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -97,8 +97,8 @@ __global__ void rv32_load_sign_extend_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        auto record = reinterpret_cast<Rv32LoadSignExtendRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
 
         auto adapter = Rv32LoadStoreAdapter(
             pointer_max_bits, VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
@@ -118,8 +118,7 @@ extern "C" int _rv32_load_sign_extend_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<Rv32LoadSignExtendRecord> d_records,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -134,7 +133,6 @@ extern "C" int _rv32_load_sign_extend_tracegen(
         height,
         width,
         d_records,
-        num_records,
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,

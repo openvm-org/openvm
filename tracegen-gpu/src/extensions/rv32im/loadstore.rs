@@ -48,7 +48,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32LoadStoreChipGpu {
                 padded_height,
                 trace_width,
                 &d_records,
-                height,
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,

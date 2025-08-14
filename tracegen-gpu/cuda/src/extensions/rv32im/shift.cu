@@ -4,6 +4,7 @@
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -27,8 +28,7 @@ __global__ void rv32_shift_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    uint8_t *records,
-    size_t num_records,
+    DeviceBufferConstView<ShiftRecord> records,
     uint32_t *range_ptr,
     uint32_t range_bins,
     uint32_t *lookup_ptr,
@@ -37,8 +37,8 @@ __global__ void rv32_shift_tracegen(
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        auto rec = reinterpret_cast<ShiftRecord *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& rec = records[idx];
         auto adapter = Rv32BaseAluAdapter(
             VariableRangeChecker(range_ptr, range_bins),
             BitwiseOperationLookup(lookup_ptr, lookup_bits),
@@ -59,8 +59,7 @@ extern "C" int _rv32_shift_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<ShiftRecord> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup,
@@ -68,7 +67,7 @@ extern "C" int _rv32_shift_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert((height & (height - 1)) == 0);
-    assert(height * sizeof(ShiftRecord) >= record_len);
+    assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
 
@@ -77,7 +76,6 @@ extern "C" int _rv32_shift_tracegen(
         height,
         width,
         d_records,
-        record_len / sizeof(ShiftRecord),
         d_range_checker,
         range_checker_num_bins,
         d_bitwise_lookup,

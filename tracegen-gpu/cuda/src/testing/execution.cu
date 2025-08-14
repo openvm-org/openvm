@@ -2,6 +2,7 @@
 #include "fp.h"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 template <typename T> struct DummyExecutionInteractionCols {
     T count;
@@ -12,13 +13,12 @@ template <typename T> struct DummyExecutionInteractionCols {
 __global__ void execution_testing_tracegen(
     Fp *trace,
     size_t height,
-    uint8_t *records,
-    size_t num_records
+    DeviceBufferConstView<DummyExecutionInteractionCols<Fp>> records
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    if (idx < num_records) {
-        auto record = reinterpret_cast<DummyExecutionInteractionCols<Fp> *>(records)[idx];
+    if (idx < records.len()) {
+        auto const& record = records[idx];
         COL_WRITE_VALUE(row, DummyExecutionInteractionCols, count, record.count);
         COL_WRITE_VALUE(
             row, DummyExecutionInteractionCols, initial_state.pc, record.initial_state.pc
@@ -45,11 +45,10 @@ extern "C" int _execution_testing_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t num_records
+    DeviceBufferConstView<DummyExecutionInteractionCols<Fp>> d_records
 ) {
     assert(width == sizeof(DummyExecutionInteractionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
-    execution_testing_tracegen<<<grid, block>>>(d_trace, height, d_records, num_records);
+    execution_testing_tracegen<<<grid, block>>>(d_trace, height, d_records);
     return cudaGetLastError();
 }

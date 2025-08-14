@@ -2,6 +2,7 @@
 #include "constants.h"
 #include "launcher.cuh"
 #include "trace_access.h"
+#include "buffer_view.cuh"
 
 using namespace riscv;
 
@@ -78,8 +79,7 @@ template <typename F> struct FieldArithmeticCompositeRecord {
 __global__ void field_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
-    uint8_t *d_records,
-    size_t num_records,
+    DeviceBufferConstView<FieldArithmeticCompositeRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     size_t range_checker_bins,
     uint32_t timestamp_max_bits
@@ -87,8 +87,8 @@ __global__ void field_arithmetic_tracegen(
     const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
 
-    if (idx < num_records) {
-        const auto rec = reinterpret_cast<FieldArithmeticCompositeRecord<Fp> *>(d_records)[idx];
+    if (idx < d_records.len()) {
+        auto const& rec = d_records[idx];
 
         AluNativeAdapter adapter(
             VariableRangeChecker(d_range_checker, range_checker_bins), 
@@ -107,8 +107,7 @@ extern "C" int _field_arithmetic_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t *d_records,
-    size_t record_len,
+    DeviceBufferConstView<FieldArithmeticCompositeRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     size_t range_checker_bins,
     uint32_t timestamp_max_bits
@@ -117,11 +116,10 @@ extern "C" int _field_arithmetic_tracegen(
     assert((height & (height - 1)) == 0); // height must be power of 2
     assert(width == sizeof(FieldArithmeticCols<uint8_t>));
 
-    const size_t num_records = record_len / sizeof(FieldArithmeticCompositeRecord<Fp>);
     const auto [grid, block] = kernel_launch_params(height);
 
     field_arithmetic_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, num_records, d_range_checker,
+        d_trace, height, d_records, d_range_checker,
         range_checker_bins, timestamp_max_bits
     );
 
