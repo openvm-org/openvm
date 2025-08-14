@@ -117,10 +117,8 @@ where
     let (segments, _) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx)?;
-    let committed_exe = vm.commit_exe(exe);
-    let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
-    let exe = committed_exe.exe;
     let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
 
     let mut state = Some(vm.create_initial_state(&exe, input));

@@ -327,7 +327,10 @@ impl AggProvingKey {
             compiler_options: config.compiler_options,
         }
         .build_program(&leaf_vm_vk, &internal_vm_vk);
-        let internal_committed_exe = Arc::new(internal_vm.commit_exe(internal_program));
+        let internal_committed_exe = Arc::new(VmCommittedExe::commit(
+            internal_program.into(),
+            internal_vm.engine.config().pcs(),
+        ));
 
         let internal_proof = dummy_internal_proof_riscv_app_vm(
             leaf_vm_pk.clone(),
@@ -352,7 +355,10 @@ impl AggProvingKey {
                 NativeCpuBuilder,
                 root_vm_config.clone(),
             )?;
-            let root_committed_exe = Arc::new(vm.commit_exe(root_program));
+            let root_committed_exe = Arc::new(VmCommittedExe::commit(
+                root_program.into(),
+                vm.engine.config().pcs(),
+            ));
 
             assert!(vm_pk.max_constraint_degree <= config.root_fri_params.max_constraint_degree());
 

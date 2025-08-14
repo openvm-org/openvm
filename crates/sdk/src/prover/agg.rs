@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver, VirtualMachineError, VmBuilder,
-    VmExecutionConfig, VmInstance,
+    instructions::exe::VmExe, ContinuationVmProof, PreflightExecutor, SingleSegmentVmProver,
+    VirtualMachineError, VmBuilder, VmExecutionConfig, VmInstance,
 };
 #[cfg(feature = "evm-prove")]
 use openvm_continuations::verifier::root::types::RootVmVerifierInput;
@@ -16,8 +16,7 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::{info_span, instrument};
 
 use crate::{
-    commit::VmCommittedExe, config::AggregationTreeConfig, keygen::AggProvingKey,
-    prover::vm::new_local_prover, F, SC,
+    config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover, F, SC,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
@@ -51,34 +50,49 @@ where
 {
     pub fn new(
         native_builder: NativeBuilder,
-        agg_stark_pk: AggProvingKey,
-        leaf_committed_exe: Arc<VmCommittedExe<SC>>,
+        agg_pk: AggProvingKey,
+        leaf_verifier_exe: Arc<VmExe<F>>,
         tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
         let leaf_prover = new_local_prover(
             native_builder.clone(),
-            &agg_stark_pk.leaf_vm_pk,
-            &leaf_committed_exe,
+            &agg_pk.leaf_vm_pk,
+            leaf_verifier_exe,
         )?;
-        let leaf_controller = LeafProvingController {
-            num_children: tree_config.num_children_leaf,
-        };
         let internal_prover = new_local_prover(
             native_builder,
-            &agg_stark_pk.internal_vm_pk,
-            &agg_stark_pk.internal_committed_exe,
+            &agg_pk.internal_vm_pk,
+            agg_pk.internal_committed_exe.exe.clone(),
         )?;
         #[cfg(feature = "evm-prove")]
-        let root_prover = RootVerifierLocalProver::new(agg_stark_pk.root_verifier_pk)?;
-        Ok(Self {
+        let root_prover = RootVerifierLocalProver::new(agg_pk.root_verifier_pk)?;
+        Ok(Self::new_from_instances(
             leaf_prover,
-            leaf_controller,
             internal_prover,
             #[cfg(feature = "evm-prove")]
             root_prover,
+            tree_config,
+        ))
+    }
+
+    pub fn new_from_instances(
+        leaf_instance: VmInstance<E, NativeBuilder>,
+        internal_instance: VmInstance<E, NativeBuilder>,
+        #[cfg(feature = "evm-prove")] root_instance: RootVerifierLocalProver,
+        tree_config: AggregationTreeConfig,
+    ) -> Self {
+        let leaf_controller = LeafProvingController {
+            num_children: tree_config.num_children_leaf,
+        };
+        Self {
+            leaf_prover: leaf_instance,
+            leaf_controller,
+            internal_prover: internal_instance,
+            #[cfg(feature = "evm-prove")]
+            root_prover: root_instance,
             num_children_internal: tree_config.num_children_internal,
             max_internal_wrapper_layers: tree_config.max_internal_wrapper_layers,
-        })
+        }
     }
 
     pub fn with_num_children_leaf(mut self, num_children_leaf: usize) -> Self {

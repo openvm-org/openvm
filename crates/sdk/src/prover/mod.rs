@@ -22,8 +22,8 @@ mod evm {
     use std::sync::Arc;
 
     use openvm_circuit::arch::{
-        Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder,
-        VmExecutionConfig,
+        instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor,
+        VirtualMachineError, VmBuilder, VmExecutionConfig,
     };
     use openvm_native_circuit::NativeConfig;
     use openvm_native_recursion::halo2::utils::Halo2ParamsReader;
@@ -31,7 +31,6 @@ mod evm {
 
     use super::{Halo2Prover, StarkProver};
     use crate::{
-        commit::VmCommittedExe,
         config::AggregationTreeConfig,
         keygen::{AggProvingKey, AppProvingKey, Halo2ProvingKey},
         stdin::StdIn,
@@ -66,7 +65,7 @@ mod evm {
             app_vm_builder: VB,
             native_builder: NativeBuilder,
             app_pk: AppProvingKey<VB::VmConfig>,
-            app_committed_exe: Arc<VmCommittedExe<SC>>,
+            app_exe: Arc<VmExe<F>>,
             agg_pk: AggProvingKey,
             halo2_pk: Halo2ProvingKey,
             agg_tree_config: AggregationTreeConfig,
@@ -75,7 +74,7 @@ mod evm {
                 app_vm_builder,
                 native_builder,
                 app_pk,
-                app_committed_exe,
+                app_exe,
                 agg_pk,
                 agg_tree_config,
             )?;

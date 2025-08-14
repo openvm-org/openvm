@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError, VmBuilder, VmExecutionConfig,
+    instructions::exe::VmExe, Executor, MeteredExecutor, PreflightExecutor, VirtualMachineError,
+    VmBuilder, VmExecutionConfig,
 };
 use openvm_continuations::verifier::internal::types::VmStarkProof;
 #[cfg(feature = "evm-prove")]
@@ -12,7 +13,6 @@ use openvm_stark_backend::proof::Proof;
 use openvm_stark_sdk::engine::StarkFriEngine;
 
 use crate::{
-    commit::VmCommittedExe,
     config::AggregationTreeConfig,
     keygen::{AggProvingKey, AppProvingKey},
     prover::{agg::AggStarkProver, app::AppProver},
@@ -42,7 +42,7 @@ where
         app_vm_builder: VB,
         native_builder: NativeBuilder,
         app_pk: AppProvingKey<VB::VmConfig>,
-        app_committed_exe: Arc<VmCommittedExe<SC>>,
+        app_exe: Arc<VmExe<F>>,
         agg_stark_pk: AggProvingKey,
         agg_tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
@@ -57,19 +57,26 @@ where
         );
 
         Ok(Self {
-            app_prover: AppProver::new(
-                app_vm_builder,
-                app_pk.app_vm_pk.clone(),
-                app_committed_exe,
-            )?,
+            app_prover: AppProver::new(app_vm_builder, app_pk.app_vm_pk.clone(), app_exe)?,
             agg_prover: AggStarkProver::new(
                 native_builder,
                 agg_stark_pk,
-                app_pk.leaf_committed_exe.clone(),
+                app_pk.leaf_committed_exe.exe.clone(),
                 agg_tree_config,
             )?,
         })
     }
+
+    pub fn from_parts(
+        app_prover: AppProver<E, VB>,
+        agg_prover: AggStarkProver<E, NativeBuilder>,
+    ) -> Result<Self, VirtualMachineError> {
+        Ok(Self {
+            app_prover,
+            agg_prover,
+        })
+    }
+
     pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
         self.set_program_name(program_name);
         self

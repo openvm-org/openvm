@@ -10,9 +10,11 @@ use itertools::izip;
 use openvm_build::{
     build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
 };
-use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
+use openvm_circuit::arch::{
+    instructions::exe::VmExe, InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME,
+};
 use openvm_sdk::{fs::write_exe_to_file, Sdk};
-use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, FromElf};
 
 use crate::util::{
     get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
@@ -432,7 +434,7 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         let transpiler = app_config.app_vm_config.transpiler();
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        let exe = Sdk::new().transpile(elf, transpiler)?;
+        let exe = VmExe::from_elf(elf, transpiler)?;
 
         let target_name = if target.is_example() {
             &format!("examples/{}", target.name)

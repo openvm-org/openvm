@@ -28,7 +28,7 @@ use openvm_circuit::{
             merkle::public_values::{extract_public_values, UserPublicValuesProofError},
             CHUNK,
         },
-        program::trace::{compute_exe_commit, VmCommittedExe},
+        program::trace::compute_exe_commit,
     },
 };
 #[cfg(feature = "evm-prove")]
@@ -287,21 +287,17 @@ where
     /// enabled.
     pub fn prove(
         &self,
-        app_committed_exe: Arc<VmCommittedExe<SC>>,
+        app_exe: Arc<VmExe<F>>,
         inputs: StdIn,
     ) -> Result<VmStarkProof<SC>, SdkError> {
-        let mut prover = self.prover(app_committed_exe)?;
+        let mut prover = self.prover(app_exe)?;
         let proof = prover.prove(inputs)?;
         Ok(proof)
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn prove_evm(
-        &self,
-        app_committed_exe: Arc<VmCommittedExe<SC>>,
-        inputs: StdIn,
-    ) -> Result<EvmProof, SdkError> {
-        let mut evm_prover = self.evm_prover(app_committed_exe)?;
+    pub fn prove_evm(&self, app_exe: Arc<VmExe<F>>, inputs: StdIn) -> Result<EvmProof, SdkError> {
+        let mut evm_prover = self.evm_prover(app_exe)?;
         let proof = evm_prover.prove_evm(inputs)?;
         Ok(proof)
     }
@@ -313,7 +309,7 @@ where
     /// exist.
     pub fn prover(
         &self,
-        app_committed_exe: Arc<VmCommittedExe<SC>>,
+        app_exe: Arc<VmExe<F>>,
     ) -> Result<StarkProver<E, VB, NativeBuilder>, SdkError> {
         let app_pk = self.app_pk().clone();
         let agg_pk = self.agg_pk().clone();
@@ -321,7 +317,7 @@ where
             self.app_vm_builder.clone(),
             self.native_builder.clone(),
             app_pk,
-            app_committed_exe,
+            app_exe,
             agg_pk,
             self.agg_tree_config,
         )?;
@@ -331,7 +327,7 @@ where
     #[cfg(feature = "evm-prove")]
     pub fn evm_prover(
         &self,
-        app_exe: Arc<VmCommittedExe<SC>>,
+        app_exe: Arc<VmExe<F>>,
     ) -> Result<EvmHalo2Prover<E, VB, NativeBuilder>, SdkError> {
         let evm_prover = EvmHalo2Prover::<E, _, _>::new(
             self.halo2_params_reader(),
@@ -353,13 +349,9 @@ where
     /// Creates an app prover instance specific to the provided exe.
     /// This function will generate the [AppProvingKey] if it doesn't already exist and use it to
     /// construct the [AppProver].
-    pub fn app_prover(
-        &self,
-        app_committed_exe: Arc<VmCommittedExe<SC>>,
-    ) -> Result<AppProver<E, VB>, SdkError> {
+    pub fn app_prover(&self, exe: Arc<VmExe<F>>) -> Result<AppProver<E, VB>, SdkError> {
         let vm_pk = self.app_pk().app_vm_pk.clone();
-        let prover =
-            AppProver::<E, VB>::new(self.app_vm_builder.clone(), vm_pk, app_committed_exe)?;
+        let prover = AppProver::<E, VB>::new(self.app_vm_builder.clone(), vm_pk, exe)?;
         Ok(prover)
     }
 

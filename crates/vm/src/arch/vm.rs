@@ -17,7 +17,10 @@ use std::{
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
-use openvm_instructions::exe::{SparseMemoryImage, VmExe};
+use openvm_instructions::{
+    exe::{SparseMemoryImage, VmExe},
+    program::Program,
+};
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -26,7 +29,7 @@ use openvm_stark_backend::{
     p3_util::{log2_ceil_usize, log2_strict_usize},
     proof::Proof,
     prover::{
-        hal::{DeviceDataTransporter, MatrixDimensions},
+        hal::{DeviceDataTransporter, MatrixDimensions, TraceCommitter},
         types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
     },
     verifier::VerificationError,
@@ -61,7 +64,7 @@ use crate::{
             online::{GuestMemory, TracingMemory},
             AddressMap, CHUNK,
         },
-        program::trace::VmCommittedExe,
+        program::trace::{generate_cached_trace, VmCommittedExe},
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
     },
 };
@@ -695,16 +698,36 @@ where
         }
     }
 
-    /// Generates and then commits to program trace entirely on host.
-    pub fn commit_exe(&self, exe: impl Into<VmExe<Val<E::SC>>>) -> VmCommittedExe<E::SC> {
-        let exe = exe.into();
-        VmCommittedExe::commit(exe, self.engine.config().pcs())
+    /// Transforms the program into a cached trace and commits it _on device_ using the proof system
+    /// polynomial commitment scheme.
+    ///
+    /// Returns the cached program trace.
+    /// Note that [`load_program`](Self::load_program) must be called separately to load the cached
+    /// program trace into the VM itself.
+    pub fn commit_program_on_device(
+        &self,
+        program: &Program<Val<E::SC>>,
+    ) -> CommittedTraceData<E::PB> {
+        let trace = generate_cached_trace(program);
+        let d_trace = self
+            .engine
+            .device()
+            .transport_matrix_to_device(&Arc::new(trace));
+        let traces = [d_trace];
+        let (commitment, data) = self.engine.device().commit(&traces);
+        let [trace] = traces;
+        CommittedTraceData {
+            commitment,
+            trace,
+            data,
+        }
     }
 
-    /// Convenience method to transport a host committed Exe to device. If the Exe has already been
-    /// committed directly on device (either via a different caching mechanism or directly using
-    /// device committer), then you can directly call [`load_program`](Self::load_program) and skip
-    /// this function.
+    /// Convenience method to transport a host committed Exe to device. This can be used if you have
+    /// a pre-committed program and want to transport to device instead of re-committing. One should
+    /// benchmark the latency of this function versus
+    /// [`commit_program_on_device`](Self::commit_program_on_device), which directly re-commits on
+    /// device, to determine which method is more suitable.
     pub fn transport_committed_exe_to_device(
         &self,
         committed_exe: &VmCommittedExe<E::SC>,
@@ -717,6 +740,7 @@ where
             .transport_committed_trace_to_device(commitment, trace, prover_data)
     }
 
+    /// Loads cached program trace into the VM.
     pub fn load_program(&mut self, cached_program_trace: CommittedTraceData<E::PB>) {
         self.chip_complex.system.load_program(cached_program_trace);
     }

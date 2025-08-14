@@ -5,7 +5,7 @@ use eyre::Result;
 #[cfg(feature = "evm-prove")]
 use openvm_sdk::fs::write_evm_proof_to_file;
 use openvm_sdk::{
-    commit::AppExecutionCommit,
+    commit::{commit_app_exe, AppExecutionCommit, VmCommittedExe},
     config::{AggregationTreeConfig, SdkVmConfig, SdkVmCpuBuilder},
     fs::{
         read_agg_stark_pk_from_file, read_app_pk_from_file, read_exe_from_file,
@@ -13,7 +13,7 @@ use openvm_sdk::{
     },
     keygen::AppProvingKey,
     types::VmStarkProofBytes,
-    Sdk,
+    Sdk, SC,
 };
 
 use super::{RunArgs, RunCargoArgs};
@@ -123,17 +123,15 @@ impl ProveCmd {
                 run_args,
                 cargo_args,
             } => {
-                let sdk = Sdk::new();
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut sdk = Sdk::new(app_pk.app_vm_pk.vm_config.clone())?;
+                sdk.app_pk_mut().set(app_pk)?;
                 let (committed_exe, target_name) =
-                    load_or_build_and_commit_exe(&sdk, run_args, cargo_args, &app_pk)?;
+                    load_or_build_and_commit_exe(run_args, cargo_args, &app_pk)?;
 
-                let app_proof = sdk.generate_app_proof(
-                    vm_builder,
-                    app_pk,
-                    committed_exe,
-                    read_to_stdin(&run_args.input)?,
-                )?;
+                let app_proof = sdk
+                    .app_prover(committed_exe)?
+                    .prove(read_to_stdin(&run_args.input)?)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
@@ -234,7 +232,7 @@ impl ProveCmd {
 pub(crate) fn load_app_pk(
     app_pk: &Option<PathBuf>,
     cargo_args: &RunCargoArgs,
-) -> Result<Arc<AppProvingKey<SdkVmConfig>>> {
+) -> Result<AppProvingKey<SdkVmConfig>> {
     let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
 
@@ -244,12 +242,11 @@ pub(crate) fn load_app_pk(
         get_app_pk_path(&target_dir)
     };
 
-    Ok(Arc::new(read_app_pk_from_file(app_pk_path)?))
+    Ok(read_app_pk_from_file(app_pk_path)?)
 }
 
 // Returns (committed_exe, target_name) where target_name has no extension
 pub(crate) fn load_or_build_and_commit_exe(
-    sdk: &Sdk,
     run_args: &RunArgs,
     cargo_args: &RunCargoArgs,
     app_pk: &Arc<AppProvingKey<SdkVmConfig>>,
@@ -266,7 +263,7 @@ pub(crate) fn load_or_build_and_commit_exe(
     };
 
     let app_exe = read_exe_from_file(exe_path)?;
-    let committed_exe = sdk.commit_app_exe(app_pk.app_fri_params(), app_exe)?;
+    let committed_exe = commit_app_exe(app_pk.app_fri_params(), app_exe)?;
     Ok((
         committed_exe,
         exe_path.file_stem().unwrap().to_string_lossy().into_owned(),

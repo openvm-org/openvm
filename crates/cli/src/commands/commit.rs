@@ -64,7 +64,6 @@ pub struct CommitCmd {
 
 impl CommitCmd {
     pub fn run(&self) -> Result<()> {
-        let sdk = Sdk::new();
         let app_pk = load_app_pk(&self.app_pk, &self.cargo_args)?;
 
         let run_args = RunArgs {
@@ -75,7 +74,7 @@ impl CommitCmd {
             input: None,
         };
         let (committed_exe, target_name) =
-            load_or_build_and_commit_exe(&sdk, &run_args, &self.cargo_args, &app_pk)?;
+            load_or_build_and_commit_exe(&run_args, &self.cargo_args, &app_pk)?;
 
         let commits = AppExecutionCommit::compute(
             &app_pk.app_vm_pk.vm_config,

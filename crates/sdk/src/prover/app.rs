@@ -5,6 +5,7 @@ use itertools::Itertools;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
+        instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
         PreflightExecutor, VerifiedExecutionPayload, VirtualMachineError, VmBuilder,
         VmExecutionConfig, VmInstance, VmVerificationError,
@@ -23,7 +24,7 @@ use openvm_stark_sdk::{
 use tracing::info_span;
 
 use crate::{
-    commit::{CommitBytes, VmCommittedExe},
+    commit::CommitBytes,
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     StdIn, F, SC,
@@ -49,19 +50,30 @@ where
     Val<E::SC>: PrimeField32,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]>,
 {
+    /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
+    /// If a cached version of the program already exists on device, then directly use the
+    /// [`Self::new_from_instance`] constructor.
     pub fn new(
         vm_builder: VB,
         app_vm_pk: Arc<VmProvingKey<E::SC, VB::VmConfig>>,
-        app_committed_exe: Arc<VmCommittedExe<E::SC>>,
+        exe: Arc<VmExe<Val<E::SC>>>,
     ) -> Result<Self, VirtualMachineError> {
-        let app_prover = new_local_prover(vm_builder, &app_vm_pk, &app_committed_exe)?;
+        let instance = new_local_prover(vm_builder, &app_vm_pk, exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
-        Ok(Self {
-            program_name: None,
-            app_prover,
-            app_vm_vk,
-        })
+        Ok(Self::new_from_instance(instance, app_vm_vk))
     }
+
+    pub fn new_from_instance(
+        instance: VmInstance<E, VB>,
+        app_vm_vk: MultiStarkVerifyingKey<E::SC>,
+    ) -> Self {
+        Self {
+            program_name: None,
+            app_prover: instance,
+            app_vm_vk,
+        }
+    }
+
     pub fn set_program_name(&mut self, program_name: impl AsRef<str>) -> &mut Self {
         self.program_name = Some(program_name.as_ref().to_string());
         self

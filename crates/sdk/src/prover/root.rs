@@ -38,7 +38,7 @@ impl RootVerifierLocalProver {
         let inner = new_local_prover(
             NativeCpuBuilder,
             &root_verifier_pk.vm_pk,
-            &root_verifier_pk.root_committed_exe,
+            root_verifier_pk.root_committed_exe.exe.clone(),
         )?;
         let fixed_air_heights = root_verifier_pk.air_heights;
         let air_id_perm = AirIdPermutation::compute(&fixed_air_heights);

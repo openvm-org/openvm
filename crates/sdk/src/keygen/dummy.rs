@@ -3,7 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         instructions::{
-            instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
+            exe::VmExe, instruction::Instruction, program::Program, LocalOpcode,
+            SystemOpcode::TERMINATE,
         },
         ContinuationVmProof, Executor, MatrixRecordArena, MeteredExecutor,
         PreflightExecutionOutput, PreflightExecutor, SingleSegmentVmProver, SystemConfig,
@@ -35,8 +36,8 @@ use openvm_stark_sdk::{
         fri_params::standard_fri_params_with_100_bits_conjectured_security,
         FriParameters,
     },
-    engine::{StarkEngine, StarkFriEngine},
-    openvm_stark_backend::{config::StarkGenericConfig, p3_field::FieldAlgebra, proof::Proof},
+    engine::StarkFriEngine,
+    openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof},
 };
 
 use crate::{
@@ -92,11 +93,11 @@ pub(super) fn compute_root_proof_heights(
 
 pub(super) fn dummy_internal_proof(
     internal_vm_pk: Arc<VmProvingKey<SC, NativeConfig>>,
-    internal_exe: Arc<VmCommittedExe<SC>>,
+    internal_committed_exe: Arc<VmCommittedExe<SC>>,
     leaf_proof: Proof<SC>,
 ) -> Result<Proof<SC>, VirtualMachineError> {
     let mut internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-        internal_exe.get_program_commit().into(),
+        internal_committed_exe.get_program_commit().into(),
         &[leaf_proof],
         1,
     );
@@ -104,7 +105,7 @@ pub(super) fn dummy_internal_proof(
     let mut internal_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
         NativeCpuBuilder,
         &internal_vm_pk,
-        &internal_exe,
+        internal_committed_exe.exe.clone(),
     )?;
     SingleSegmentVmProver::prove(
         &mut internal_prover,
@@ -153,13 +154,9 @@ where
         1,
         "Dummy proof should only have 1 segment"
     );
-    let e = BabyBearPoseidon2Engine::new(leaf_vm_pk.fri_params);
-    let leaf_exe = Arc::new(VmCommittedExe::<SC>::commit(
-        leaf_program.into(),
-        e.config().pcs(),
-    ));
+    let leaf_exe = Arc::new(VmExe::new(leaf_program));
     let mut leaf_prover =
-        new_local_prover::<BabyBearPoseidon2Engine, _>(NativeCpuBuilder, &leaf_vm_pk, &leaf_exe)?;
+        new_local_prover::<BabyBearPoseidon2Engine, _>(NativeCpuBuilder, &leaf_vm_pk, leaf_exe)?;
     let mut leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(app_proof, 1);
     let leaf_input = leaf_inputs.pop().unwrap();
     SingleSegmentVmProver::prove(
@@ -195,10 +192,9 @@ where
     VC: VmExecutionConfig<F>,
     <VC as VmExecutionConfig<F>>::Executor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
 {
-    let fri_params = app_vm_pk.fri_params;
-    let dummy_exe = dummy_app_committed_exe(fri_params);
+    let dummy_exe = Arc::new(VmExe::new(dummy_app_program()));
     let mut app_prover =
-        new_local_prover::<BabyBearPoseidon2Engine, VB>(app_vm_builder, &app_vm_pk, &dummy_exe)?;
+        new_local_prover::<BabyBearPoseidon2Engine, VB>(app_vm_builder, &app_vm_pk, dummy_exe)?;
     // Force all AIRs to have non-empty trace matrices (height 0 -> height 1)
     let modify_ctx = |_seg_idx: usize, ctx: &mut ProvingContext<CpuBackend<SC>>| {
         for (i, pk) in app_vm_pk.vm_pk.per_air.iter().enumerate() {
@@ -212,15 +208,6 @@ where
     };
     let dummy_proof = app_prover.prove_continuations(vec![], modify_ctx)?;
     Ok(dummy_proof)
-}
-
-fn dummy_app_committed_exe(fri_params: FriParameters) -> Arc<VmCommittedExe<SC>> {
-    let program = dummy_app_program();
-    let e = BabyBearPoseidon2Engine::new(fri_params);
-    Arc::new(VmCommittedExe::<SC>::commit(
-        program.into(),
-        e.config().pcs(),
-    ))
 }
 
 fn dummy_app_program() -> Program<F> {
