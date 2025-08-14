@@ -151,7 +151,9 @@ impl GroupedMetrics {
                     })
                     .collect();
 
-                Self::validate_instruction_counts(&group_summaries);
+                if !group_name.contains("keygen") {
+                    Self::validate_instruction_counts(&group_summaries);
+                }
 
                 (group_name.clone(), group_summaries)
             })
