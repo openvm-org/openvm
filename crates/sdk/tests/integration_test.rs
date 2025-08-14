@@ -273,7 +273,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
 #[test]
 #[ignore = "slow"]
 fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
-    use openvm_sdk::keygen::{AggProvingKey, Halo2ProvingKey};
+    use openvm_sdk::keygen::Halo2ProvingKey;
 
     // Define custom public values handler and implement StaticVerifierPvHandler trait on it
     pub struct CustomPvHandler {
@@ -318,14 +318,13 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
     println!("test setup");
     let app_log_blowup = 1;
     let app_config = small_test_app_config(app_log_blowup);
+    println!("app_config: {:?}", app_config.app_vm_config);
     let sdk = Sdk::new(app_config)?;
     let app_exe = app_exe_for_test();
-    println!("app_config: {:?}", app_config.app_vm_config);
-    let params_reader = CacheHalo2ParamsReader::new_with_default_params_dir();
 
     // Generate PK using custom PV handler
     println!("generate PK using custom PV handler");
-    let app_commit = sdk.app_prover(app_exe)?.app_commit();
+    let app_commit = sdk.app_prover(app_exe.clone())?.app_commit();
     let exe_commit = app_commit.app_exe_commit.to_bn254();
     let leaf_verifier_commit = app_commit.app_vm_commit.to_bn254();
 
@@ -343,23 +342,23 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
         agg_pk,
         dummy_internal_proof.clone(),
     )?;
-    sdk.set_halo2_pk(halo2_pk)?;
 
     // Generate verifier contract
     println!("generate verifier contract");
-    let params =
-        params_reader.read_params(agg_pk.halo2_pk.wrapper.pinning.metadata.config_params.k);
+    let wrapper_k = halo2_pk.wrapper.pinning.metadata.config_params.k;
+    let params = params_reader.read_params(wrapper_k);
     let evm_verifier = halo2_pk.wrapper.generate_fallback_evm_verifier(&params);
 
     // Generate and verify proof
     println!("generate and verify proof");
+    let _ = sdk.set_halo2_pk(halo2_pk).map_err(|_| panic!());
     let evm_proof = sdk.prove_evm(app_exe, StdIn::default())?;
 
     let evm_proof: RawEvmProof = evm_proof
         .clone()
         .try_into()
         .expect("failed to convert evm proof");
-    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof)?;
+    Halo2WrapperProvingKey::evm_verify(&evm_verifier, &evm_proof).unwrap();
     Ok(())
 }
 

@@ -7,8 +7,8 @@ else
 fi
 echo "maxk=$maxk"
 
-mkdir -p params/
-cd params
+PARAMS_DIR="$HOME/.openvm/params/"
+mkdir -p $PARAMS_DIR
 for k in $(seq 10 $maxk)
 do
     pkey_file="kzg_bn254_${k}.srs"
@@ -16,7 +16,6 @@ do
         echo "$pkey_file already exists"
     else
         echo "downloading $pkey_file"
-        s5cmd --no-sign-request cp --concurrency 10 "s3://axiom-crypto/challenge_0085/${pkey_file}" .
+        s5cmd --no-sign-request cp --concurrency 10 "s3://axiom-crypto/challenge_0085/${pkey_file}" $PARAMS_DIR
     fi
 done
-cd ..
