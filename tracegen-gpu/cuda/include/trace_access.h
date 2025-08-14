@@ -2,7 +2,6 @@
 
 #include "fp.h"
 #include <cstddef>
-#include <cstdint>
 
 /// A RowSlice is a contiguous section of a row in col-based trace.
 struct RowSlice {
@@ -12,6 +11,11 @@ struct RowSlice {
     __device__ RowSlice(Fp *ptr, size_t stride) : ptr(ptr), stride(stride) {}
 
     __device__ __forceinline__ Fp &operator[](size_t column_index) const {
+        // While implementing tracegen for SHA256, we encountered what we believe to be an nvcc
+        // compiler bug. Occasionally, at various non-zero PTXAS optimization levels the compiler
+        // tries to replace this multiplication with a series of SHL, ADD, and AND instructions
+        // that we believe erroneously adds ~2^49 to the final address via an improper carry
+        // propagation. To read more, see https://github.com/stephenh-axiom-xyz/cuda-illegal.
         return ptr[column_index * stride];
     }
 
@@ -25,11 +29,8 @@ struct RowSlice {
     }
 
     template <typename T>
-    __device__ __forceinline__ void write_array(
-        size_t column_index,
-        size_t length,
-        const T *values
-    ) const {
+    __device__ __forceinline__ void write_array(size_t column_index, size_t length, const T *values)
+        const {
 #pragma unroll
         for (size_t i = 0; i < length; i++) {
             ptr[(column_index + i) * stride] = values[i];
