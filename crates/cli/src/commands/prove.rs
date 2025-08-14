@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use eyre::{eyre, Result};
+use eyre::Result;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_sdk::{
     config::{AggregationTreeConfig, SdkVmConfig},
@@ -118,10 +118,7 @@ impl ProveCmd {
                 cargo_args,
             } => {
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let mut sdk = Sdk::new(app_pk.app_config())?;
-                sdk.app_pk_mut()
-                    .set(app_pk)
-                    .map_err(|_| eyre!("app_pk already existed"))?;
+                let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let app_proof = sdk
@@ -143,18 +140,15 @@ impl ProveCmd {
                 agg_tree_config,
             } => {
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let mut sdk = Sdk::new(app_pk.app_config())?.with_agg_tree_config(*agg_tree_config);
-                sdk.app_pk_mut()
-                    .set(app_pk)
-                    .map_err(|_| eyre!("app_pk already existed"))?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let agg_pk = read_object_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                sdk.agg_pk_mut()
-                    .set(agg_pk)
-                    .map_err(|_| eyre!("agg_pk already existed"))?;
+                let sdk = Sdk::new(app_pk.app_config())?
+                    .with_agg_tree_config(*agg_tree_config)
+                    .with_app_pk(app_pk)
+                    .with_agg_pk(agg_pk);
                 let mut prover = sdk.prover(exe)?;
                 let app_commit = prover.app_commit();
                 println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
@@ -179,22 +173,17 @@ impl ProveCmd {
                 agg_tree_config,
             } => {
                 let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let mut sdk = Sdk::new(app_pk.app_config())?.with_agg_tree_config(*agg_tree_config);
-                sdk.app_pk_mut()
-                    .set(app_pk)
-                    .map_err(|_| eyre!("app_pk already existed"))?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                sdk.agg_pk_mut()
-                    .set(agg_pk)
-                    .map_err(|_| eyre!("agg_pk already existed"))?;
-                sdk.halo2_pk_mut()
-                    .set(halo2_pk)
-                    .map_err(|_| eyre!("halo2_pk already existed"))?;
+                let sdk = Sdk::new(app_pk.app_config())?
+                    .with_agg_tree_config(*agg_tree_config)
+                    .with_app_pk(app_pk)
+                    .with_agg_pk(agg_pk)
+                    .with_halo2_pk(halo2_pk);
                 let mut prover = sdk.evm_prover(exe)?;
                 let app_commit = prover.stark_prover.app_commit();
                 println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());

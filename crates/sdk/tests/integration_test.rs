@@ -343,7 +343,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
         agg_pk,
         dummy_internal_proof.clone(),
     )?;
-    sdk.halo2_pk_mut().set(halo2_pk)?;
+    sdk.set_halo2_pk(halo2_pk)?;
 
     // Generate verifier contract
     println!("generate verifier contract");

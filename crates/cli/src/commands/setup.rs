@@ -100,7 +100,7 @@ impl SetupCmd {
 
             Self::download_params(10, 24).await?;
             // halo2 keygen does not depend on the app config
-            let mut sdk = Sdk::standard();
+            let sdk = Sdk::standard();
 
             let agg_vk = if !self.force_agg_keygen
                 && PathBuf::from(&default_agg_stark_pk_path).exists()
@@ -108,11 +108,9 @@ impl SetupCmd {
                 && PathBuf::from(&default_agg_halo2_pk_path).exists()
             {
                 let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk()?;
-                sdk.agg_pk_mut()
-                    .set(agg_pk)
+                sdk.set_agg_pk(agg_pk)
                     .map_err(|_| eyre!("agg_pk already existed"))?;
-                sdk.halo2_pk_mut()
-                    .set(halo2_pk)
+                sdk.set_halo2_pk(halo2_pk)
                     .map_err(|_| eyre!("halo2_pk already existed"))?;
                 read_object_from_file(&default_agg_stark_vk_path)?
             } else {

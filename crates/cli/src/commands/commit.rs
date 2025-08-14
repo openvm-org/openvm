@@ -74,10 +74,7 @@ impl CommitCmd {
             input: None,
         };
         let (exe, target_name) = load_or_build_exe(&run_args, &self.cargo_args)?;
-        let mut sdk = Sdk::new(app_pk.app_config())?;
-        sdk.app_pk_mut()
-            .set(app_pk)
-            .map_err(|_| eyre!("app_pk already existed"))?;
+        let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
 
         let app_commit = sdk.app_prover(exe)?.app_commit();
         println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());

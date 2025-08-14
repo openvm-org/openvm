@@ -129,11 +129,9 @@ where
     #[getset(get = "pub")]
     executor: VmExecutor<F, VB::VmConfig>,
 
-    #[getset(get_mut = "pub")]
     app_pk: OnceLock<AppProvingKey<VB::VmConfig>>,
     /// STARK aggregation proving key and dummy internal proof. Dummy internal proof is saved for
     /// halo2 pkey generation usage.
-    #[getset(get_mut = "pub")]
     agg_pk: OnceLock<AggProvingKey>,
     dummy_internal_proof: OnceLock<Proof<SC>>,
 
@@ -141,7 +139,6 @@ where
     #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
-    #[getset(get_mut = "pub")]
     halo2_pk: OnceLock<Halo2ProvingKey>,
 
     #[getset(get = "pub")]
@@ -439,6 +436,22 @@ where
             AppProvingKey::keygen(self.app_config.clone()).expect("app_keygen failed")
         })
     }
+    /// Sets the app proving key. Returns `Ok(())` if app keygen has not been called and
+    /// `Err(app_pk)` if keygen has already been called.
+    pub fn set_app_pk(
+        &self,
+        app_pk: AppProvingKey<VB::VmConfig>,
+    ) -> Result<(), AppProvingKey<VB::VmConfig>> {
+        self.app_pk.set(app_pk)
+    }
+    /// See [`set_app_pk`](Self::set_app_pk). This should only be used in a constructor, and panics
+    /// if app keygen has already been called.
+    pub fn with_app_pk(self, app_pk: AppProvingKey<VB::VmConfig>) -> Self {
+        let _ = self
+            .set_app_pk(app_pk)
+            .map_err(|_| panic!("app_pk already set"));
+        self
+    }
 
     /// Generates the proving keys necessary for STARK aggregation. Generates the proving keys once
     /// and caches them. Future calls will return the cached key. This function does not include
@@ -464,6 +477,19 @@ where
             }
             agg_pk
         })
+    }
+    /// Sets the aggregation proving keys. Returns `Ok(())` if agg keygen has not been called and
+    /// `Err(agg_pk)` if keygen has already been called.
+    pub fn set_agg_pk(&self, agg_pk: AggProvingKey) -> Result<(), AggProvingKey> {
+        self.agg_pk.set(agg_pk)
+    }
+    /// See [`set_agg_pk`](Self::set_agg_pk). This should only be used in a constructor, and panics
+    /// if app keygen has already been called.
+    pub fn with_agg_pk(self, agg_pk: AggProvingKey) -> Self {
+        let _ = self
+            .set_agg_pk(agg_pk)
+            .map_err(|_| panic!("agg_pk already set"));
+        self
     }
     // We have this function in case agg_pk is set externally without setting dummy proof.
     fn dummy_internal_proof(&self) -> &Proof<SC> {
@@ -498,6 +524,11 @@ where
     }
 
     #[cfg(feature = "evm-prove")]
+    pub fn halo2_keygen(&self) -> Halo2ProvingKey {
+        self.halo2_pk().clone()
+    }
+
+    #[cfg(feature = "evm-prove")]
     pub fn halo2_pk(&self) -> &Halo2ProvingKey {
         let (agg_pk, dummy_internal_proof) = self.agg_pk_and_dummy_internal_proof();
         // TODO[jpw]: use `get_or_try_init` once it is stable
@@ -511,6 +542,21 @@ where
             )
             .expect("halo2_keygen failed")
         })
+    }
+    /// Sets the halo2 proving keys. Returns `Ok(())` if halo2 keygen has not been called and
+    /// `Err(halo2_pk)` if keygen has already been called.
+    #[cfg(feature = "evm-prove")]
+    pub fn set_halo2_pk(&self, halo2_pk: Halo2ProvingKey) -> Result<(), Halo2ProvingKey> {
+        self.halo2_pk.set(halo2_pk)
+    }
+    /// See [`set_halo2_pk`](Self::set_halo2_pk). This should only be used in a constructor, and
+    /// panics if halo2 keygen has already been called.
+    #[cfg(feature = "evm-prove")]
+    pub fn with_halo2_pk(self, halo2_pk: Halo2ProvingKey) -> Self {
+        let _ = self
+            .set_halo2_pk(halo2_pk)
+            .map_err(|_| "halo2_pk already set");
+        self
     }
 
     // ======================== Verification Methods ========================
