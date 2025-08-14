@@ -1,17 +1,21 @@
-use std::array;
+use std::{array, fmt::Debug};
 
+use openvm_instructions::{
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    NATIVE_AS,
+};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
-use rand::{thread_rng, Rng};
+use rand::{distributions::Standard, prelude::Distribution, thread_rng, Rng};
 
 use crate::{
     arch::{testing::VmChipTestBuilder, MemoryConfig},
-    system::memory::online::TracingMemory,
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::TracingMemory},
 };
 
 type F = BabyBear;
 
-fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>) {
+fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>, its: usize) {
     let mut rng = create_seeded_rng();
 
     // The point here is to have a lot of equal
@@ -21,7 +25,6 @@ fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>) {
     let aligns = [4, 4, 4, 1];
     let value_bounds = [256, 256, 256, (1 << 30)];
     let max_log_block_size = 4;
-    let its = 1000;
     for _ in 0..its {
         let addr_sp = rng.gen_range(1..=aligns.len());
         let align: usize = aligns[addr_sp - 1];
@@ -64,36 +67,56 @@ fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>) {
 
 #[test]
 fn test_memory_write_volatile() {
-    test_memory_write_by_tester(VmChipTestBuilder::<F>::volatile(MemoryConfig::default()));
+    test_memory_write_by_tester(
+        VmChipTestBuilder::<F>::volatile(MemoryConfig::default()),
+        1000,
+    );
+    test_memory_write_by_tester(VmChipTestBuilder::<F>::volatile(MemoryConfig::default()), 0);
 }
 
 #[test]
 fn test_memory_write_persistent() {
-    test_memory_write_by_tester(VmChipTestBuilder::<F>::persistent(MemoryConfig::default()));
+    test_memory_write_by_tester(
+        VmChipTestBuilder::<F>::persistent(MemoryConfig::default()),
+        1000,
+    );
+    test_memory_write_by_tester(
+        VmChipTestBuilder::<F>::persistent(MemoryConfig::default()),
+        0,
+    );
 }
 
-#[test]
-fn test_no_adapter_records_for_singleton_accesses() {
+fn test_no_adapter_records_for_singleton_accesses<T, const BLOCK_SIZE: usize>(address_space: u32)
+where
+    T: Copy + Debug,
+    Standard: Distribution<T>,
+{
     let memory_config = MemoryConfig::default();
-    let mut memory = TracingMemory::new(&memory_config, 1, 0);
+    let mut memory = TracingMemory::new(&memory_config, BLOCK_SIZE, 0);
+    let max_ptr = (memory_config.addr_spaces[address_space as usize].num_cells / BLOCK_SIZE) as u32;
 
     let mut rng = thread_rng();
     for _ in 0..1000 {
-        // TODO[jpw]: test other address spaces?
-        let address_space = 4u32;
-        let pointer = rng.gen_range(0..1 << memory_config.pointer_max_bits);
+        let pointer = rng.gen_range(0..max_ptr) * BLOCK_SIZE as u32;
 
         if rng.gen_bool(0.5) {
-            let data = F::from_canonical_u32(rng.gen_range(0..1 << 30));
-            // address space is 4 so cell type is `F`
+            let data: [T; BLOCK_SIZE] = array::from_fn(|_| rng.gen());
             unsafe {
-                memory.write::<F, 1, 1>(address_space, pointer, [data]);
+                memory.write::<T, BLOCK_SIZE, BLOCK_SIZE>(address_space, pointer, data);
             }
         } else {
             unsafe {
-                memory.read::<F, 1, 1>(address_space, pointer);
+                memory.read::<T, BLOCK_SIZE, BLOCK_SIZE>(address_space, pointer);
             }
         }
     }
     assert!(memory.access_adapter_records.allocated().is_empty());
+}
+
+#[test]
+fn test_no_adapter_records() {
+    test_no_adapter_records_for_singleton_accesses::<u8, 4>(RV32_REGISTER_AS);
+    test_no_adapter_records_for_singleton_accesses::<u8, 4>(RV32_MEMORY_AS);
+    test_no_adapter_records_for_singleton_accesses::<u8, 4>(PUBLIC_VALUES_AS);
+    test_no_adapter_records_for_singleton_accesses::<F, 1>(NATIVE_AS);
 }
