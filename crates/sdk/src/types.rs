@@ -1,8 +1,12 @@
-use std::io::Cursor;
+use std::{io::Cursor, sync::Arc};
 
+use derive_more::derive::From;
 use eyre::Result;
+use openvm::platform::memory::MEM_SIZE;
+use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
 use openvm_stark_backend::proof::Proof;
+use openvm_transpiler::elf::Elf;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 #[cfg(feature = "evm-prove")]
@@ -26,6 +30,25 @@ pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 #[cfg(feature = "evm-prove")]
 const NUM_BN254_PROOF: usize = 43;
+
+#[derive(From)]
+pub enum ExecutableFormat {
+    Elf(Elf),
+    VmExe(VmExe<crate::F>),
+    SharedVmExe(Arc<VmExe<crate::F>>),
+}
+
+impl<'a> From<&'a [u8]> for ExecutableFormat {
+    fn from(bytes: &'a [u8]) -> Self {
+        let elf = Elf::decode(bytes, MEM_SIZE.try_into().unwrap()).expect("Invalid ELF bytes");
+        ExecutableFormat::Elf(elf)
+    }
+}
+impl From<Vec<u8>> for ExecutableFormat {
+    fn from(bytes: Vec<u8>) -> Self {
+        ExecutableFormat::from(&bytes[..])
+    }
+}
 
 #[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]

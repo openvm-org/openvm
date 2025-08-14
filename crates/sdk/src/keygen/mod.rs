@@ -174,6 +174,10 @@ where
         }
     }
 
+    pub fn leaf_verifier_program_commit(&self) -> Com<SC> {
+        self.leaf_committed_exe.get_program_commit()
+    }
+
     pub fn app_fri_params(&self) -> FriParameters {
         self.app_vm_pk.fri_params
     }

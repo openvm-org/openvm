@@ -1,11 +1,13 @@
 use std::{array::from_fn, sync::Arc};
 
 use num_bigint::BigUint;
-use openvm_circuit::arch::{instructions::exe::VmExe, VmConfig};
+use openvm_circuit::arch::{instructions::exe::VmExe, MemoryConfig};
 pub use openvm_circuit::system::program::trace::VmCommittedExe;
 use openvm_native_compiler::ir::DIGEST_SIZE;
 use openvm_stark_backend::{
-    config::StarkGenericConfig, engine::StarkEngine, p3_field::PrimeField32,
+    config::{Com, StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -86,19 +88,32 @@ pub struct AppExecutionCommit {
 impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
-    pub fn compute<VC: VmConfig<SC>>(
-        app_vm_config: &VC,
-        app_exe: &VmCommittedExe<SC>,
-        leaf_vm_verifier_exe: &VmCommittedExe<SC>,
-    ) -> Self {
-        let exe_commit: [F; DIGEST_SIZE] = app_exe
-            .compute_exe_commit(&app_vm_config.as_ref().memory_config)
-            .into();
-        let vm_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe.commitment.into();
+    pub fn compute<SC: StarkGenericConfig>(
+        app_memory_config: &MemoryConfig,
+        app_exe: &VmExe<Val<SC>>,
+        app_program_commit: Com<SC>,
+        leaf_verifier_program_commit: Com<SC>,
+    ) -> Self
+    where
+        Com<SC>: AsRef<[Val<SC>; DIGEST_SIZE]>
+            + From<[Val<SC>; DIGEST_SIZE]>
+            + Into<[Val<SC>; DIGEST_SIZE]>,
+        Val<SC>: PrimeField32,
+    {
+        let exe_commit: [Val<SC>; DIGEST_SIZE] = VmCommittedExe::<SC>::compute_exe_commit(
+            &app_program_commit,
+            app_exe,
+            app_memory_config,
+        )
+        .into();
+        let vm_commit: [Val<SC>; DIGEST_SIZE] = leaf_verifier_program_commit.into();
         Self::from_field_commit(exe_commit, vm_commit)
     }
 
-    pub fn from_field_commit(exe_commit: [F; DIGEST_SIZE], vm_commit: [F; DIGEST_SIZE]) -> Self {
+    pub fn from_field_commit<F: PrimeField32>(
+        exe_commit: [F; DIGEST_SIZE],
+        vm_commit: [F; DIGEST_SIZE],
+    ) -> Self {
         Self {
             app_exe_commit: CommitBytes::from_u32_digest(&exe_commit.map(|x| x.as_canonical_u32())),
             app_vm_commit: CommitBytes::from_u32_digest(&vm_commit.map(|x| x.as_canonical_u32())),

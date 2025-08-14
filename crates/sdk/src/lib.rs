@@ -54,13 +54,16 @@ use openvm_transpiler::{
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
 
+#[cfg(feature = "evm-prove")]
 use crate::{
-    config::{AggregationConfig, Halo2Config, SdkVmCpuBuilder},
+    config::Halo2Config, keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof,
+};
+use crate::{
+    config::{AggregationConfig, SdkVmCpuBuilder},
     keygen::{asm::program_to_asm, AggProvingKey, AggVerifyingKey},
     prover::{AppProver, StarkProver},
+    types::ExecutableFormat,
 };
-#[cfg(feature = "evm-prove")]
-use crate::{keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof};
 
 pub mod codec;
 pub mod commit;
@@ -143,7 +146,7 @@ where
     app_vm_builder: VB,
     #[getset(get = "pub")]
     native_builder: NativeBuilder,
-    #[getset(get = "pub", get_mut = "pub", set_with = "pub")]
+    #[getset(get_mut = "pub", set_with = "pub")]
     transpiler: Option<Transpiler<F>>,
 
     _phantom: PhantomData<E>,
@@ -197,6 +200,7 @@ where
             profiling,
             ..Default::default()
         };
+        #[cfg(feature = "evm-prove")]
         let halo2_config = Halo2Config {
             profiling,
             ..Default::default()
@@ -250,18 +254,36 @@ where
         Elf::decode(&data, MEM_SIZE as u32).map_err(SdkError::Other)
     }
 
-    /// Transpiles RISC-V ELF to OpenVM executable.
-    pub fn transpile(&self, elf: Elf) -> Result<VmExe<F>, SdkError> {
-        let transpiler = self
-            .transpiler
-            .clone()
-            .ok_or(SdkError::TranspilerNotAvailable)?;
-        let exe = VmExe::from_elf(elf, transpiler)?;
+    /// Transpiler for transpiling RISC-V ELF to OpenVM executable.
+    pub fn transpiler(&self) -> Result<&Transpiler<F>, SdkError> {
+        self.transpiler
+            .as_ref()
+            .ok_or(SdkError::TranspilerNotAvailable)
+    }
+
+    pub fn convert_to_exe(
+        &self,
+        executable: impl Into<ExecutableFormat>,
+    ) -> Result<Arc<VmExe<F>>, SdkError> {
+        let executable = executable.into();
+        let exe = match executable {
+            ExecutableFormat::Elf(elf) => {
+                let transpiler = self.transpiler()?.clone();
+                Arc::new(VmExe::from_elf(elf, transpiler)?)
+            }
+            ExecutableFormat::VmExe(exe) => Arc::new(exe),
+            ExecutableFormat::SharedVmExe(exe) => exe,
+        };
         Ok(exe)
     }
 
     /// Returns the user public values as field elements.
-    pub fn execute(&self, exe: VmExe<F>, inputs: StdIn) -> Result<Vec<u8>, SdkError> {
+    pub fn execute(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<Vec<u8>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
         let instance = self
             .executor
             .instance(&exe)
@@ -285,18 +307,34 @@ where
     /// The returned STARK proof is not intended for EVM verification. For EVM verification, use the
     /// [`prove_evm`](Self::prove_evm) method, which requires the `"evm-prove"` feature to be
     /// enabled.
+    ///
+    /// For convenience, this function also returns the [AppExecutionCommit], which is a full
+    /// commitment to the App VM config and the App [VmExe]. It does **not** depend on the `inputs`.
+    /// It can be generated separately from the proof by creating a
+    /// [`prover`](Self::prover) and calling
+    /// [`app_commit`](StarkProver::app_commit).
+    ///
+    /// If STARK aggregation is not needed and a proof whose size may grow linearly with the length
+    /// of the program runtime is desired, create an [`app_prover`](Self::app_prover) and call
+    /// [`app_prover.prove(inputs)`](AppProver::prove).
     pub fn prove(
         &self,
-        app_exe: Arc<VmExe<F>>,
+        app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
-    ) -> Result<VmStarkProof<SC>, SdkError> {
+    ) -> Result<(VmStarkProof<SC>, AppExecutionCommit), SdkError> {
         let mut prover = self.prover(app_exe)?;
+        let app_commit = prover.app_prover.execution_commit();
         let proof = prover.prove(inputs)?;
-        Ok(proof)
+        Ok((proof, app_commit))
     }
 
     #[cfg(feature = "evm-prove")]
-    pub fn prove_evm(&self, app_exe: Arc<VmExe<F>>, inputs: StdIn) -> Result<EvmProof, SdkError> {
+    pub fn prove_evm(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<EvmProof, SdkError> {
+        let app_exe = self.convert_to_exe(app_exe)?;
         let mut evm_prover = self.evm_prover(app_exe)?;
         let proof = evm_prover.prove_evm(inputs)?;
         Ok(proof)
@@ -309,10 +347,11 @@ where
     /// exist.
     pub fn prover(
         &self,
-        app_exe: Arc<VmExe<F>>,
+        app_exe: impl Into<ExecutableFormat>,
     ) -> Result<StarkProver<E, VB, NativeBuilder>, SdkError> {
-        let app_pk = self.app_pk().clone();
-        let agg_pk = self.agg_pk().clone();
+        let app_exe = self.convert_to_exe(app_exe)?;
+        let app_pk = self.app_pk();
+        let agg_pk = self.agg_pk();
         let stark_prover = StarkProver::<E, _, _>::new(
             self.app_vm_builder.clone(),
             self.native_builder.clone(),
@@ -327,15 +366,16 @@ where
     #[cfg(feature = "evm-prove")]
     pub fn evm_prover(
         &self,
-        app_exe: Arc<VmExe<F>>,
+        app_exe: impl Into<ExecutableFormat>,
     ) -> Result<EvmHalo2Prover<E, VB, NativeBuilder>, SdkError> {
+        let app_exe = self.convert_to_exe(app_exe)?;
         let evm_prover = EvmHalo2Prover::<E, _, _>::new(
             self.halo2_params_reader(),
             self.app_vm_builder.clone(),
             self.native_builder.clone(),
-            self.app_pk().clone(),
+            self.app_pk(),
             app_exe,
-            self.agg_pk().clone(),
+            self.agg_pk(),
             self.halo2_pk().clone(),
             self.agg_tree_config,
         )?;
@@ -349,9 +389,18 @@ where
     /// Creates an app prover instance specific to the provided exe.
     /// This function will generate the [AppProvingKey] if it doesn't already exist and use it to
     /// construct the [AppProver].
-    pub fn app_prover(&self, exe: Arc<VmExe<F>>) -> Result<AppProver<E, VB>, SdkError> {
-        let vm_pk = self.app_pk().app_vm_pk.clone();
-        let prover = AppProver::<E, VB>::new(self.app_vm_builder.clone(), vm_pk, exe)?;
+    pub fn app_prover(
+        &self,
+        exe: impl Into<ExecutableFormat>,
+    ) -> Result<AppProver<E, VB>, SdkError> {
+        let exe = self.convert_to_exe(exe)?;
+        let app_pk = self.app_pk();
+        let prover = AppProver::<E, VB>::new(
+            self.app_vm_builder.clone(),
+            &app_pk.app_vm_pk,
+            exe,
+            app_pk.leaf_verifier_program_commit(),
+        )?;
         Ok(prover)
     }
 
@@ -402,20 +451,18 @@ where
         })
     }
 
-    pub fn generate_root_verifier_asm(&self, agg_stark_pk: &AggProvingKey) -> String {
+    pub fn generate_root_verifier_asm(&self) -> String {
+        let agg_pk = self.agg_pk();
         let kernel_asm = RootVmVerifierConfig {
-            leaf_fri_params: agg_stark_pk.leaf_vm_pk.fri_params,
-            internal_fri_params: agg_stark_pk.internal_vm_pk.fri_params,
-            num_user_public_values: agg_stark_pk.num_user_public_values(),
-            internal_vm_verifier_commit: agg_stark_pk
-                .internal_committed_exe
-                .get_program_commit()
-                .into(),
+            leaf_fri_params: agg_pk.leaf_vm_pk.fri_params,
+            internal_fri_params: agg_pk.internal_vm_pk.fri_params,
+            num_user_public_values: agg_pk.num_user_public_values(),
+            internal_vm_verifier_commit: agg_pk.internal_committed_exe.get_program_commit().into(),
             compiler_options: Default::default(),
         }
         .build_kernel_asm(
-            &agg_stark_pk.leaf_vm_pk.vm_pk.get_vk(),
-            &agg_stark_pk.internal_vm_pk.vm_pk.get_vk(),
+            &agg_pk.leaf_vm_pk.vm_pk.get_vk(),
+            &agg_pk.internal_vm_pk.vm_pk.get_vk(),
         );
         program_to_asm(kernel_asm)
     }

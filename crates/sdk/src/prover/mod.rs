@@ -64,9 +64,9 @@ mod evm {
             reader: &impl Halo2ParamsReader,
             app_vm_builder: VB,
             native_builder: NativeBuilder,
-            app_pk: AppProvingKey<VB::VmConfig>,
+            app_pk: &AppProvingKey<VB::VmConfig>,
             app_exe: Arc<VmExe<F>>,
-            agg_pk: AggProvingKey,
+            agg_pk: &AggProvingKey,
             halo2_pk: Halo2ProvingKey,
             agg_tree_config: AggregationTreeConfig,
         ) -> Result<Self, VirtualMachineError> {

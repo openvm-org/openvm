@@ -1,16 +1,9 @@
 // ANCHOR: dependencies
-use std::{fs, sync::Arc};
+use std::fs;
 
 use eyre::Result;
-use openvm::platform::memory::MEM_SIZE;
 use openvm_build::GuestOptions;
-use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
-use openvm_sdk::{
-    config::{AggConfig, AppConfig, SdkVmConfig, SdkVmCpuBuilder},
-    DefaultStaticVerifierPvHandler, Sdk, StdIn,
-};
-use openvm_stark_sdk::config::FriParameters;
-use openvm_transpiler::elf::Elf;
+use openvm_sdk::{Sdk, StdIn};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -24,8 +17,7 @@ pub struct SomeStruct {
 fn read_elf() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: read_elf
     // 2b. Load the ELF from a file
-    let elf_bytes = fs::read("your_path_to_elf")?;
-    let elf = Elf::decode(&elf_bytes, MEM_SIZE as u32)?;
+    let elf: Vec<u8> = fs::read("your_path_to_elf")?;
     // ANCHOR_END: read_elf
     Ok(())
 }
@@ -50,11 +42,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let elf = sdk.build(guest_opts, target_path, &None, None)?;
     // ANCHOR_END: build
 
-    // ANCHOR: transpilation
-    // 3. Transpile the ELF into a VmExe
-    let exe = sdk.transpile(elf)?;
-    // ANCHOR_END: transpilation
-
     // ANCHOR: execution
     // 4. Format your input into StdIn
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
@@ -62,23 +49,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     stdin.write(&my_input);
     // ANCHOR_END: execution
 
-    // ANCHOR: keygen
-    // 6. Commit the exe
-    let app_committed_exe = sdk.commit_app_exe(app_fri_params, exe)?;
-    // ANCHOR_END: keygen
-
     // ANCHOR: evm_verification
-    // 9. Generate the SNARK verifier smart contract
+    // 5. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_halo2_verifier_solidity()?;
 
-    // 10. Generate an EVM proof
+    // 6. Generate an EVM proof
     // NOTE: this will do app_keygen, agg_keygen, halo2_keygen automatically if they have never been
     // called before. As a consequence, the first call to `prove_evm` will take longer if you do not
     // explicitly call `app_keygen`, `agg_keygen`, and `halo2_keygen` before calling `prove_evm`.
-    let proof = sdk.prove_evm(app_committed_exe, stdin)?;
+    let proof = sdk.prove_evm(elf, stdin)?;
 
-    // 11. Verify the EVM proof
-    sdk.verify_evm_halo2_proof(&verifier, proof)?;
+    // 7. Verify the EVM proof
+    Sdk::verify_evm_halo2_proof(&verifier, proof)?;
     // ANCHOR_END: evm_verification
 
     Ok(())

@@ -47,7 +47,7 @@ use crate::{
 pub struct VmCommittedExe<SC: StarkGenericConfig> {
     /// Raw executable.
     pub exe: Arc<VmExe<Val<SC>>>,
-    pub commitment: Com<SC>,
+    program_commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
     pub prover_data: Arc<PcsProverData<SC>>,
@@ -60,23 +60,23 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
         let trace = generate_cached_trace(&exe.program);
         let domain = pcs.natural_domain_for_degree(trace.height());
 
-        let (commitment, data) = pcs.commit(vec![(domain, trace.clone())]);
+        let (program_commitment, data) = pcs.commit(vec![(domain, trace.clone())]);
         Self {
             exe: Arc::new(exe),
-            commitment,
+            program_commitment,
             trace: Arc::new(trace),
             prover_data: Arc::new(data),
         }
     }
     pub fn get_program_commit(&self) -> Com<SC> {
-        self.commitment.clone()
+        self.program_commitment.clone()
     }
 
     pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
         let log_trace_height: u8 = log2_strict_usize(self.trace.height()).try_into().unwrap();
         let data = cpu::PcsData::new(self.prover_data.clone(), vec![log_trace_height]);
         CommittedTraceData {
-            commitment: self.commitment.clone(),
+            commitment: self.program_commitment.clone(),
             trace: self.trace.clone(),
             data,
         }
@@ -94,14 +94,18 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
     /// and a cryptographic compression function (for internal nodes).
     ///
     /// **Note**: This function recomputes the Merkle tree for the initial memory image.
-    pub fn compute_exe_commit(&self, memory_config: &MemoryConfig) -> Com<SC>
+    pub fn compute_exe_commit(
+        program_commitment: &Com<SC>,
+        exe: &VmExe<Val<SC>>,
+        memory_config: &MemoryConfig,
+    ) -> Com<SC>
     where
         Com<SC>: AsRef<[Val<SC>; CHUNK]> + From<[Val<SC>; CHUNK]>,
         Val<SC>: PrimeField32,
     {
         let hasher = vm_poseidon2_hasher();
         let memory_dimensions = memory_config.memory_dimensions();
-        let app_program_commit: &[Val<SC>; CHUNK] = self.commitment.as_ref();
+        let app_program_commit: &[Val<SC>; CHUNK] = program_commitment.as_ref();
         let mem_config = memory_config;
         let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
         memory_image.set_from_sparse(&self.exe.init_memory);
@@ -111,7 +115,7 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
             &hasher,
             app_program_commit,
             &init_memory_commit,
-            Val::<SC>::from_canonical_u32(self.exe.pc_start),
+            Val::<SC>::from_canonical_u32(exe.pc_start),
         ))
     }
 }

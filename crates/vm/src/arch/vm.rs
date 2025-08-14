@@ -732,7 +732,7 @@ where
         &self,
         committed_exe: &VmCommittedExe<E::SC>,
     ) -> CommittedTraceData<E::PB> {
-        let commitment = committed_exe.commitment.clone();
+        let commitment = committed_exe.get_program_commit();
         let trace = &committed_exe.trace;
         let prover_data = &committed_exe.prover_data;
         self.engine
@@ -875,7 +875,7 @@ where
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub")]
-    exe_commitment: Com<E::SC>,
+    program_commitment: Com<E::SC>,
     #[getset(get = "pub")]
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
@@ -892,14 +892,14 @@ where
         exe: Arc<VmExe<Val<E::SC>>>,
         cached_program_trace: CommittedTraceData<E::PB>,
     ) -> Result<Self, StaticProgramError> {
-        let exe_commitment = cached_program_trace.commitment.clone();
+        let program_commitment = cached_program_trace.commitment.clone();
         vm.load_program(cached_program_trace);
         let interpreter = vm.preflight_interpreter(&exe)?;
         let state = vm.create_initial_state(&exe, vec![]);
         Ok(Self {
             vm,
             interpreter,
-            exe_commitment,
+            program_commitment,
             exe,
             state: Some(state),
         })

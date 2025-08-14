@@ -34,13 +34,13 @@ pub struct RootVerifierLocalProver {
 }
 
 impl RootVerifierLocalProver {
-    pub fn new(root_verifier_pk: RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
+    pub fn new(root_verifier_pk: &RootVerifierProvingKey) -> Result<Self, VirtualMachineError> {
         let inner = new_local_prover(
             NativeCpuBuilder,
             &root_verifier_pk.vm_pk,
             root_verifier_pk.root_committed_exe.exe.clone(),
         )?;
-        let fixed_air_heights = root_verifier_pk.air_heights;
+        let fixed_air_heights = root_verifier_pk.air_heights.clone();
         let air_id_perm = AirIdPermutation::compute(&fixed_air_heights);
         let mut inverse_perm = vec![0usize; air_id_perm.perm.len()];
         for (i, &perm_i) in air_id_perm.perm.iter().enumerate() {

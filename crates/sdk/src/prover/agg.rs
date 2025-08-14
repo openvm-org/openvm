@@ -50,7 +50,7 @@ where
 {
     pub fn new(
         native_builder: NativeBuilder,
-        agg_pk: AggProvingKey,
+        agg_pk: &AggProvingKey,
         leaf_verifier_exe: Arc<VmExe<F>>,
         tree_config: AggregationTreeConfig,
     ) -> Result<Self, VirtualMachineError> {
@@ -65,7 +65,7 @@ where
             agg_pk.internal_committed_exe.exe.clone(),
         )?;
         #[cfg(feature = "evm-prove")]
-        let root_prover = RootVerifierLocalProver::new(agg_pk.root_verifier_pk)?;
+        let root_prover = RootVerifierLocalProver::new(&agg_pk.root_verifier_pk)?;
         Ok(Self::new_from_instances(
             leaf_prover,
             internal_prover,
@@ -153,7 +153,7 @@ where
         // proof, in order to shrink the proof size
         while proofs.len() > 1 || internal_node_height == 0 {
             let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
-                (*self.internal_prover.exe_commitment()).into(),
+                (*self.internal_prover.program_commitment()).into(),
                 &proofs,
                 self.num_children_internal,
             );
@@ -197,7 +197,7 @@ where
         &mut self,
         e2e_stark_proof: VmStarkProof<SC>,
     ) -> Result<RootVmVerifierInput<SC>, VirtualMachineError> {
-        let internal_commit = (*self.internal_prover.exe_commitment()).into();
+        let internal_commit = (*self.internal_prover.program_commitment()).into();
         let internal_prover = &mut self.internal_prover;
         let root_prover = &mut self.root_prover;
         let max_internal_wrapper_layers = self.max_internal_wrapper_layers;

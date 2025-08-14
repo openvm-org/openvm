@@ -24,7 +24,7 @@ use openvm_stark_sdk::{
 use tracing::info_span;
 
 use crate::{
-    commit::CommitBytes,
+    commit::{AppExecutionCommit, CommitBytes},
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     StdIn, F, SC,
@@ -41,6 +41,8 @@ where
     app_prover: VmInstance<E, VB>,
     #[getset(get = "pub")]
     app_vm_vk: MultiStarkVerifyingKey<E::SC>,
+    #[getset(get = "pub")]
+    leaf_verifier_program_commit: Com<E::SC>,
 }
 
 impl<E, VB> AppProver<E, VB>
@@ -53,24 +55,34 @@ where
     /// Creates a new [AppProver] instance. This method will re-commit the `exe` program on device.
     /// If a cached version of the program already exists on device, then directly use the
     /// [`Self::new_from_instance`] constructor.
+    ///
+    /// The `leaf_verifier_program_commit` is the commitment to the program of the leaf verifier
+    /// that verifies the App VM circuit. It can be found in the `AppProvingKey`.
     pub fn new(
         vm_builder: VB,
-        app_vm_pk: Arc<VmProvingKey<E::SC, VB::VmConfig>>,
-        exe: Arc<VmExe<Val<E::SC>>>,
+        app_vm_pk: &VmProvingKey<E::SC, VB::VmConfig>,
+        app_exe: Arc<VmExe<Val<E::SC>>>,
+        leaf_verifier_program_commit: Com<E::SC>,
     ) -> Result<Self, VirtualMachineError> {
-        let instance = new_local_prover(vm_builder, &app_vm_pk, exe)?;
+        let instance = new_local_prover(vm_builder, app_vm_pk, app_exe)?;
         let app_vm_vk = app_vm_pk.vm_pk.get_vk();
-        Ok(Self::new_from_instance(instance, app_vm_vk))
+        Ok(Self::new_from_instance(
+            instance,
+            app_vm_vk,
+            leaf_verifier_program_commit,
+        ))
     }
 
     pub fn new_from_instance(
         instance: VmInstance<E, VB>,
         app_vm_vk: MultiStarkVerifyingKey<E::SC>,
+        leaf_verifier_program_commit: Com<E::SC>,
     ) -> Self {
         Self {
             program_name: None,
             app_prover: instance,
             app_vm_vk,
+            leaf_verifier_program_commit,
         }
     }
 
@@ -81,6 +93,20 @@ where
     pub fn with_program_name(mut self, program_name: impl AsRef<str>) -> Self {
         self.set_program_name(program_name);
         self
+    }
+
+    /// Returns [AppExecutionCommit], which is a commitment to **both** the App VM and the App
+    /// VmExe.
+    pub fn execution_commit(&self) -> AppExecutionCommit
+    where
+        Com<E::SC>: From<[Val<E::SC>; CHUNK]> + Into<[Val<E::SC>; CHUNK]>,
+    {
+        AppExecutionCommit::compute::<E::SC>(
+            &self.app_prover().vm.config().as_ref().memory_config,
+            self.app_prover().exe(),
+            self.app_prover().program_commitment().clone(),
+            self.leaf_verifier_program_commit.clone(),
+        )
     }
 
     /// Generates proof for every continuation segment
