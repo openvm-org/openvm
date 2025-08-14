@@ -108,7 +108,7 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
         let app_program_commit: &[Val<SC>; CHUNK] = program_commitment.as_ref();
         let mem_config = memory_config;
         let mut memory_image = AddressMap::new(mem_config.addr_spaces.clone());
-        memory_image.set_from_sparse(&self.exe.init_memory);
+        memory_image.set_from_sparse(&exe.init_memory);
         let init_memory_commit =
             MerkleTree::from_memory(&memory_image, &memory_dimensions, &hasher).root();
         Com::<SC>::from(compute_exe_commit(

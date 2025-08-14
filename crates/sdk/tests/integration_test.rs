@@ -49,12 +49,7 @@ use {
         },
         vars::StarkProofVariable,
     },
-    openvm_sdk::{
-        commit::AppExecutionCommit,
-        config::Halo2Config,
-        types::{EvmHalo2Verifier, EvmProof},
-        DefaultStaticVerifierPvHandler,
-    },
+    openvm_sdk::types::{EvmHalo2Verifier, EvmProof},
     openvm_stark_sdk::p3_bn254_fr::Bn254Fr,
     snark_verifier_sdk::evm::evm_verify,
 };
