@@ -36,6 +36,9 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 
+# CUDA dependencies (only included when cuda feature is enabled)
+stark-backend-gpu = { workspace = true, optional = true }
+
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -52,6 +55,12 @@ openvm-rv32im-transpiler.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]
+cuda = ["dep:stark-backend-gpu"]
+# cuda = [
+#    "dep:stark-backend-gpu",
+#    "openvm-circuit/cuda",
+#    "openvm-native-circuit/cuda",
+# ]
 parallel = [
     "openvm-stark-backend/parallel",
     "dashmap/rayon",

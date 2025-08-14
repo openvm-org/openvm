@@ -60,6 +60,11 @@ use crate::{
 pub mod execution;
 pub mod memory;
 pub mod program;
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;

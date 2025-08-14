@@ -21,11 +21,11 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
-    testing::cuda::memory_testing,
-};
+// use crate::{
+//     primitives::var_range::VariableRangeCheckerChipGPU,
+//     system::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
+//     testing::cuda::memory_testing,
+// };
 
 pub struct DeviceMemoryTester {
     pub chip_for_block: HashMap<usize, FixedSizeMemoryTester>,

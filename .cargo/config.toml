@@ -1,0 +1,4 @@
+[build]
+rustflags = ["--cfg", "feature=\"cuda\""]
+[env]
+CARGO_BUILD_FEATURES="cuda"

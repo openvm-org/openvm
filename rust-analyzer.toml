@@ -1,0 +1,13 @@
+[cargo]
+features = ["cuda"]
+allFeatures = false
+
+[check]
+command = "check"
+extraArgs = ["--features", "cuda"]
+
+[rustfmt]
+extraArgs = ["--cfg", "feature=\"cuda\""]
+
+[rustc]
+extraArgs = ["--cfg", "feature=\"cuda\""]

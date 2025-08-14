@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
-use openvm_circuit::metrics::VmMetrics;
-use openvm_circuit::{
+use crate::metrics::VmMetrics;
+use crate::{
     arch::{
         instructions::instruction::Instruction,
         testing::{
@@ -64,16 +64,16 @@ use stark_backend_gpu::{
 };
 use tracing::Level;
 
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-        var_range::VariableRangeCheckerChipGPU,
-    },
-    system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
-    testing::{
-        execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
-    },
-};
+// use crate::{
+//     primitives::{
+//         bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
+//         var_range::VariableRangeCheckerChipGPU,
+//     },
+//     system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+//     testing::{
+//         execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
+//     },
+// };
 
 pub mod cuda;
 pub mod execution;
