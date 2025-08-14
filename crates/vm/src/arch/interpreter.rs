@@ -78,7 +78,7 @@ macro_rules! execute_with_metrics {
             let elapsed = start.elapsed();
             let insns = $exec_state.instret - start_instret;
             tracing::info!("instructions_executed={insns}");
-            metrics::counter!("insns", "execution_mode" => $span).absolute(insns);
+            metrics::counter!(concat!($span, "_insns")).absolute(insns);
             metrics::gauge!(concat!($span, "_insn_mi/s"))
                 .set(insns as f64 / elapsed.as_micros() as f64);
         }

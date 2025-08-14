@@ -117,6 +117,23 @@ impl GroupedMetrics {
         })
     }
 
+    /// Validates that E1, metered, and preflight instruction counts all match each other
+    fn validate_instruction_counts(group_summaries: &HashMap<MetricName, Stats>) {
+        let e1_insns = group_summaries.get(EXECUTE_E1_INSNS_LABEL);
+        let metered_insns = group_summaries.get(EXECUTE_METERED_INSNS_LABEL);
+        let preflight_insns = group_summaries.get(EXECUTE_PREFLIGHT_INSNS_LABEL);
+
+        if let (Some(e1_insns), Some(preflight_insns)) = (e1_insns, preflight_insns) {
+            assert_eq!(e1_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+        if let (Some(e1_insns), Some(metered_insns)) = (e1_insns, metered_insns) {
+            assert_eq!(e1_insns.sum.val as u64, metered_insns.sum.val as u64);
+        }
+        if let (Some(metered_insns), Some(preflight_insns)) = (metered_insns, preflight_insns) {
+            assert_eq!(metered_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+    }
+
     pub fn aggregate(&self) -> AggregateMetrics {
         let by_group: HashMap<String, _> = self
             .by_group
@@ -125,20 +142,17 @@ impl GroupedMetrics {
                 let group_summaries: HashMap<MetricName, Stats> = metrics
                     .iter()
                     .map(|(metric_name, metrics)| {
-                        let summary = if metric_name == INSNS_LABEL {
-                            Self::handle_insns(metrics)
-                        } else {
-                            let mut summary = Stats::new();
-                            for (value, _) in metrics {
-                                summary.push(*value);
-                            }
-
-                            summary.finalize();
-                            summary
-                        };
+                        let mut summary = Stats::new();
+                        for (value, _) in metrics {
+                            summary.push(*value);
+                        }
+                        summary.finalize();
                         (metric_name.clone(), summary)
                     })
                     .collect();
+
+                Self::validate_instruction_counts(&group_summaries);
+
                 (group_name.clone(), group_summaries)
             })
             .collect();
@@ -148,43 +162,6 @@ impl GroupedMetrics {
         };
         metrics.compute_total();
         metrics
-    }
-
-    /// Special handling for insns metrics.
-    ///
-    /// For instruction count metrics, we may have both segmented and non-segmented data
-    /// in the same group. We validate that the non-segmented count equals the sum
-    /// of all segmented counts, then use only the segmented data for aggregation to
-    /// avoid double-counting.
-    fn handle_insns(metrics: &Vec<(f64, Labels)>) -> Stats {
-        let mut summary = Stats::new();
-        let mut insns_no_segment: u64 = 0;
-        let mut insns_segment_sum: u64 = 0;
-
-        for (value, labels) in metrics {
-            // app prove use segment as label, internal and leaf use idx as label
-            if labels
-                .0
-                .iter()
-                .any(|label_entry| label_entry.0 == "segment" || label_entry.0 == "idx")
-            {
-                insns_segment_sum += *value as u64;
-                summary.push(*value);
-            } else {
-                insns_no_segment = *value as u64;
-                // do not push the data to the summary, otherwise it will be double-counted
-            }
-        }
-        // Validate that sum(insns within segment) == insns without segment label
-        if insns_no_segment > 0 && insns_segment_sum > 0 {
-            assert_eq!(
-                insns_no_segment, insns_segment_sum,
-                "insns mismatch: insns without segment label {insns_no_segment} != sum of insns within segment {insns_segment_sum}",
-            );
-        }
-
-        summary.finalize();
-        summary
     }
 }
 
@@ -506,14 +483,12 @@ impl BenchmarkOutput {
 
 pub const EXECUTE_MODE_LABEL: &str = "execution_mode";
 
-pub const EXECUTE_E1_PREFIX: &str = "execute_e1";
-pub const EXECUTE_METERED_PREFIX: &str = "execute_metered";
-pub const EXECUTE_PREFLIGHT_PREFIX: &str = "execute_preflight";
-
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
 pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
-pub const INSNS_LABEL: &str = "insns";
+pub const EXECUTE_E1_INSNS_LABEL: &str = "execute_e1_insns";
+pub const EXECUTE_METERED_INSNS_LABEL: &str = "execute_metered_insns";
+pub const EXECUTE_PREFLIGHT_INSNS_LABEL: &str = "execute_preflight_insns";
 pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
 pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
@@ -530,11 +505,11 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
     TOTAL_CELLS_USED_LABEL,
-    INSNS_LABEL,
     EXECUTE_E1_TIME_LABEL,
     EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
+    EXECUTE_PREFLIGHT_INSNS_LABEL,
     EXECUTE_PREFLIGHT_TIME_LABEL,
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,

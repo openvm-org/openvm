@@ -5,10 +5,7 @@ use eyre::Result;
 use memmap2::Mmap;
 
 use crate::{
-    aggregate::{
-        EXECUTE_E1_PREFIX, EXECUTE_METERED_TIME_LABEL, EXECUTE_MODE_LABEL,
-        EXECUTE_PREFLIGHT_TIME_LABEL, INSNS_LABEL,
-    },
+    aggregate::{EXECUTE_METERED_TIME_LABEL, EXECUTE_PREFLIGHT_TIME_LABEL},
     types::{Labels, Metric, MetricDb, MetricsFile},
 };
 
