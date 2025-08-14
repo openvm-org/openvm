@@ -510,12 +510,12 @@ impl TracingMemory {
     /// Returns (block_start_pointer, block_metadata).
     #[inline(always)]
     fn get_block_metadata<const ALIGN: usize>(
-        &mut self,
+        &self,
         address_space: usize,
         pointer: usize,
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let meta_page = unsafe { self.meta.get_unchecked(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
         let (block_start_index, block_metadata) = if current_meta.offset_to_start == 0 {
@@ -533,9 +533,9 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
+    fn get_timestamp<const ALIGN: usize>(&self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let meta_page = unsafe { self.meta.get_unchecked(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
         if current_meta.offset_to_start == 0 {
@@ -614,7 +614,7 @@ impl TracingMemory {
     #[inline(always)]
     #[allow(clippy::type_complexity)]
     fn calculate_splits_and_merges<const BLOCK_SIZE: usize, const ALIGN: usize>(
-        &mut self,
+        &self,
         address_space: usize,
         pointer: usize,
     ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
