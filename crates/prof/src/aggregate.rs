@@ -483,8 +483,6 @@ impl BenchmarkOutput {
     }
 }
 
-pub const EXECUTE_MODE_LABEL: &str = "execution_mode";
-
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
 pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
