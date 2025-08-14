@@ -36,7 +36,7 @@ fn test_verify_openvm_stark_e2e() -> Result<()> {
         .build();
     let fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
     let app_config = AppConfig::new_with_leaf_fri_params(fri_params, vm_config.clone(), fri_params);
-    let mut sdk = Sdk::new(app_config)?;
+    let sdk = Sdk::new(app_config)?;
     assert!(vm_config.system.config.continuation_enabled);
     let elf = sdk.build(Default::default(), pkg_dir, &None, None)?;
 
@@ -56,7 +56,7 @@ fn test_verify_openvm_stark_e2e() -> Result<()> {
         },
         root_max_constraint_degree: (1 << ROOT_LOG_BLOWUP) + 1,
     })?;
-    let _ = sdk.agg_pk_mut().set(agg_pk);
+    let _ = sdk.set_agg_pk(agg_pk);
     let asm = sdk.generate_root_verifier_asm();
     let asm_path = format!(
         "{}/examples/verify_openvm_stark/{}",

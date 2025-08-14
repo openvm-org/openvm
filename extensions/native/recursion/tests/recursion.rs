@@ -79,8 +79,7 @@ where
         record_arenas,
         ..
     } = output;
-    let committed_exe = vm.commit_exe(fib_program);
-    let cached_program_trace = vm.transport_committed_exe_to_device(&committed_exe);
+    let cached_program_trace = vm.commit_program_on_device(&fib_program);
     vm.load_program(cached_program_trace);
     let ctx = vm
         .generate_proving_ctx(system_records, record_arenas)
