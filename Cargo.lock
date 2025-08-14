@@ -5610,8 +5610,6 @@ dependencies = [
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
- "p3-symmetric",
- "rand 0.8.5",
  "serde",
  "snark-verifier-sdk",
  "strum",
