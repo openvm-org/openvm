@@ -63,9 +63,13 @@ pub struct BenchmarkCli {
     #[arg(long)]
     pub kzg_params_dir: Option<PathBuf>,
 
-    /// Max segment length for continuations
-    #[arg(short, long, alias = "max_segment_length")]
-    pub max_segment_length: Option<usize>,
+    /// Max trace height per chip in segment for continuations
+    #[arg(long, alias = "max_segment_length")]
+    pub max_segment_length: Option<u32>,
+
+    /// Max cells per chip in segment for continuations
+    #[arg(long)]
+    pub segment_max_cells: Option<usize>,
 
     /// Controls the arity (num_children) of the aggregation tree
     #[command(flatten)]
@@ -85,11 +89,14 @@ impl BenchmarkCli {
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
         app_vm_config.as_mut().profiling = self.profiling;
-        if let Some(max_segment_length) = self.max_segment_length {
-            app_vm_config.as_mut().set_segmentation_limits(
-                SegmentationLimits::default().with_max_trace_height(max_segment_length as u32),
-            );
+        let mut seg_limits = SegmentationLimits::default();
+        if let Some(max_height) = self.max_segment_length {
+            seg_limits.max_trace_height = max_height;
         }
+        if let Some(max_cells) = self.segment_max_cells {
+            seg_limits.max_cells = max_cells;
+        }
+        app_vm_config.as_mut().set_segmentation_limits(seg_limits);
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
                 app_log_blowup,
