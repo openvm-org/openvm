@@ -4,7 +4,7 @@ use std::{
 };
 
 use clap::Parser;
-use eyre::{eyre, Result};
+use eyre::Result;
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
 use openvm_sdk::{fs::write_to_file_json, Sdk};
 

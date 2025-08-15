@@ -42,11 +42,7 @@ use {
     },
     openvm_native_recursion::{
         config::outer::OuterConfig,
-        halo2::{
-            utils::{CacheHalo2ParamsReader, Halo2ParamsReader},
-            wrapper::Halo2WrapperProvingKey,
-            RawEvmProof,
-        },
+        halo2::{utils::Halo2ParamsReader, wrapper::Halo2WrapperProvingKey, RawEvmProof},
         vars::StarkProofVariable,
     },
     openvm_sdk::types::{EvmHalo2Verifier, EvmProof},

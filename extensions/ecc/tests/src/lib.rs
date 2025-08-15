@@ -22,7 +22,7 @@ mod tests {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sdk::{
-        config::{AppConfig, SdkVmConfig, SdkVmCpuBuilder},
+        config::{AppConfig, SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig},
         StdIn,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;
