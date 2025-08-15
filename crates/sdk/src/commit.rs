@@ -66,7 +66,7 @@ impl std::fmt::Display for CommitBytes {
 
 /// `AppExecutionCommit` has all the commitments users should check against the final proof.
 #[serde_as]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppExecutionCommit {
     /// Commitment of the executable. In base-F::MODULUS, it's computed as
     /// compress(

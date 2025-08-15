@@ -12,6 +12,7 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ### Changed
 - (Toolchain) Removed `step` from `Program` struct because `DEFAULT_PC_STEP = 4` is always used.
+- (Config) The `SystemConfig` default now has `continuation_enabled: true` instead of the previous default of `false`. This is a **breaking change**.
 - (Config) The `clk_max_bits` field in `MemoryConfig` has been renamed to `timestamp_max_bits`.
 - (Prover) Guest memory is stored on host with address space-specified memory layouts. In particular address space `1` through `3` are now represented in bytes instead of field elements.
 - (ISA) Field arithmetic instructions now restrict address spaces `e, f` to be either `0` or `4`, instead of allowing any address space.
