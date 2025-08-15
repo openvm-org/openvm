@@ -4,9 +4,8 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::SegmentationLimits, verify_single, Executor,
-    MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmConfig,
-    VmExecutionConfig,
+    verify_single, Executor, MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig,
+    VmBuilder, VmConfig, VmExecutionConfig,
 };
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
 use openvm_native_compiler::conversion::CompilerOptions;
@@ -89,14 +88,12 @@ impl BenchmarkCli {
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
         app_vm_config.as_mut().profiling = self.profiling;
-        let mut seg_limits = SegmentationLimits::default();
         if let Some(max_height) = self.max_segment_length {
-            seg_limits.max_trace_height = max_height;
+            app_vm_config.as_mut().segmentation_limits.max_trace_height = max_height;
         }
         if let Some(max_cells) = self.segment_max_cells {
-            seg_limits.max_cells = max_cells;
+            app_vm_config.as_mut().segmentation_limits.max_cells = max_cells;
         }
-        app_vm_config.as_mut().set_segmentation_limits(seg_limits);
         AppConfig {
             app_fri_params: FriParameters::standard_with_100_bits_conjectured_security(
                 app_log_blowup,
