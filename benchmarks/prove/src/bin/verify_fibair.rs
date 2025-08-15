@@ -54,6 +54,7 @@ fn main() -> Result<()> {
             app_fri_params.max_constraint_degree().min(7),
         );
         app_vm_config.system.profiling = args.profiling;
+        app_vm_config.system.max_constraint_degree = (1 << app_log_blowup) + 1;
 
         let compiler_options = CompilerOptions::default();
         let app_config = AppConfig {
