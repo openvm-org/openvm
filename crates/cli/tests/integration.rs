@@ -136,6 +136,7 @@ fn test_cli_app_e2e_simplified() -> Result<()> {
 #[test]
 fn test_cli_stark_e2e_simplified() -> Result<()> {
     install_cli();
+    run_cmd("cargo", &["openvm", "setup"])?;
     run_cmd(
         "cargo",
         &[
