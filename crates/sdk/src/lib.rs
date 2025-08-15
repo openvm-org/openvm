@@ -145,7 +145,6 @@ where
     app_vm_builder: VB,
     #[getset(get = "pub")]
     native_builder: NativeBuilder,
-    #[getset(get_mut = "pub", set_with = "pub")]
     transpiler: Option<Transpiler<F>>,
 
     _phantom: PhantomData<E>,
@@ -200,7 +199,7 @@ where
         VB::VmConfig: TranspilerConfig<F>,
     {
         let transpiler = app_config.app_vm_config.transpiler();
-        let sdk = Self::new_without_transpiler(app_config)?.with_transpiler(Some(transpiler));
+        let sdk = Self::new_without_transpiler(app_config)?.with_transpiler(transpiler);
         Ok(sdk)
     }
 
@@ -286,6 +285,13 @@ where
         self.transpiler
             .as_ref()
             .ok_or(SdkError::TranspilerNotAvailable)
+    }
+    pub fn set_transpiler(&mut self, transpiler: Transpiler<F>) {
+        self.transpiler = Some(transpiler);
+    }
+    pub fn with_transpiler(mut self, transpiler: Transpiler<F>) -> Self {
+        self.set_transpiler(transpiler);
+        self
     }
 
     pub fn convert_to_exe(
