@@ -1,9 +1,7 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::{
-    execution_mode::metered::segment_ctx::SegmentationLimits, DEFAULT_MAX_NUM_PUBLIC_VALUES,
-};
+use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
 use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
@@ -18,9 +16,7 @@ async fn main() -> Result<()> {
 
     let mut config =
         SdkVmConfig::from_toml(include_str!("../../../guest/fibonacci/openvm.toml"))?.app_vm_config;
-    config.as_mut().set_segmentation_limits(
-        SegmentationLimits::default().with_max_trace_height(max_segment_length),
-    );
+    config.as_mut().segmentation_limits.max_trace_height = max_segment_length;
     config.as_mut().num_public_values = NUM_PUBLIC_VALUES;
 
     let elf = args.build_bench_program("fibonacci", &config, None)?;
