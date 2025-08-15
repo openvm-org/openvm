@@ -184,7 +184,7 @@ impl BenchmarkCli {
             #[cfg(not(feature = "aggregation"))]
             None,
             #[cfg(feature = "aggregation")]
-            Some(self.agg_config().agg_stark_config.leaf_vm_config()),
+            Some(self.agg_config().leaf_vm_config()),
         )
     }
 }
