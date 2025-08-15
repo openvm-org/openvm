@@ -11,9 +11,7 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
-
-# TODO[stephenh]: Replace this with workspace declaration
-stark-backend-gpu = { path = "../../../../axiom-gpu/crates/backend", default-features = false, optional = true }
+stark-backend-gpu = { workspace = true, optional = true }
 
 rand.workspace = true
 derive-new.workspace = true
