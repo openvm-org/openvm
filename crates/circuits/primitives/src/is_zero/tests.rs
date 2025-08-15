@@ -15,10 +15,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use test_case::test_case;
-
-use super::{IsZeroIo, IsZeroSubAir};
-use crate::{SubAir, TraceSubRowGenerator};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,
@@ -28,6 +24,9 @@ use {
     stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
     std::sync::Arc,
 };
+
+use super::{IsZeroIo, IsZeroSubAir};
+use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

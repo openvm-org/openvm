@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
 use stark_backend_gpu::{base::DeviceMatrix, types::F};
-use std::sync::Arc;
 
 use crate::{cuda_abi::encoder, encoder::Encoder};
 

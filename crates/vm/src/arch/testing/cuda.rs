@@ -1,14 +1,12 @@
 use std::sync::Arc;
 
 #[cfg(feature = "metrics")]
-use openvm_circuit::metrics::VmMetrics;
-use openvm_circuit::{
+use crate::metrics::VmMetrics;
+use crate::{
     arch::{
         instructions::instruction::Instruction,
         testing::{
-            execution::air::ExecutionDummyAir, program::air::ProgramDummyAir, TestChipHarness,
-            EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
-            READ_INSTRUCTION_BUS,
+            assert_eq_cpu_and_gpu_matrix, default_tracing_memory, default_var_range_checker_bus, dummy_memory_helper, execution::{air::ExecutionDummyAir, DeviceExecutionTester}, program::{air::ProgramDummyAir, DeviceProgramTester}, TestChipHarness, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS
         },
         Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
         MemoryConfig, PreflightExecutor, Streams, VmStateMut,
@@ -26,36 +24,25 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
+        cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip
     },
     range_tuple::{
-        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
-        SharedRangeTupleCheckerChip,
+        cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip
     },
     var_range::{
-        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
-        VariableRangeCheckerChip,
+        cuda::VariableRangeCheckerChipGPU, SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus, VariableRangeCheckerChip
     },
 };
 use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
-    config::Val,
-    interaction::{LookupBus, PermutationCheckBus},
-    p3_field::{Field, FieldAlgebra},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::AnyRap,
-    utils::disable_debug_builder,
-    verifier::VerificationError,
-    AirRef, Chip,
+    config::Val, interaction::{LookupBus, PermutationCheckBus}, p3_air::{self, BaseAir}, p3_field::{Field, FieldAlgebra, PrimeField32}, prover::{cpu::CpuBackend, types::AirProvingContext}, rap::AnyRap, utils::disable_debug_builder, verifier::VerificationError, AirRef, Chip
 };
 use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
-use p3_air::BaseAir;
-use p3_field::PrimeField32;
+
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use stark_backend_gpu::{
     engine::GpuBabyBearPoseidon2Engine,
@@ -64,23 +51,16 @@ use stark_backend_gpu::{
 };
 use tracing::Level;
 
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-        var_range::VariableRangeCheckerChipGPU,
-    },
-    system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
-    testing::{
-        execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
-    },
-};
-
-pub mod cuda;
-pub mod execution;
-pub mod memory;
-pub mod program;
-mod utils;
-pub use utils::*;
+// use crate::{
+//     primitives::{
+//         bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
+//         var_range::VariableRangeCheckerChipGPU,
+//     },
+//     system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+//     testing::{
+//         execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
+//     },
+// };
 
 pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
     pub executor: Executor,

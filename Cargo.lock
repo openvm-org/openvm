@@ -5296,6 +5296,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "serde",
  "serde-big-array",
+ "stark-backend-gpu",
  "static_assertions",
  "test-log",
  "thiserror 1.0.69",

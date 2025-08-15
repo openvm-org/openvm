@@ -21,10 +21,6 @@ use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-
-use super::*;
-use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
@@ -34,6 +30,9 @@ use {
         types::F,
     },
 };
+
+use super::*;
+use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 
 // We only create an Air for testing purposes
 

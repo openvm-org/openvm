@@ -10,7 +10,7 @@ use openvm_circuit::{
         online::TracingMemory,
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerBus};
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     prover::types::AirProvingContext,
@@ -19,12 +19,6 @@ use openvm_stark_backend::{
 use rand::Rng;
 use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
-
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
-    testing::cuda::memory_testing,
 };
 
 pub struct DeviceMemoryTester {

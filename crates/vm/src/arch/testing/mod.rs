@@ -57,12 +57,20 @@ use crate::{
     },
 };
 
+// TODO[arayi]: bring back once system is migrated
+// #[cfg(feature = "cuda")]
+// mod cuda;
+#[cfg(feature = "cuda")]
+pub mod cuda_abi;
 pub mod execution;
 pub mod memory;
 pub mod program;
-
+mod utils;
+// #[cfg(feature = "cuda")]
+// pub use cuda::*;
 pub use execution::ExecutionTester;
 pub use memory::MemoryTester;
+pub use utils::*;
 
 pub const EXECUTION_BUS: BusIndex = 0;
 pub const MEMORY_BUS: BusIndex = 1;

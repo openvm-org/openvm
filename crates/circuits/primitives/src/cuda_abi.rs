@@ -6,9 +6,10 @@ use stark_backend_gpu::{
 };
 
 pub mod bitwise_op_lookup {
-    use super::*;
     #[allow(unused_imports)]
     use stark_backend_gpu::cuda::d_buffer::DeviceBufferView;
+
+    use super::*;
 
     extern "C" {
         fn _bitwise_op_lookup_tracegen(

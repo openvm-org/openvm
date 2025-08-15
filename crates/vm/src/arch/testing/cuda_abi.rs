@@ -11,8 +11,8 @@ use stark_backend_gpu::{
 pub mod execution_testing {
     use super::*;
 
-    extern "C" {
-        fn _execution_testing_tracegen(
+    unsafe extern "C" {
+        unsafe fn _execution_testing_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -39,8 +39,8 @@ pub mod execution_testing {
 pub mod memory_testing {
     use super::*;
 
-    extern "C" {
-        fn _memory_testing_tracegen(
+    unsafe extern "C" {
+        unsafe fn _memory_testing_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -75,8 +75,8 @@ pub mod memory_testing {
 pub mod program_testing {
     use super::*;
 
-    extern "C" {
-        fn _program_testing_tracegen(
+    unsafe extern "C" {
+        unsafe fn _program_testing_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,

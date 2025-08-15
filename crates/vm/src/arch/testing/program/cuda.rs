@@ -2,9 +2,9 @@ use std::slice::from_raw_parts;
 
 use openvm_circuit::{
     arch::{
-        testing::{execution::air::DummyExecutionInteractionCols, ExecutionTester},
-        ExecutionBus, ExecutionState,
+        instructions::instruction::Instruction, testing::program::ProgramTester, ExecutionState,
     },
+    system::program::{ProgramBus, ProgramExecutionCols},
     utils::next_power_of_two_or_zero,
 };
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
@@ -12,29 +12,25 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::testing::cuda::execution_testing;
+use crate::arch::testing::{cuda_abi::program_testing, get_empty_air_proving_ctx};
 
-pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>);
+pub struct DeviceProgramTester(ProgramTester<F>);
 
-impl DeviceExecutionTester {
-    pub fn new(bus: ExecutionBus) -> Self {
-        Self(ExecutionTester::new(bus))
+impl DeviceProgramTester {
+    pub fn new(bus: ProgramBus) -> Self {
+        Self(ProgramTester::new(bus))
     }
 
-    pub fn bus(&self) -> ExecutionBus {
+    pub fn bus(&self) -> ProgramBus {
         self.0.bus
     }
 
-    pub fn execute(
-        &mut self,
-        initial_state: ExecutionState<u32>,
-        final_state: ExecutionState<u32>,
-    ) {
-        self.0.execute(initial_state, final_state);
+    pub fn execute(&mut self, instruction: &Instruction<F>, initial_state: &ExecutionState<u32>) {
+        self.0.execute(instruction, initial_state);
     }
 }
 
-impl ChipUsageGetter for DeviceExecutionTester {
+impl ChipUsageGetter for DeviceProgramTester {
     fn air_name(&self) -> String {
         self.0.air_name()
     }
@@ -48,17 +44,13 @@ impl ChipUsageGetter for DeviceExecutionTester {
     }
 }
 
-impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
+impl<RA> Chip<RA, GpuBackend> for DeviceProgramTester {
     fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<GpuBackend> {
         let height = next_power_of_two_or_zero(self.0.current_trace_height());
         let width = self.0.trace_width();
 
         if height == 0 {
-            return AirProvingContext {
-                cached_mains: vec![],
-                common_main: None,
-                public_values: vec![],
-            };
+            return get_empty_air_proving_ctx();
         }
         let trace = DeviceMatrix::<F>::with_capacity(height, width);
 
@@ -66,10 +58,11 @@ impl<RA> Chip<RA, GpuBackend> for DeviceExecutionTester {
         let num_records = records.len();
 
         unsafe {
-            let bytes_size = num_records * size_of::<DummyExecutionInteractionCols<F>>();
+            let bytes_size = num_records * size_of::<ProgramExecutionCols<F>>();
             let records_bytes = from_raw_parts(records.as_ptr() as *const u8, bytes_size);
             let records = records_bytes.to_device().unwrap();
-            execution_testing::tracegen(trace.buffer(), height, width, &records).unwrap();
+            program_testing::tracegen(trace.buffer(), height, width, &records, num_records)
+                .unwrap();
         }
         AirProvingContext::simple_no_pis(trace)
     }
