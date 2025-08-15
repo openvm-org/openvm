@@ -1,4 +1,4 @@
-use std::{array::from_fn, fmt::Debug, num::NonZero};
+use std::{array::from_fn, fmt::Debug, mem::MaybeUninit, num::NonZero};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -456,6 +456,13 @@ const INITIAL_CELL_BUFFER: &[u8] = &[0u8; 8];
 // min_block_size never exceeds 8
 const INITIAL_TIMESTAMP_BUFFER: &[u32] = &[INITIAL_TIMESTAMP; 8];
 
+#[derive(Default, Clone, Copy)]
+struct SplitData {
+    start_ptr: u32,
+    timestamp: u32,
+    block_size: u8,
+}
+
 impl TracingMemory {
     pub fn new(
         mem_config: &MemoryConfig,
@@ -569,6 +576,7 @@ impl TracingMemory {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
         if header.block_size == header.lowest_block_size {
             return;
@@ -590,6 +598,7 @@ impl TracingMemory {
     }
 
     /// `data_slice` is the underlying data of the record in raw host memory format.
+    #[inline(always)]
     pub(crate) fn add_merge_record(
         &mut self,
         header: AccessRecordHeader,
@@ -607,55 +616,6 @@ impl TracingMemory {
         record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
         record_mut.data.copy_from_slice(data_slice);
         record_mut.timestamps.copy_from_slice(prev_ts);
-    }
-
-    /// Calculate splits and merges needed for a memory access.
-    /// Returns Some((splits, merge)) or None if no operations needed.
-    #[inline(always)]
-    #[allow(clippy::type_complexity)]
-    fn calculate_splits_and_merges<const BLOCK_SIZE: usize, const ALIGN: usize>(
-        &self,
-        address_space: usize,
-        pointer: usize,
-    ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
-        // Skip adapters if this is a repeated access to the same location with same size
-        let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
-        if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
-            return None;
-        }
-
-        // Split intersecting blocks to align bytes
-        let mut splits_buf = [(0usize, 0usize); MAX_SEGMENTS];
-        let mut splits_count = 0;
-        let mut current_ptr = pointer;
-        let end_ptr = pointer + BLOCK_SIZE;
-
-        while current_ptr < end_ptr {
-            let (start_ptr, block_metadata) =
-                self.get_block_metadata::<ALIGN>(address_space, current_ptr);
-
-            if block_metadata.block_size() == 0 {
-                current_ptr += ALIGN;
-                continue;
-            }
-
-            if block_metadata.block_size() > ALIGN as u8 {
-                // SAFETY: splits_count < MAX_SEGMENTS by construction since we iterate over
-                // at most BLOCK_SIZE/ALIGN segments and BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *splits_buf.get_unchecked_mut(splits_count) =
-                        (start_ptr as usize, block_metadata.block_size() as usize);
-                }
-                splits_count += 1;
-            }
-
-            // Skip to the next segment after this block ends
-            current_ptr = start_ptr as usize + block_metadata.block_size() as usize;
-        }
-
-        let merge = (pointer, BLOCK_SIZE);
-
-        Some((splits_buf[..splits_count].to_vec(), merge))
     }
 
     #[inline(always)]
@@ -711,58 +671,70 @@ impl TracingMemory {
             },
             size_of::<T>()
         );
-        // Calculate what splits and merges are needed for this memory access
-        let result = if let Some((splits, (merge_ptr, merge_size))) =
-            self.calculate_splits_and_merges::<BLOCK_SIZE, ALIGN>(address_space, pointer)
-        {
-            // Process all splits first
-            for (split_ptr, split_size) in splits {
-                let (_, block_metadata) =
-                    self.get_block_metadata::<ALIGN>(address_space, split_ptr);
-                let timestamp = block_metadata.timestamp();
-                self.split_by_meta::<T, ALIGN>(
-                    split_ptr as u32,
-                    timestamp,
-                    split_size as u8,
-                    address_space,
-                );
-            }
-
-            // Process merge
-            let mut prev_ts_buf = [0u32; MAX_SEGMENTS];
-
-            let mut max_timestamp = INITIAL_TIMESTAMP;
-
-            let mut ptr = merge_ptr;
-            let end_ptr = merge_ptr + merge_size;
+        // Calculate what splits are needed for this memory access. We always merge after splits.
+        // Skip adapters if this is a repeated access to the same location with same size
+        let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
+        let result = if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
+            self.get_timestamp::<ALIGN>(address_space, pointer)
+        } else {
+            // Split intersecting blocks to align bytes
+            let mut prev_ts_buf: [MaybeUninit<u32>; MAX_SEGMENTS] =
+                [MaybeUninit::uninit(); MAX_SEGMENTS];
             let mut seg_idx = 0;
-            while ptr < end_ptr {
-                let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
+            let mut max_timestamp = INITIAL_TIMESTAMP;
+            let mut current_ptr = pointer;
+            let end_ptr = pointer + BLOCK_SIZE;
+            let mut push_ts = |ts: u32| {
+                unsafe {
+                    let _ = *prev_ts_buf.get_unchecked_mut(seg_idx).write(ts);
+                }
+                seg_idx += 1;
+            };
 
-                let timestamp = if block_metadata.block_size() > 0 {
-                    block_metadata.timestamp()
-                } else {
-                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
-                    INITIAL_TIMESTAMP
-                };
+            while current_ptr < end_ptr {
+                let (curr_start_ptr, curr_block_meta) =
+                    self.get_block_metadata::<ALIGN>(address_space, current_ptr);
 
+                let block_size = curr_block_meta.block_size();
                 // SAFETY: seg_idx < MAX_SEGMENTS since we iterate at most merge_size/ALIGN times
                 // and merge_size <= BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *prev_ts_buf.get_unchecked_mut(seg_idx) = timestamp;
+                if block_size == 0 {
+                    let curr_start_ptr = self
+                        .handle_uninitialized_memory::<T, ALIGN>(address_space, current_ptr as u32);
+                    let block_size = self.initial_block_size as u32;
+                    let curr_end_ptr = curr_start_ptr + block_size;
+                    let num_ts =
+                        (curr_end_ptr.min(end_ptr as u32) - current_ptr as u32) / ALIGN as u32;
+                    for _ in 0..num_ts {
+                        push_ts(INITIAL_TIMESTAMP);
+                    }
+                    current_ptr = curr_end_ptr as usize;
+                } else {
+                    let timestamp = curr_block_meta.timestamp();
+                    if block_size > ALIGN as u8 {
+                        self.split_by_meta::<T, ALIGN>(
+                            curr_start_ptr,
+                            timestamp,
+                            block_size,
+                            address_space,
+                        );
+                    }
+                    let curr_end_ptr = curr_start_ptr as usize + block_size as usize;
+                    while current_ptr < curr_end_ptr && current_ptr < end_ptr {
+                        push_ts(timestamp);
+                        current_ptr += ALIGN;
+                    }
+                    max_timestamp = max_timestamp.max(timestamp);
                 }
-                max_timestamp = max_timestamp.max(timestamp);
-                ptr += ALIGN;
-                seg_idx += 1;
             }
-
+            let prev_ts_buf: [u32; MAX_SEGMENTS] = unsafe { std::mem::transmute(prev_ts_buf) };
             // Create the merge record
             self.add_merge_record(
                 AccessRecordHeader {
                     timestamp_and_mask: max_timestamp,
                     address_space: address_space as u32,
-                    pointer: merge_ptr as u32,
-                    block_size: merge_size as u32,
+                    pointer: pointer as u32,
+                    block_size: BLOCK_SIZE as u32,
                     lowest_block_size: ALIGN as u32,
                     type_size: size_of::<T>() as u32,
                 },
@@ -770,10 +742,7 @@ impl TracingMemory {
                 unsafe { slice_as_bytes(prev_values) },
                 &prev_ts_buf[..seg_idx],
             );
-
             max_timestamp
-        } else {
-            self.get_timestamp::<ALIGN>(address_space, pointer)
         };
 
         // Update the metadata for this access
@@ -786,11 +755,11 @@ impl TracingMemory {
     fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
         &mut self,
         address_space: usize,
-        pointer: usize,
-    ) {
+        pointer: u32,
+    ) -> u32 {
         if self.initial_block_size >= ALIGN {
             // Split the initial block into chunks
-            let segment_index = pointer / ALIGN;
+            let segment_index = pointer as usize / ALIGN;
             let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
             let start_ptr = (block_start * ALIGN) as u32;
             self.split_by_meta::<T, ALIGN>(
@@ -799,6 +768,7 @@ impl TracingMemory {
                 self.initial_block_size as u8,
                 address_space,
             );
+            start_ptr
         } else {
             // Create a merge record for single-byte initialization
             debug_assert_eq!(self.initial_block_size, 1);
@@ -806,7 +776,7 @@ impl TracingMemory {
                 AccessRecordHeader {
                     timestamp_and_mask: INITIAL_TIMESTAMP,
                     address_space: address_space as u32,
-                    pointer: pointer as u32,
+                    pointer,
                     block_size: ALIGN as u32,
                     lowest_block_size: self.initial_block_size as u32,
                     type_size: size_of::<T>() as u32,
@@ -814,6 +784,7 @@ impl TracingMemory {
                 &INITIAL_CELL_BUFFER[..ALIGN],
                 &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
             );
+            pointer
         }
     }
 
@@ -989,7 +960,7 @@ impl TracingMemory {
             assert!(
                 current_cnt == 0
                     || (current_address.address_space == addr_space
-                        && current_address.pointer + current_cnt as u32 == ptr),
+                    && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
             debug_assert!(block_size >= min_block_size as u8);
