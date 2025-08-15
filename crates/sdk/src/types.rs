@@ -136,8 +136,6 @@ impl TryFrom<RawEvmProof> for EvmProof {
     type Error = EvmProofConversionError;
 
     fn try_from(evm_proof: RawEvmProof) -> Result<Self, Self::Error> {
-        use crate::commit::AppExecutionCommit;
-
         let RawEvmProof { instances, proof } = evm_proof;
         if NUM_BN254_ACCUMULATOR + 2 >= instances.len() {
             return Err(EvmProofConversionError::InvalidLengthInstances);

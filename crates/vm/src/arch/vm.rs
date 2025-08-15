@@ -719,12 +719,13 @@ where
             .engine
             .device()
             .transport_matrix_to_device(&Arc::new(trace));
+        // commit() needs a slice
         let traces = [d_trace];
         let (commitment, data) = self.engine.device().commit(&traces);
-        let [trace] = traces;
+        let [d_trace] = traces;
         CommittedTraceData {
             commitment,
-            trace,
+            trace: d_trace,
             data,
         }
     }
