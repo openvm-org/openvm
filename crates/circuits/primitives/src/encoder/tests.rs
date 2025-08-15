@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::{cuda_abi::encoder, encoder::Encoder};
 
 #[test]
-fn test_encoder_with_invalid_row() {
+fn test_cuda_encoder_with_invalid_row() {
     // Max number of flags for k = 6
     let num_flags = 461;
     let max_degree = 5;
@@ -42,7 +42,7 @@ fn test_encoder_with_invalid_row() {
 }
 
 #[test]
-fn test_encoder_without_invalid_row() {
+fn test_cuda_encoder_without_invalid_row() {
     let num_flags = 18;
     let max_degree = 2;
     let reserve_invalid = false;

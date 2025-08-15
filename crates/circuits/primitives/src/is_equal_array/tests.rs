@@ -200,7 +200,7 @@ fn test_is_eq_array_fail_rand() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_simple_is_equal_array_tracegen() {
+fn test_cuda_simple_is_equal_array_tracegen() {
     const ARRAY_LEN: usize = 4;
     let n = 4;
     let trace = DeviceMatrix::<F>::with_capacity(n, ARRAY_LEN + 1);
@@ -246,7 +246,7 @@ fn test_simple_is_equal_array_tracegen() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_random_is_equal_array_tracegen() {
+fn test_cuda_random_is_equal_array_tracegen() {
     let mut rng = create_seeded_rng();
     const ARRAY_LEN: usize = 64;
 

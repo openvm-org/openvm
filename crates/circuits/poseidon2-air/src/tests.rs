@@ -103,7 +103,7 @@ fn test_poseidon2_random_constants() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_tracegen_gpu_vs_cpu_poseidon2() {
+fn test_cuda_tracegen_poseidon2() {
     const WIDTH: usize = 16; // constant for BabyBear
     const N: usize = 16;
     const SBOX_REGS: usize = 1;

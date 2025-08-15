@@ -225,7 +225,7 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_less_than_array_tracegen() {
+fn test_cuda_less_than_array_tracegen() {
     let max_bits: usize = 16;
     let decomp: usize = 8;
     const ARRAY_LEN: usize = 2;

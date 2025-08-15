@@ -183,7 +183,7 @@ fn test_is_less_than_negative() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_less_than_tracegen() {
+fn test_cuda_less_than_tracegen() {
     let max_bits: usize = 16;
     let decomp: usize = 8;
     const AUX_LEN: usize = 2;

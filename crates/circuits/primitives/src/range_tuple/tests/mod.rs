@@ -13,14 +13,20 @@ use rand::Rng;
 
 use crate::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 
-// TODO[stephenh]: Refactor CUDA tests to not use GpuChipTestBuilder
-// use {
-//     crate::range_tuple::{cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir},
-//     array::from_fn,
-//     dummy::DummyInteractionChipGPU,
-//     openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext},
-//     stark_backend_gpu::{base::DeviceMatrix, types::F},
-// };
+#[cfg(feature = "cuda")]
+use {
+    crate::range_tuple::{cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir},
+    array::from_fn,
+    dummy::DummyInteractionChipGPU,
+    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
+    openvm_stark_sdk::config::FriParameters,
+    stark_backend_gpu::{
+        base::DeviceMatrix,
+        cuda::copy::MemCopyH2D as _,
+        engine::GpuBabyBearPoseidon2Engine,
+        types::{F, SC},
+    },
+};
 
 #[cfg(feature = "cuda")]
 mod dummy;
@@ -136,107 +142,109 @@ fn negative_test_range_tuple_chip_size_overflow() {
     );
 }
 
-// #[test]
-// fn test_cuda_range_tuple() {
-//     let mut tester = GpuChipTestBuilder::default();
-//     const TUPLE_SIZE: usize = 3;
-//     const NUM_INPUTS: usize = 1 << 16;
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_range_tuple() {
+    const TUPLE_SIZE: usize = 3;
+    const NUM_INPUTS: usize = 1 << 16;
 
-//     let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << tester.rng().gen_range(1..5));
-//     let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
-//     let random_values = (0..NUM_INPUTS)
-//         .flat_map(|_| {
-//             sizes
-//                 .iter()
-//                 .map(|&size| tester.rng().gen_range(0..size))
-//                 .collect::<Vec<_>>()
-//         })
-//         .collect::<Vec<_>>();
+    let mut rng = create_seeded_rng();
+    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.gen_range(1..5));
+    let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
+    let random_values = (0..NUM_INPUTS)
+        .flat_map(|_| {
+            sizes
+                .iter()
+                .map(|&size| rng.gen_range(0..size))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
 
-//     let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus.sizes));
-//     let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::new(bus.sizes));
+    let dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), random_values);
 
-//     tester
-//         .build()
-//         .load_periphery(
-//             DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index),
-//             dummy_chip,
-//         )
-//         .load_periphery(
-//             RangeTupleCheckerAir::<TUPLE_SIZE> { bus },
-//             range_tuple_checker,
-//         )
-//         .finalize()
-//         .simple_test()
-//         .expect("Verification failed");
-// }
+    let airs: Vec<AirRef<SC>> = vec![
+        Arc::new(DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index)),
+        Arc::new(RangeTupleCheckerAir::<TUPLE_SIZE> { bus }),
+    ];
+    let ctxs = vec![
+        dummy_chip.generate_proving_ctx(()),
+        range_tuple_checker.generate_proving_ctx(()),
+    ];
 
-// #[test]
-// fn test_cuda_range_tuple_hybrid() {
-//     let mut tester = GpuChipTestBuilder::default();
-//     const TUPLE_SIZE: usize = 3;
-//     const NUM_INPUTS: usize = 1 << 16;
+    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    engine.run_test(airs, ctxs).expect("Verification failed");
+}
 
-//     let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << tester.rng().gen_range(1..5));
-//     let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
-//     let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
-//         RangeTupleCheckerChip::new(bus),
-//     )));
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_range_tuple_hybrid() {
+    const TUPLE_SIZE: usize = 3;
+    const NUM_INPUTS: usize = 1 << 16;
 
-//     let gpu_values = (0..NUM_INPUTS)
-//         .flat_map(|_| {
-//             sizes
-//                 .iter()
-//                 .map(|&size| tester.rng().gen_range(0..size))
-//                 .collect::<Vec<_>>()
-//         })
-//         .collect::<Vec<_>>();
-//     let gpu_dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), gpu_values);
+    let mut rng = create_seeded_rng();
+    let sizes: [u32; TUPLE_SIZE] = from_fn(|_| 1 << rng.gen_range(1..5));
+    let bus = RangeTupleCheckerBus::<TUPLE_SIZE>::new(0, sizes);
+    let range_tuple_checker = Arc::new(RangeTupleCheckerChipGPU::hybrid(Arc::new(
+        RangeTupleCheckerChip::new(bus),
+    )));
 
-//     let cpu_chip = range_tuple_checker.cpu_chip.clone().unwrap();
-//     let cpu_values = (0..NUM_INPUTS)
-//         .map(|_| {
-//             let values = sizes
-//                 .iter()
-//                 .map(|&size| tester.rng().gen_range(0..size))
-//                 .collect::<Vec<_>>();
-//             cpu_chip.add_count(&values);
-//             values
-//         })
-//         .collect::<Vec<_>>();
-//     let cpu_dummy_trace = (0..NUM_INPUTS)
-//         .map(|_| F::ONE)
-//         .chain(
-//             cpu_values
-//                 .iter()
-//                 .map(|v| F::from_canonical_u32(v[0]))
-//                 .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[1])))
-//                 .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[2]))),
-//         )
-//         .collect::<Vec<_>>()
-//         .to_device()
-//         .unwrap();
+    let gpu_values = (0..NUM_INPUTS)
+        .flat_map(|_| {
+            sizes
+                .iter()
+                .map(|&size| rng.gen_range(0..size))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let gpu_dummy_chip = DummyInteractionChipGPU::new(range_tuple_checker.clone(), gpu_values);
 
-//     let dummy_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);
-//     let cpu_proving_ctx = AirProvingContext {
-//         cached_mains: vec![],
-//         common_main: Some(DeviceMatrix::new(
-//             Arc::new(cpu_dummy_trace),
-//             NUM_INPUTS,
-//             BaseAir::<F>::width(&dummy_air),
-//         )),
-//         public_values: vec![],
-//     };
+    let cpu_chip = range_tuple_checker.cpu_chip.clone().unwrap();
+    let cpu_values = (0..NUM_INPUTS)
+        .map(|_| {
+            let values = sizes
+                .iter()
+                .map(|&size| rng.gen_range(0..size))
+                .collect::<Vec<_>>();
+            cpu_chip.add_count(&values);
+            values
+        })
+        .collect::<Vec<_>>();
+    let cpu_dummy_trace = (0..NUM_INPUTS)
+        .map(|_| F::ONE)
+        .chain(
+            cpu_values
+                .iter()
+                .map(|v| F::from_canonical_u32(v[0]))
+                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[1])))
+                .chain(cpu_values.iter().map(|v| F::from_canonical_u32(v[2]))),
+        )
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
 
-//     tester
-//         .build()
-//         .load_air_proving_ctx(Arc::new(dummy_air), cpu_proving_ctx)
-//         .load_periphery(dummy_air, gpu_dummy_chip)
-//         .load_periphery(
-//             RangeTupleCheckerAir::<TUPLE_SIZE> { bus },
-//             range_tuple_checker,
-//         )
-//         .finalize()
-//         .simple_test()
-//         .expect("Verification failed");
-// }
+    let dummy_air = DummyInteractionAir::new(TUPLE_SIZE, true, bus.inner.index);
+    let cpu_proving_ctx = AirProvingContext {
+        cached_mains: vec![],
+        common_main: Some(DeviceMatrix::new(
+            Arc::new(cpu_dummy_trace),
+            NUM_INPUTS,
+            BaseAir::<F>::width(&dummy_air),
+        )),
+        public_values: vec![],
+    };
+
+    let airs: Vec<AirRef<SC>> = vec![
+        Arc::new(dummy_air),
+        Arc::new(dummy_air),
+        Arc::new(RangeTupleCheckerAir::<TUPLE_SIZE> { bus }),
+    ];
+    let ctxs = vec![
+        cpu_proving_ctx,
+        gpu_dummy_chip.generate_proving_ctx(()),
+        range_tuple_checker.generate_proving_ctx(()),
+    ];
+
+    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    engine.run_test(airs, ctxs).expect("Verification failed");
+}

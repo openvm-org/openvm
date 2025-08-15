@@ -141,7 +141,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_is_equal_against_cpu_full() {
+fn test_cuda_is_equal_against_cpu_full() {
     let mut rng = create_seeded_rng();
 
     for log_height in 1..=16 {

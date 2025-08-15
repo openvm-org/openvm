@@ -235,7 +235,7 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_assert_less_than_tracegen() {
+fn test_cuda_assert_less_than_tracegen() {
     let max_bits: usize = 29;
     let decomp: usize = 8;
     const AUX_LEN: usize = 4;
