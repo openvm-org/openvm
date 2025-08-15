@@ -63,7 +63,7 @@ fn main() -> Result<()> {
             compiler_options,
         };
         let (program, input_stream) = build_verification_program(vdata, compiler_options);
-        let app_pk = AppProvingKey::keygen(app_config.clone())?;
+        let app_pk = AppProvingKey::keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let exe = Arc::new(VmExe::new(program));
         let mut prover = new_local_prover::<BabyBearPoseidon2Engine, _>(

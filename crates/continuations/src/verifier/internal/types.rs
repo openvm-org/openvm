@@ -32,8 +32,8 @@ assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, De
 
 /// A proof which can prove OpenVM program execution.
 ///
-/// The `proof` field contains the full STARK proof, including the public values of each AIR. The
-/// `user_public_values` are special user-defined values that are only committed to in the `proof`
+/// The `inner` field contains the raw STARK proof, including the public values of each AIR. The
+/// `user_public_values` are special user-defined values that are only committed to in the `inner`
 /// public values: one can verify using a Merkle proof that the former are committed to in the
 /// latter.
 ///

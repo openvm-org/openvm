@@ -42,24 +42,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let elf = sdk.build(guest_opts, target_path, &None, None)?;
     // ANCHOR_END: build
 
-    // ANCHOR: execution
-    // 4. Format your input into StdIn
+    // ANCHOR: input
+    // 3. Format your input into StdIn
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
     let mut stdin = StdIn::default();
     stdin.write(&my_input);
-    // ANCHOR_END: execution
+    // ANCHOR_END: input
 
     // ANCHOR: evm_verification
-    // 5. Generate the SNARK verifier smart contract
+    // 4. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_halo2_verifier_solidity()?;
 
-    // 6. Generate an EVM proof
+    // 5. Generate an EVM proof
     // NOTE: this will do app_keygen, agg_keygen, halo2_keygen automatically if they have never been
     // called before. As a consequence, the first call to `prove_evm` will take longer if you do not
     // explicitly call `app_keygen`, `agg_keygen`, and `halo2_keygen` before calling `prove_evm`.
     let proof = sdk.prove_evm(elf, stdin)?;
 
-    // 7. Verify the EVM proof
+    // 6. Verify the EVM proof
     Sdk::verify_evm_halo2_proof(&verifier, proof)?;
     // ANCHOR_END: evm_verification
 

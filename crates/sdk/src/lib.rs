@@ -559,6 +559,16 @@ where
         self
     }
 
+    #[cfg(feature = "evm-prove")]
+    pub fn with_halo2_params_dir(mut self, params_dir: impl AsRef<Path>) -> Self {
+        self.set_halo2_params_dir(params_dir);
+        self
+    }
+    #[cfg(feature = "evm-prove")]
+    pub fn set_halo2_params_dir(&mut self, params_dir: impl AsRef<Path>) {
+        self.halo2_params_reader = CacheHalo2ParamsReader::new(params_dir);
+    }
+
     // ======================== Verification Methods ========================
 
     /// Verifies aggregate STARK proof of VM execution.
