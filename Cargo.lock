@@ -1764,7 +1764,6 @@ dependencies = [
  "itertools 0.14.0",
  "openvm-build",
  "openvm-circuit",
- "openvm-native-recursion",
  "openvm-sdk",
  "openvm-stark-backend",
  "openvm-stark-sdk",
