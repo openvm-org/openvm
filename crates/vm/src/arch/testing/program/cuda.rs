@@ -12,7 +12,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::arch::testing::{cuda_abi::program_testing, get_empty_air_proving_ctx};
+use crate::{cuda_abi::program_testing, utils::cuda_utils::get_empty_air_proving_ctx};
 
 pub struct DeviceProgramTester(ProgramTester<F>);
 

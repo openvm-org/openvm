@@ -12,7 +12,7 @@ use stark_backend_gpu::{
     base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
 };
 
-use crate::arch::testing::cuda_abi::execution_testing;
+use crate::cuda_abi::execution_testing;
 
 pub struct DeviceExecutionTester(pub(crate) ExecutionTester<F>);
 

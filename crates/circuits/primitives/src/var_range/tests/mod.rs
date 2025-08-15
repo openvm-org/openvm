@@ -9,13 +9,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-
-use crate::var_range::{
-    bus::VariableRangeCheckerBus,
-    tests::dummy::{TestRangeCheckAir, TestSendAir},
-    VariableRangeCheckerChip,
-};
-
 #[cfg(feature = "cuda")]
 use {
     crate::var_range::{cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerAir},
@@ -30,6 +23,12 @@ use {
         engine::GpuBabyBearPoseidon2Engine,
         types::{F, SC},
     },
+};
+
+use crate::var_range::{
+    bus::VariableRangeCheckerBus,
+    tests::dummy::{TestRangeCheckAir, TestSendAir},
+    VariableRangeCheckerChip,
 };
 
 pub mod dummy;
