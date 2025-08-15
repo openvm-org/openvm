@@ -11,7 +11,10 @@ use openvm_sdk::{fs::write_to_file_json, Sdk};
 use super::{RunArgs, RunCargoArgs};
 use crate::{
     commands::{load_app_pk, load_or_build_exe},
-    util::{get_app_commit_path, get_manifest_path_and_dir, get_target_dir, get_target_output_dir},
+    util::{
+        get_app_commit_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir,
+        get_target_output_dir,
+    },
 };
 
 #[derive(Parser)]
@@ -73,7 +76,7 @@ impl CommitCmd {
             init_file_name: self.init_file_name.clone(),
             input: None,
         };
-        let (exe, target_name) = load_or_build_exe(&run_args, &self.cargo_args)?;
+        let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
         let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
 
         let app_commit = sdk.app_prover(exe)?.app_commit();
@@ -84,8 +87,12 @@ impl CommitCmd {
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 
-        let commit_path = get_app_commit_path(&target_output_dir, &target_name);
+        // target_name_stem does not contain "examples/" prefix
+        let target_name =
+            get_single_target_name(&self.cargo_args).unwrap_or(target_name_stem.into());
+        let commit_path = get_app_commit_path(&target_output_dir, target_name);
 
+        println!("Writing app commit to {}", commit_path.display());
         write_to_file_json(&commit_path, app_commit)?;
         if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;

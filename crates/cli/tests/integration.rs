@@ -134,6 +134,56 @@ fn test_cli_app_e2e_simplified() -> Result<()> {
 }
 
 #[test]
+fn test_cli_stark_e2e_simplified() -> Result<()> {
+    install_cli();
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "keygen",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "commit",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+            "--example",
+            "fibonacci",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "prove",
+            "stark",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+            "--example",
+            "fibonacci",
+        ],
+    )?;
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "verify",
+            "stark",
+            "--manifest-path",
+            "tests/programs/multi/Cargo.toml",
+            "--example",
+            "fibonacci",
+        ],
+    )?;
+    Ok(())
+}
+
+#[test]
 fn test_cli_init_build() -> Result<()> {
     let temp_dir = tempdir()?;
     let temp_path = temp_dir.path();

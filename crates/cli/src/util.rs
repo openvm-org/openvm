@@ -86,8 +86,8 @@ pub fn get_app_vk_path(target_dir: &Path) -> PathBuf {
     target_dir.join("openvm").join(DEFAULT_APP_VK_NAME)
 }
 
-pub fn get_app_commit_path(target_output_dir: &Path, target_name: &str) -> PathBuf {
-    let commit_name = format!("{}.commit.json", target_name);
+pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> PathBuf {
+    let commit_name = target_name.with_extension("commit.json");
     target_output_dir.join(commit_name)
 }
 
@@ -95,7 +95,7 @@ pub fn get_app_commit_path(target_output_dir: &Path, target_name: &str) -> PathB
 // run. If a specific binary or example is specified it will return that, else it
 // will search the workspace/package for binary targets. If there is a single
 // binary that will be returned, else an error will be raised.
-pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
+pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
     let num_targets = cargo_args.bin.len() + cargo_args.example.len();
     let single_target_name = if num_targets > 1 {
         return Err(eyre::eyre!(
@@ -136,12 +136,12 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<String> {
                 "No binaries found. If you would like to run an example, use the --example flag.",
             ));
         } else {
-            binaries[0].name.clone()
+            PathBuf::from(binaries[0].name.clone())
         }
     } else if cargo_args.bin.is_empty() {
-        format!("examples/{}", cargo_args.example[0])
+        PathBuf::from("examples").join(&cargo_args.example[0])
     } else {
-        cargo_args.bin[0].clone()
+        PathBuf::from(cargo_args.bin[0].clone())
     };
     Ok(single_target_name)
 }

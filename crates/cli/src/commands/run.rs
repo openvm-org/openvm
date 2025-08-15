@@ -237,7 +237,7 @@ impl RunCmd {
             let build_args = self.run_args.clone().into();
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
-            &output_dir.join(format!("{}.vmexe", target_name))
+            &output_dir.join(target_name.with_extension("vmexe"))
         };
 
         let (_, manifest_dir) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;

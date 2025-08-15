@@ -51,10 +51,12 @@ enum VerifySubCommand {
         cargo_args: KeygenCargoArgs,
     },
     Stark {
+        /// NOTE: if `openvm commit` was called with the `--exe` option, then `--app-commit` must
+        /// be specified so the command knows where to find the app commit.
         #[arg(
             long,
             action,
-            help = "Path to app commit, by default will search for using the binary target name",
+            help = "Path to app commit, by default will search for it using the binary target name",
             help_heading = "OpenVM Options"
         )]
         app_commit: Option<PathBuf>,
@@ -132,7 +134,7 @@ impl VerifyCmd {
                     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
                     let target_name = get_single_target_name(cargo_args)?;
-                    get_app_commit_path(&target_output_dir, &target_name)
+                    get_app_commit_path(&target_output_dir, target_name)
                 };
                 let expected_app_commit = read_from_file_json(app_commit_path)?;
 

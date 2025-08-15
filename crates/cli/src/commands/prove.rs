@@ -128,8 +128,12 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(format!("{}.app.proof", target_name))
+                    &PathBuf::from(target_name).with_extension("app.proof")
                 };
+                println!(
+                    "App proof completed! Writing App proof to {}",
+                    proof_path.display()
+                );
                 encode_to_file(proof_path, app_proof)?;
             }
             ProveSubCommand::Stark {
@@ -160,8 +164,12 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(format!("{}.stark.proof", target_name))
+                    &PathBuf::from(target_name).with_extension("stark.proof")
                 };
+                println!(
+                    "STARK proof completed! Writing STARK proof to {}",
+                    proof_path.display()
+                );
                 write_to_file_json(proof_path, stark_proof_bytes)?;
             }
             #[cfg(feature = "evm-prove")]
@@ -193,8 +201,12 @@ impl ProveCmd {
                 let proof_path = if let Some(proof) = proof {
                     proof
                 } else {
-                    &PathBuf::from(format!("{}.evm.proof", target_name))
+                    &PathBuf::from(target_name).with_extension("evm.proof")
                 };
+                println!(
+                    "EVM proof completed! Writing EVM proof to {}",
+                    proof_path.display()
+                );
                 write_to_file_json(proof_path, evm_proof)?;
             }
         }
@@ -218,7 +230,8 @@ pub(crate) fn load_app_pk(
     read_object_from_file(app_pk_path)
 }
 
-// Returns (committed_exe, target_name) where target_name has no extension
+/// Returns `(exe, target_name.file_stem())` where target_name has no extension and only contains
+/// the file stem (in particular it does not include `examples/` if the target was an example)
 pub(crate) fn load_or_build_exe(
     run_args: &RunArgs,
     cargo_args: &RunCargoArgs,
@@ -231,7 +244,7 @@ pub(crate) fn load_or_build_exe(
         let build_args = run_args.clone().into();
         let cargo_args = cargo_args.clone().into();
         let output_dir = build(&build_args, &cargo_args)?;
-        &output_dir.join(format!("{}.vmexe", target_name))
+        &output_dir.join(target_name.with_extension("vmexe"))
     };
 
     let app_exe = read_object_from_file(exe_path)?;

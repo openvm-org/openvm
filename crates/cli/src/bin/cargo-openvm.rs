@@ -36,7 +36,7 @@ pub enum VmCliCommands {
 async fn main() -> Result<()> {
     let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
-    setup_tracing_with_log_level(Level::WARN);
+    setup_tracing_with_log_level(Level::INFO);
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),
         VmCliCommands::Commit(cmd) => cmd.run(),

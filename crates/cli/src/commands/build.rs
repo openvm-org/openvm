@@ -437,11 +437,11 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         let exe = VmExe::from_elf(elf, transpiler)?;
 
         let target_name = if target.is_example() {
-            &format!("examples/{}", target.name)
+            PathBuf::from("examples").join(&target.name)
         } else {
-            &target.name
+            PathBuf::from(&target.name)
         };
-        let file_name = format!("{}.vmexe", target_name);
+        let file_name = target_name.with_extension("vmexe");
         let file_path = target_output_dir.join(&file_name);
 
         write_object_to_file(&file_path, exe)?;
