@@ -154,12 +154,29 @@ where
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
 impl Sdk {
+    /// Creates SDK with a standard configuration that includes a set of default VM extensions
+    /// loaded.
+    ///
+    /// **Note**: To use this configuration, your `openvm.toml` must match, including the order of
+    /// the moduli and elliptic curve parameters of the respective extensions:
+    /// The `app_vm_config` field of your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("./config/openvm_standard.toml")]
+    /// ```
     pub fn standard() -> Self {
-        GenericSdk::new(AppConfig::standard()).expect("standard config is valid")
+        GenericSdk::new(AppConfig::standard()).unwrap()
     }
 
+    /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
+    ///
+    /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("./config/openvm_riscv32.toml")]
+    /// ```
     pub fn riscv32() -> Self {
-        GenericSdk::new(AppConfig::riscv32()).expect("riscv32 config is valid")
+        GenericSdk::new(AppConfig::riscv32()).unwrap()
     }
 }
 
@@ -315,7 +332,7 @@ where
     /// `app_exe` with program inputs `inputs`.
     ///
     /// The returned STARK proof is not intended for EVM verification. For EVM verification, use the
-    /// [`prove_evm`](Self::prove_evm) method, which requires the `"evm-prove"` feature to be
+    /// `prove_evm` method, which requires the `"evm-prove"` feature to be
     /// enabled.
     ///
     /// For convenience, this function also returns the [AppExecutionCommit], which is a full

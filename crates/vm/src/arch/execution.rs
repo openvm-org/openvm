@@ -375,7 +375,7 @@ impl<T: FieldAlgebra> From<(u32, Option<T>)> for PcIncOrSet<T> {
 
 /// Phantom sub-instructions affect the runtime of the VM and the trace matrix values.
 /// However they all have no AIR constraints besides advancing the pc by
-/// [DEFAULT_PC_STEP](openvm_instructions::program::DEFAULT_PC_STEP).
+/// [DEFAULT_PC_STEP].
 ///
 /// They should not mutate memory, but they can mutate the input & hint streams.
 ///

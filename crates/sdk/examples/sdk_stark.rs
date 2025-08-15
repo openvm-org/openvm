@@ -42,29 +42,29 @@ fn main() -> eyre::Result<()> {
     // ANCHOR_END: build
 
     // ANCHOR: execution
-    // 4. Format your input into StdIn
+    // 3. Format your input into StdIn
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
     let mut stdin = StdIn::default();
     stdin.write(&my_input);
 
-    // 5. Run the program
+    // 4. Run the program
     let output = sdk.execute(elf.clone(), stdin.clone())?;
     println!("public values output: {:?}", output);
     // ANCHOR_END: execution
 
     // ANCHOR: proof_generation
-    // 7a. Generate a proof
+    // 5a. Generate a proof
     let (proof, app_commit) = sdk.prove(elf.clone(), stdin.clone())?;
-    // 7b. Generate a proof with a StarkProver with custom fields
+    // 5b. Generate a proof with a StarkProver with custom fields
     let mut prover = sdk.prover(elf)?.with_program_name("test_program");
     let app_commit = prover.app_commit();
     let proof = prover.prove(stdin.clone())?;
     // ANCHOR_END: proof_generation
 
     // ANCHOR: verification
-    // 8. Do this once to save the agg_vk, independent of the proof.
+    // 6. Do this once to save the agg_vk, independent of the proof.
     let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
-    // 8. Verify your program
+    // 7. Verify your program
     Sdk::verify_proof(&agg_vk, app_commit, &proof)?;
     // ANCHOR_END: verification
 

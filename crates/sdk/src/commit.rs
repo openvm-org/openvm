@@ -81,7 +81,7 @@ pub struct AppExecutionCommit {
 
     /// Commitment of the leaf VM verifier program which commits the VmConfig of App VM.
     // Internal verifier will verify `app_vm_commit`.
-    // Internally this is also known as `leaf_vm_verifier_commit`
+    // Internally this is also known as `leaf_verifier_program_commit`.
     pub app_vm_commit: CommitBytes,
 }
 

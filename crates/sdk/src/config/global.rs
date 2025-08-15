@@ -85,9 +85,12 @@ impl SdkVmConfig {
     /// Standard configuration with a set of default VM extensions loaded.
     ///
     /// **Note**: To use this configuration, your `openvm.toml` must match, including the order of
-    /// the moduli and elliptic curve parameters of the respective extensions.
-    //
-    // TODO[jpw]: add the openvm.toml itself to doc comment
+    /// the moduli and elliptic curve parameters of the respective extensions:
+    /// The `app_vm_config` field of your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("openvm_standard.toml")]
+    /// ```
     pub fn standard() -> SdkVmConfig {
         let bn_config = PairingCurve::Bn254.curve_config();
         let bls_config = PairingCurve::Bls12_381.curve_config();
@@ -133,7 +136,13 @@ impl SdkVmConfig {
             .optimize()
     }
 
-    /// Creates [SdkVmConfigBuilder] with RISC-V 32-bit extensions added.
+    /// Configuration with RISC-V RV32IM and IO VM extensions loaded.
+    ///
+    /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
+    ///
+    /// ```toml
+    #[doc = include_str!("openvm_riscv32.toml")]
+    /// ```
     pub fn riscv32() -> Self {
         SdkVmConfig::builder()
             .system(Default::default())
@@ -227,14 +236,12 @@ impl SdkVmConfig {
         }
         let rv32m = self.rv32m.as_mut();
         let bigint = self.bigint.as_mut();
-        if let Some(bigint) = bigint {
-            if let Some(rv32m) = rv32m {
-                rv32m.range_tuple_checker_sizes[0] =
-                    rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
-                rv32m.range_tuple_checker_sizes[1] =
-                    rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
-                bigint.range_tuple_checker_sizes = rv32m.range_tuple_checker_sizes;
-            }
+        if let (Some(bigint), Some(rv32m)) = (bigint, rv32m) {
+            rv32m.range_tuple_checker_sizes[0] =
+                rv32m.range_tuple_checker_sizes[0].max(bigint.range_tuple_checker_sizes[0]);
+            rv32m.range_tuple_checker_sizes[1] =
+                rv32m.range_tuple_checker_sizes[1].max(bigint.range_tuple_checker_sizes[1]);
+            bigint.range_tuple_checker_sizes = rv32m.range_tuple_checker_sizes;
         }
     }
 
