@@ -1,6 +1,5 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
@@ -9,10 +8,10 @@ use stark_backend_gpu::{
     types::F,
 };
 
-use crate::primitives::cuda::range_tuple::tracegen;
-
-#[cfg(test)]
-mod tests;
+use crate::{
+    cuda_abi::range_tuple::tracegen,
+    range_tuple::{RangeTupleCheckerChip, NUM_RANGE_TUPLE_COLS},
+};
 
 pub struct RangeTupleCheckerChipGPU<const N: usize> {
     pub count: Arc<DeviceBuffer<F>>,

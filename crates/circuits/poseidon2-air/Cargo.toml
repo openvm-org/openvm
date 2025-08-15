@@ -18,6 +18,9 @@ zkhash = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 
+# TODO[stephenh]: Replace this with workspace declaration
+stark-backend-gpu = { path = "../../../../axiom-gpu/crates/backend", default-features = false, optional = true }
+
 rand.workspace = true
 lazy_static.workspace = true
 derivative.workspace = true
@@ -26,5 +29,6 @@ derivative.workspace = true
 p3-symmetric = { workspace = true }
 
 [features]
-default = ["parallel"]
+default = ["parallel", "cuda"]
 parallel = ["openvm-stark-backend/parallel"]
+cuda = ["dep:stark-backend-gpu"]

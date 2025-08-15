@@ -1,8 +1,5 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit_primitives::var_range::{
-    VariableRangeCheckerBus, VariableRangeCheckerChip, NUM_VARIABLE_RANGE_COLS,
-};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
@@ -11,10 +8,10 @@ use stark_backend_gpu::{
     prover_backend::GpuBackend,
 };
 
-use crate::primitives::cuda::var_range::tracegen;
-
-#[cfg(test)]
-mod tests;
+use crate::{
+    cuda_abi::var_range::tracegen,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip, NUM_VARIABLE_RANGE_COLS},
+};
 
 pub struct VariableRangeCheckerChipGPU {
     pub count: Arc<DeviceBuffer<F>>,

@@ -18,6 +18,16 @@ use test_case::test_matrix;
 use super::{IsEqSubAir, IsEqualIo};
 use crate::{SubAir, TraceSubRowGenerator};
 
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::is_equal,
+    openvm_stark_backend::p3_field::PrimeField32,
+    openvm_stark_sdk::utils::create_seeded_rng,
+    rand::Rng,
+    stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
+    std::sync::Arc,
+};
+
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct IsEqualCols<T> {
@@ -127,4 +137,55 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
         Some(VerificationError::OodEvaluationMismatch),
         "Expected constraint to fail"
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_is_equal_against_cpu_full() {
+    let mut rng = create_seeded_rng();
+
+    for log_height in 1..=16 {
+        let n = 1 << log_height;
+
+        let vec_x: Vec<F> = (0..n)
+            .map(|_| F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)))
+            .collect();
+
+        let vec_y: Vec<F> = (0..n)
+            .map(|i| {
+                if rng.gen_bool(0.5) {
+                    vec_x[i] // 50 % chance: equal to x
+                } else {
+                    F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32)) // 50% chance to be random
+                }
+            })
+            .collect();
+
+        let inputs_x = vec_x.as_slice().to_device().unwrap();
+        let inputs_y = vec_y.as_slice().to_device().unwrap();
+
+        let gpu_matrix = DeviceMatrix::<F>::with_capacity(n, 2);
+        unsafe {
+            is_equal::dummy_tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y).unwrap();
+        }
+
+        let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+            (0..n)
+                .flat_map(|i| {
+                    let cur_x = vec_x[i];
+                    let cur_y = vec_y[i];
+
+                    let mut cur_inv = F::ONE;
+                    let mut cur_out = F::ONE;
+                    IsEqSubAir.generate_subrow((cur_x, cur_y), (&mut cur_inv, &mut cur_out));
+
+                    [cur_inv, cur_out]
+                })
+                .collect::<Vec<_>>(),
+            2,
+        ));
+
+        // TODO[stephenh]: Uncomment this when we decide where to put it
+        // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+    }
 }

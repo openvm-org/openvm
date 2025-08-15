@@ -12,6 +12,9 @@ license.workspace = true
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 
+# TODO[stephenh]: Replace this with workspace declaration
+stark-backend-gpu = { path = "../../../../axiom-gpu/crates/backend", default-features = false, optional = true }
+
 rand.workspace = true
 derive-new.workspace = true
 itertools.workspace = true
@@ -24,5 +27,6 @@ test-case.workspace = true
 openvm-stark-sdk = { workspace = true }
 
 [features]
-default = ["parallel"]
+default = ["parallel", "cuda"]
 parallel = ["openvm-stark-backend/parallel"]
+cuda = ["dep:stark-backend-gpu"]

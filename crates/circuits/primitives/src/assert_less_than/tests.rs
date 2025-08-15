@@ -25,6 +25,16 @@ use openvm_stark_sdk::{
 use super::*;
 use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
+    stark_backend_gpu::{
+        base::DeviceMatrix,
+        cuda::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
+        types::F,
+    },
+};
+
 // We only create an Air for testing purposes
 
 // repr(C) is needed to make sure that the compiler does not reorder the fields
@@ -221,4 +231,55 @@ fn test_assert_less_than_with_non_power_of_two_pairs() {
 
     BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace])
         .expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_assert_less_than_tracegen() {
+    let max_bits: usize = 29;
+    let decomp: usize = 8;
+    const AUX_LEN: usize = 4;
+
+    let num_pairs = 4;
+    let trace = DeviceMatrix::<F>::with_capacity(num_pairs, 3 + AUX_LEN);
+    let pairs = vec![[14321, 26883], [0, 1], [28, 120], [337, 456]]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
+
+    let rc_num_bins = (1 << (decomp + 1)) as usize;
+    let rc_histogram = DeviceBuffer::<u32>::with_capacity(rc_num_bins);
+
+    unsafe {
+        assert_less_than_dummy_tracegen(
+            trace.buffer(),
+            num_pairs,
+            &pairs,
+            max_bits,
+            AUX_LEN,
+            &rc_histogram,
+        )
+        .unwrap();
+    }
+
+    // From test_lt_chip_decomp_does_not_divide
+    let expected_cpu_matrix_vals: [[u32; 7]; 4] = [
+        [14321, 26883, 1, 17, 49, 0, 0],
+        [0, 1, 1, 0, 0, 0, 0],
+        [28, 120, 1, 91, 0, 0, 0],
+        [337, 456, 1, 118, 0, 0, 0],
+    ];
+    let _expected_cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        expected_cpu_matrix_vals
+            .into_iter()
+            .flatten()
+            .map(F::from_canonical_u32)
+            .collect(),
+        3 + AUX_LEN,
+    ));
+
+    // TODO[stephenh]: Uncomment this when we decide where to put it
+    // assert_eq_cpu_and_gpu_matrix(expected_cpu_matrix, &trace);
 }

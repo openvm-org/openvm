@@ -41,3 +41,6 @@ pub mod xor;
 
 mod sub_air;
 pub use sub_air::*;
+
+#[cfg(feature = "cuda")]
+pub mod cuda_abi;
