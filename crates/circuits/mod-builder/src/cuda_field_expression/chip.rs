@@ -7,8 +7,9 @@ use cuda_runtime_sys::{cudaDeviceSetLimit, cudaLimit};
 use num_bigint::BigUint;
 use num_traits::{FromBytes, One};
 use openvm_circuit::utils::next_power_of_two_or_zero;
-use openvm_mod_circuit_builder::{
-    utils::biguint_to_limbs_vec, FieldExpressionCoreAir, SymbolicExpr,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
+    var_range::cuda::VariableRangeCheckerChipGPU,
 };
 use openvm_stark_backend::p3_air::BaseAir;
 use stark_backend_gpu::{
@@ -20,16 +21,15 @@ use stark_backend_gpu::{
     prelude::F,
 };
 
-use super::{
-    constants::*,
-    cuda::field_expression::tracegen,
-    types::{ExprMeta, ExprNode, FieldExprMeta, FieldExpressionChipGPU},
-};
 use crate::{
-    mod_builder::expr_op::ExprOp,
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    cuda_abi::field_expression::tracegen,
+    cuda_field_expression::{
+        constants::{ExprType, LIMB_BITS, MAX_LIMBS},
+        expr_op::ExprOp,
     },
+    utils::biguint_to_limbs_vec,
+    ExprMeta, ExprNode, FieldExprMeta, FieldExpressionChipGPU, FieldExpressionCoreAir,
+    SymbolicExpr,
 };
 
 impl FieldExpressionChipGPU {
@@ -336,7 +336,6 @@ impl FieldExpressionChipGPU {
     }
 
     fn calculate_ast_depth(expr: &SymbolicExpr) -> u32 {
-        use openvm_mod_circuit_builder::SymbolicExpr;
         match expr {
             SymbolicExpr::Input(_) | SymbolicExpr::Var(_) | SymbolicExpr::Const(_, _, _) => 1,
             SymbolicExpr::Add(left, right)

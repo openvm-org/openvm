@@ -21,8 +21,11 @@ rand.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
 tracing.workspace = true
-
 itertools.workspace = true
+
+# CUDA dependencies (only included when cuda feature is enabled)
+stark-backend-gpu = { workspace = true, optional = true }
+cuda-runtime-sys = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-circuit-primitives = { workspace = true }
@@ -31,7 +34,12 @@ halo2curves-axiom = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
-default = []
+default = ["cuda"]
+cuda = [
+    "dep:stark-backend-gpu",
+    "dep:cuda-runtime-sys",
+    "openvm-circuit-primitives/cuda",
+]
 parallel = ["openvm-stark-backend/parallel"]
 test-utils = [
     "dep:halo2curves-axiom",

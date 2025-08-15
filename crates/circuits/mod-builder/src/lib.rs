@@ -14,3 +14,11 @@ pub mod utils;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+
+#[cfg(feature = "cuda")]
+mod cuda_abi;
+#[cfg(feature = "cuda")]
+mod cuda_field_expression;
+
+#[cfg(feature = "cuda")]
+pub use cuda_field_expression::*;

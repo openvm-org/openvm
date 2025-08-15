@@ -2341,6 +2341,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "cuda-config"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ee74643f7430213a1a78320f88649de309b20b80818325575e393f848f79f5d"
+dependencies = [
+ "glob",
+]
+
+[[package]]
+name = "cuda-runtime-sys"
+version = "0.3.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d070b301187fee3c611e75a425cf12247b7c75c09729dbdef95cb9cb64e8c39"
+dependencies = [
+ "cuda-config",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5578,6 +5596,7 @@ dependencies = [
 name = "openvm-mod-circuit-builder"
 version = "1.4.0-rc.2"
 dependencies = [
+ "cuda-runtime-sys",
  "halo2curves-axiom",
  "itertools 0.14.0",
  "num-bigint 0.4.6",
@@ -5589,6 +5608,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "rand 0.8.5",
+ "stark-backend-gpu",
  "tracing",
 ]
 
