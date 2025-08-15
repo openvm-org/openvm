@@ -88,6 +88,7 @@ impl BenchmarkCli {
         let leaf_log_blowup = self.leaf_log_blowup.unwrap_or(DEFAULT_LEAF_LOG_BLOWUP);
 
         app_vm_config.as_mut().profiling = self.profiling;
+        app_vm_config.as_mut().max_constraint_degree = (1 << app_log_blowup) + 1;
         if let Some(max_height) = self.max_segment_length {
             app_vm_config.as_mut().segmentation_limits.max_trace_height = max_height;
         }
