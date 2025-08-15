@@ -259,6 +259,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -348,6 +349,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -355,6 +357,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
         adapter_cols.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
         if record.rd_ptr != u32::MAX {
+            // TODO(ayush): add safety
             unsafe {
                 self.inner.fill_trace_row(
                     mem_helper,

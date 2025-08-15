@@ -185,6 +185,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32BranchAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &Rv32BranchAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32BranchAdapterCols<F> = adapter_row.borrow_mut();

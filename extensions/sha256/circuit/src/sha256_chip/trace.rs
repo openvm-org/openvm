@@ -86,12 +86,14 @@ pub struct Sha256VmRecordMut<'a> {
 /// slices.
 impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: Sha256VmRecordLayout) -> Sha256VmRecordMut<'a> {
+        // TODO(ayush): add safety
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Sha256VmRecordHeader>()) };
 
         // Using `split_at_mut_unchecked` for perf reasons
         // input is a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks`, so the alignment
         // is always satisfied
+        // TODO(ayush): add safety
         let (input, rest) = unsafe {
             rest.split_at_mut_unchecked((layout.metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
         };
@@ -99,6 +101,7 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] 
         // Using `align_to_mut` to make sure the returned slice is properly aligned to
         // `MemoryReadAuxRecord` Additionally, Rust's subslice operation (a few lines below)
         // will verify that the buffer has enough capacity
+        // TODO(ayush): add safety
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
             inner: header_buf.borrow_mut(),
@@ -262,6 +265,7 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 sizes.push((0, num_blocks_so_far));
                 break;
             } else {
+                // TODO(ayush): add safety
                 let record: &Sha256VmRecordHeader =
                     unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = ((record.len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
@@ -284,6 +288,7 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                     slice.par_chunks_mut(SHA256VM_WIDTH).for_each(|row| {
                         // Need to get rid of the accidental garbage data that might overflow the
                         // F's prime field. Unfortunately, there is no good way around this
+                        // TODO(ayush): add safety
                         unsafe {
                             std::ptr::write_bytes(
                                 row.as_mut_ptr() as *mut u8,
@@ -298,6 +303,7 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                     return;
                 }
 
+                // TODO(ayush): add safety
                 let record: Sha256VmRecordMut = unsafe {
                     get_record_from_slice(
                         slice,

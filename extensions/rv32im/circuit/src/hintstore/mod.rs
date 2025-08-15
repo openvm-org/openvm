@@ -312,9 +312,11 @@ pub struct Rv32HintStoreRecordMut<'a> {
 /// Has debug assertions to make sure the above works as expected.
 impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
+        // TODO(ayush): add safety
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
 
+        // TODO(ayush): add safety
         let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
         Rv32HintStoreRecordMut {
             inner: header_buf.borrow_mut(),
@@ -478,6 +480,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
         let mut chunks = Vec::with_capacity(rows_used);
 
         while !trace.is_empty() {
+            // TODO(ayush): add safety
             let record: &Rv32HintStoreRecordHeader =
                 unsafe { get_record_from_slice(&mut trace, ()) };
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
@@ -494,6 +497,7 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             .par_iter_mut()
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
+                // TODO(ayush): add safety
                 let record: Rv32HintStoreRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,

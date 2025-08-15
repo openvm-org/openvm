@@ -14,5 +14,6 @@ pub const LIST_COL_MAP: ListCols<usize> = make_col_map();
 
 const fn make_col_map() -> ListCols<usize> {
     let indices_arr = indices_arr::<NUM_LIST_COLS>();
+    // TODO(ayush): add safety
     unsafe { transmute::<[usize; NUM_LIST_COLS], ListCols<usize>>(indices_arr) }
 }

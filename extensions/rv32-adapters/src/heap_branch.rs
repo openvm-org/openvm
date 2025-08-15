@@ -265,6 +265,7 @@ impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTra
     const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &Rv32HeapBranchAdapterRecord<NUM_READS> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let cols: &mut Rv32HeapBranchAdapterCols<F, NUM_READS, READ_SIZE> =

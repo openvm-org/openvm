@@ -23,6 +23,7 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     #[cold]
     #[inline(never)]
     fn create_zeroed_page() -> Box<[T; PAGE_SIZE]> {
+        // TODO(ayush): add safety
         unsafe {
             let layout = std::alloc::Layout::array::<T>(PAGE_SIZE).unwrap();
             let ptr = std::alloc::alloc_zeroed(layout) as *mut [T; PAGE_SIZE];
@@ -37,6 +38,7 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         let page_idx = index / PAGE_SIZE;
         let offset = index % PAGE_SIZE;
 
+        // TODO(ayush): add safety
         self.pages[page_idx]
             .as_ref()
             .map(|page| unsafe { *page.get_unchecked(offset) })

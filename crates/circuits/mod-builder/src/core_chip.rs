@@ -225,6 +225,7 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
         &'a mut self,
         layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
+        // TODO(ayush): add safety
         let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
         FieldExpressionCoreRecordMut {
@@ -437,10 +438,12 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice
+        // TODO(ayush): add safety
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // TODO(ayush): add safety
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 

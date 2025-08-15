@@ -515,6 +515,7 @@ impl TracingMemory {
         pointer: usize,
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
+        // TODO(ayush): add safety
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -535,6 +536,7 @@ impl TracingMemory {
     #[inline(always)]
     fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
+        // TODO(ayush): add safety
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -573,6 +575,7 @@ impl TracingMemory {
         if header.block_size == header.lowest_block_size {
             return;
         }
+        // TODO(ayush): add safety
         let data_slice = unsafe {
             self.data.memory.get_u8_slice(
                 header.address_space,
@@ -670,6 +673,7 @@ impl TracingMemory {
             return;
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
+        // TODO(ayush): add safety
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         for i in 0..(block_size as usize / MIN_BLOCK_SIZE) {
@@ -700,6 +704,7 @@ impl TracingMemory {
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
+        // TODO(ayush): add safety
         debug_assert_eq!(
             unsafe {
                 self.data

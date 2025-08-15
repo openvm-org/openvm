@@ -16,6 +16,7 @@ pub mod types;
 impl MetricDb {
     pub fn new(metrics_file: impl AsRef<Path>) -> Result<Self> {
         let file = File::open(metrics_file)?;
+        // TODO(ayush): add safety
         let mmap = unsafe { Mmap::map(&file)? };
         let metrics: MetricsFile = serde_json::from_slice(&mmap)?;
 

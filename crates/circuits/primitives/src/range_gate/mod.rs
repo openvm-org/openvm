@@ -153,5 +153,6 @@ impl RangeCheckerGateChip {
 
 const fn make_col_map() -> RangeGateCols<usize> {
     let indices_arr = indices_arr::<NUM_RANGE_GATE_COLS>();
+    // TODO(ayush): add safety
     unsafe { transmute::<[usize; NUM_RANGE_GATE_COLS], RangeGateCols<usize>>(indices_arr) }
 }

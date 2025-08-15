@@ -126,6 +126,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let mut ptr = 0;
         while ptr < bytes.len() {
             let header: &AccessRecordHeader = bytes[ptr..].borrow();
+            // TODO(ayush): add safety
             let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
             ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
 
@@ -189,6 +190,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let bytes = self.arena.allocated_mut();
         let mut ptr = 0;
         while ptr < bytes.len() {
+            // TODO(ayush): add safety
             let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
             let record: AccessRecordMut<'_> = bytes[ptr..].custom_borrow(layout.clone());
             ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);

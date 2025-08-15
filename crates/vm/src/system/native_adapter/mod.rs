@@ -258,6 +258,7 @@ impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &NativeAdapterRecord<F, R, W> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeAdapterCols<_, R, W> = adapter_row.borrow_mut();

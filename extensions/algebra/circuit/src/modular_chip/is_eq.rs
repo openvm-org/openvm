@@ -395,6 +395,7 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, adapter_row);
+        // TODO(ayush): add safety
         let record: &ModularIsEqualRecord<READ_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();

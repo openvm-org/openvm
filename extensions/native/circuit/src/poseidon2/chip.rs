@@ -108,6 +108,7 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
         &'a mut self,
         layout: NativePoseidon2RecordLayout,
     ) -> NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS> {
+        // TODO(ayush): add safety
         let arr = unsafe {
             self.align_to_mut::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
                 .1

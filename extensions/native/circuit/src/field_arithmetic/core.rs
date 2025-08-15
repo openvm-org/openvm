@@ -175,8 +175,10 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // TODO(ayush): add safety
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
+        // TODO(ayush): add safety
         let record: &FieldArithmeticRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut FieldArithmeticCoreCols<_> = core_row.borrow_mut();
 

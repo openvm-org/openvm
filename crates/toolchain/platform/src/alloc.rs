@@ -56,6 +56,7 @@ impl AlignedBuf {
 impl Drop for AlignedBuf {
     fn drop(&mut self) {
         if self.layout.size() != 0 {
+            // TODO(ayush): add safety
             unsafe {
                 dealloc(self.ptr, self.layout);
             }

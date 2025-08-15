@@ -158,7 +158,9 @@ struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
+        // TODO(ayush): add safety
         let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
+        // TODO(ayush): add safety
         let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
         let mut rd = [0u64; 4];
         // Only use the first 8 bits.
@@ -173,6 +175,7 @@ impl ShiftOp for SllOp {
                 carry = curr >> (u64::BITS - bit_offset);
             }
         }
+        // TODO(ayush): add safety
         unsafe { std::mem::transmute(rd) }
     }
 }
@@ -201,7 +204,9 @@ fn shift_right(
     rs2: [u8; INT256_NUM_LIMBS],
     init_value: u64,
 ) -> [u8; INT256_NUM_LIMBS] {
+    // TODO(ayush): add safety
     let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
+    // TODO(ayush): add safety
     let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
     let mut rd = [init_value; 4];
     let shift = (rs2_u64[0] & 0xff) as u32;
@@ -219,6 +224,7 @@ fn shift_right(
             carry = curr << (u64::BITS - bit_offset);
         }
     }
+    // TODO(ayush): add safety
     unsafe { std::mem::transmute(rd) }
 }
 

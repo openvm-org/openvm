@@ -635,6 +635,7 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         &'a mut self,
         layout: FriReducedOpeningLayout,
     ) -> FriReducedOpeningRecordMut<'a, F> {
+        // TODO(ayush): add safety
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningHeaderRecord>()) };
         let header: &mut FriReducedOpeningHeaderRecord = header_buf.borrow_mut();
@@ -642,6 +643,7 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         let workload_size =
             layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
 
+        // TODO(ayush): add safety
         let (workload_buf, rest) = unsafe { rest.split_at_mut_unchecked(workload_size) };
         let a_prev_size = if layout.metadata.is_init {
             0
@@ -649,9 +651,12 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
             layout.metadata.length * size_of::<F>()
         };
 
+        // TODO(ayush): add safety
         let (a_prev_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(a_prev_size) };
 
+        // TODO(ayush): add safety
         let (_, a_prev_records, _) = unsafe { a_prev_buf.align_to_mut::<F>() };
+        // TODO(ayush): add safety
         let (_, workload_records, _) =
             unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
 
@@ -884,6 +889,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
+            // TODO(ayush): add safety
             let header: &FriReducedOpeningHeaderRecord =
                 unsafe { get_record_from_slice(&mut remaining_trace, ()) };
             let num_rows = header.length as usize + 2;
@@ -899,6 +905,7 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                 length: num_rows - 2,
                 is_init,
             };
+            // TODO(ayush): add safety
             let record: FriReducedOpeningRecordMut<F> =
                 unsafe { get_record_from_slice(&mut chunk, MultiRowLayout::new(metadata)) };
 

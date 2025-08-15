@@ -234,6 +234,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterFiller {
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // TODO(ayush): add safety
         let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 
