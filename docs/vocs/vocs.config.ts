@@ -2,6 +2,7 @@ import React from 'react'
 import { defineConfig } from 'vocs'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import remarkMdxDisableExplicitJsx from 'remark-mdx-disable-explicit-jsx'
 
 import { bookSidebar, specsSidebar } from './sidebar'
 
@@ -59,9 +60,28 @@ export default defineConfig({
     }
   ],
   markdown: {
-    remarkPlugins: [remarkMath],
-    rehypePlugins: [rehypeKatex],
-  },  
+    remarkPlugins: [[remarkMath, { singleDollarTextMath: true }, remarkMdxDisableExplicitJsx]],
+    rehypePlugins: [[rehypeKatex, {
+        // Strict mode can help with parsing
+        strict: false,
+        // Trust all LaTeX commands
+        trust: true
+      }]],
+  },
+  vite: {  
+    plugins: [  
+      {  
+        name: 'exclude-llms',  
+        configResolved(config) {  
+          // Cast to mutable to modify the readonly plugins array  
+          const mutableConfig = config as any  
+          mutableConfig.plugins = config.plugins.filter(  
+            plugin => plugin && plugin.name !== 'llms'  
+          )  
+        }  
+      }  
+    ]  
+  },
   theme: {
     accentColor: {
       light: '#1f1f1f',
