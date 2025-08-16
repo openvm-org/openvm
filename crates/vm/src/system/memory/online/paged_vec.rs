@@ -57,6 +57,23 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
         }
     }
 
+    /// Touch a range of pages in parallel.
+    /// Panics if the range is out of bounds. Creates new page before write when necessary.
+    #[inline]
+    pub fn par_touch(&mut self, start: usize, end: usize)
+    where
+        T: Send + Sync,
+    {
+        let page_idx_start = start / PAGE_SIZE;
+        let page_idx_end = end.div_ceil(PAGE_SIZE);
+
+        self.pages[page_idx_start..page_idx_end]
+            .par_iter_mut()
+            .for_each(|page| {
+                page.get_or_insert_with(Self::create_zeroed_page);
+            });
+    }
+
     pub fn par_iter(&self) -> impl ParallelIterator<Item = (usize, T)> + '_
     where
         T: Send + Sync,
