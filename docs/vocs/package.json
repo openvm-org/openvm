@@ -14,12 +14,15 @@
 		"react-dom": "^19.1.1",
 		"rehype-katex": "^7.0.1",
 		"remark-math": "^6.0.0",
+		"remark-mdx-disable-explicit-jsx": "^0.1.0",
 		"vocs": "^1.0.13"
 	},
 	"devDependencies": {
-		"@types/node": "^24.2.0",
-		"@types/react": "^19.1.9",
+		"@types/node": "^24.3.0",
+		"@types/react": "^19.1.10",
 		"glob": "^11.0.3",
+		"patch-package": "^8.0.0",
+		"postinstall-postinstall": "^2.1.0",
 		"typescript": "^5.9.2"
 	}
 }

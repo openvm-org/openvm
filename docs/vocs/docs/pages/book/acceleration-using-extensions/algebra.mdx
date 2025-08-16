@@ -22,7 +22,7 @@ The functional part is provided by the `openvm-algebra-guest` crate, which is a 
 
 ## Modular arithmetic
 
-To [leverage](./overview.md) compile-time known moduli for performance, you declare and initialize the arithmetic structures:
+To [leverage](./overview) compile-time known moduli for performance, you declare and initialize the arithmetic structures:
 
 1. **Declare**: Use the `moduli_declare!` macro to define a modular arithmetic struct. This can be done multiple times in various crates or modules:
 
@@ -37,7 +37,7 @@ This creates `Bls12_381Fp` and `Bn254Fp` structs, each implementing the `IntMod`
 Since both moduli are prime, both structs also implement the `Field` and `Sqrt` traits.
 The modulus parameter must be a string literal in decimal or hexadecimal format.
 
-2. **Init**: Use the [`openvm::init!` macro](./overview.md#automating-the-init-step) exactly once in the final binary:
+2. **Init**: Use the [`openvm::init!` macro](./overview#automating-the-init-step) exactly once in the final binary:
 
 ```rust
 openvm::init!();
@@ -70,7 +70,7 @@ complex_declare! {
 
 This creates a `Bn254Fp2` struct, representing a complex extension field. The `mod_type` must implement `IntMod`.
 
-2. **Init**: After calling `complex_declare!`, the [`openvm::init!` macro](./overview.md#automating-the-init-step) will now expand to the appropriate call to `complex_init!`.
+2. **Init**: After calling `complex_declare!`, the [`openvm::init!` macro](./overview#automating-the-init-step) will now expand to the appropriate call to `complex_init!`.
 
 ```rust
 openvm::init!();

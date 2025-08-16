@@ -2,7 +2,7 @@
 
 ## Writing a Program
 
-The first step to using OpenVM is to write a Rust program that can be executed by an OpenVM virtual machine. Writing a program for OpenVM is very similar to writing a standard Rust program, with a few key differences necessary to support the OpenVM environment. For more detailed information about writing programs, see the [Writing Programs](./write-program.md) guide.
+The first step to using OpenVM is to write a Rust program that can be executed by an OpenVM virtual machine. Writing a program for OpenVM is very similar to writing a standard Rust program, with a few key differences necessary to support the OpenVM environment. For more detailed information about writing programs, see the [Writing Programs](./writing-a-program) guide.
 
 ## Building and Transpiling a Program
 
@@ -22,7 +22,7 @@ cargo openvm run --input <path_to_input | hex_string>
 
 Note if your program doesn't require inputs, you can omit the `--input` flag.
 
-For more information see the [build](./build.md) and [run](./run.md) docs.
+For more information see the [build](./compiling) and [run](./running-a-program) docs.
 
 ### Inputs
 
@@ -32,7 +32,7 @@ Each hex string (either in the file or as the direct input) is either:
 - Hex string of bytes, which is prefixed with `0x01`
 - Hex string of native field elements (represented as u32, little endian), prefixed with `0x02`
 
-If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk.md#using-stdin) doc.
+If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the **Using StdIn** section of the [SDK](../advanced-usage/sdk#using-stdin) doc.
 
 ## Generating a Proof
 
@@ -42,7 +42,7 @@ To generate a proof, you first need to generate a proving and verifying key:
 cargo openvm keygen
 ```
 
-If you are using custom VM extensions, this will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](../custom-extensions/overview.md) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
+If you are using custom VM extensions, this will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](../acceleration-using-extensions/overview) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
 
 ```bash
 cargo openvm prove app --input <path_to_input | hex_string>
@@ -50,7 +50,7 @@ cargo openvm prove app --input <path_to_input | hex_string>
 
 Again, if your program doesn't require inputs, you can omit the `--input` flag.
 
-For more information on the `keygen` and `prove` commands, see the [prove](./prove.md) doc.
+For more information on the `keygen` and `prove` commands, see the [prove](./generating-proofs) doc.
 
 ## Verifying a Proof
 
@@ -60,7 +60,7 @@ To verify a proof using the CLI, you need to provide the verifying key and the p
 cargo openvm verify app
 ```
 
-For more information on the `verify` command, see the [verify](./verify.md) doc.
+For more information on the `verify` command, see the [verify](./verifying-proofs) doc.
 
 ## End-to-end EVM Proof Generation and Verification
 
