@@ -43,6 +43,19 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
             .unwrap_or_default()
     }
 
+    /// Panics if index is out of bounds. Creates new page before returning mutable reference when
+    /// necessary.
+    #[inline]
+    pub fn get_mut(&mut self, index: usize) -> &mut T {
+        let page_idx = index / PAGE_SIZE;
+        let offset = index % PAGE_SIZE;
+
+        let page = self.pages[page_idx].get_or_insert_with(Self::create_zeroed_page);
+
+        // SAFETY: offset < PAGE_SIZE by construction
+        unsafe { page.get_unchecked_mut(offset) }
+    }
+
     /// Panics if the index is out of bounds. Creates new page before write when necessary.
     #[inline]
     pub fn set(&mut self, index: usize, value: T) {
