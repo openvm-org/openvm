@@ -1,8 +1,8 @@
 use std::{
     borrow::BorrowMut,
+    io::Cursor,
     marker::PhantomData,
     ptr::{copy_nonoverlapping, slice_from_raw_parts_mut},
-    sync::atomic::{AtomicU64, Ordering},
 };
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
@@ -162,43 +162,8 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 }
 
-pub struct AtomicCursor<T> {
-    inner: T,
-    pos: AtomicU64,
-}
-
-impl<T> AtomicCursor<T> {
-    pub fn new(inner: T) -> Self {
-        Self {
-            inner,
-            pos: AtomicU64::new(0),
-        }
-    }
-
-    pub fn position(&self) -> u64 {
-        self.pos.load(Ordering::Acquire)
-    }
-
-    pub fn set_position(&self, offset: u64) {
-        self.pos.store(offset, Ordering::Release);
-    }
-
-    /// Return the position before moving.
-    pub fn move_position(&self, offset: u64) -> u64 {
-        self.pos.fetch_add(offset, Ordering::Release)
-    }
-
-    pub fn get_ref(&self) -> &T {
-        &self.inner
-    }
-
-    pub fn get_mut(&mut self) -> &mut T {
-        &mut self.inner
-    }
-}
-
 pub struct DenseRecordArena {
-    pub records_buffer: AtomicCursor<Vec<u8>>,
+    pub records_buffer: Cursor<Vec<u8>>,
 }
 
 const MAX_ALIGNMENT: usize = 32;
@@ -208,8 +173,8 @@ impl DenseRecordArena {
     pub fn with_byte_capacity(size_bytes: usize) -> Self {
         let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
-        let cursor = AtomicCursor::new(buffer);
-        cursor.move_position(offset as u64);
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position(offset as u64);
         Self {
             records_buffer: cursor,
         }
@@ -218,8 +183,8 @@ impl DenseRecordArena {
     pub fn set_byte_capacity(&mut self, size_bytes: usize) {
         let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
-        let cursor = AtomicCursor::new(buffer);
-        cursor.move_position(offset as u64);
+        let mut cursor = Cursor::new(buffer);
+        cursor.set_position(offset as u64);
         self.records_buffer = cursor;
     }
 
@@ -232,12 +197,13 @@ impl DenseRecordArena {
 
     /// Allocates `count` bytes and returns as a mutable slice.
     pub fn alloc_bytes<'a>(&mut self, count: usize) -> &'a mut [u8] {
-        let begin = self.records_buffer.move_position(count as u64);
+        let begin = self.records_buffer.position();
         debug_assert!(
             begin as usize + count <= self.records_buffer.get_ref().len(),
             "failed to allocate {count} bytes from {begin} when the capacity is {}",
             self.records_buffer.get_ref().len()
         );
+        self.records_buffer.set_position(begin + count as u64);
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.records_buffer
