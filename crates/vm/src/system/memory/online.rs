@@ -717,7 +717,7 @@ impl TracingMemory {
                 if block_size == 0 {
                     let curr_start_ptr = self
                         .handle_uninitialized_memory::<T, ALIGN>(address_space, current_ptr as u32);
-                    let block_size = self.initial_block_size as u32;
+                    let block_size = self.initial_block_size.max(ALIGN) as u32;
                     let curr_end_ptr = curr_start_ptr + block_size;
                     let num_ts =
                         (curr_end_ptr.min(end_ptr as u32) - current_ptr as u32) / ALIGN as u32;
@@ -847,7 +847,7 @@ impl TracingMemory {
             let block_size = curr_block_meta.block_size();
             if curr_start_ptr == pointer {
                 let actual_curr_start_ptr = if block_size == 0 {
-                    self.uninitialized_memory_chunk_start::<ALIGN>(pointer as u32)
+                    self.uninitialized_memory_chunk_start::<ALIGN>(pointer)
                 } else {
                     curr_start_ptr
                 };
@@ -1038,7 +1038,7 @@ impl TracingMemory {
                                 mut_self.add_merge_record(
                                     AccessRecordHeader {
                                         timestamp_and_mask: INITIAL_TIMESTAMP,
-                                        address_space: address_space as u32,
+                                        address_space,
                                         pointer: curr_ptr,
                                         block_size: ALIGN as u32,
                                         lowest_block_size: self.initial_block_size as u32,
@@ -1048,6 +1048,7 @@ impl TracingMemory {
                                     &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
                                 );
                             }
+                            block_size = ALIGN as u8;
                             add_split = false;
                         } else {
                             block_size = self.initial_block_size as u8;
