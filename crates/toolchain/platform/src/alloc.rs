@@ -20,6 +20,8 @@ impl AlignedBuf {
                 layout,
             };
         }
+        // TODO[jpw]: replace `alloc` with `allocate` once the `Allocator` trait is stabilized.
+        //            (see https://doc.rust-lang.org/alloc/alloc/fn.alloc.html)
         // SAFETY: `len` is nonzero
         let ptr = unsafe { alloc(layout) };
         if ptr.is_null() {
