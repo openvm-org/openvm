@@ -491,9 +491,11 @@ struct SplitData {
 #[derive(Clone, Copy)]
 struct AccessSplitRecord<const MAX_SEG: usize> {
     start_ptr: u32,
-    // Length of `split_data`. Caller could know `split_data` is used up when start_ptr moves out
+    // Caller could know `split_data` is used up when start_ptr moves out
     // of range.
     split_data: [SplitData; MAX_SEG],
+    /// Length of `split_data`. It is only safe to access `split_data[..len]`.
+    len: usize,
 }
 
 impl TracingMemory {
@@ -623,7 +625,17 @@ impl TracingMemory {
         data_slice: &[u8],
         prev_ts: &[u32],
     ) {
+        debug_assert_eq!(header.block_size % header.lowest_block_size, 0);
+        debug_assert_eq!(
+            prev_ts.len() as u32,
+            header.block_size / header.lowest_block_size
+        );
+        debug_assert_eq!(
+            data_slice.len() as u32,
+            header.block_size * header.type_size
+        );
         if header.block_size == header.lowest_block_size {
+            // no merge required
             return;
         }
 
@@ -718,15 +730,16 @@ impl TracingMemory {
         // Split intersecting blocks to align bytes
         let mut prev_ts_buf: [MaybeUninit<u32>; MAX_SEGMENTS] =
             [MaybeUninit::uninit(); MAX_SEGMENTS];
-        let mut seg_idx = 0;
+        // split_idx is the index of the after-split small block of size ALIGN
+        let mut split_idx = 0;
         let mut max_timestamp = INITIAL_TIMESTAMP;
         let mut current_ptr = pointer;
         let end_ptr = pointer + BLOCK_SIZE;
         let mut push_ts = |ts: u32| {
             unsafe {
-                let _ = *prev_ts_buf.get_unchecked_mut(seg_idx).write(ts);
+                let _ = *prev_ts_buf.get_unchecked_mut(split_idx).write(ts);
             }
-            seg_idx += 1;
+            split_idx += 1;
         };
         while current_ptr < end_ptr {
             let (curr_start_ptr, curr_block_meta) =
@@ -776,7 +789,7 @@ impl TracingMemory {
             },
             // SAFETY: T is plain old data
             unsafe { slice_as_bytes(prev_values) },
-            &prev_ts_buf[..seg_idx],
+            &prev_ts_buf[..split_idx],
         );
 
         // Update the metadata for this access
@@ -878,7 +891,12 @@ impl TracingMemory {
             }
             seg_idx += 1;
         }
-        unsafe { ret.assume_init() }
+        // SAFETY: we have written to start_ptr, split_data up to seg_idx, and now len
+        // - split_data[len..] is still uninit, and we guarantee we never read from it.
+        unsafe {
+            addr_of_mut!((*ret_ptr).len).write(seg_idx);
+            ret.assume_init()
+        }
     }
 
     /// Performs batch getting of the previous access times of a slice in guest memory in address
@@ -895,7 +913,6 @@ impl TracingMemory {
     /// access timestamp is the access timestamp after all split and merges were performed.
     ///
     /// Note that this function does not mutate `self.data`.
-    #[inline(always)]
     pub fn batch_prev_access_times<
         T: Copy + Send + Sync,
         const BLOCK_SIZE: usize,
@@ -947,14 +964,14 @@ impl TracingMemory {
         (0..len)
             .into_par_iter()
             .map(|i| {
-                let access_record = self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(
-                    address_space,
-                    pointer + i as u32 * BLOCK_SIZE as u32,
-                );
                 let AccessSplitRecord {
                     start_ptr,
                     split_data,
-                } = access_record;
+                    len: num_segs,
+                } = self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(
+                    address_space,
+                    pointer + i as u32 * BLOCK_SIZE as u32,
+                );
                 let access_t = access_timestamp(i);
                 // Edge case: the first block is responsible for the first out-of-bound segment.
                 if i == 0 && start_ptr < pointer {
@@ -973,11 +990,11 @@ impl TracingMemory {
                 let mut idx = 0;
 
                 let mut prev_ts_buf = [INITIAL_TIMESTAMP; MAX_SEGMENTS];
-                let mut seg_idx = 0;
+                let mut split_idx = 0;
                 let mut max_timestamp = INITIAL_TIMESTAMP;
                 let mut push_ts = |ts: u32| {
-                    prev_ts_buf[seg_idx] = ts;
-                    seg_idx += 1;
+                    prev_ts_buf[split_idx] = ts;
+                    split_idx += 1;
                 };
                 while curr_ptr < block_end_ptr {
                     let SplitData {
@@ -1033,6 +1050,7 @@ impl TracingMemory {
                     }
                     idx += 1;
                 }
+                debug_assert_eq!(idx, num_segs);
                 // Create the merge record
                 unsafe {
                     batch_processor.add_merge_record(
@@ -1044,7 +1062,7 @@ impl TracingMemory {
                             lowest_block_size: ALIGN as u32,
                             type_size: size_of::<T>() as u32,
                         },
-                        &prev_ts_buf[..seg_idx],
+                        &prev_ts_buf[..split_idx],
                     );
                     batch_processor
                         .set_meta_block::<BLOCK_SIZE, ALIGN>(block_start_ptr as usize, access_t);
