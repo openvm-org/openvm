@@ -32,7 +32,7 @@ OpenVM depends on the following parameters, some of which are fixed and some of 
 | `DEFAULT_PC_STEP`   | The default program counter step size.                             | Fixed to 4.                                                                                         |
 | `LIMB_BITS`         | The number of bits in a limb for RISC-V memory emulation.          | Fixed to 8.                                                                                         |
 | `ADDR_SPACE_OFFSET` | The index of the first writable address space.                     | Fixed to 1.                                                                                         |
-| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                             |
+| `addr_space_height` | The base 2 log of the number of writable address spaces supported. | Configurable, must satisfy `addr_space_height <= F::bits() - 2`                                     |
 | `pointer_max_bits`  | The maximum number of bits in a pointer.                           | Configurable, must satisfy `pointer_max_bits <= F::bits() - 2`                                      |
 | `num_public_values` | The number of user public values.                                  | Configurable. If continuation is enabled, it must equal `8` times a power of two(which is nonzero). |
 
@@ -439,7 +439,7 @@ The RV32IM extension defines the following phantom sub-instructions.
 |-------------------| ------------ | -------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Rv32HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal the vector `[(hint.len() as u32).to_le_bytes()), hint].concat()`.                                                                                             |
 | Rv32PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r32{0}(a)..r32{0}(a) + r32{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
-| Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is the host operating system (`rand::rngs::OsRng`). Its result is not constrained in any way.                                                                                 |
+| Rv32HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `4 * r32{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                                 |
 | Rv32HintLoadByKey | 0x23         | `a,b,_`  | Look up the value by key `[r32{0}{a}:r32{0}{b}]_2` and prepend the value into `input_stream`. The logical value is `Vec<Vec<F>>`. The serialization of `Vec` follows the format `[length, <content>]`. Both length and content encoded as little-endian bytes. |
 ### Native Extension
 
@@ -711,7 +711,7 @@ r32_ec_point(a) -> EcPoint {
 | EC_ADD_NE\<C\>       | `a,b,c,1,2` | Set `r32_ec_point(a) = r32_ec_point(b) + r32_ec_point(c)` (curve addition). Assumes that `r32_ec_point(b), r32_ec_point(c)` both lie on the curve and are not the identity point. Further assumes that `r32_ec_point(b).x, r32_ec_point(c).x` are not equal in the coordinate field.           |
 | SETUP_EC_ADD_NE\<C\> | `a,b,c,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC ADD. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).x != r32_ec_point(c).x)`   |
 | EC_DOUBLE\<C\>       | `a,b,_,1,2` | Set `r32_ec_point(a) = 2 * r32_ec_point(b)`. This doubles the input point. Assumes that `r32_ec_point(b)` lies on the curve and is not the identity point.                                                                                                                                     |
-| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
+| SETUP_EC_DOUBLE\<C\> | `a,b,_,1,2` | `assert(r32_ec_point(b).x == C::MODULUS && r32_ec_point(b).y == C::A)` in the chip for EC DOUBLE. For the sake of implementation convenience it also writes something (can be anything) into `[r32{0}(a): 2*C::COORD_SIZE]_2`. It is required for proper functionality that `assert(r32_ec_point(b).y != 0 mod C::MODULUS)` |
 
 ### Pairing Extension
 
