@@ -1040,7 +1040,7 @@ impl TracingMemory {
                             lowest_block_size: ALIGN as u32,
                             type_size: size_of::<T>() as u32,
                         },
-                        &prev_ts_buf,
+                        &prev_ts_buf[..seg_idx],
                     );
                     batch_processor.set_meta_block::<BLOCK_SIZE, ALIGN>(
                         block_start_ptr as usize,
