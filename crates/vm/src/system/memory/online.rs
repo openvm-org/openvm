@@ -894,6 +894,11 @@ impl TracingMemory {
         unsafe { ret.assume_init() }
     }
 
+    /// Performs batch read of a slice in address space `address_space` starting at `pointer` of
+    /// length `access_timestamp.len()` elements of type `T`.
+    ///
+    /// **Note**: Unlike `read`, this function does not mutate the internal timestamp. Instead it
+    /// takes in the `access_timestamp`s to update this slice's metadata to as a separate argument.
     #[inline(always)]
     pub fn batch_read<T: Copy + Send + Sync, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
