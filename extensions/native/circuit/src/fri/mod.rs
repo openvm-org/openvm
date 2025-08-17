@@ -1,7 +1,8 @@
 use core::ops::Deref;
 use std::{
+    any::TypeId,
     borrow::{Borrow, BorrowMut},
-    mem::offset_of,
+    mem::{offset_of, transmute},
 };
 
 use itertools::zip_eq;
@@ -26,11 +27,12 @@ use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
-    p3_field::{Field, FieldAlgebra, PrimeField32},
+    p3_field::{extension::BinomialExtensionField, Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use static_assertions::const_assert_eq;
 
 use crate::{
@@ -707,7 +709,8 @@ impl Default for FriReducedOpeningExecutor {
 impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
-    for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
+    for<'buf> RA:
+        RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, BabyBear>>,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
         assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
@@ -755,7 +758,7 @@ where
             alpha_ptr,
             &mut record.common.alpha_aux.prev_timestamp,
         );
-        record.common.alpha_ptr = d;
+        record.common.alpha_ptr = BabyBear::from_canonical_u32(alpha_ptr);
         record.common.alpha = alpha;
 
         tracing_read_native::<F, 1>(
@@ -763,7 +766,7 @@ where
             length_ptr,
             &mut record.common.length_aux.prev_timestamp,
         );
-        record.common.length_ptr = c;
+        record.common.length_ptr = BabyBear::from_canonical_u32(length_ptr);
         record.header.length = length;
 
         let a_ptr_ptr = a.as_canonical_u32();
@@ -772,7 +775,7 @@ where
             a_ptr_ptr,
             &mut record.common.a_ptr_aux.prev_timestamp,
         );
-        record.common.a_ptr_ptr = a;
+        record.common.a_ptr_ptr = BabyBear::from_canonical_u32(a_ptr_ptr);
         record.common.a_ptr = a_ptr.as_canonical_u32();
 
         let b_ptr_ptr = b.as_canonical_u32();
@@ -781,7 +784,7 @@ where
             b_ptr_ptr,
             &mut record.common.b_ptr_aux.prev_timestamp,
         );
-        record.common.b_ptr_ptr = b;
+        record.common.b_ptr_ptr = BabyBear::from_canonical_u32(b_ptr_ptr);
         record.common.b_ptr = b_ptr.as_canonical_u32();
 
         tracing_read_native::<F, 1>(
@@ -789,19 +792,22 @@ where
             is_init_ptr,
             &mut record.common.is_init_aux.prev_timestamp,
         );
-        record.common.is_init_ptr = g;
+        record.common.is_init_ptr = BabyBear::from_canonical_u32(g.as_canonical_u32());
         record.header.is_init = is_init;
 
         let hint_id_ptr = f.as_canonical_u32();
         let [hint_id]: [F; 1] = memory_read_native(state.memory.data(), hint_id_ptr);
         let hint_id = hint_id.as_canonical_u32() as usize;
-        record.common.hint_id_ptr = f;
+        record.common.hint_id_ptr = BabyBear::from_canonical_u32(hint_id_ptr);
 
         let length = length as usize;
 
         let data = if !is_init {
             let hint_steam = &mut state.streams.hint_space[hint_id];
-            hint_steam.drain(0..length).collect()
+            hint_steam
+                .drain(0..length)
+                .map(|x| BabyBear::from_canonical_u32(x.as_canonical_u32()))
+                .collect()
         } else {
             vec![]
         };
@@ -812,8 +818,8 @@ where
             let workload_row = &mut record.workload[length - i - 1];
 
             let a_ptr_i = record.common.a_ptr + i as u32;
-            let [a]: [F; 1] = if !is_init {
-                let mut prev = [F::ZERO; 1];
+            let [a]: [BabyBear; 1] = if !is_init {
+                let mut prev = [BabyBear::ZERO; 1];
                 tracing_write_native(
                     state.memory,
                     a_ptr_i,
@@ -831,7 +837,7 @@ where
                 )
             };
             let b_ptr_i = record.common.b_ptr + (EXT_DEG * i) as u32;
-            let b = tracing_read_native::<F, EXT_DEG>(
+            let b = tracing_read_native::<BabyBear, EXT_DEG>(
                 state.memory,
                 b_ptr_i,
                 &mut workload_row.b_aux.prev_timestamp,
@@ -840,20 +846,23 @@ where
             as_and_bs.push((a, b));
         }
 
-        let mut result = [F::ZERO; EXT_DEG];
+        assert_eq!(TypeId::of::<F>(), TypeId::of::<BabyBear>());
+        type EF = BinomialExtensionField<BabyBear, EXT_DEG>;
+        let mut result = EF::ZERO;
         for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
             let workload_row = &mut record.workload[i];
 
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
             workload_row.a = a;
-            workload_row.result = result;
+            // result = result * alpha + (b - a)
+            unsafe {
+                let b = transmute::<[BabyBear; EXT_DEG], EF>(b);
+                result = result * transmute::<[BabyBear; EXT_DEG], EF>(alpha) + (b - a);
+                workload_row.result = transmute::<EF, [BabyBear; EXT_DEG]>(result);
+            }
         }
 
         let result_ptr = e.as_canonical_u32();
+        let result = unsafe { transmute::<EF, [BabyBear; EXT_DEG]>(result) };
         tracing_write_native(
             state.memory,
             result_ptr,
@@ -861,7 +870,7 @@ where
             &mut record.common.result_aux.prev_timestamp,
             &mut record.common.result_aux.prev_data,
         );
-        record.common.result_ptr = e;
+        record.common.result_ptr = BabyBear::from_canonical_u32(e.as_canonical_u32());
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
