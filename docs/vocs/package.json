@@ -7,7 +7,7 @@
 		"dev": "vocs dev",
 		"build": "vocs build",
 		"preview": "vocs preview",
-		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && pnpm build"
+		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && cp -rL docs/snippets/examples_sdk docs/snippets/examples_sdk-tmp && rm -rf docs/snippets/examples_sdk && mv docs/snippets/examples_sdk-tmp docs/snippets/examples_sdk && pnpm build"
 	},
 	"dependencies": {
 		"katex": "^0.16.22",
