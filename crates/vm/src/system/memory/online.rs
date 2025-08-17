@@ -1,6 +1,11 @@
 use std::{
-    array::from_fn, fmt::Debug, mem::MaybeUninit, num::NonZero, ptr::addr_of_mut,
+    array::from_fn,
+    fmt::Debug,
+    mem::MaybeUninit,
+    num::NonZero,
+    ptr::addr_of_mut,
     slice::from_raw_parts,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 use getset::Getters;
@@ -38,6 +43,11 @@ pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
 pub use paged_vec::PagedVec;
+
+use crate::{
+    arch::CustomBorrow,
+    system::memory::adapter::records::{size_by_layout, AccessRecordMut},
+};
 
 #[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
 pub type MemoryBackend = memmap::MmapMemory;
@@ -225,11 +235,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     #[inline(always)]
-    pub unsafe fn get_slice<T: Copy + Debug>(
-        &self,
-        (addr_space, ptr): Address,
-        len: usize,
-    ) -> &[T] {
+    pub unsafe fn get_slice<T: Copy>(&self, (addr_space, ptr): Address, len: usize) -> &[T] {
         debug_assert_eq!(
             size_of::<T>(),
             self.config[addr_space as usize].layout.size()
@@ -381,7 +387,7 @@ impl GuestMemory {
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
     #[inline(always)]
-    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+    pub unsafe fn get_slice<T: Copy>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
     }
 
@@ -889,16 +895,12 @@ impl TracingMemory {
     }
 
     #[inline(always)]
-    pub fn batch_read<
-        T: Copy + Debug + Send + Sync,
-        const BLOCK_SIZE: usize,
-        const ALIGN: usize,
-    >(
+    pub fn batch_read<T: Copy + Send + Sync, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: u32,
         pointer: u32,
         // Access timestamp for each block. Also `access_timestamp.len()` indicates the number of
-        // access.
+        // accesses.
         access_timestamp: &[u32],
     ) -> &[T] {
         // Goal: read a batch of memory with the same `BLOCK_SIZE` at given the timestamps.
@@ -935,80 +937,7 @@ impl TracingMemory {
         let batch_end = pointer + len as u32 * BLOCK_SIZE as u32;
         let end = batch_end + MAX_BLOCK_SIZE as u32 - 1;
         meta_page.par_touch(start as usize, end as usize);
-        struct ForceSendSyncMut<T>(*mut T);
-        unsafe impl<T> Sync for ForceSendSyncMut<T> {}
-        unsafe impl<T> Send for ForceSendSyncMut<T> {}
-        impl ForceSendSyncMut<TracingMemory> {
-            unsafe fn add_split_record<T: Copy, const MIN_BLOCK_SIZE: usize>(
-                &self,
-                start_ptr: u32,
-                timestamp: u32,
-                block_size: u8,
-                address_space: usize,
-            ) {
-                (*self.0).add_split_record(AccessRecordHeader {
-                    timestamp_and_mask: timestamp,
-                    address_space: address_space as u32,
-                    pointer: start_ptr,
-                    block_size: block_size as u32,
-                    lowest_block_size: MIN_BLOCK_SIZE as u32,
-                    type_size: size_of::<T>() as u32,
-                });
-            }
-
-            #[inline(always)]
-            unsafe fn add_merge_record(
-                &self,
-                header: AccessRecordHeader,
-                data_slice: &[u8],
-                prev_ts: &[u32],
-            ) {
-                (*self.0).add_merge_record(header, data_slice, prev_ts);
-            }
-
-            #[inline(always)]
-            unsafe fn set_timestamp<const MIN_BLOCK_SIZE: usize>(
-                &self,
-                start_ptr: u32,
-                end_ptr: u32,
-                timestamp: u32,
-                address_space: usize,
-            ) {
-                let begin = start_ptr / MIN_BLOCK_SIZE as u32;
-                let end = end_ptr / MIN_BLOCK_SIZE as u32;
-                let meta_page = unsafe { (*self.0).meta.get_unchecked_mut(address_space) };
-                for i in begin..end {
-                    meta_page.set(
-                        i as usize,
-                        AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
-                    );
-                }
-            }
-
-            #[inline(always)]
-            unsafe fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
-                &self,
-                address_space: usize,
-                pointer: usize,
-                timestamp: u32,
-            ) {
-                (*self.0).set_meta_block::<BLOCK_SIZE, ALIGN>(address_space, pointer, timestamp);
-            }
-        }
-        let mut_self = ForceSendSyncMut(self as *mut Self);
-        struct ForceSendSyncConst<T>(*const T);
-        unsafe impl<T> Sync for ForceSendSyncConst<T> {}
-        unsafe impl<T> Send for ForceSendSyncConst<T> {}
-        impl<T> ForceSendSyncConst<T> {
-            unsafe fn get_slice(&self, offset: usize, len: usize) -> &[T] {
-                from_raw_parts(self.0.add(offset), len)
-            }
-        }
-        let prev_values_slice = unsafe {
-            self.data
-                .get_slice::<T>(address_space, pointer, len * BLOCK_SIZE)
-        };
-        let prev_values = ForceSendSyncConst(prev_values_slice.as_ptr());
+        let batch_processor = BatchReadProcessor::<T>::new(self, address_space);
         (0..len).into_par_iter().for_each(|i| {
             let access_record = self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(
                 address_space,
@@ -1018,14 +947,13 @@ impl TracingMemory {
                 start_ptr,
                 split_data,
             } = access_record;
-            // Edge case: the first
+            // Edge case: the first block is responsible for the first out-of-bound segment.
             if i == 0 && start_ptr < pointer {
                 unsafe {
-                    mut_self.set_timestamp::<ALIGN>(
+                    batch_processor.set_timestamp::<ALIGN>(
                         start_ptr,
                         pointer,
                         split_data[0].timestamp,
-                        address_space as usize,
                     );
                 }
             }
@@ -1049,20 +977,17 @@ impl TracingMemory {
                         if self.initial_block_size < ALIGN {
                             // Create a merge record for single-byte initialization
                             debug_assert_eq!(self.initial_block_size, 1);
-                            unsafe {
-                                mut_self.add_merge_record(
-                                    AccessRecordHeader {
-                                        timestamp_and_mask: INITIAL_TIMESTAMP,
-                                        address_space,
-                                        pointer: curr_ptr,
-                                        block_size: ALIGN as u32,
-                                        lowest_block_size: self.initial_block_size as u32,
-                                        type_size: size_of::<T>() as u32,
-                                    },
-                                    &INITIAL_CELL_BUFFER[..ALIGN],
-                                    &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
-                                );
-                            }
+                            batch_processor.add_merge_record(
+                                AccessRecordHeader {
+                                    timestamp_and_mask: INITIAL_TIMESTAMP,
+                                    address_space,
+                                    pointer: curr_ptr,
+                                    block_size: ALIGN as u32,
+                                    lowest_block_size: self.initial_block_size as u32,
+                                    type_size: size_of::<T>() as u32,
+                                },
+                                &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
+                            );
                             block_size = ALIGN as u8;
                             add_split = false;
                         } else {
@@ -1070,15 +995,14 @@ impl TracingMemory {
                         }
                     }
                     if add_split {
-                        // SAFETY: Dense
-                        unsafe {
-                            mut_self.add_split_record::<T, ALIGN>(
-                                curr_ptr,
-                                timestamp,
-                                block_size,
-                                address_space as usize,
-                            );
-                        }
+                        batch_processor.add_split_record(AccessRecordHeader {
+                            timestamp_and_mask: timestamp,
+                            address_space,
+                            pointer: curr_ptr,
+                            block_size: block_size as u32,
+                            lowest_block_size: ALIGN as u32,
+                            type_size: size_of::<T>() as u32,
+                        });
                     }
                     // No need to update the metadata of cells in the block because we will merge
                     // them later.
@@ -1088,7 +1012,7 @@ impl TracingMemory {
             }
             // Create the merge record
             unsafe {
-                mut_self.add_merge_record(
+                batch_processor.add_merge_record(
                     AccessRecordHeader {
                         timestamp_and_mask: max_timestamp,
                         address_space,
@@ -1097,12 +1021,9 @@ impl TracingMemory {
                         lowest_block_size: ALIGN as u32,
                         type_size: size_of::<T>() as u32,
                     },
-                    // SAFETY: T is plain old data
-                    slice_as_bytes(prev_values.get_slice(i * BLOCK_SIZE, BLOCK_SIZE)),
                     &prev_ts_buf,
                 );
-                mut_self.set_meta_block::<BLOCK_SIZE, ALIGN>(
-                    address_space as usize,
+                batch_processor.set_meta_block::<BLOCK_SIZE, ALIGN>(
                     block_start_ptr as usize,
                     access_timestamp[i],
                 );
@@ -1110,16 +1031,20 @@ impl TracingMemory {
 
             if i + 1 == len && curr_ptr > block_end_ptr {
                 unsafe {
-                    mut_self.set_timestamp::<ALIGN>(
+                    batch_processor.set_timestamp::<ALIGN>(
                         block_end_ptr,
                         curr_ptr,
                         split_data[idx - 1].timestamp,
-                        address_space as usize,
                     );
                 }
             }
         });
-        prev_values_slice
+        unsafe {
+            from_raw_parts(
+                batch_processor.data_slice.add(pointer as usize),
+                len * BLOCK_SIZE,
+            )
+        }
     }
 
     /// Atomic read operation which increments the timestamp by 1.
@@ -1420,5 +1345,128 @@ impl TracingMemory {
             .iter()
             .map(|&x| log2_strict_usize(x as usize) as u8)
             .collect()
+    }
+}
+
+struct BatchReadProcessor<T> {
+    access_adapter_arena: *mut DenseRecordArena,
+    position: AtomicUsize,
+    data_slice: *const T,
+    meta_page: *mut PagedVec<AccessMetadata, PAGE_SIZE>,
+}
+
+unsafe impl<T: Copy + Send + Sync> Send for BatchReadProcessor<T> {}
+unsafe impl<T: Copy + Send + Sync> Sync for BatchReadProcessor<T> {}
+
+impl<T: Copy + Send + Sync> BatchReadProcessor<T> {
+    pub fn new(tracing_memory: &mut TracingMemory, addr_space: u32) -> Self {
+        let start = tracing_memory
+            .access_adapter_records
+            .records_buffer
+            .position();
+        let access_adapter_arena =
+            &mut tracing_memory.access_adapter_records as *mut DenseRecordArena;
+        let data_slice = unsafe { tracing_memory.data.get_slice(addr_space, 0, 0).as_ptr() };
+        let meta_page = unsafe {
+            tracing_memory.meta.get_unchecked_mut(addr_space as usize)
+                as *mut PagedVec<AccessMetadata, PAGE_SIZE>
+        };
+        Self {
+            access_adapter_arena,
+            position: AtomicUsize::new(start as usize),
+            data_slice,
+            meta_page,
+        }
+    }
+
+    #[inline(always)]
+    fn allocate(&self, header: &AccessRecordHeader) -> AccessRecordMut {
+        let layout = AccessLayout::from_record_header(header);
+        let size = size_by_layout(&layout);
+        let start = self.position.fetch_add(size, Ordering::AcqRel);
+        let access_adapter_arena = unsafe { &mut *self.access_adapter_arena };
+        let bytes = &mut access_adapter_arena.records_buffer.get_mut()[start..(start + size)];
+        <[u8] as CustomBorrow<AccessRecordMut<'_>, AccessLayout>>::custom_borrow(bytes, layout)
+    }
+
+    fn add_split_record(&self, header: AccessRecordHeader) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+        let data_slice = unsafe {
+            from_raw_parts(
+                self.data_slice.add(header.pointer as usize) as *const u8,
+                header.block_size as usize * size_of::<T>(),
+            )
+        };
+
+        let record_mut = self.allocate(&header);
+        *record_mut.header = header;
+        record_mut.data.copy_from_slice(data_slice);
+        // we don't mind garbage values in prev_*
+    }
+
+    #[inline(always)]
+    fn add_merge_record(&self, header: AccessRecordHeader, prev_ts: &[u32]) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+        debug_assert_eq!(header.block_size, prev_ts.len() as u32);
+        let data_slice = unsafe {
+            from_raw_parts(
+                self.data_slice.add(header.pointer as usize) as *const u8,
+                header.block_size as usize * size_of::<T>(),
+            )
+        };
+
+        let record_mut = self.allocate(&header);
+        *record_mut.header = header;
+        record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
+        record_mut.data.copy_from_slice(data_slice);
+        record_mut.timestamps.copy_from_slice(prev_ts);
+    }
+
+    #[inline(always)]
+    unsafe fn set_timestamp<const MIN_BLOCK_SIZE: usize>(
+        &self,
+        start_ptr: u32,
+        end_ptr: u32,
+        timestamp: u32,
+    ) {
+        let begin = start_ptr / MIN_BLOCK_SIZE as u32;
+        let end = end_ptr / MIN_BLOCK_SIZE as u32;
+        let meta_page = unsafe { &mut *self.meta_page };
+        for i in begin..end {
+            meta_page.set(
+                i as usize,
+                AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
+            );
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &self,
+        pointer: usize,
+        timestamp: u32,
+    ) {
+        let ptr = pointer / ALIGN;
+        let meta_page = unsafe { &mut *self.meta_page };
+        meta_page.set(ptr, AccessMetadata::new(timestamp, BLOCK_SIZE as u8, 0));
+        // Store offsets for other positions in the block
+        for i in 1..(BLOCK_SIZE / ALIGN) {
+            meta_page.set(ptr + i, AccessMetadata::new(0, 0, i as u8));
+        }
+    }
+}
+
+impl<T> Drop for BatchReadProcessor<T> {
+    fn drop(&mut self) {
+        let access_adapter_arena = unsafe { &mut *self.access_adapter_arena };
+        // No one else is accessing when dropping.
+        let new_position = self.position.load(Ordering::Relaxed);
+        access_adapter_arena
+            .records_buffer
+            .set_position(new_position as u64);
     }
 }
