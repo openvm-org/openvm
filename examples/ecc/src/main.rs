@@ -1,11 +1,11 @@
-// ANCHOR: imports
+// [!region imports]
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::weierstrass::WeierstrassPoint;
 use openvm_k256::{Secp256k1Coord, Secp256k1Point};
-// ANCHOR_END: imports
+// [!endregion imports]
 
-// ANCHOR: init
+// [!region init]
 openvm::init!();
 /* The init! macro will expand to the following
 openvm_algebra_guest::moduli_macros::moduli_init! {
@@ -15,9 +15,9 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
 
 openvm_ecc_guest::sw_macros::sw_init! { "Secp256k1Point" }
 */
-// ANCHOR_END: init
+// [!endregion init]
 
-// ANCHOR: main
+// [!region main]
 pub fn main() {
     let x1 = Secp256k1Coord::from_u32(1);
     let y1 = Secp256k1Coord::from_le_bytes_unchecked(&hex!(
@@ -34,4 +34,4 @@ pub fn main() {
     #[allow(clippy::op_ref)]
     let _p3 = &p1 + &p2;
 }
-// ANCHOR_END: main
+// [!endregion main]

@@ -1,4 +1,4 @@
-// ANCHOR: dependencies
+// [!region dependencies]
 use std::fs;
 
 use openvm_build::GuestOptions;
@@ -10,14 +10,14 @@ pub struct SomeStruct {
     pub a: u64,
     pub b: u64,
 }
-// ANCHOR_END: dependencies
+// [!endregion dependencies]
 
 #[allow(dead_code, unused_variables)]
 fn read_elf() -> eyre::Result<()> {
-    // ANCHOR: read_elf
+    // [!region read_elf]
     // 2b. Load the ELF from a file
     let elf: Vec<u8> = fs::read("your_path_to_elf")?;
-    // ANCHOR_END: read_elf
+    // [!endregion read_elf]
     Ok(())
 }
 
@@ -31,7 +31,7 @@ fn main() -> eyre::Result<()> {
     /// path.push("guest/fib");
     /// let target_path = path.to_str().unwrap();
     /// ```
-    // ANCHOR: build
+    // [!region build]
     // 1. Build the VmConfig with the extensions needed.
     let sdk = Sdk::riscv32();
 
@@ -39,9 +39,9 @@ fn main() -> eyre::Result<()> {
     let guest_opts = GuestOptions::default();
     let target_path = "your_path_project_root";
     let elf = sdk.build(guest_opts, target_path, &None, None)?;
-    // ANCHOR_END: build
+    // [!endregion build]
 
-    // ANCHOR: execution
+    // [!region execution]
     // 3. Format your input into StdIn
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
     let mut stdin = StdIn::default();
@@ -50,23 +50,23 @@ fn main() -> eyre::Result<()> {
     // 4. Run the program
     let output = sdk.execute(elf.clone(), stdin.clone())?;
     println!("public values output: {:?}", output);
-    // ANCHOR_END: execution
+    // [!endregion execution]
 
-    // ANCHOR: proof_generation
+    // [!region proof_generation]
     // 5a. Generate a proof
     let (proof, app_commit) = sdk.prove(elf.clone(), stdin.clone())?;
     // 5b. Generate a proof with a StarkProver with custom fields
     let mut prover = sdk.prover(elf)?.with_program_name("test_program");
     let app_commit = prover.app_commit();
     let proof = prover.prove(stdin.clone())?;
-    // ANCHOR_END: proof_generation
+    // [!endregion proof_generation]
 
-    // ANCHOR: verification
+    // [!region verification]
     // 6. Do this once to save the agg_vk, independent of the proof.
     let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
     // 7. Verify your program
     Sdk::verify_proof(&agg_vk, app_commit, &proof)?;
-    // ANCHOR_END: verification
+    // [!endregion verification]
 
     Ok(())
 }

@@ -1,0 +1,43 @@
+# Design and Specifications
+
+OpenVM is a modular framework to co-design and build a custom zkVM, ISA, and supporting programming language frontend simultaneously.
+
+- The [Circuit Architecture](/specs/architecture/circuit-architecture) explains the zkVM circuit architecture, which focuses on maximizing modularity and composability. The architecture supports adding arbitrary chips to handle custom instructions using a **VM extension** framework.
+  - There are a few required system chips: Program, Public Values, Connector, Range Checker, Memory (which is handled with several chips), and Poseidon2. These chips are required in any VM instantiation, and all other functionality is handled by circuits from VM extensions.
+- The [Instruction Set Architecture](/specs/openvm/isa) specifies the ISA framework and lists the currently supported instructions in different VM extensions. The ISA is specialized for zkVMs and provides additional flexibility over traditional machine architectures:
+  - Support for multiple machine architectures interoperating over multiple memory address spaces. These address spaces also allow support for both register and stack based architectures.
+  - Variable word size, which allows flexible support for different register sizes and also higher bandwidth memory accesses.
+- Programming language support is provided using Rust as the language frontend. Support for Rust relies on compilation to a 32-bit RISC-V ELF binary which is then transpiled to OpenVM assembly. VM extensions can specify additional instructions which are either (1) **intrinsics**, which can read from and write to RISC-V registers and memory in address spaces 1 and 2 or (2) **kernels**, which can operate over arbitrary address spaces, including address spaces 1 and 2.
+  - Intrinsics are supported in the Rust frontend by inserting custom RISC-V directives to be passed through LLVM into the RISC-V ELF. The [RISC-V custom instructions](/specs/reference/riscv-custom-code) specification explains the custom instruction format in the RISC-V ELF for each default VM extension.
+  - Each VM extension with intrinsics specifies an extensible [transpiler](/specs/reference/transpiler) component to convert its instructions in the RISC-V ELF into OpenVM assembly. The transpiler comes with support for RV32IM and the set of default extensions, and it is extensible for new VM extensions.
+  - VM extensions with kernels compile directly to OpenVM assembly and may be used outside of the Rust frontend, or called from within Rust via procedural macros. At present, a standalone Rust eDSL is supported for the native VM extension.
+- We provide a general recursion library written in a standalone Rust eDSL which compiles to the native VM extension for OpenVM. The library supports inner aggregation of arbitrary STARK proofs, outer aggregation using Halo2-based SNARKs, and on-chain EVM verification of the aggregated SNARK proofs.
+- All VMs within our framework support parallel proving of programs with unbounded cycle count using continuations and proof aggregation. Our [continuations design](/specs/architecture/continuations) maximizes proving parallelism and does not rely on interactive communication between continuation segments.
+
+## VM Extensions
+
+The framework is designed to be extendable via external crates _without forking_.
+VM extensions provide a way to simultaneously extend the VM with new chips, opcodes, and toolchain support for these opcodes.
+A new extension of the overall architecture consists of three components:
+
+- Guest library: the guest library that compiles program code (usually in Rust) into RISC-V assembly with custom instructions.
+- Transpiler extension: extend the transpiler to specify how newly introduced custom RISC-V instructions should be transpiled into custom OpenVM instructions.
+- Circuit extension: define new chips and assign them to handle the new opcodes.
+
+These three components should be organized into three separate crates. When introducing a new extension with name `$name`, we recommend naming the crates as follows:
+
+- `openvm-$name-guest`: the guest library crate. This crate specifies the custom RISC-V instructions to be added. To avoid opcode collisions, we keep a list of currently supported custom instructions in [this](/specs/reference/riscv-custom-code) file.
+- `openvm-$name-transpiler`: the transpiler extension crate. This crate needs to import `openvm-$name-guest` to get the custom RISC-V instruction definitions. The `openvm-$name-transpiler` crate specifies the new OpenVM instruction definitions (represented in field elements) as well as the transpiler extension.
+- `openvm-$name-circuit`: the circuit extension crate that defines new chips. This crate needs to import `openvm-$name-transpiler` to get the new OpenVM instruction definitions.
+
+## Specifications
+
+More details about OpenVM are provided in the specific pages below.
+
+- [Circuit Architecture](/specs/architecture/circuit-architecture)
+- [Instruction Set Architecture](/specs/openvm/isa)
+- [Code-Level Instruction Mapping](/specs/reference/instruction-reference)
+- [RISC-V custom instructions](/specs/reference/riscv-custom-code)
+- [Transpiler from RISC-V ELF to OpenVM assembly](/specs/reference/transpiler)
+- [Continuations](/specs/architecture/continuations)
+- [Memory Architecture](/specs/architecture/memory)

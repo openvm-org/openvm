@@ -1,4 +1,4 @@
-// ANCHOR: dependencies
+// [!region dependencies]
 use std::fs;
 
 use eyre::Result;
@@ -11,14 +11,14 @@ pub struct SomeStruct {
     pub a: u64,
     pub b: u64,
 }
-// ANCHOR_END: dependencies
+// [!endregion dependencies]
 
 #[allow(dead_code, unused_variables)]
 fn read_elf() -> Result<(), Box<dyn std::error::Error>> {
-    // ANCHOR: read_elf
+    // [!region read_elf]
     // 2b. Load the ELF from a file
     let elf: Vec<u8> = fs::read("your_path_to_elf")?;
-    // ANCHOR_END: read_elf
+    // [!endregion read_elf]
     Ok(())
 }
 
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// path.push("guest/fib");
     /// let target_path = path.to_str().unwrap();
     /// ```
-    // ANCHOR: build
+    // [!region build]
     // 1. Build the VmConfig with the extensions needed.
     let sdk = Sdk::riscv32();
 
@@ -40,16 +40,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let guest_opts = GuestOptions::default();
     let target_path = "your_path_project_root";
     let elf = sdk.build(guest_opts, target_path, &None, None)?;
-    // ANCHOR_END: build
+    // [!endregion build]
 
-    // ANCHOR: input
+    // [!region input]
     // 3. Format your input into StdIn
     let my_input = SomeStruct { a: 1, b: 2 }; // anything that can be serialized
     let mut stdin = StdIn::default();
     stdin.write(&my_input);
-    // ANCHOR_END: input
+    // [!endregion input]
 
-    // ANCHOR: evm_verification
+    // [!region evm_verification]
     // 4. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_halo2_verifier_solidity()?;
 
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 6. Verify the EVM proof
     Sdk::verify_evm_halo2_proof(&verifier, proof)?;
-    // ANCHOR_END: evm_verification
+    // [!endregion evm_verification]
 
     Ok(())
 }

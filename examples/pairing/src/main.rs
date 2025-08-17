@@ -1,16 +1,16 @@
-// ANCHOR: pre
+// [!region pre]
 use hex_literal::hex;
-// ANCHOR_END: pre
-// ANCHOR: imports
+// [!endregion pre]
+// [!region imports]
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing::{
     bls12_381::{Bls12_381, Fp, Fp2},
     PairingCheck,
 };
-// ANCHOR_END: imports
+// [!endregion imports]
 
-// ANCHOR: init
+// [!region init]
 openvm::init!();
 /* The init! macro will expand to the following
 openvm_algebra_moduli_macros::moduli_init! {
@@ -22,9 +22,9 @@ openvm_algebra_complex_macros::complex_init! {
     "Bls12_381Fp2" { mod_idx = 0 },
 }
 */
-// ANCHOR_END: init
+// [!endregion init]
 
-// ANCHOR: main
+// [!region main]
 pub fn main() {
     let p0 = AffinePoint::new(
         Fp::from_be_bytes_unchecked(&hex!("17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb")),
@@ -55,9 +55,9 @@ pub fn main() {
         ]),
     );
 
-    // ANCHOR: pairing_check
+    // [!region pairing_check]
     let res = Bls12_381::pairing_check(&[p0, -q0], &[p1, q1]);
     assert!(res.is_ok());
-    // ANCHOR_END: pairing_check
+    // [!endregion pairing_check]
 }
-// ANCHOR_END: main
+// [!endregion main]
