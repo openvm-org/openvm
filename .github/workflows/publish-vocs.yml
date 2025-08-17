@@ -1,6 +1,9 @@
 name: Publish Vocs Docs to Vercel
 
 on:
+  pull_request:
+    branches:
+      - feat/new-execution
   workflow_dispatch:
     inputs:
       branch:
