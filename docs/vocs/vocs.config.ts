@@ -21,7 +21,7 @@ export default defineConfig({
     { text: 'Specs', link: '/specs/openvm/overview' },
     {
       text: 'Rustdocs',
-      link: 'https://docs.openvm.dev/'
+      link: 'https://openvm.dev/docs'
     },
     { text: 'GitHub', link: 'https://github.com/openvm-org/openvm' },
     {
