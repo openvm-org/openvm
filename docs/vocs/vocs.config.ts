@@ -60,7 +60,7 @@ export default defineConfig({
     }
   ],
   markdown: {
-    remarkPlugins: [[remarkMath, { singleDollarTextMath: true }, remarkMdxDisableExplicitJsx]],
+    remarkPlugins: [[remarkMath, { singleDollarTextMath: true }]],
     rehypePlugins: [[rehypeKatex, {
         // Strict mode can help with parsing
         strict: false,
@@ -80,7 +80,7 @@ export default defineConfig({
           )  
         }  
       }  
-    ]  
+    ],
   },
   theme: {
     accentColor: {
