@@ -834,13 +834,14 @@ where
                 .get_slice(NATIVE_AS, record.common.b_ptr, length * EXT_DEG)
         };
 
+        let start_t = state.memory.timestamp();
         let a_prev_ts = state
             .memory
             .batch_prev_access_times::<F, 1, DEFAULT_NATIVE_BLOCK_SIZE, _>(
                 NATIVE_AS,
                 a_ptr,
                 length,
-                |i| 2 * i as u32,
+                |i| start_t + 2 * i as u32,
             );
         let b_prev_ts = state
             .memory
@@ -848,7 +849,7 @@ where
                 NATIVE_AS,
                 b_ptr,
                 length,
-                |i| (2 * i + 1) as u32,
+                |i| start_t + (2 * i + 1) as u32,
             );
         state.memory.increment_timestamp_by(2 * length as u32);
 

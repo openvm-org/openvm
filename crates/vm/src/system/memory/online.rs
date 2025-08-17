@@ -955,6 +955,7 @@ impl TracingMemory {
                     start_ptr,
                     split_data,
                 } = access_record;
+                let access_t = access_timestamp(i);
                 // Edge case: the first block is responsible for the first out-of-bound segment.
                 if i == 0 && start_ptr < pointer {
                     unsafe {
@@ -1018,10 +1019,13 @@ impl TracingMemory {
                                 lowest_block_size: ALIGN as u32,
                                 type_size: size_of::<T>() as u32,
                             });
-                            for _ in 0..(block_size as usize / ALIGN) {
+                            let curr_end_ptr = curr_ptr + block_size as u32;
+                            let num_ts =
+                                (curr_end_ptr.min(block_end_ptr) - curr_ptr) / ALIGN as u32;
+                            for _ in 0..num_ts {
                                 push_ts(timestamp);
-                                curr_ptr += ALIGN as u32;
                             }
+                            curr_ptr += block_size as u32;
                             max_timestamp = max_timestamp.max(timestamp);
                         }
                         // No need to update the metadata of cells in the block because we will
@@ -1042,12 +1046,11 @@ impl TracingMemory {
                         },
                         &prev_ts_buf[..seg_idx],
                     );
-                    batch_processor.set_meta_block::<BLOCK_SIZE, ALIGN>(
-                        block_start_ptr as usize,
-                        access_timestamp(i),
-                    );
+                    batch_processor
+                        .set_meta_block::<BLOCK_SIZE, ALIGN>(block_start_ptr as usize, access_t);
                 }
 
+                // Edge case: the last block is responsible for the last out-of-bounds segment
                 if i + 1 == len && curr_ptr > block_end_ptr {
                     unsafe {
                         batch_processor.set_timestamp::<ALIGN>(
