@@ -1,7 +1,9 @@
 use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
+    cell::UnsafeCell,
     mem::offset_of,
+    thread,
 };
 
 use itertools::zip_eq;
@@ -21,7 +23,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, NATIVE_AS,
+};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -806,52 +810,103 @@ where
             vec![]
         };
 
-        let mut as_and_bs = Vec::with_capacity(length);
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..length {
-            let workload_row = &mut record.workload[length - i - 1];
+        let a_slice: &[F] = if !is_init {
+            &data
+        } else {
+            unsafe {
+                state
+                    .memory
+                    .data()
+                    .get_slice(NATIVE_AS, record.common.a_ptr, length)
+            }
+        };
+        let b_slice_flat: &[F] = unsafe {
+            state
+                .memory
+                .data()
+                .get_slice(NATIVE_AS, record.common.b_ptr, length * EXT_DEG)
+        };
 
-            let a_ptr_i = record.common.a_ptr + i as u32;
-            let [a]: [F; 1] = if !is_init {
-                let mut prev = [F::ZERO; 1];
-                tracing_write_native(
-                    state.memory,
-                    a_ptr_i,
-                    [data[i]],
-                    &mut workload_row.a_aux.prev_timestamp,
-                    &mut prev,
-                );
-                record.a_write_prev_data[length - i - 1] = prev[0];
-                [data[i]]
-            } else {
-                tracing_read_native(
-                    state.memory,
-                    a_ptr_i,
-                    &mut workload_row.a_aux.prev_timestamp,
-                )
+        struct SharedUnsafeSlice<T> {
+            ptr: *const UnsafeCell<T>,
+            len: usize,
+        }
+
+        // SAFETY: We handle race conditions ourselves
+        unsafe impl<T: Send> Send for SharedUnsafeSlice<T> {}
+        unsafe impl<T: Send> Sync for SharedUnsafeSlice<T> {}
+
+        impl<T> SharedUnsafeSlice<T> {
+            unsafe fn get_mut_unchecked(&self, index: usize) -> *mut T {
+                debug_assert!(index < self.len);
+                (*self.ptr.add(index)).get()
+            }
+        }
+        let workload: SharedUnsafeSlice<FriReducedOpeningWorkloadRowRecord<F>> =
+            SharedUnsafeSlice {
+                ptr: record.workload.as_ptr() as *const UnsafeCell<_>,
+                len: length,
             };
-            let b_ptr_i = record.common.b_ptr + (EXT_DEG * i) as u32;
-            let b = tracing_read_native::<F, EXT_DEG>(
-                state.memory,
-                b_ptr_i,
-                &mut workload_row.b_aux.prev_timestamp,
-            );
-
-            as_and_bs.push((a, b));
-        }
-
         let mut result = [F::ZERO; EXT_DEG];
-        for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
-            let workload_row = &mut record.workload[i];
+        thread::scope(|s| {
+            let handle = s.spawn(|| {
+                for i in 0..length {
+                    // SAFETY: we immutably borrow and then cast to mutable reference.
+                    // The guarantee is that nothing else reads or writes to workload_row.a_aux and workload_row.b_aux.
+                    let workload_row: &mut FriReducedOpeningWorkloadRowRecord<F> =
+                        unsafe { &mut *(workload.get_mut_unchecked(length - i - 1)) };
 
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
-            workload_row.a = a;
-            workload_row.result = result;
-        }
+                    let a_ptr_i = record.common.a_ptr + i as u32;
+                    // SAFETY: we immutably borrow and then cast to mutable reference to get around lifetimes.
+                    // The guarantee is that the mutations to a, b, will not affect the borrowed slices of a_slice, b_slice_flat
+                    let memory = unsafe { &mut *(state.memory as *const _ as *mut TracingMemory) };
+                    if !is_init {
+                        let mut prev = [F::ZERO; 1];
+                        tracing_write_native(
+                            memory,
+                            a_ptr_i,
+                            [data[i]],
+                            &mut workload_row.a_aux.prev_timestamp,
+                            &mut prev,
+                        );
+                        record.a_write_prev_data[length - i - 1] = prev[0];
+                    } else {
+                        tracing_read_native::<F, 1>(
+                            memory,
+                            a_ptr_i,
+                            &mut workload_row.a_aux.prev_timestamp,
+                        );
+                    };
+                    let b_ptr_i = record.common.b_ptr + (EXT_DEG * i) as u32;
+                    tracing_read_native::<F, EXT_DEG>(
+                        memory,
+                        b_ptr_i,
+                        &mut workload_row.b_aux.prev_timestamp,
+                    );
+                }
+            });
+
+            for (i, (a, b)) in a_slice
+                .iter()
+                .zip(b_slice_flat.chunks_exact(EXT_DEG))
+                .rev()
+                .enumerate()
+            {
+                let b: &[F; EXT_DEG] = b.try_into().unwrap();
+                let mut b: [F; EXT_DEG] = *b;
+                b[0] -= *a;
+                // result = result * alpha + (b - a)
+                result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
+                // SAFETY: we immutably borrow and then cast to mutable reference.
+                // The guarantee is that nothing else reads or writes to workload_row.a and workload_row.result.
+                let workload_row: &mut FriReducedOpeningWorkloadRowRecord<F> =
+                    unsafe { &mut *workload.get_mut_unchecked(i) };
+                workload_row.a = *a;
+                workload_row.result = result;
+            }
+
+            handle.join().unwrap();
+        });
 
         let result_ptr = e.as_canonical_u32();
         tracing_write_native(
