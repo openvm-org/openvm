@@ -43,9 +43,9 @@ jobs:
 
       - name: Deploy to Vercel
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_VOCS_TOKEN }} # Token stored in GitHub Secrets
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }} # Token stored in GitHub Secrets
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_VOCS_PROJECT_ID }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_VOCS_ORG_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
         run: |
           cd docs/vocs/docs
           mkdir .vercel
