@@ -38,10 +38,10 @@ svm use 0.8.19
 The workflow for generating an end-to-end EVM proof requires first generating an aggregation proving key and EVM verifier contract. This can be done by running the following command:
 
 ```bash
-cargo openvm setup
+cargo openvm setup --evm
 ```
 
-Note that `cargo openvm setup` may attempt to download other files (i.e. KZG parameters) from an AWS S3 bucket into `~/.openvm/`.
+Note that `cargo openvm setup --evm` may attempt to download other files (i.e. KZG parameters) from an AWS S3 bucket into `~/.openvm/`.
 
 This command can take ~20mins on a `m6a.16xlarge` instance due to the keygen time.
 
