@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use clap::Parser;
-use eyre::Result;
+use eyre::{Context, Result};
 use openvm_sdk::{
     fs::{decode_from_file, read_from_file_json, read_object_from_file},
     prover::verify_app_proof,
-    types::VmStarkProofBytes,
-    Sdk,
+    types::VersionedVmStarkProof,
+    Sdk, OPENVM_VERSION,
 };
 
 use super::KeygenCargoArgs;
@@ -150,12 +150,18 @@ impl VerifyCmd {
                     files[0].clone()
                 };
                 println!("Verifying STARK proof at {}", proof_path.display());
-                let stark_proof_bytes: VmStarkProofBytes = read_from_file_json(proof_path)?;
-                Sdk::verify_proof(&agg_vk, expected_app_commit, &stark_proof_bytes.try_into()?)?;
+                let stark_proof: VersionedVmStarkProof = read_from_file_json(proof_path)
+                    .with_context(|| {
+                        format!("Proof needs to be compatible with openvm v{OPENVM_VERSION}",)
+                    })?;
+                if stark_proof.version != format!("v{OPENVM_VERSION}") {
+                    eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", stark_proof.version);
+                }
+                Sdk::verify_proof(&agg_vk, expected_app_commit, &stark_proof.try_into()?)?;
             }
             #[cfg(feature = "evm-verify")]
             VerifySubCommand::Evm { proof } => {
-                use openvm_sdk::fs::read_evm_halo2_verifier_from_folder;
+                use openvm_sdk::{fs::read_evm_halo2_verifier_from_folder, types::EvmProof};
 
                 let evm_verifier =
                     read_evm_halo2_verifier_from_folder(default_evm_halo2_verifier_path())
@@ -178,7 +184,12 @@ impl VerifyCmd {
                 };
                 // The app config used here doesn't matter, it is ignored in verification
                 println!("Verifying EVM proof at {}", proof_path.display());
-                let evm_proof = read_from_file_json(proof_path)?;
+                let evm_proof: EvmProof = read_from_file_json(proof_path).with_context(|| {
+                    format!("Proof needs to be compatible with openvm v{OPENVM_VERSION}",)
+                })?;
+                if evm_proof.version != format!("v{OPENVM_VERSION}") {
+                    eprintln!("Attempting to verify proof generated with openvm {}, but the verifier is on openvm v{OPENVM_VERSION}", evm_proof.version);
+                }
                 Sdk::verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }
         }

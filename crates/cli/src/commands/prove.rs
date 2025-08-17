@@ -7,7 +7,7 @@ use openvm_sdk::{
     config::{AggregationTreeConfig, SdkVmConfig},
     fs::{encode_to_file, read_object_from_file, write_to_file_json},
     keygen::AppProvingKey,
-    types::VmStarkProofBytes,
+    types::VersionedVmStarkProof,
     Sdk, F,
 };
 
@@ -159,7 +159,7 @@ impl ProveCmd {
                 println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
 
                 let stark_proof = prover.prove(read_to_stdin(&run_args.input)?)?;
-                let stark_proof_bytes = VmStarkProofBytes::new(stark_proof)?;
+                let stark_proof_bytes = VersionedVmStarkProof::new(stark_proof)?;
 
                 let proof_path = if let Some(proof) = proof {
                     proof
