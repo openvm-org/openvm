@@ -37,7 +37,7 @@ jobs:
 
       # Build and test from base branch
       - name: Build base branch CLI
-        run: cargo install --force --path crates/cli
+        run: cargo install --force --locked --path crates/cli
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
@@ -81,12 +81,11 @@ jobs:
           clean: false
 
       - name: Build tagged CLI
-        run: cargo install --force --path crates/cli
+        run: cargo install --force --locked --path crates/cli
 
       - name: Run setup from tagged version
         run: |
-          # TODO: Add --evm after v1.3.0 release
-          cargo openvm setup
+          cargo openvm setup --evm
 
       # - name: Build and keygen examples from tagged version
       #   run: |
@@ -97,9 +96,8 @@ jobs:
       #         echo "Building and generating keys for example: $example_name"
       #         cd "$example"
       #         cargo openvm build --no-transpile
-      #         # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
       #         mkdir -p "../../tagged-outputs/examples/$example_name"
-      #         cargo openvm keygen --vk-output "../../tagged-outputs/examples/$example_name/app.vk"
+      #         cargo openvm keygen --output-dir "../../tagged-outputs/examples/$example_name/app.vk"
       #         cd ../..
       #       fi
       #     done
@@ -113,9 +111,8 @@ jobs:
               echo "Building and generating keys for benchmark: $benchmark_name"
               cd "$benchmark"
               cargo openvm build --no-transpile
-              # TODO(yi): Change --vk-output to --output-dir after v1.3.0 release
               mkdir -p "../../../tagged-outputs/benchmarks/$benchmark_name"
-              cargo openvm keygen --vk-output "../../../tagged-outputs/benchmarks/$benchmark_name/app.vk"
+              cargo openvm keygen --output-dir "../../../tagged-outputs/benchmarks/$benchmark_name"
               cd ../../..
             fi
           done
@@ -167,19 +164,25 @@ jobs:
           fi
 
       # Compare all outputs
-      # TODO: After v1.3.0 release, just compare the contents of ~/.openvm-base
-      # and ~/.openvm
       - name: Compare ~/.openvm contents
         run: |
           echo "🔍 Comparing ~/.openvm agg and halo2 outputs between base branch and ${{ env.version }}..."
 
           failed=0
 
-          # Compare agg.pk with agg_halo2.pk
-          if cmp ~/.openvm-base/agg.pk ~/.openvm/agg_halo2.pk; then
-            echo "✅ agg.pk and agg_halo2.pk are identical"
+          # Compare agg_stark.pk
+          if cmp ~/.openvm-base/agg_stark.pk ~/.openvm/agg_stark.pk; then
+            echo "✅ agg_stark.pk are identical"
           else
-            echo "❌ agg.pk and agg_halo2.pk differ"
+            echo "❌ agg_stark.pk differ"
+            failed=1
+          fi
+
+          # Compare agg_halo2.pk
+          if cmp ~/.openvm-base/agg_halo2.pk ~/.openvm/agg_halo2.pk; then
+            echo "✅ agg_halo2.pk are identical"
+          else
+            echo "❌ agg_halo2.pk differ"
             failed=1
           fi
 
