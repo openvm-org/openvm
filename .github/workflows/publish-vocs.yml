@@ -40,7 +40,7 @@ jobs:
       - name: Build docs
         run: |
           cd docs/vocs/
-          pnpm install --frozen-lockfile && pnpm build
+          pnpm install --frozen-lockfile && pnpm vercel-build
 
       - name: Install Vercel CLI
         run: npm install -g vercel

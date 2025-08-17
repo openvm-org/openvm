@@ -6,7 +6,8 @@
 	"scripts": {
 		"dev": "vocs dev",
 		"build": "vocs build",
-		"preview": "vocs preview"
+		"preview": "vocs preview",
+		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && pnpm build"
 	},
 	"dependencies": {
 		"katex": "^0.16.22",
