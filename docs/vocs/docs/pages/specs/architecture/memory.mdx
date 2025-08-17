@@ -166,7 +166,7 @@ The following invariants **must** be maintained by the memory architecture:
 2. In the MEMORY_BUS, the `address_space` is always in range `[0, 1 + 2^addr_space_height)` where `addr_space_height` is a configuration constant satisfying `addr_space_height < F::bits() - 2`. (Our current implementation only supports `addr_space_height` less than the max bits supported by the VariableRangeCheckerBus).
 3. In the MEMORY_BUS, the `pointer` is always in range `[0, 2^pointer_max_bits)` where `pointer_max_bits <= F::bits() - 2` is a configuration constant.
 
-Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](../architecture/circuit-architecture#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
+Invariant 1 is guaranteed by [time goes forward](#time-goes-forward) under the [assumption](/specs/architecture/circuit-architecture#instruction-executors) that the timestamp increase during instruction execution is bounded by the number of AIR interactions.
 
 Invariant 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the boundary chips:
 - VolatileBoundaryChip constrains the range checks outright.
@@ -183,7 +183,7 @@ Assume that the MEMORY_BUS interactions and the constraints mentioned above are 
 
 ### Time goes forward
   
-In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](../architecture/circuit-architecture#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
+In the connector chip, we constrain that the final timestamp is less than $`2^\text{timestamp\_max\_bits}`$ and that the start timestamp is equal to `1`. It is [guaranteed](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md) that the total number of interaction messages is less than $p$. In our current circuit set, all chips increase timestamp [less than they do interactions](/specs/architecture/circuit-architecture#inspection-of-vm-chip-timestamp-increments), which guarantees that the final timestamp cannot overflow: its actual (not mod $p$) value is less than $`2^\text{timestamp\_max\_bits}`$. Given that, our check that `timestamp - prev_timestamp - 1 < 2^timestamp_max_bits` guarantees that `prev_timestamp < timestamp` everywhere we check it.
 
 ### Memory consistency
 
@@ -236,7 +236,7 @@ self.addr_lt_air
 ### Persistent Memory: `PersistentBoundaryChip`
 
 - **Purpose:**
-  When operating in persistent memory mode, the final state of memory must be verifiable. The `PersistentBoundaryChip` commits not only to the final memory state but also to the initial state provided by the program. These commitments become part of the public values used later in proof aggregation, see [Continuations](../architecture/continuations).
+  When operating in persistent memory mode, the final state of memory must be verifiable. The `PersistentBoundaryChip` commits not only to the final memory state but also to the initial state provided by the program. These commitments become part of the public values used later in proof aggregation, see [Continuations](/specs/architecture/continuations).
 
 - **Key Points:**
   - **Commitments:**

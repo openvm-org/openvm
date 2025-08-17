@@ -2,12 +2,12 @@
 
 OpenVM ships with a set of pre-built extensions maintained by the OpenVM team. Below, we highlight six of these extensions designed to accelerate common arithmetic and cryptographic operations that are notoriously expensive to execute. Some of these extensions have corresponding guest libraries which provide convenient, high-level interfaces for your guest program to interact with the extension.
 
-- [`openvm-keccak-guest`](./keccak) - Keccak256 hash function. See the [Keccak256 guest library](../guest-libraries/keccak256) for usage details.
-- [`openvm-sha256-guest`](./sha-256) - SHA-256 hash function. See the [SHA-2 guest library](../guest-libraries/sha2) for usage details.
-- [`openvm-bigint-guest`](./big-integer) - Big integer arithmetic for 256-bit signed and unsigned integers. See the [ruint guest library](../guest-libraries/ruint) for using accelerated 256-bit integer ops in rust.
+- [`openvm-keccak-guest`](./keccak) - Keccak256 hash function. See the [Keccak256 guest library](/book/guest-libraries/keccak256) for usage details.
+- [`openvm-sha256-guest`](./sha-256) - SHA-256 hash function. See the [SHA-2 guest library](/book/guest-libraries/sha2) for usage details.
+- [`openvm-bigint-guest`](./big-integer) - Big integer arithmetic for 256-bit signed and unsigned integers. See the [ruint guest library](/book/guest-libraries/ruint) for using accelerated 256-bit integer ops in rust.
 - [`openvm-algebra-guest`](./algebra) - Modular arithmetic and complex field extensions.
-- [`openvm-ecc-guest`](./elliptic-curve-cryptography) - Elliptic curve cryptography. See the [k256](../guest-libraries/k256) and [p256](../guest-libraries/p256) guest libraries for using this extension over the respective curves.
-- [`openvm-pairing-guest`](./elliptic-curve-pairing) - Elliptic curve optimal Ate pairings. See the [pairing guest library](../guest-libraries/pairing) for usage details.
+- [`openvm-ecc-guest`](./elliptic-curve-cryptography) - Elliptic curve cryptography. See the [k256](/book/guest-libraries/k256) and [p256](/book/guest-libraries/p256) guest libraries for using this extension over the respective curves.
+- [`openvm-pairing-guest`](./elliptic-curve-pairing) - Elliptic curve optimal Ate pairings. See the [pairing guest library](/book/guest-libraries/pairing) for usage details.
 
 ## Optimizing Modular Arithmetic
 
@@ -24,7 +24,7 @@ Our design for the configuration procedure above was inspired by the [EVMMAX pro
 
 The `openvm` crate provides an `init!` macro to automate the **init** step:
 1. Call `openvm::init!()` exactly once in the code of the final program binary.
-2. When [compiling the program](../writing-apps/compiling), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
+2. When [compiling the program](/book/writing-apps/compiling), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
 3. The `openvm::init!()` macro will include the `openvm_init.rs` file into the final binary to complete the init process. You can call `openvm::init!(INIT_FILE_NAME)` to include init code from a different file if needed.
 
 ## Configuration

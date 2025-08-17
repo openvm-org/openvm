@@ -15,7 +15,7 @@ export default defineConfig({
     '/book/': bookSidebar,
     '/specs/': specsSidebar
   },
-  basePath: '/docs',
+  basePath: '/',
   topNav: [
     { text: 'Book', link: '/book/getting-started/introduction' },
     { text: 'Specs', link: '/specs/openvm/overview' },

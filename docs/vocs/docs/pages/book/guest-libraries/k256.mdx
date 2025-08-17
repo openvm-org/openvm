@@ -1,6 +1,6 @@
 # K256
 
-The K256 guest library uses [`openvm-ecc-guest`](../acceleration-using-extensions/elliptic-curve-cryptography) to provide elliptic curve operations over the Secp256k1 curve. It is intended as a patch for the [`k256`](https://crates.io/crates/k256) rust crate and can be swapped in for accelerated signature verification usage. Note that signing from a private key is not supported. 
+The K256 guest library uses [`openvm-ecc-guest`](/book/acceleration-using-extensions/elliptic-curve-cryptography) to provide elliptic curve operations over the Secp256k1 curve. It is intended as a patch for the [`k256`](https://crates.io/crates/k256) rust crate and can be swapped in for accelerated signature verification usage. Note that signing from a private key is not supported. 
 
 
 ## Example program
@@ -17,7 +17,7 @@ openvm-k256 = { git = "https://github.com/openvm-org/openvm.git", package = "k25
 
 The guest library provides a `Secp256k1Coord`, which represents a field element on the coordinate field of Secp256k1, and a `Secp256k1Point`, which represents an Secp256k1 elliptic curve point.
 
-The K256 guest library handles the "Declare" phase described in [Optimizing Modular Arithmetic](../acceleration-using-extensions/overview#optimizing-modular-arithmetic). The consuming guest program is responsible for running the "Init" phase via `openvm::init!()`.
+The K256 guest library handles the "Declare" phase described in [Optimizing Modular Arithmetic](/book/acceleration-using-extensions/overview#optimizing-modular-arithmetic). The consuming guest program is responsible for running the "Init" phase via `openvm::init!()`.
 
 ```rust,no_run,noplayground
 // [!include ~/snippets/examples/ecc/src/main.rs:imports]
@@ -48,7 +48,7 @@ a = "0"
 b = "7"
 ```
 
-The `supported_moduli` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](../acceleration-using-extensions/algebra) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
+The `supported_moduli` parameter is a list of moduli that the guest program will use. As mentioned in the [algebra extension](/book/acceleration-using-extensions/algebra) chapter, the order of moduli in `[app_vm_config.modular]` must match the order in the `moduli_init!` macro.
 
 The `ecc.supported_curves` parameter is a list of supported curves that the guest program will use. They must be provided in decimal format in the `.toml` file. For multiple curves create multiple `[[app_vm_config.ecc.supported_curves]]` sections. The order of curves in `[[app_vm_config.ecc.supported_curves]]` must match the order in the `sw_init!` macro.
 Also, the `struct_name` field must be the name of the elliptic curve struct created by `sw_declare!`.

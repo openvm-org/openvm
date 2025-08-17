@@ -19,7 +19,7 @@ This specification describes the overall architecture and default VM extensions 
 
 In addition to these default extensions, developers are able to extend the ISA by defining their own custom VM
 extensions. For reader convenience, we provide a mapping between the code-level representation of opcodes in OpenVM and
-the opcodes below [here](../reference/instruction-reference).
+the opcodes below [here](/specs/reference/instruction-reference).
 
 ## Constants and Configuration Parameters
 
@@ -295,7 +295,7 @@ always advance the program counter by `DEFAULT_PC_STEP`.
 ### RV32IM Extension
 
 The RV32IM extension introduces OpenVM opcodes which support 32-bit RISC-V via transpilation from a standard RV32IM ELF
-binary, specified [here](../reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as
+binary, specified [here](/specs/reference/riscv-custom-code). These consist of opcodes corresponding 1-1 with RV32IM opcodes, as well as
 additional user IO opcodes and phantom sub-instructions to support input and debug printing on the host. We denote the
 OpenVM opcode corresponding to a RV32IM opcode by appending `_RV32`.
 
@@ -306,7 +306,7 @@ instructions preserve this constraint.
 The `i`th RISC-V register is represented by the block `[4 * i:4]_1` of 4 limbs in address space `1`. All memory
 addresses in address space `1` behave uniformly, and in particular writes to the block `[0:4]_1` corresponding to the
 RISC-V register `x0` are allowed in the RV32IM extension. However, as detailed
-in [RV32IM Transpilation](../reference/transpiler#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will
+in [RV32IM Transpilation](/specs/reference/transpiler#rv32im-transpilation), any OpenVM program transpiled from a RV32IM ELF will
 never contain such a write and conforms to the RV32IM specification.
 
 #### ALU

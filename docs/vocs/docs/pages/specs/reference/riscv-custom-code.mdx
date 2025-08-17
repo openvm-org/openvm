@@ -1,6 +1,6 @@
 # RISC-V Custom Code for VM Extensions
 
-VM extensions in OpenVM are supported in the Rust frontend by inserting custom RISC-V machine code to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom machine code used for the default set of VM extensions. This custom code will be transpiled to OpenVM assembly using the modular transpiler specified [here](../reference/transpiler).
+VM extensions in OpenVM are supported in the Rust frontend by inserting custom RISC-V machine code to be passed through LLVM into the RISC-V ELF using a standard 32-bit RISC-V encoding. This document specifies the custom machine code used for the default set of VM extensions. This custom code will be transpiled to OpenVM assembly using the modular transpiler specified [here](/specs/reference/transpiler).
 The default VM extensions that support transpilation are:
 
 - [RV32IM](#rv32im-extension): An extension supporting the 32-bit RISC-V ISA with multiplication.
@@ -16,7 +16,7 @@ The default VM extensions that support transpilation are:
 We divide the types of custom RISC-V machine code associated with VM extensions into two categories:
 
 - **Intrinsic Instruction:** the custom machine code is a single custom RISC-V instruction, compliant with the RISC-V specification.
-- **Kernel Code:** the custom machine code is a 32-bit aligned binary sequence with bit length a multiple of 32. The machine code does not need to conform to any RISC-V ISA specification. Kernel code is used as a means to statically link foreign OpenVM assembly code into the ELF without a custom linker. Kernel code cannot be executed directly by a RISC-V machine without additional toolchain support from the [transpiler](../reference/transpiler#openvm-kernel-code-transpilation).
+- **Kernel Code:** the custom machine code is a 32-bit aligned binary sequence with bit length a multiple of 32. The machine code does not need to conform to any RISC-V ISA specification. Kernel code is used as a means to statically link foreign OpenVM assembly code into the ELF without a custom linker. Kernel code cannot be executed directly by a RISC-V machine without additional toolchain support from the [transpiler](/specs/reference/transpiler#openvm-kernel-code-transpilation).
 
 ## Conventions for RISC-V Intrinsic Instructions
 
@@ -115,7 +115,7 @@ We support a single branch instruction, `beq256`, which is B-type.
 
 ## Native (Kernel) Extension
 
-The following are _not_ intrinsic instructions, but custom RISC-V instructions used to frame the insertion of custom kernel code. They are not meant to be used alone. See the [transpiler](../reference/transpiler#openvm-kernel-code-transpilation) for more details.
+The following are _not_ intrinsic instructions, but custom RISC-V instructions used to frame the insertion of custom kernel code. They are not meant to be used alone. See the [transpiler](/specs/reference/transpiler#openvm-kernel-code-transpilation) for more details.
 
 These use the _custom-0_ opcode prefix and funct3 = 0b111.
 
@@ -147,7 +147,7 @@ For developer convenience, in the Rust function bindings for these intrinsics, e
 
 We use `config.mod_idx(N)` to denote the index of `N` in this list. In the list below, `idx` denotes `config.mod_idx(N)`.
 
-**Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See the [ISA specification](../openvm/isa#algebra-extension) for more details.
+**Note:** The output for the first 4 instructions is not guaranteed to be less than `N`. See the [ISA specification](/specs/openvm/isa#algebra-extension) for more details.
 
 | RISC-V Inst  | FMT | opcode[6:0] | funct3 | funct7    | RISC-V description and notes                                                                                                                                                                                                                                                                                                                                                                                                |
 | ------------ | --- | ----------- | ------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

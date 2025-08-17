@@ -24,7 +24,7 @@ The following must exist in any VM circuit:
 - **Program chip** and **program bus**. The program chip's trace matrix simply consists of the program code, one instruction per row, as a cached trace. A cached trace is used so that the commitment to the program code is the proof system trace commitment. Every time an instruction executor (to be defined later) executes an instruction, it sends this instruction, along with the `pc`, to the program bus via the program chip. The program chip keeps track of all accesses to later balance out the interactions.
 - **Connector chip**. If we only had the above interactions with the execution bus, then the initial execution state would have only been sent and the final one would have only been received. The connector chip publishes the initial and final states and balances this out (in particular, its trace is a matrix with two rows -- because it has a preprocessed trace).
 - **Phantom chip**. We call an instruction _phantom_ if it doesn't mutate execution state (and, of course, the state of the memory). Phantom instructions are sent to the phantom chip.
-- A set of memory-related chips and a bus (different depending on the persistence type -- see [Memory](../architecture/memory)),
+- A set of memory-related chips and a bus (different depending on the persistence type -- see [Memory](/specs/architecture/memory)),
 - **Execution bus**. Every time an instruction executor executes an instruction, it sends the execution state before the instruction to the execution bus (with multiplicity $1$) and receives the execution state after the instruction from it. It has a convenient **execution bridge** that provides functions which do these two interactions at once.
 
 Notably, there is no CPU chip where the full transcript of executed instructions is materialized in a single trace matrix. The transcript of memory accesses is also not materialized in a single trace matrix.
@@ -41,7 +41,7 @@ When the program is being run, in the simple scenario, the following happens at 
 There are limitations to how many interactions/trace rows/etc. we can have in total; see [soundness criteria](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf). If executing the full program would lead us to overflowing these limits, the program needs to be executed in several segments. Then the process is slightly different:
 - After executing an instruction, we may decide to _segment_ our execution at this point. In this case, the execution will be split into several segments.
 - The timestamp resets on segmentation.
-- Each segment is going to be proven separately. Of course, this means that adjacent segments need to agree on some things (mainly memory state). See [Continuations](../architecture/continuations) for full details.
+- Each segment is going to be proven separately. Of course, this means that adjacent segments need to agree on some things (mainly memory state). See [Continuations](/specs/architecture/continuations) for full details.
 
 ## Instruction executors
 
@@ -57,7 +57,7 @@ the entire chip with the combined functionality of the adapter and core can be i
 > [!IMPORTANT]
 > It is a responsibility of the instruction executor (more specifically, the adapter) to update the execution state. It is also its responsibility to constrain that the timestamp increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
 
-To prevent [timestamp overflow](../architecture/memory#time-goes-forward), we **require** that each instruction executor chip must satisfy the following condition:
+To prevent [timestamp overflow](/specs/architecture/memory#time-goes-forward), we **require** that each instruction executor chip must satisfy the following condition:
 
 > [!IMPORTANT]
 > In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
@@ -71,7 +71,7 @@ We check that all VM chips contained in the OpenVM system and the standard VM ex
 
 ## What to take into account when adding a new chip
 
-- [Ensure memory consistency](../architecture/memory#what-to-take-into-account-when-adding-a-new-chip)
+- [Ensure memory consistency](/specs/architecture/memory#what-to-take-into-account-when-adding-a-new-chip)
 - Do not forget to constrain that `is_valid` is boolean in your core AIR.
 - If your chip generates some number of trace rows, and this number is not a power of two, the trace is padded with all-zero rows. It should correspond to a legitimate operation, most likely `is_valid = 0` though. For example, if your AIR asserts that the value in the first column is 1 less than the value in the second column, you cannot just write `builder.assert_eq(local.x + 1, local.y)`, because this is not the case for the padding rows.
 
