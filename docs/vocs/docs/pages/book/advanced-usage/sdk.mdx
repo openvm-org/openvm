@@ -58,14 +58,14 @@ The `StdIn` struct allows you to format any serializable type into a VM-readable
 
 There are two types of proofs that you can generate, with the sections below continuing from this point.
 
-- [STARK Proof](#stark-proof): Generates a STARK proof of the guest program
+- [App Proof](#app-proof): Generates STARK proof(s) of the guest program
 - [EVM Proof](#evm-proof): Generates a halo2 proof that can be posted on-chain
 
-## STARK Proof
+## App Proof
 
-### Generating STARK Proofs
+### Generating App Proofs
 
-After building and transpiling a program, you can then generate a proof. To do so, you need to commit your `VmExe`, format your input into `StdIn`, and then generate a proof.
+After building and transpiling a program, you can then generate a proof. To do so, you need to commit your `VmExe`, generate an `AppProvingKey`, format your input into `StdIn`, and then generate a proof.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:proof_generation]
@@ -73,9 +73,9 @@ After building and transpiling a program, you can then generate a proof. To do s
 
 For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
 
-### Verifying STARK Proofs
+### Verifying App Proofs
 
-After generating a proof, you can verify it. To do so, you need your verifying key and the output of your `generate_app_proof` call.
+After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from your `AppProvingKey`) and the output of your `generate_app_proof` call.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
@@ -85,7 +85,7 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ### Setup
 
-To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](../getting-started/install). get the appropriate KZG params by running the following command.
+To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](/book/getting-started/install). get the appropriate KZG params by running the following command.
 
 ```bash
 cargo openvm setup
@@ -108,7 +108,7 @@ cargo openvm setup
 
 You can now run the aggregation keygen, proof, and verification functions for the EVM proof.
 
-**Note**: you **do not** need to generate the STARK proof with the `prove` function, as the EVM proof function will handle this automatically.
+**Note**: you **do not** need to generate the app proof with the `generate_app_proof` function, as the EVM proof function will handle this automatically.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_evm.rs:evm_verification]
