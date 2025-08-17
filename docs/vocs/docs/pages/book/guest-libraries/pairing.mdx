@@ -5,13 +5,13 @@ We'll be working with an example using the BLS12-381 elliptic curve. This is in 
 In the guest program, we will import the `PairingCheck` and `IntMod` traits, along with the BLS12-381 curve structs (**IMPORTANT:** this requires the `bls12_381` feature enabled in Cargo.toml for the `openvm-pairing` dependency), and a few other values that we will need:
 
 ```rust,no_run,noplayground title="guest program"
-// [!include ~/snippets/examples/pairing/src/main.rs:imports]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:imports]
 ```
 
 Additionally, we'll need to initialize our moduli and `Fp2` struct via the following macros. For a more in-depth description of these macros, please see the [OpenVM Algebra](/book/acceleration-using-extensions/algebra) section.
 
 ```rust,no_run,noplayground
-// [!include ~/snippets/examples/pairing/src/main.rs:init]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:init]
 ```
 
 ## Input values
@@ -35,7 +35,7 @@ pub struct PairingCheckInput {
 Most users that use the pairing extension will want to assert that a pairing is valid (the final exponentiation equals one). With the `PairingCheck` trait imported from the previous section, we have access to the `pairing_check` function on the `Bls12_381` struct. After reading in the input struct, we can use its values in the `pairing_check`:
 
 ```rust,no_run,noplayground
-// [!include ~/snippets/examples/pairing/src/main.rs:pairing_check]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:pairing_check]
 ```
 
 ## Additional functionality
@@ -89,10 +89,10 @@ RUST_MIN_STACK=8388608 cargo openvm keygen
 This [example code](https://github.com/openvm-org/openvm/blob/main/examples/pairing/src/main.rs) contains hardcoded values and no inputs as an example that can be run via the CLI.
 
 ```rust,no_run,noplayground
-// [!include ~/snippets/examples/pairing/src/main.rs:pre]
-// [!include ~/snippets/examples/pairing/src/main.rs:imports]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:pre]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:imports]
 
-// [!include ~/snippets/examples/pairing/src/main.rs:init]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:init]
 
-// [!include ~/snippets/examples/pairing/src/main.rs:main]
+// [!include ~/docs/docs/snippets/examples/pairing/src/main.rs:main]
 ```
