@@ -20,8 +20,8 @@ The guest library provides a `Secp256k1Coord`, which represents a field element 
 The K256 guest library handles the "Declare" phase described in [Optimizing Modular Arithmetic](/book/acceleration-using-extensions/overview#optimizing-modular-arithmetic). The consuming guest program is responsible for running the "Init" phase via `openvm::init!()`.
 
 ```rust,no_run,noplayground
-// [!include ~/docs/snippets/examples/ecc/src/main.rs:imports]
-// [!include ~/docs/snippets/examples/ecc/src/main.rs:init]
+// [!include docs/snippets/examples/ecc/src/main.rs:imports]
+// [!include docs/snippets/examples/ecc/src/main.rs:init]
 ```
 
 `moduli_init!` is called for both the coordinate and scalar field because they were declared in the `k256` module, although we will not be using the scalar field below.
@@ -29,7 +29,7 @@ The K256 guest library handles the "Declare" phase described in [Optimizing Modu
 With the above we can start doing elliptic curve operations like adding points:
 
 ```rust,no_run,noplayground
-// [!include ~/docs/snippets/examples/ecc/src/main.rs:main]
+// [!include docs/snippets/examples/ecc/src/main.rs:main]
 ```
 
 ### Config parameters
