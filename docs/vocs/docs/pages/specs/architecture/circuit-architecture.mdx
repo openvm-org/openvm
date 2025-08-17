@@ -5,8 +5,9 @@ randomness between AIR matrices to enable permutation arguments such as log-up.
 
 In the following, we will refer to a circuit as a collection of chips that communicate with one another over buses using a LogUp permutation argument. We refer to messages sent to such a bus as [interactions](https://github.com/openvm-org/stark-backend/blob/main/docs/interactions.md). Every _chip_ is an entity responsible for a certain operation (or set of operations), and it has an AIR to check the correctness of its execution.
 
-> [!NOTE]
-> A bus itself doesn't have any logic. It is just an index, and all related functionality is purely on the backend side.
+:::note
+A bus itself doesn't have any logic. It is just an index, and all related functionality is purely on the backend side.
+:::
 
 Usually we have _bridges_, which are basically APIs for buses. Using a bridge is preferred over communicating with a bus directly since bridges may enforce some special type of communication (for example, sending messages in pairs or communicating with different buses at once, thus synchronizing these communications).
 
@@ -54,13 +55,15 @@ Note that technically these are parts of the same chip and therefore generate on
 As already mentioned, it is not required that an instruction executor must be implemented in two parts:
 the entire chip with the combined functionality of the adapter and core can be implemented all at once.
 
-> [!IMPORTANT]
-> It is a responsibility of the instruction executor (more specifically, the adapter) to update the execution state. It is also its responsibility to constrain that the timestamp increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
+:::warning
+It is a responsibility of the instruction executor (more specifically, the adapter) to update the execution state. It is also its responsibility to constrain that the timestamp increases. If any of these is not done correctly, the proof of correctness will fail to be generated.
+:::
 
 To prevent [timestamp overflow](/specs/architecture/memory#time-goes-forward), we **require** that each instruction executor chip must satisfy the following condition:
 
-> [!IMPORTANT]
-> In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
+:::warning
+In the AIR, the amount that the timestamp is constrained to increase during execution of a single instruction is at most `num_interactions * num_rows_per_execution`.
+:::
 
 Here `num_interactions` is the number of interactions in the AIR: this is a static property of the AIR.
 The number of AIR interactions does not depend on the number of trace rows, and it doesn't depend on whether messages are actually sent or not. In general, the trace for the execution of a single instruction can

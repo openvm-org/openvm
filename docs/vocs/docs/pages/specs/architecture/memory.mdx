@@ -172,8 +172,9 @@ Invariant 2 and 3 are guaranteed at timestamp `0` in the MEMORY_BUS by the bound
 - VolatileBoundaryChip constrains the range checks outright.
 - PersistentBoundaryChip populates the MEMORY_BUS at timestamp `0` from the initial memory state, which is committed to in the public value `initial_memory_root`. PersistentBoundaryChip upholds Invariants 2 and 3 **assuming** that the initial memory state only contains addresses in the required range. This assumption needs to be checked outside the scope of the circuit.
 
-> [!IMPORTANT]
-> At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
+:::warning
+At all later timestamps, it is the responsibility of each chip to ensure their memory accesses maintain Invariants 2 and 3.
+:::
 
 We note an observation that may be useful in soundness analysis of instruction executor chips: if the `MemoryBridge` is used to add the interactions necessary for a write operation, then under the assumptions that time goes forward and that all memory accesses at previous timestamps are in valid range, any attempt to write to an address out of range will lead to an unbalanced MEMORY_BUS because it will require a send at an earlier timestamp that was also out of bounds.
 
@@ -197,8 +198,9 @@ To prove memory consistency, we need to show that, if we only consider basic int
 
 For every row that gets handled by a memory bridge, draw a directed edge from the previous timestamp to the new timestamp with capacity $1$. We know that in the obtained network, where the source and the sink are defined by the boundary interactions, all edges go left to right, and the maximal flow is $1$ (because there is only one edge from the source, therefore the minimal cut is $1$). Since all edges go left to right, there are no circulation in this network. Hence, all edges represent exactly one path from the source to the sink. Therefore, for every vertex (which is a timestamp), the value for the edge going to this vertex (the last receive interaction) equals the value for the edge going from this vertex (the considered send instruction).
 
-> [!NOTE]
-> Technically, it is possible to add artificial rows in the access adapter AIRs that do nothing: for example, the one corresponding to splitting a segment `[7, 11)` into two and the one merging it back, all at the same timestamp and with the same data completely unrelated to the actual execution. However, this cannot be abused by memory accesses: informally, because this kind of happens at the same time and nobody gets to read these values, and formally, because even if a flow has a circulation, it still can be decomposed into paths and a circulation, and we only consider the path in the argument above.
+:::info
+Technically, it is possible to add artificial rows in the access adapter AIRs that do nothing: for example, the one corresponding to splitting a segment `[7, 11)` into two and the one merging it back, all at the same timestamp and with the same data completely unrelated to the actual execution. However, this cannot be abused by memory accesses: informally, because this kind of happens at the same time and nobody gets to read these values, and formally, because even if a flow has a circulation, it still can be decomposed into paths and a circulation, and we only consider the path in the argument above.
+:::
 
 ## Volatile and persistent memory
 
