@@ -917,7 +917,7 @@ impl TracingMemory {
         // this function we use an `AtomicU64` to update the access adapter records in parallel in a
         // thread-safe manner.
         //
-        // We want to insert the split access adapter record. Here we parallize
+        // We want to insert the split access adapter record. Here we parallelize
         // by blocks. Because 2 adjacent blocks could have at most 1 overlapped segment. We
         // always let the left block to add the access adapter record for the overlapped
         // segment.
