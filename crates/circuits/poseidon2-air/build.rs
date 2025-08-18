@@ -13,8 +13,8 @@ fn main() {
         .watch("cuda")
         .watch("../primitives/cuda")
         .library_name("tracegen_gpu_poseidon2_air")
-        .file("cuda/src/dummy.cu")
-        .build();
+        .file("cuda/src/dummy.cu");
 
-    builder.emit_link_directives(); // Call once at end
+    builder.emit_link_directives();
+    builder.build();
 }

@@ -11,8 +11,8 @@ fn main() {
         .include("cuda/include")
         .watch("cuda")
         .library_name("tracegen_gpu_primitives")
-        .files_from_glob("cuda/src/**/*.cu")
-        .build();
+        .files_from_glob("cuda/src/**/*.cu");
 
-    builder.emit_link_directives(); // Call once at end
+    builder.emit_link_directives();
+    builder.build();
 }
