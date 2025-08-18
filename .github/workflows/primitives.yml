@@ -27,7 +27,7 @@ jobs:
       matrix:
         config:
           - { runner: "32cpu-linux-arm64", image: "ubuntu24-full-arm64" }
-          - { runner: "g6.xlarge", image: "ubuntu22-gpu-x64" }
+          - { runner: "g6.xlarge", image: "ubuntu24-gpu-x64" }
 
     runs-on:
       - runs-on=${{ github.run_id }}
