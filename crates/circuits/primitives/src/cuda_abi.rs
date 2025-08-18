@@ -1,14 +1,13 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::{
-    cuda::{d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-};
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub mod bitwise_op_lookup {
+    #[cfg(test)]
+    use openvm_cuda_common::d_buffer::DeviceBufferView;
+
     use super::*;
-    #[allow(unused_imports)]
-    use stark_backend_gpu::cuda::d_buffer::DeviceBufferView;
 
     extern "C" {
         fn _bitwise_op_lookup_tracegen(

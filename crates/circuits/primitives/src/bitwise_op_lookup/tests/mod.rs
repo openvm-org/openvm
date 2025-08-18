@@ -14,31 +14,28 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-
-use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
-
 #[cfg(feature = "cuda")]
 use {
     crate::bitwise_op_lookup::{cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir},
     dummy::cuda::DummyInteractionChipGPU,
+    openvm_cuda_backend::{
+        base::DeviceMatrix,
+        engine::GpuBabyBearPoseidon2Engine,
+        types::{F, SC},
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
     openvm_stark_sdk::{
         config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },
-    stark_backend_gpu::{
-        base::DeviceMatrix,
-        cuda::copy::MemCopyH2D as _,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
-    },
 };
+
+use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
 
 mod dummy;
 
 const NUM_BITS: usize = 4;
 const LIST_LEN: usize = 1 << 8;
-#[cfg(feature = "cuda")]
-const BIT_MASK: u32 = (1 << NUM_BITS) - 1;
 
 #[derive(Clone, Copy)]
 enum BitwiseOperation {
@@ -195,10 +192,13 @@ fn negative_test_bitwise_operation_lookup_xor_y_out_of_range() {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_bitwise_op_lookup() {
-    let mut rng = create_seeded_rng();
-    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<NUM_BITS>::new());
-
+    const CUDA_NUM_BITS: usize = 8;
     const NUM_INPUTS: usize = 1 << 16;
+    const BIT_MASK: u32 = (1 << CUDA_NUM_BITS) - 1;
+
+    let mut rng = create_seeded_rng();
+    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::new());
+
     let random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
             let x = rng.gen::<u32>() & BIT_MASK;
@@ -211,29 +211,32 @@ fn test_cuda_bitwise_op_lookup() {
 
     let airs: Vec<AirRef<SC>> = vec![
         Arc::new(DummyInteractionAir::new(4, true, 0)),
-        Arc::new(BitwiseOperationLookupAir::<8>::new(
+        Arc::new(BitwiseOperationLookupAir::<CUDA_NUM_BITS>::new(
             BitwiseOperationLookupBus::new(0),
         )),
     ];
-    let ctxs = vec![
-        dummy_chip.generate_proving_ctx(()),
-        bitwise.generate_proving_ctx(()),
-    ];
+    let dummy_ctx = dummy_chip.generate_proving_ctx(());
+    let bitwise_ctx = bitwise.generate_proving_ctx(());
+    let ctxs = vec![dummy_ctx, bitwise_ctx];
 
-    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let engine: GpuBabyBearPoseidon2Engine =
+        GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
     engine.run_test(airs, ctxs).expect("Verification failed");
 }
 
 #[cfg(feature = "cuda")]
 #[test]
 fn test_cuda_bitwise_op_lookup_hybrid() {
+    const CUDA_NUM_BITS: usize = 8;
+    const NUM_INPUTS: usize = 1 << 16;
+    const BIT_MASK: u32 = (1 << CUDA_NUM_BITS) - 1;
+
     let mut rng = create_seeded_rng();
     let bus = BitwiseOperationLookupBus::new(0);
-    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<NUM_BITS>::hybrid(Arc::new(
-        BitwiseOperationLookupChip::new(bus),
-    )));
+    let bitwise = Arc::new(BitwiseOperationLookupChipGPU::<CUDA_NUM_BITS>::hybrid(
+        Arc::new(BitwiseOperationLookupChip::new(bus)),
+    ));
 
-    const NUM_INPUTS: usize = 1 << 16;
     let gpu_random_values = (0..NUM_INPUTS)
         .flat_map(|_| {
             let x = rng.gen::<u32>() & BIT_MASK;
@@ -287,7 +290,7 @@ fn test_cuda_bitwise_op_lookup_hybrid() {
     let airs: Vec<AirRef<SC>> = vec![
         Arc::new(dummy_air),
         Arc::new(dummy_air),
-        Arc::new(BitwiseOperationLookupAir::<8>::new(bus)),
+        Arc::new(BitwiseOperationLookupAir::<CUDA_NUM_BITS>::new(bus)),
     ];
     let ctxs = vec![
         cpu_proving_ctx,

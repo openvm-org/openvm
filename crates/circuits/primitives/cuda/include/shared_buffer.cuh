@@ -1,7 +1,7 @@
 #pragma once
 
 #include "poseidon2.cuh"
-#include "poseidon2/fp_array.cuh"
+#include "fp_array.cuh"
 #include "trace_access.h"
 #include <cassert>
 

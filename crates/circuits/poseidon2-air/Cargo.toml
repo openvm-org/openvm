@@ -17,7 +17,8 @@ zkhash = { workspace = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
-stark-backend-gpu = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
 
 rand.workspace = true
 lazy_static.workspace = true
@@ -26,7 +27,11 @@ derivative.workspace = true
 [dev-dependencies]
 p3-symmetric = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder.workspace = true
+
 [features]
-default = ["parallel", "cuda"]
+default = ["parallel"]
 parallel = ["openvm-stark-backend/parallel"]
-cuda = ["dep:stark-backend-gpu"]
+cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
+touchemall = ["openvm-cuda-backend/touchemall"]

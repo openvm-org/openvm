@@ -14,19 +14,21 @@ use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use test_case::test_matrix;
-
-use super::{IsEqSubAir, IsEqualIo};
-use crate::{SubAir, TraceSubRowGenerator};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,
     rand::Rng,
-    stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
     std::sync::Arc,
 };
+
+use super::{IsEqSubAir, IsEqualIo};
+use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -169,7 +171,7 @@ fn test_cuda_is_equal_against_cpu_full() {
             is_equal::dummy_tracegen(gpu_matrix.buffer(), &inputs_x, &inputs_y).unwrap();
         }
 
-        let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
             (0..n)
                 .flat_map(|i| {
                     let cur_x = vec_x[i];
@@ -185,7 +187,6 @@ fn test_cuda_is_equal_against_cpu_full() {
             2,
         ));
 
-        // TODO[stephenh]: Uncomment this when we decide where to put it
-        // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
     }
 }
