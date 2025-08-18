@@ -5413,7 +5413,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5445,7 +5445,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
 dependencies = [
  "cc",
  "glob",
@@ -5454,7 +5454,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
 dependencies = [
  "bytesize",
  "lazy_static",
@@ -6161,7 +6161,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6189,7 +6189,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
 dependencies = [
  "dashmap",
  "derivative",
