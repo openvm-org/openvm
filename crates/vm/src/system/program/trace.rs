@@ -35,7 +35,6 @@ use crate::{
     },
 };
 
-// TODO[jpw]: separate so we can have Arc<VmExe> separate from CommittedTraceData
 /// **Note**: this struct stores the program ROM twice: once in [VmExe] and once as a cached trace
 /// matrix `trace`.
 #[derive(Serialize, Deserialize, Derivative)]
