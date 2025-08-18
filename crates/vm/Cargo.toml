@@ -16,7 +16,7 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-stark-sdk = { workspace = true, optional = true }
+openvm-stark-sdk = { workspace = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -59,12 +59,12 @@ default = ["parallel", "jemalloc"]
 parallel = [
     "openvm-stark-backend/parallel",
     "dashmap/rayon",
-    "openvm-stark-sdk?/parallel",
+    "openvm-stark-sdk/parallel",
 ]
 metrics = [
     "dep:metrics",
     "openvm-stark-backend/metrics",
-    "openvm-stark-sdk?/metrics",
+    "openvm-stark-sdk/metrics",
 ]
 # turns on more invasive profiling for fine-grained guest metrics
 perf-metrics = ["metrics"]
@@ -72,10 +72,10 @@ perf-metrics = ["metrics"]
 basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
-test-utils = ["openvm-stark-sdk"]
+test-utils = []
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
-nightly-features = ["openvm-stark-sdk?/nightly-features"]
+nightly-features = ["openvm-stark-sdk/nightly-features"]
 cuda = []

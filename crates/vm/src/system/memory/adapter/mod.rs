@@ -41,6 +41,7 @@ use crate::{
 mod air;
 mod columns;
 pub mod records;
+mod cuda;
 
 #[derive(Setters)]
 pub struct AccessAdapterInventory<F> {
