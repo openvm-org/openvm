@@ -1,4 +1,0 @@
-runners:
-  gpu-small:
-    family: ["g6.xlarge", "g6.2xlarge"]
-    cpu: [4, 8]

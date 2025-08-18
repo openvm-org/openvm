@@ -5,3 +5,8 @@ images:
     owner: "405894839083"
     name: "arm64-rust-riscv-dev-32gb"
     ami: "ami-040a96edd406c9478"
+
+runners:
+  gpu-small:
+    family: ["g6.xlarge", "g6.2xlarge"]
+    cpu: [4, 8]
