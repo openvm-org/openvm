@@ -8,21 +8,25 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 ## v1.4.0-rc (Unreleased)
 
 ### Added
+- (Verifier) An `AggVerifyingKey` struct is introduced so that verifying the final STARK proof does not require the proving key.
 - (Config) Added `addr_spaces` vector of `AddressSpaceHostConfig` to `MemoryConfig`.
 
 ### Changed
+- (Verifier) The `MultiStarkVerifyingKey`s for all existing App and Agg configs remain unchanged. However the serialized binary for the `AppVerifyingKey` has changed due to the removal of `as_offset` from `MemoryDimensions` (see below).
 - (Toolchain) Removed `step` from `Program` struct because `DEFAULT_PC_STEP = 4` is always used.
 - (Config) The `SystemConfig` default now has `continuation_enabled: true` instead of the previous default of `false`. This is a **breaking change**.
 - (Config) The `clk_max_bits` field in `MemoryConfig` has been renamed to `timestamp_max_bits`.
-- (Prover) Guest memory is stored on host with address space-specified memory layouts. In particular address space `1` through `3` are now represented in bytes instead of field elements.
+- (Config) The `as_offset` field in `MemoryDimensions` has been removed and replaced by the constant `ADDR_SPACE_OFFSET = 1`.
 - (ISA) Field arithmetic instructions now restrict address spaces `e, f` to be either `0` or `4`, instead of allowing any address space.
 - (ISA) RV32IM load instructions are now restricted to address space `2` only, instead of allowing address spaces `0`, `1`, or `2`.
 - (ISA) The maximum valid pointer value in address space `1` (register address space) is now `127`, corresponding to 32 registers with 4 byte limbs each.
 - (ISA) Memory accesses now have configurable minimum block size requirements per address space. Address spaces `1`, `2`, and `3` require minimum block size of 4. Native address space (`4`) allows minimum block size of 1. Address spaces beyond `4` default to minimum block size of 1 but are configurable.
+- (Prover) Guest memory is stored on host with address space-specified memory layouts. In particular address space `1` through `3` are now represented in bytes instead of field elements.
+- (Prover) The internal format of `VmCommittedExe` has changed. Moreover the main proving flows have been updated so they rely primarily on `VmExe` and not `VmCommittedExe`.
 - (CLI) The `prove stark` output proof no longer contains the `app_commit`. The `verify stark` command now needs to specify the target name to read the `app_commit` stored from a previous call to the `commit` command.
 - (CLI) The `setup` command now stores an `agg.vk` verifying key and the `verify stark` command now reads `agg.vk` instead of `agg.pk`.
 - (SDK) The `Sdk` is now specific to a VM config, with default constructors `Sdk::standard()` and `Sdk::riscv32()`. The methods of the `Sdk` have been updated for a better developer experience.
-- (SDK) An `AggVerifyingKey` struct is introduced so that verifying the final STARK proof does not require the proving key. The `Halo2ProvingKey` struct now internally contains `Arc` so it can be cloned and shared.
+- (SDK) The `Halo2ProvingKey` struct now internally contains `Arc` so it can be cloned and shared.
 
 ## v1.3.0 (2025-07-15)
 
