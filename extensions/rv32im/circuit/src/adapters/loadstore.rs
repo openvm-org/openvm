@@ -496,7 +496,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - adapter_row contains a valid Rv32LoadStoreAdapterRecord representation
+        // - get_record_from_slice correctly interprets the bytes as Rv32LoadStoreAdapterRecord
         let record: &Rv32LoadStoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32LoadStoreAdapterCols<F> = adapter_row.borrow_mut();

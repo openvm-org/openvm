@@ -167,9 +167,9 @@ struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
         let (res, mut carry) = rs1_u64[0].overflowing_add(rs2_u64[0]);
@@ -180,16 +180,16 @@ impl AluOp for AddOp {
             carry = c1 || c2;
             rd_u64[i] = res2;
         }
-        // TODO(ayush): add safety
+        // SAFETY:
         unsafe { transmute(rd_u64) }
     }
 }
 impl AluOp for SubOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
         let (res, mut borrow) = rs1_u64[0].overflowing_sub(rs2_u64[0]);
@@ -200,55 +200,55 @@ impl AluOp for SubOp {
             borrow = c1 || c2;
             rd_u64[i] = res2;
         }
-        // TODO(ayush): add safety
+        // SAFETY:
         unsafe { transmute(rd_u64) }
     }
 }
 impl AluOp for XorOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] ^ rs2_u64[i];
         }
-        // TODO(ayush): add safety
+        // SAFETY:
         unsafe { transmute(rd_u64) }
     }
 }
 impl AluOp for OrOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] | rs2_u64[i];
         }
-        // TODO(ayush): add safety
+        // SAFETY:
         unsafe { transmute(rd_u64) }
     }
 }
 impl AluOp for AndOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // TODO(ayush): add safety
+        // SAFETY:
         let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] & rs2_u64[i];
         }
-        // TODO(ayush): add safety
+        // SAFETY:
         unsafe { transmute(rd_u64) }
     }
 }

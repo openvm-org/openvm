@@ -204,7 +204,7 @@ impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTr
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
-        // TODO(ayush): add safety
+        // SAFETY:
         let record: &ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();

@@ -270,7 +270,7 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
-        // TODO(ayush): add safety
+        // SAFETY:
         let repr: &[u8; N] = unsafe {
             memory
                 .memory

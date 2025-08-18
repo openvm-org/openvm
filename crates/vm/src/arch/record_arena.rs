@@ -204,7 +204,10 @@ impl DenseRecordArena {
             self.records_buffer.get_ref().len()
         );
         self.records_buffer.set_position(begin + count as u64);
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - `begin` is within bounds (checked by debug_assert above)
+        // - `count` bytes are available from `begin` (checked by debug_assert)
+        // - The resulting slice is valid for the lifetime of self
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.records_buffer
@@ -318,7 +321,9 @@ where
     // **SAFETY**: `offset` has to be a valid offset, pointing to the start of a record
     pub fn get_layout_at(offset: &mut usize, buffer: &[u8]) -> MultiRowLayout<M> {
         let buffer = &buffer[*offset..];
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - The buffer contains a valid serialized layout at this offset
+        // - extract_layout reads the expected number of bytes for the layout
         unsafe { buffer.extract_layout() }
     }
 
@@ -343,7 +348,10 @@ where
         let mut offset = 0;
         while offset < len {
             let record: R = {
-                // TODO(ayush): add safety
+                // SAFETY:
+                // - buff.as_mut_ptr() is valid for len bytes
+                // - We're creating a new slice with the same bounds
+                // - This reborrowing is needed to satisfy the borrow checker
                 let buff = unsafe { &mut *slice_from_raw_parts_mut(buff.as_mut_ptr(), len) };
                 Self::get_record_at(&mut offset, buff)
             };
@@ -365,12 +373,17 @@ where
             let record_size = R::size(&layout);
             let record_alignment = R::alignment(&layout);
             let aligned_record_size = record_size.next_multiple_of(record_alignment);
-            // TODO(ayush): add safety
+            // SAFETY:
+            // - offset < len (checked by while loop condition)
+            // - The resulting pointer is within the buffer bounds
             let src_ptr = unsafe { self.buffer.as_ptr().add(offset) };
             let dst_ptr = arena
                 .alloc_buffer(layout.metadata.get_num_rows())
                 .as_mut_ptr();
-            // TODO(ayush): add safety
+            // SAFETY:
+            // - src_ptr points to valid memory with at least aligned_record_size bytes
+            // - dst_ptr points to freshly allocated memory with sufficient size
+            // - The memory regions don't overlap (different allocations)
             unsafe { copy_nonoverlapping(src_ptr, dst_ptr, aligned_record_size) };
             offset += aligned_record_size;
         }
@@ -415,7 +428,9 @@ where
     ) -> (A, C) {
         let buffer = &mut buffer[*offset..];
         let (adapter_size, core_size) = Self::get_aligned_sizes(&layout);
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - adapter_size is calculated to be within the buffer bounds
+        // - The buffer has sufficient size for both adapter and core records
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_size) };
         let adapter_record: A = adapter_buffer.custom_borrow(layout.clone());
         let core_record: C = core_buffer.custom_borrow(layout);
@@ -431,7 +446,10 @@ where
         let mut offset = 0;
         while offset < len {
             let record: (A, C) = {
-                // TODO(ayush): add safety
+                // SAFETY:
+                // - buff.as_mut_ptr() is valid for len bytes
+                // - We're creating a new slice with the same bounds
+                // - This reborrowing is needed to satisfy the borrow checker
                 let buff = unsafe { &mut *slice_from_raw_parts_mut(buff.as_mut_ptr(), len) };
                 Self::get_record_at(&mut offset, buff, layout.clone())
             };
@@ -452,7 +470,9 @@ where
         let (adapter_size, core_size) = Self::get_aligned_sizes(&layout);
         while offset < len {
             let dst_buffer = arena.alloc_single_row();
-            // TODO(ayush): add safety
+            // SAFETY:
+            // - dst_buffer has sufficient size (allocated for a full row)
+            // - M::get_adapter_width() is within bounds of the allocated buffer
             let (adapter_buf, core_buf) =
                 unsafe { dst_buffer.split_at_mut_unchecked(M::get_adapter_width()) };
             unsafe {
@@ -633,7 +653,9 @@ where
         let adapter_width = M::get_adapter_width();
         let buffer = self.alloc_single_row();
         // Doing a unchecked split here for perf
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - buffer is a freshly allocated row with sufficient size
+        // - adapter_width is guaranteed to be less than the total buffer size
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_width) };
 
         let adapter_record: A = adapter_buffer.custom_borrow(layout.clone());
@@ -665,7 +687,9 @@ where
         debug_assert_eq!(MAX_ALIGNMENT % core_alignment, 0);
         let buffer = self.alloc_bytes(aligned_adapter_size + aligned_core_size);
         // Doing an unchecked split here for perf
-        // TODO(ayush): add safety
+        // SAFETY:
+        // - buffer has exactly aligned_adapter_size + aligned_core_size bytes
+        // - aligned_adapter_size is within bounds by construction
         let (adapter_buffer, core_buffer) =
             unsafe { buffer.split_at_mut_unchecked(aligned_adapter_size) };
 

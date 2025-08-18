@@ -41,7 +41,11 @@ impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPosei
             TypeId::of::<BabyBear>(),
             "BabyBear is the only supported field type"
         );
-        // TODO(ayush): add safety
+        // SAFETY: FA::F and BabyBear have identical memory representation since we
+        // verified with TypeId that FA::F is BabyBear. Both types are arrays of WIDTH
+        // elements with the same size and alignment.
+        // - BabyBear and FA::F have the same memory representation
+        // - Both are arrays of WIDTH elements with compatible layouts
         let diag_m1_matrix =
             unsafe { std::mem::transmute::<&[BabyBear; WIDTH], &[FA::F; WIDTH]>(diag_m1_matrix) };
         babybear_internal_linear_layer(state, diag_m1_matrix);

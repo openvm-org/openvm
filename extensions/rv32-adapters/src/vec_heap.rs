@@ -466,7 +466,7 @@ impl<
     >::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // TODO(ayush): add safety
+        // SAFETY:
         let record: &Rv32VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,

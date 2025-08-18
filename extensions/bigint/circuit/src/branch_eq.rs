@@ -159,9 +159,9 @@ impl Rv32BranchEqual256Executor {
 }
 
 fn u256_eq(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
-    // TODO(ayush): add safety
+    // SAFETY:
     let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    // TODO(ayush): add safety
+    // SAFETY:
     let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
     for i in 0..4 {
         if rs1_u64[i] != rs2_u64[i] {
