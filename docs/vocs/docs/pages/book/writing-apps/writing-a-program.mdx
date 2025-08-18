@@ -26,9 +26,25 @@ let n: u64 = read();
 
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
 
-> ⚠️ **WARNING**
->
-> The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+:::warning
+The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+:::
+
+## Configuring OpenVM
+
+The set of VM extensions used by OpenVM is controlled by a configuration set in the `openvm.toml` file. Projects created by
+`cargo openvm init` have the following minimal default configuration:
+
+```toml [openvm.toml]
+// [!include ~/snippets/examples_cli/openvm.toml]
+```
+
+To use additional [VM extensions](/book/acceleration-using-extensions/overview), you can specify and configure them in the `openvm.toml`
+file. An example of an `openvm.toml` with all commonly used extensions is:
+
+```toml [openvm_standard.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
+```
 
 ## Rust `std` library support
 
@@ -119,10 +135,6 @@ to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be
 
 and you still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
-
-## Building and running
-
-See the [overview](./overview) on how to build and run the program.
 
 ## Using crates that depend on `getrandom`
 
