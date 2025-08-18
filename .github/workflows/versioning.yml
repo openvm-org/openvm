@@ -102,7 +102,7 @@ jobs:
               cd "$example"
               # cargo openvm build --no-transpile
               mkdir -p "../../tagged-outputs/examples/$example_name"
-              cargo openvm keygen --output-dir "../../tagged-outputs/examples/$example_name/app.vk"
+              cargo openvm keygen --output-dir "../../tagged-outputs/examples/$example_name"
               $HOME/convert_vkey --path "../../tagged-outputs/examples/$example_name/app.vk"
               cd ../..
             fi
