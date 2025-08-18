@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
-use stark_backend_gpu::cuda::d_buffer::DeviceBuffer;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
+    var_range::cuda::VariableRangeCheckerChipGPU,
+};
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 use crate::{
-    mod_builder::{expr_op::ExprOp, field_expression::constants::LIMB_BITS},
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
+    cuda::{constants::LIMB_BITS, expr_op::ExprOp},
+    FieldExpressionCoreAir,
 };
 
 #[repr(C)]
@@ -75,7 +77,7 @@ unsafe impl Send for FieldExprMeta {}
 unsafe impl Sync for FieldExprMeta {}
 
 pub struct FieldExpressionChipGPU {
-    pub air: openvm_mod_circuit_builder::FieldExpressionCoreAir,
+    pub air: FieldExpressionCoreAir,
     pub records: Arc<DeviceBuffer<u8>>,
     pub num_records: usize,
     pub record_stride: usize,

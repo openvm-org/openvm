@@ -1,9 +1,10 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use stark_backend_gpu::cuda::{d_buffer::DeviceBuffer, error::CudaError};
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub mod field_expression {
+
     use super::*;
     extern "C" {
         fn _field_expression_tracegen(

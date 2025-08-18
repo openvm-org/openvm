@@ -1,4 +1,4 @@
-use crate::mod_builder::field_expression::ExprNode;
+use crate::ExprNode;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
