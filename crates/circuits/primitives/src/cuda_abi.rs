@@ -4,9 +4,10 @@ use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub mod bitwise_op_lookup {
-    use super::*;
     #[cfg(test)]
     use openvm_cuda_common::d_buffer::DeviceBufferView;
+
+    use super::*;
 
     extern "C" {
         fn _bitwise_op_lookup_tracegen(

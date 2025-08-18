@@ -19,10 +19,6 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_case::test_case;
-
-use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
-use crate::{SubAir, TraceSubRowGenerator};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
@@ -33,6 +29,9 @@ use {
     openvm_stark_backend::p3_field::PrimeField32,
     std::sync::Arc,
 };
+
+use super::{IsEqArrayAuxCols, IsEqArrayIo, IsEqArraySubAir};
+use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
