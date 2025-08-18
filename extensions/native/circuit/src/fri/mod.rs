@@ -896,26 +896,100 @@ where
 
         // The following is the computation of the partial RLCs, where each partial result depends
         // on the former. This entire computation does not involve any guest state access.
-        let mut result = [F::ZERO; EXT_DEG];
-        // workload must be written to in reverse due to how the RLC is evaluated
-        for (workload_row, (a, b)) in record
-            .workload
-            .iter_mut()
-            .zip(izip!(a_slice.iter(), b_slice_flat.chunks_exact(EXT_DEG)).rev())
-        {
-            let b: &[F; EXT_DEG] = b.try_into().unwrap();
-            let mut b: [F; EXT_DEG] = *b;
-            b[0] -= *a;
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
-            workload_row.result = result;
+
+        // Threshold for switching between sequential and parallel computation
+        // 64 chosen based on typical cache line considerations and overhead of parallel
+        // coordination
+        const PARALLEL_THRESHOLD: usize = 64;
+
+        // Parallel scan implementation for RLC computation
+        // First, collect the input data
+        let inputs: Vec<(F, [F; EXT_DEG])> =
+            izip!(a_slice.iter(), b_slice_flat.chunks_exact(EXT_DEG))
+                .rev()
+                .map(|(a, b_chunk)| {
+                    let b: &[F; EXT_DEG] = b_chunk.try_into().unwrap();
+                    let mut b_arr = *b;
+                    b_arr[0] -= *a;
+                    (*a, b_arr)
+                })
+                .collect();
+
+        // Parallel prefix scan using work-efficient algorithm
+        let n = inputs.len();
+        // For small arrays, sequential is likely faster
+        if n < PARALLEL_THRESHOLD {
+            let mut result = [F::ZERO; EXT_DEG];
+            for (workload_row, (_, b)) in record.workload.iter_mut().zip(inputs.iter()) {
+                result = FieldExtension::add(FieldExtension::multiply(result, alpha), *b);
+                workload_row.result = result;
+            }
+        } else {
+            // Parallel scan implementation
+            let mut results = vec![[F::ZERO; EXT_DEG]; n];
+
+            // Phase 1: Parallel batch-wise reduction
+            let batch_size = 32;
+
+            let batch_results: Vec<[F; EXT_DEG]> = inputs
+                .par_chunks(batch_size)
+                .map(|batch| {
+                    let mut local_result = [F::ZERO; EXT_DEG];
+                    for (_, b) in batch {
+                        local_result =
+                            FieldExtension::add(FieldExtension::multiply(local_result, alpha), *b);
+                    }
+                    local_result
+                })
+                .collect();
+
+            // Phase 2: Sequential scan of batch results
+            // Compute alpha^batch_size for combining batch results
+            let mut alpha_power = alpha;
+            for _ in 1..batch_size {
+                alpha_power = FieldExtension::multiply(alpha_power, alpha);
+            }
+
+            let mut batch_prefixes = vec![[F::ZERO; EXT_DEG]; batch_results.len()];
+            batch_prefixes[0] = batch_results[0];
+            for i in 1..batch_results.len() {
+                batch_prefixes[i] = FieldExtension::add(
+                    FieldExtension::multiply(batch_prefixes[i - 1], alpha_power),
+                    batch_results[i],
+                );
+            }
+
+            // Phase 3: Parallel computation within batches using batch prefixes
+            results
+                .par_chunks_mut(batch_size)
+                .zip(inputs.par_chunks(batch_size))
+                .enumerate()
+                .for_each(|(batch_idx, (result_batch, input_batch))| {
+                    let initial = if batch_idx == 0 {
+                        [F::ZERO; EXT_DEG]
+                    } else {
+                        batch_prefixes[batch_idx - 1]
+                    };
+
+                    let mut local_result = initial;
+                    for (result_elem, (_, b)) in result_batch.iter_mut().zip(input_batch.iter()) {
+                        local_result =
+                            FieldExtension::add(FieldExtension::multiply(local_result, alpha), *b);
+                        *result_elem = local_result;
+                    }
+                });
+
+            // Write results back to workload
+            for (workload_row, result) in record.workload.iter_mut().zip(results.iter()) {
+                workload_row.result = *result;
+            }
         }
 
         let result_ptr = e.as_canonical_u32();
         tracing_write_native(
             state.memory,
             result_ptr,
-            result,
+            record.workload.last().unwrap().result,
             &mut record.common.result_aux.prev_timestamp,
             &mut record.common.result_aux.prev_data,
         );
