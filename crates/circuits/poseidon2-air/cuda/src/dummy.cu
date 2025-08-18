@@ -1,5 +1,5 @@
 #include "launcher.cuh"
-#include "poseidon2/tracegen.cuh"
+#include "tracegen.cuh"
 #include "trace_access.h"
 #include <stdio.h>
 

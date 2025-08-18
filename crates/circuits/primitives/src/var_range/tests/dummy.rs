@@ -79,13 +79,9 @@ impl<AB: InteractionBuilder + AirBuilder> Air<AB> for TestRangeCheckAir {
 pub mod cuda {
     use std::sync::Arc;
 
+    use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+    use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
     use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-    use stark_backend_gpu::{
-        base::DeviceMatrix,
-        cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-        prelude::F,
-        prover_backend::GpuBackend,
-    };
 
     use crate::{
         cuda_abi::var_range::dummy_tracegen,

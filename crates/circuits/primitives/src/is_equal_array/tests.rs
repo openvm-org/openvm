@@ -26,8 +26,11 @@ use crate::{SubAir, TraceSubRowGenerator};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
-    stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
     std::sync::Arc,
 };
 
@@ -224,7 +227,7 @@ fn test_cuda_simple_is_equal_array_tracegen() {
         is_equal::dummy_tracegen_array(trace.buffer(), &inputs_x, &inputs_y, ARRAY_LEN).unwrap()
     };
 
-    let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+    let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         (0..n)
             .flat_map(|i| {
                 let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
@@ -240,8 +243,7 @@ fn test_cuda_simple_is_equal_array_tracegen() {
         ARRAY_LEN + 1,
     ));
 
-    // TODO[stephenh]: Uncomment this when we decide where to put it
-    // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(cpu_matrix, &trace);
 }
 
 #[cfg(feature = "cuda")]
@@ -270,7 +272,7 @@ fn test_cuda_random_is_equal_array_tracegen() {
                 .unwrap();
         }
 
-        let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
             (0..n)
                 .flat_map(|i| {
                     let cur_x: [F; ARRAY_LEN] = std::array::from_fn(|k| vec_x[i + k * n]);
@@ -286,7 +288,6 @@ fn test_cuda_random_is_equal_array_tracegen() {
             ARRAY_LEN + 1,
         ));
 
-        // TODO[stephenh]: Uncomment this when we decide where to put it
-        // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+        assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
     }
 }

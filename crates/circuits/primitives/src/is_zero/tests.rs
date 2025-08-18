@@ -22,10 +22,13 @@ use crate::{SubAir, TraceSubRowGenerator};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_zero,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_sdk::utils::create_seeded_rng,
     rand::Rng,
-    stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
     std::sync::Arc,
 };
 
@@ -190,7 +193,7 @@ fn test_cuda_is_zero_against_cpu_full() {
             is_zero::dummy_tracegen(output.buffer(), &input_buffer).unwrap();
         };
 
-        let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+        let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
             vec_x
                 .iter()
                 .flat_map(|x| {
@@ -204,7 +207,6 @@ fn test_cuda_is_zero_against_cpu_full() {
             2,
         ));
 
-        // TODO[stephenh]: Uncomment this when we decide where to put it
-        // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &output);
+        assert_eq_host_and_device_matrix(cpu_matrix, &output);
     }
 }

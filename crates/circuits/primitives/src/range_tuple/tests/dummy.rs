@@ -1,12 +1,8 @@
 use std::sync::Arc;
 
+use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
-    prover_backend::GpuBackend,
-};
 
 use crate::{cuda_abi::range_tuple::dummy_tracegen, range_tuple::cuda::RangeTupleCheckerChipGPU};
 
@@ -17,8 +13,6 @@ pub struct DummyInteractionChipGPU<const N: usize> {
 
 /// Expects trace to be: [1, tuple...]
 impl<const N: usize> DummyInteractionChipGPU<N> {
-    // TODO[stephenh]: Remove this allow once CUDA tests are uncommented
-    #[allow(unused)]
     pub fn new(range_tuple_checker: Arc<RangeTupleCheckerChipGPU<N>>, data: Vec<u32>) -> Self {
         assert!(!data.is_empty());
         Self {
