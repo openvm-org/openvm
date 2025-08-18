@@ -663,7 +663,7 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         FriReducedOpeningRecordMut {
             header,
             workload: &mut workload_records[..layout.metadata.length],
-            a_write_prev_data: &mut a_prev_records[..],
+            a_write_prev_data: a_prev_records,
             common,
         }
     }
@@ -806,8 +806,7 @@ where
 
         if !is_init {
             let hint_stream = &mut state.streams.hint_space[hint_id];
-            for (i, (prev_data, hint_value)) in record
-                .a_write_prev_data
+            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
                 .iter_mut()
                 .rev()
                 .zip(hint_stream.drain(0..length))
