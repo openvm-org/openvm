@@ -535,7 +535,7 @@ where
 
     /// Calls [`VmState::initial`] but sets more information for
     /// performance metrics when feature "perf-metrics" is enabled.
-    #[instrument(name = "vm.create_initial_state", skip_all)]
+    #[instrument(name = "vm.create_initial_state", level = "debug", skip_all)]
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -909,7 +909,7 @@ where
         })
     }
 
-    #[instrument(name = "vm.reset_state", skip_all)]
+    #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
     pub fn reset_state(&mut self, inputs: impl Into<Streams<Val<E::SC>>>) {
         self.state
             .as_mut()
