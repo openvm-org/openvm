@@ -693,7 +693,7 @@ impl TracingMemory {
     ///
     /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
     #[inline(always)]
-    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
