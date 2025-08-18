@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../src/extensions/rv32_adapters/vec_heap.cuh"
-#include "mod_builder/meta.cuh"
+#include "vec_heap.cuh"
+#include "meta.cuh"
 #include "trace_access.h"
 
 struct Rv32VecHeapConfig {
