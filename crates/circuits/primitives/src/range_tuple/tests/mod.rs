@@ -10,9 +10,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-
-use crate::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
-
 #[cfg(feature = "cuda")]
 use {
     crate::range_tuple::{cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir},
@@ -27,6 +24,8 @@ use {
     openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
     openvm_stark_sdk::config::FriParameters,
 };
+
+use crate::range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip};
 
 #[cfg(feature = "cuda")]
 mod dummy;

@@ -31,6 +31,6 @@ p3-symmetric = { workspace = true }
 openvm-cuda-builder.workspace = true
 
 [features]
-default = ["parallel", "cuda"]
+default = ["parallel"]
 parallel = ["openvm-stark-backend/parallel"]
 cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
