@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use connector::VmConnectorChipGPU;
+use memory::MemoryInventoryGPU;
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
@@ -8,20 +10,16 @@ use openvm_circuit::{
         SystemChipComplex, SystemRecords,
     },
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_stark_backend::{
     prover::types::{AirProvingContext, CommittedTraceData},
     Chip,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
-
-use {
-    connector::VmConnectorChipGPU, memory::MemoryInventoryGPU,
-    poseidon2::Poseidon2PeripheryChipGPU, program::ProgramChipGPU,
-    public_values::PublicValuesChipGPU,
-};
+use poseidon2::Poseidon2PeripheryChipGPU;
+use program::ProgramChipGPU;
+use public_values::PublicValuesChipGPU;
 
 pub(crate) const DIGEST_WIDTH: usize = 8;
 

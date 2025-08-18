@@ -1,8 +1,5 @@
 use std::{ffi::c_void, sync::Arc};
 
-use super::poseidon2::SharedBuffer;
-use super::Poseidon2PeripheryChipGPU;
-use super::DIGEST_WIDTH;
 use openvm_circuit::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
@@ -20,6 +17,8 @@ use openvm_stark_backend::{
     prover::types::AirProvingContext,
 };
 use p3_field::FieldAlgebra;
+
+use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
 pub mod cuda;
 use cuda::merkle_tree::*;

@@ -1,6 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::cuda_abi::program;
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
 use openvm_cuda_backend::{
     base::DeviceMatrix, gpu_device::GpuDevice, prover_backend::GpuBackend, types::F,
@@ -18,6 +17,8 @@ use openvm_stark_backend::{
     Chip,
 };
 use p3_field::FieldAlgebra;
+
+use crate::cuda_abi::program;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,

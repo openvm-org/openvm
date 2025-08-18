@@ -8,19 +8,17 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::encoder::Encoder;
-use openvm_cuda_backend::prelude::F;
+use openvm_circuit_primitives::{encoder::Encoder, var_range::cuda::VariableRangeCheckerChipGPU};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
 
 use crate::cuda_abi::public_values;
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::base::DeviceMatrix;
-use openvm_cuda_backend::chip::get_empty_air_proving_ctx;
-use openvm_cuda_backend::prover_backend::GpuBackend;
-use openvm_cuda_common::copy::MemCopyH2D;
 
 #[repr(C)]
 struct FullPublicValuesRecord {

@@ -1,12 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
-use super::SharedBuffer;
-use super::DIGEST_WIDTH;
-use super::TIMESTAMPED_BLOCK_WIDTH;
 use openvm_cuda_backend::{base::DeviceMatrix, types::F};
 use openvm_cuda_common::{
     copy::MemCopyH2D, d_buffer::DeviceBuffer, error::CudaError, stream::cudaStream_t,
 };
+
+use super::{SharedBuffer, DIGEST_WIDTH, TIMESTAMPED_BLOCK_WIDTH};
 
 pub mod merkle_tree {
     use super::*;

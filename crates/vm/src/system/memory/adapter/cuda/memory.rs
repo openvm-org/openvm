@@ -1,12 +1,5 @@
 use std::sync::Arc;
 
-use super::access_adapters::AccessAdapterInventoryGPU;
-use super::boundary::BoundaryChipGPU;
-use super::boundary::BoundaryFields;
-use super::merkle_tree::MemoryMerkleTree;
-use super::merkle_tree::TIMESTAMPED_BLOCK_WIDTH;
-use super::Poseidon2PeripheryChipGPU;
-use super::DIGEST_WIDTH;
 use openvm_circuit::{
     arch::{AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{
@@ -23,6 +16,13 @@ use openvm_cuda_common::{
 };
 use openvm_stark_backend::{
     p3_field::FieldAlgebra, p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip,
+};
+
+use super::{
+    access_adapters::AccessAdapterInventoryGPU,
+    boundary::{BoundaryChipGPU, BoundaryFields},
+    merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
+    Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 
 pub struct MemoryInventoryGPU {

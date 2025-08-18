@@ -7,6 +7,11 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
@@ -14,17 +19,8 @@ use openvm_stark_backend::{
     Chip,
 };
 
-use openvm_cuda_backend::prover_backend::GpuBackend;
-use openvm_cuda_common::copy::MemCopyH2D;
-
-use super::merkle_tree::TIMESTAMPED_BLOCK_WIDTH;
-use super::poseidon2::SharedBuffer;
+use super::{merkle_tree::TIMESTAMPED_BLOCK_WIDTH, poseidon2::SharedBuffer};
 use crate::cuda_abi::boundary::{persistent_boundary_tracegen, volatile_boundary_tracegen};
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::base::DeviceMatrix;
-use openvm_cuda_backend::chip::get_empty_air_proving_ctx;
-use openvm_cuda_backend::prelude::F;
-use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 pub struct PersistentBoundary {
     pub poseidon2_buffer: SharedBuffer<F>,
