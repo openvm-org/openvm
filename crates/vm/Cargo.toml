@@ -35,13 +35,10 @@ derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
-
-[target.'cfg(feature = "cuda")'.dependencies]
-stark-backend-gpu.workspace = true
+openvm-cuda-common.workspace = true
 
 [build-dependencies]
-glob = "0.3.3" # not a workspace dependency because to be moved to the build crate
-cc = "1.2.32"
+openvm-cuda-builder.workspace = true
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true

@@ -172,7 +172,10 @@ openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = fal
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
 
-stark-backend-gpu = { path = "tracegen-gpu", default-features = false }
+# Cuda related stuff
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
 
 # Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }

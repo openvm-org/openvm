@@ -1708,6 +1708,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytesize"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3c8f83209414aacf0eeae3cf730b18d6981697fba62f200fcfb92b9f082acba"
+
+[[package]]
 name = "bzip2"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5243,7 +5249,6 @@ name = "openvm-circuit"
 version = "1.4.0-rc.2"
 dependencies = [
  "backtrace",
- "cc",
  "dashmap",
  "derivative",
  "derive-new 0.6.0",
@@ -5251,7 +5256,6 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "getset",
- "glob",
  "itertools 0.14.0",
  "libc",
  "memmap2",
@@ -5260,6 +5264,8 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
  "openvm-instructions",
  "openvm-native-circuit",
  "openvm-native-compiler",
@@ -5325,6 +5331,28 @@ dependencies = [
  "openvm-stark-sdk",
  "serde",
  "static_assertions",
+]
+
+[[package]]
+name = "openvm-cuda-builder"
+version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#70ea9d6c5dc338df54a8a0bce6dfb3bedcc4adf9"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
+name = "openvm-cuda-common"
+version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#70ea9d6c5dc338df54a8a0bce6dfb3bedcc4adf9"
+dependencies = [
+ "bytesize",
+ "lazy_static",
+ "metrics",
+ "openvm-cuda-builder",
+ "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
