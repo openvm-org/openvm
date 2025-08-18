@@ -21,7 +21,7 @@ fn main() {
         .watch("../poseidon2-air/cuda/include")
         .watch("../../../tracegen-gpu/cuda/src") // TODO[arayi]: change once system is migrated
         .library_name("tracegen_mod_builder")
-        .files(["cuda/src/field_expression.cu"]);
+        .file("cuda/src/field_expression.cu");
 
     builder.emit_link_directives();
     builder.build();
