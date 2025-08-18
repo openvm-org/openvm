@@ -25,7 +25,7 @@ The SDK provides lower-level control over the building and transpiling process.
 
 ### Using `SdkVmConfig`
 
-The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the extensions and system configuration you want.
+The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the desired extensions and system configuration as in the example below.
 
 ```rust
     let vm_config = SdkVmConfig::builder()
@@ -36,6 +36,10 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
         .build()
         .optimize();
 ```
+
+You can also use the `SdkVmConfig::standard()` or `SdkVmConfig::riscv32()` methods to get commonly used default
+configurations supporting all default OpenVM extensions or just RV32IM, respectively. To use a custom OpenVM configuration
+specified in an `openvm.toml` file, you can use the `SdkVmConfig::from_toml()` method.
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
