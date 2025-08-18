@@ -126,6 +126,15 @@ where
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
             );
+            if vm_pk.max_constraint_degree
+                != config.app_fri_params.fri_params.max_constraint_degree()
+            {
+                tracing::warn!(
+                    "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
+                    vm_pk.max_constraint_degree,
+                    config.app_fri_params.fri_params.max_constraint_degree()
+                );
+            }
             VmProvingKey {
                 fri_params: config.app_fri_params.fri_params,
                 vm_config: config.app_vm_config.clone(),
@@ -306,6 +315,13 @@ impl AggProvingKey {
                 leaf_vm_config.clone(),
             )?;
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
+            if vm_pk.max_constraint_degree != config.leaf_fri_params.max_constraint_degree() {
+                tracing::warn!(
+                    "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
+                    vm_pk.max_constraint_degree,
+                    config.leaf_fri_params.max_constraint_degree()
+                );
+            }
             Arc::new(VmProvingKey {
                 fri_params: config.leaf_fri_params,
                 vm_config: leaf_vm_config,
