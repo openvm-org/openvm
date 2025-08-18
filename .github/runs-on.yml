@@ -5,13 +5,3 @@ images:
     owner: "405894839083"
     name: "arm64-rust-riscv-dev-32gb"
     ami: "ami-040a96edd406c9478"
-
-runners:
-  32cpu-arm64:
-    family: ["c7g.8xlarge"]
-    cpu: [32]
-    image: "ubuntu24-full-arm64"
-  gpu-small-x64:
-    family: ["g6.xlarge", "g6.2xlarge"]
-    cpu: [4, 8]
-    image: "ubuntu24-gpu-x64"
