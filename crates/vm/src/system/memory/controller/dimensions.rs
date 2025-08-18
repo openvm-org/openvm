@@ -17,6 +17,15 @@ pub struct MemoryDimensions {
     pub address_height: usize,
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, new)]
+pub struct OldMemoryDimensions {
+    /// Address space height
+    pub addr_space_height: usize,
+    /// Pointer height
+    pub address_height: usize,
+    pub as_offset: u32,
+}
+
 impl MemoryDimensions {
     pub fn overall_height(&self) -> usize {
         self.addr_space_height + self.address_height

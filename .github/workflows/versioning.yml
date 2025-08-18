@@ -37,7 +37,9 @@ jobs:
 
       # Build and test from base branch
       - name: Build base branch CLI
-        run: cargo install --force --locked --path crates/cli
+        run: cargo install --force --locked --path crates/cli --bin cargo-openvm
+      - name: Build converter
+        run: cargo install --force --locked --path crates/cli --bin convert_vkey
 
       - name: Run setup from base branch and snapshot ~/.openvm
         run: |
@@ -113,6 +115,7 @@ jobs:
               # cargo openvm build --no-transpile
               mkdir -p "../../../tagged-outputs/benchmarks/$benchmark_name"
               cargo openvm keygen --output-dir "../../../tagged-outputs/benchmarks/$benchmark_name"
+              convert_vkey --path "../../../tagged-outputs/benchmarks/$benchmark_name/app.vk"
               cd ../../..
             fi
           done
@@ -148,7 +151,7 @@ jobs:
             if [ -f "$benchmark/Cargo.toml" ]; then
               benchmark_name=$(basename "$benchmark")
               echo "Checking benchmark: $benchmark_name"
-              if cmp "./base-outputs/benchmarks/$benchmark_name/app.vk" "./tagged-outputs/benchmarks/$benchmark_name/app.vk"; then
+              if cmp "./base-outputs/benchmarks/$benchmark_name/app.vk" "./tagged-outputs/benchmarks/$benchmark_name/app.1.vk"; then
                 echo "✅ $benchmark_name verification keys are identical"
               else
                 echo "❌ $benchmark_name verification keys differ"

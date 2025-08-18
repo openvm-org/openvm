@@ -4,7 +4,7 @@ use derivative::Derivative;
 // use dummy::{compute_root_proof_heights, dummy_internal_proof_riscv_app_vm};
 use openvm_circuit::{
     arch::{AirInventoryError, SystemConfig, VirtualMachine, VirtualMachineError, VmCircuitConfig},
-    system::memory::dimensions::MemoryDimensions,
+    system::memory::dimensions::{MemoryDimensions, OldMemoryDimensions},
 };
 use openvm_continuations::verifier::{
     internal::InternalVmVerifierConfig, leaf::LeafVmVerifierConfig, root::RootVmVerifierConfig,
@@ -75,6 +75,15 @@ pub struct AppVerifyingKey {
     /// STARK backend verifying key
     pub vk: MultiStarkVerifyingKey<SC>,
     pub memory_dimensions: MemoryDimensions,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct OldAppVerifyingKey {
+    /// We store the FRI parameters used to generate the proof separately.
+    pub fri_params: FriParameters,
+    /// STARK backend verifying key
+    pub vk: MultiStarkVerifyingKey<SC>,
+    pub memory_dimensions: OldMemoryDimensions,
 }
 
 /// The STARK proving keys necessary for aggregation of app proofs into a single aggregate STARK
