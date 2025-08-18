@@ -841,6 +841,7 @@ impl TracingMemory {
             let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
             (block_start * ALIGN) as u32
         } else {
+            debug_assert_eq!(self.initial_block_size, 1);
             pointer
         }
     }
@@ -860,19 +861,19 @@ impl TracingMemory {
         let end_ptr = pointer + BLOCK_SIZE as u32;
         let mut seg_idx = 0;
         while current_ptr < end_ptr {
-            let (curr_start_ptr, curr_block_meta) =
+            let (mut curr_start_ptr, curr_block_meta) =
                 self.get_block_metadata::<ALIGN>(address_space as usize, current_ptr as usize);
-            let block_size = curr_block_meta.block_size();
-            if curr_start_ptr == pointer {
-                let actual_curr_start_ptr = if block_size == 0 {
-                    self.uninitialized_memory_chunk_start::<ALIGN>(pointer)
-                } else {
-                    curr_start_ptr
-                };
+            let mut block_size = curr_block_meta.block_size();
+            if block_size == 0 {
+                curr_start_ptr = self.uninitialized_memory_chunk_start::<ALIGN>(pointer);
+                block_size = self.initial_block_size.max(ALIGN) as u8;
+            }
+            if current_ptr == pointer {
                 unsafe {
-                    addr_of_mut!((*ret_ptr).start_ptr).write(actual_curr_start_ptr);
+                    addr_of_mut!((*ret_ptr).start_ptr).write(curr_start_ptr);
                 }
             }
+            current_ptr = curr_start_ptr + block_size as u32;
             unsafe {
                 addr_of_mut!((*ret_ptr).split_data[seg_idx].block_size).write(block_size);
             }
@@ -880,13 +881,11 @@ impl TracingMemory {
                 unsafe {
                     addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(INITIAL_TIMESTAMP);
                 }
-                current_ptr += ALIGN as u32;
             } else {
                 let timestamp = curr_block_meta.timestamp();
                 unsafe {
                     addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(timestamp);
                 }
-                current_ptr = curr_start_ptr + block_size as u32;
                 max_timestamp = max_timestamp.max(timestamp);
             }
             seg_idx += 1;
@@ -917,7 +916,7 @@ impl TracingMemory {
         T: Copy + Send + Sync,
         const BLOCK_SIZE: usize,
         const ALIGN: usize,
-        F: (Fn(usize) -> u32) + Sync,
+        FN: (Fn(usize) -> u32) + Sync,
     >(
         &mut self,
         address_space: u32,
@@ -925,8 +924,9 @@ impl TracingMemory {
         len: usize,
         // Access timestamp for each block. Also `access_timestamp.len()` indicates the number of
         // accesses.
-        access_timestamp: F,
+        access_timestamp: FN,
     ) -> Vec<u32> {
+        // dbg!(BLOCK_SIZE, ALIGN, address_space, pointer, len);
         // Goal: read a batch of memory with the same `BLOCK_SIZE` at given the timestamps.
         // High-level overview:
         // The batch read splits memory into the following segments:
@@ -964,15 +964,24 @@ impl TracingMemory {
         (0..len)
             .into_par_iter()
             .map(|i| {
+                let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
+                let access_t = access_timestamp(i);
+                let (start_ptr, start_meta) = self
+                    .get_block_metadata::<ALIGN>(address_space as usize, block_start_ptr as usize);
+                if start_ptr == block_start_ptr && start_meta.block_size() == BLOCK_SIZE as u8 {
+                    let prev_t = start_meta.timestamp(); // no split or merges needed
+                    unsafe {
+                        batch_processor
+                            .set_meta_block::<BLOCK_SIZE, ALIGN>(start_ptr as usize, access_t);
+                    }
+                    return prev_t;
+                }
                 let AccessSplitRecord {
                     start_ptr,
                     split_data,
                     len: num_segs,
-                } = self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(
-                    address_space,
-                    pointer + i as u32 * BLOCK_SIZE as u32,
-                );
-                let access_t = access_timestamp(i);
+                } = self
+                    .compute_access_record::<T, BLOCK_SIZE, ALIGN>(address_space, block_start_ptr);
                 // Edge case: the first block is responsible for the first out-of-bound segment.
                 if i == 0 && start_ptr < pointer {
                     unsafe {
@@ -984,10 +993,9 @@ impl TracingMemory {
                     }
                 }
 
-                let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
                 let block_end_ptr = pointer + (i as u32 + 1) * BLOCK_SIZE as u32;
                 let mut curr_ptr = start_ptr;
-                let mut idx = 0;
+                let mut seg_idx = 0;
 
                 let mut prev_ts_buf = [INITIAL_TIMESTAMP; MAX_SEGMENTS];
                 let mut split_idx = 0;
@@ -1000,7 +1008,7 @@ impl TracingMemory {
                     let SplitData {
                         timestamp,
                         mut block_size,
-                    } = split_data[idx];
+                    } = split_data[seg_idx];
                     if curr_ptr >= block_start_ptr || i == 0 {
                         let mut add_split = true;
                         if block_size == 0 {
@@ -1022,7 +1030,7 @@ impl TracingMemory {
                                 block_size = ALIGN as u8;
                                 add_split = false;
                                 push_ts(INITIAL_TIMESTAMP);
-                                curr_ptr += ALIGN as u32;
+                                curr_ptr += block_size as u32;
                             } else {
                                 block_size = self.initial_block_size as u8;
                             }
@@ -1048,9 +1056,9 @@ impl TracingMemory {
                         // No need to update the metadata of cells in the block because we will
                         // merge them later.
                     }
-                    idx += 1;
+                    seg_idx += 1;
                 }
-                debug_assert_eq!(idx, num_segs);
+                debug_assert_eq!(seg_idx, num_segs);
                 // Create the merge record
                 unsafe {
                     batch_processor.add_merge_record(
@@ -1074,7 +1082,7 @@ impl TracingMemory {
                         batch_processor.set_timestamp::<ALIGN>(
                             block_end_ptr,
                             curr_ptr,
-                            split_data[idx - 1].timestamp,
+                            split_data[seg_idx - 1].timestamp,
                         );
                     }
                 }
@@ -1343,6 +1351,7 @@ impl TracingMemory {
                             .iter()
                             .max()
                             .unwrap();
+
                         self.add_merge_record(
                             AccessRecordHeader {
                                 timestamp_and_mask: timestamp,
@@ -1447,7 +1456,11 @@ impl<T: Copy + Send + Sync> BatchReadProcessor<T> {
         if header.block_size == header.lowest_block_size {
             return;
         }
-        debug_assert_eq!(header.block_size, prev_ts.len() as u32);
+        debug_assert_eq!(header.block_size % header.lowest_block_size, 0);
+        debug_assert_eq!(
+            prev_ts.len() as u32,
+            header.block_size / header.lowest_block_size
+        );
         let data_slice = unsafe {
             from_raw_parts(
                 self.data_slice.add(header.pointer as usize) as *const u8,
@@ -1500,7 +1513,7 @@ impl<T> Drop for BatchReadProcessor<T> {
     fn drop(&mut self) {
         let access_adapter_arena = unsafe { &mut *self.access_adapter_arena };
         // No one else is accessing when dropping.
-        let new_position = self.position.load(Ordering::Relaxed);
+        let new_position = self.position.load(Ordering::Acquire);
         access_adapter_arena
             .records_buffer
             .set_position(new_position as u64);
