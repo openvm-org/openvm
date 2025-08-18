@@ -1,9 +1,8 @@
 #[cfg(feature = "cuda")]
-use openvm_cuda_builder::{cuda_available, emit_cuda_cfg_if_available, CudaBuilder};
+use openvm_cuda_builder::{cuda_available, CudaBuilder};
 
 #[cfg(feature = "cuda")]
 fn main() {
-    emit_cuda_cfg_if_available();
     if !cuda_available() {
         return; // Skip CUDA compilation
     }
@@ -24,8 +23,7 @@ fn main() {
         .library_name("tracegen_mod_builder")
         .files(["cuda/src/field_expression.cu"]);
 
-    builder.emit_link_directives(); // Call once at end
-
+    builder.emit_link_directives();
     builder.build();
 }
 
