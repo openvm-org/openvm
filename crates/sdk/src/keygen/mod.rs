@@ -84,6 +84,16 @@ pub struct AggStarkProvingKey {
     pub root_verifier_pk: RootVerifierProvingKey,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AggVerifyingKey {
+    pub(super) leaf_fri_params: FriParameters,
+    pub(super) leaf_vk: MultiStarkVerifyingKey<SC>,
+    /// FRI parameters used to generate the last internal proof.
+    pub(super) internal_fri_params: FriParameters,
+    pub(super) internal_vk: MultiStarkVerifyingKey<SC>,
+    pub(super) internal_verifier_program_commit: Com<SC>,
+}
+
 /// Attention: the size of this struct is VERY large, usually >10GB.
 #[cfg(feature = "evm-prove")]
 #[derive(Clone, Serialize, Deserialize)]
@@ -259,6 +269,21 @@ impl AggStarkProvingKey {
     pub fn keygen(config: AggStarkConfig) -> Self {
         tracing::info_span!("agg_stark_keygen", group = "agg_stark_keygen")
             .in_scope(|| Self::dummy_proof_and_keygen(config).0)
+    }
+
+    pub fn get_agg_vk(&self) -> AggVerifyingKey {
+        let leaf_fri_params = self.leaf_vm_pk.fri_params;
+        let leaf_vk = self.leaf_vm_pk.vm_pk.get_vk();
+        let internal_fri_params = self.internal_vm_pk.fri_params;
+        let internal_vk = self.internal_vm_pk.vm_pk.get_vk();
+        let internal_verifier_program_commit = self.internal_committed_exe.get_program_commit();
+        AggVerifyingKey {
+            leaf_fri_params,
+            leaf_vk,
+            internal_fri_params,
+            internal_vk,
+            internal_verifier_program_commit,
+        }
     }
 
     pub fn dummy_proof_and_keygen(config: AggStarkConfig) -> (Self, Proof<SC>) {
