@@ -49,11 +49,14 @@ To build the program, run:
 cargo openvm build
 ```
 
-This will output an OpenVM executable file to `./target/openvm/release/fibonacci.vmexe`.
+This will output:
+
+- an RV32IM ELF containing [custom OpenVM instructions](/specs/reference/riscv-custom-code) at `./target/riscv32im-risc0-zkvm-elf/release/fibonacci`
+- an OpenVM executable binary at `./target/openvm/release/fibonacci.vmexe`
 
 ## Keygen
 
-Before generating any proofs, we will also need to generate the proving and verification keys.
+Before generating proofs, we will also need to generate the proving and verification keys using:
 
 ```bash
 cargo openvm keygen
