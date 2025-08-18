@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::{
+use openvm_cuda_common::{
     cuda::{
         d_buffer::{DeviceBuffer, DeviceBufferView},
         error::CudaError,

@@ -115,7 +115,7 @@ lto = "thin"
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.0-rc.1", default-features = false }
 # TODO[stephenh]: Replace this once open sourced
-stark-backend-gpu = { git = "https://github.com/axiom-crypto/axiom-gpu.git", default-features = false }
+stark-backend-gpu = { git = "ssh://git@github.com/axiom-crypto/axiom-gpu.git", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
