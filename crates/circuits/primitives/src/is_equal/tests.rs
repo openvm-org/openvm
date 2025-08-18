@@ -14,10 +14,6 @@ use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
 use test_case::test_matrix;
-
-use super::{IsEqSubAir, IsEqualIo};
-use crate::{SubAir, TraceSubRowGenerator};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::is_equal,
@@ -30,6 +26,9 @@ use {
     rand::Rng,
     std::sync::Arc,
 };
+
+use super::{IsEqSubAir, IsEqualIo};
+use crate::{SubAir, TraceSubRowGenerator};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]

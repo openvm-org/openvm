@@ -14,14 +14,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
-
-use super::IsLessThanIo;
-use crate::{
-    is_less_than::IsLtSubAir,
-    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
-    SubAir, TraceSubRowGenerator,
-};
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_dummy_tracegen,
@@ -29,6 +21,13 @@ use {
         base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
     },
     openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
+};
+
+use super::IsLessThanIo;
+use crate::{
+    is_less_than::IsLtSubAir,
+    var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
+    SubAir, TraceSubRowGenerator,
 };
 
 /// Struct purely for testing purposes. We could make this have a const generic just like

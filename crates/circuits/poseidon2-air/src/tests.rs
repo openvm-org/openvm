@@ -15,10 +15,6 @@ use openvm_stark_sdk::{
 };
 use p3_poseidon2::ExternalLayerConstants;
 use rand::{rngs::StdRng, Rng, RngCore};
-
-use super::{Poseidon2Config, Poseidon2Constants, Poseidon2SubChip};
-use crate::BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS;
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::poseidon2,
@@ -28,6 +24,9 @@ use {
     openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
 };
+
+use super::{Poseidon2Config, Poseidon2Constants, Poseidon2SubChip};
+use crate::BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS;
 
 fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: &mut StdRng) {
     // random state and trace generation
