@@ -22,8 +22,11 @@ use crate::BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS;
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::poseidon2,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::p3_field::PrimeField32,
-    stark_backend_gpu::{base::DeviceMatrix, cuda::copy::MemCopyH2D as _, types::F},
 };
 
 fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: &mut StdRng) {
@@ -141,7 +144,6 @@ fn test_cuda_tracegen_poseidon2() {
     // Run CPU tracegen and compare results
     let config = Poseidon2Config::<BabyBear>::default();
     let chip: Poseidon2SubChip<_, SBOX_REGS> = Poseidon2SubChip::new(config.constants);
-    let _cpu_trace = Arc::new(chip.generate_trace(cpu_inputs));
-    // TODO[stephenh]: Uncomment this when we decide where to put it
-    // assert_eq_cpu_and_gpu_matrix(cpu_trace, &gpu_mat);
+    let cpu_trace = Arc::new(chip.generate_trace(cpu_inputs));
+    assert_eq_host_and_device_matrix(cpu_trace, &gpu_mat);
 }

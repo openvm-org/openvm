@@ -20,15 +20,15 @@ use crate::var_range::{
 use {
     crate::var_range::{cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerAir},
     dummy::cuda::DummyInteractionChipGPU,
+    openvm_cuda_backend::{
+        base::DeviceMatrix,
+        engine::GpuBabyBearPoseidon2Engine,
+        types::{F, SC},
+    },
+    openvm_cuda_common::copy::MemCopyH2D as _,
     openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
     openvm_stark_sdk::{
         config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
-    },
-    stark_backend_gpu::{
-        base::DeviceMatrix,
-        cuda::copy::MemCopyH2D as _,
-        engine::GpuBabyBearPoseidon2Engine,
-        types::{F, SC},
     },
 };
 

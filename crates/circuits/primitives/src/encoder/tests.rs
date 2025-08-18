@@ -1,6 +1,9 @@
-use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
-use stark_backend_gpu::{base::DeviceMatrix, types::F};
 use std::sync::Arc;
+
+use openvm_cuda_backend::{
+    base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
+};
+use openvm_stark_backend::{p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix};
 
 use crate::{cuda_abi::encoder, encoder::Encoder};
 
@@ -17,7 +20,7 @@ fn test_cuda_encoder_with_invalid_row() {
     let values = (0..num_flags)
         .map(|i| encoder.get_flag_pt(i))
         .collect::<Vec<_>>();
-    let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+    let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         values
             .into_iter()
             .flat_map(|v| v.into_iter().map(F::from_canonical_u32))
@@ -37,8 +40,7 @@ fn test_cuda_encoder_with_invalid_row() {
         .unwrap();
     };
 
-    // TODO[stephenh]: Uncomment this when we decide where to put it
-    // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
 }
 
 #[test]
@@ -53,7 +55,7 @@ fn test_cuda_encoder_without_invalid_row() {
     let values = (0..num_flags)
         .map(|i| encoder.get_flag_pt(i))
         .collect::<Vec<_>>();
-    let _cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+    let cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         values
             .into_iter()
             .flat_map(|v| v.into_iter().map(F::from_canonical_u32))
@@ -73,6 +75,5 @@ fn test_cuda_encoder_without_invalid_row() {
         .unwrap();
     };
 
-    // TODO[stephenh]: Uncomment this when we decide where to put it
-    // assert_eq_cpu_and_gpu_matrix(cpu_matrix, &gpu_matrix);
+    assert_eq_host_and_device_matrix(cpu_matrix, &gpu_matrix);
 }
