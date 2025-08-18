@@ -28,9 +28,9 @@ derivative.workspace = true
 p3-symmetric = { workspace = true }
 
 [build-dependencies]
-openvm-cuda-builder = { workspace = true, optional = true }
+openvm-cuda-builder.workspace = true
 
 [features]
 default = ["parallel"]
 parallel = ["openvm-stark-backend/parallel"]
-cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend", "dep:openvm-cuda-builder"]
+cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
