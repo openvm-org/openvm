@@ -1,3 +1,5 @@
+#![cfg(feature = "cuda")]
+
 use openvm_cuda_builder::{cuda_available, emit_cuda_cfg_if_available, CudaBuilder};
 
 fn main() {
