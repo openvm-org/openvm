@@ -20,7 +20,7 @@ use openvm_stark_backend::p3_air::BaseAir;
 
 use crate::{
     cuda_abi::field_expression::tracegen,
-    cuda_field_expression::{
+    cuda::{
         constants::{ExprType, LIMB_BITS, MAX_LIMBS},
         expr_op::ExprOp,
     },

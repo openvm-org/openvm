@@ -7,7 +7,7 @@ use openvm_circuit_primitives::{
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 use crate::{
-    cuda_field_expression::{constants::LIMB_BITS, expr_op::ExprOp},
+    cuda::{constants::LIMB_BITS, expr_op::ExprOp},
     FieldExpressionCoreAir,
 };
 

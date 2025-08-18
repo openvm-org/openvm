@@ -18,7 +18,7 @@ pub mod test_utils;
 #[cfg(feature = "cuda")]
 mod cuda_abi;
 #[cfg(feature = "cuda")]
-mod cuda_field_expression;
+mod cuda;
 
 #[cfg(feature = "cuda")]
-pub use cuda_field_expression::*;
+pub use cuda::*;
