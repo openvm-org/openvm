@@ -16,9 +16,9 @@ pub mod utils;
 pub mod test_utils;
 
 #[cfg(feature = "cuda")]
-mod cuda_abi;
-#[cfg(feature = "cuda")]
 mod cuda;
+#[cfg(feature = "cuda")]
+mod cuda_abi;
 
 #[cfg(feature = "cuda")]
 pub use cuda::*;

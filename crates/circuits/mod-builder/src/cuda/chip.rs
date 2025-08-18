@@ -19,11 +19,11 @@ use openvm_cuda_common::{
 use openvm_stark_backend::p3_air::BaseAir;
 
 use crate::{
-    cuda_abi::field_expression::tracegen,
     cuda::{
         constants::{ExprType, LIMB_BITS, MAX_LIMBS},
         expr_op::ExprOp,
     },
+    cuda_abi::field_expression::tracegen,
     utils::biguint_to_limbs_vec,
     ExprMeta, ExprNode, FieldExprMeta, FieldExpressionChipGPU, FieldExpressionCoreAir,
     SymbolicExpr,
