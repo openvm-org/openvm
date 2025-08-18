@@ -7,26 +7,14 @@ use openvm_circuit::{
         TouchedMemory,
     },
 };
-use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip};
-use p3_field::FieldAlgebra;
+use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::{
-    cuda::{
-        copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
-        d_buffer::DeviceBuffer,
-        memory_manager::MemTracker,
-    },
-    prover_backend::GpuBackend,
-    types::F,
+    copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+    memory_manager::MemTracker,
 };
-
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{
-        access_adapters::AccessAdapterInventoryGPU,
-        boundary::{BoundaryChipGPU, BoundaryFields},
-        merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
-        Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
-    },
+use openvm_stark_backend::{
+    p3_field::FieldAlgebra, p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip,
 };
 
 pub struct MemoryInventoryGPU {

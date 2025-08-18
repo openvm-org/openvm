@@ -5,24 +5,18 @@ use openvm_circuit::{
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},
     utils::next_power_of_two_or_zero,
 };
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_common::{
+    copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+    stream::{cudaStreamPerThread, default_stream_wait, CudaEvent, CudaStream},
+};
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
     prover::types::AirProvingContext,
 };
 use p3_field::FieldAlgebra;
-use openvm_cuda_common::{
-    base::DeviceMatrix,
-    cuda::{
-        copy::{cuda_memcpy, MemCopyD2H, MemCopyH2D},
-        d_buffer::DeviceBuffer,
-        stream::{cudaStreamPerThread, default_stream_wait, CudaEvent, CudaStream},
-    },
-    prelude::F,
-    prover_backend::GpuBackend,
-};
-
-use crate::system::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
 pub mod cuda;
 use cuda::merkle_tree::*;
@@ -418,6 +412,7 @@ mod tests {
             poseidon2::Poseidon2PeripheryChip,
         },
     };
+    use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         NATIVE_AS,
@@ -425,7 +420,6 @@ mod tests {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
-    use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
 
     use super::{
         merkle_tree::{DeviceBuffer, MemoryMerkleTree},

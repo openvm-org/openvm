@@ -40,8 +40,9 @@ use crate::{
 
 mod air;
 mod columns;
-pub mod records;
+#[cfg(feature = "cuda")]
 mod cuda;
+pub mod records;
 
 #[derive(Setters)]
 pub struct AccessAdapterInventory<F> {

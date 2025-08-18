@@ -1,27 +1,22 @@
 use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, gpu_device::GpuDevice, prover_backend::GpuBackend, types::F,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
     prover::{
         hal::{MatrixDimensions, TraceCommitter},
         types::{AirProvingContext, CommittedTraceData},
     },
     Chip,
 };
-use openvm_cuda_common::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    gpu_device::GpuDevice,
-    prover_backend::GpuBackend,
-    types::F,
-};
-
-use crate::system::cuda;
+use p3_field::FieldAlgebra;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -62,7 +57,7 @@ impl ProgramChipGPU {
 
         let trace = DeviceMatrix::<F>::with_capacity(height, size_of::<ProgramExecutionCols<u8>>());
         unsafe {
-            cuda::program::cached_tracegen(
+            cuda_abi::program::cached_tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
@@ -132,6 +127,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 #[cfg(test)]
 mod tests {
     use openvm_circuit::system::program::trace::VmCommittedExe;
+    use openvm_cuda_common::{engine::GpuBabyBearPoseidon2Engine, types::F};
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -152,7 +148,6 @@ mod tests {
         },
         engine::{StarkEngine, StarkFriEngine},
     };
-    use openvm_cuda_common::{engine::GpuBabyBearPoseidon2Engine, types::F};
 
     use crate::{system::program::ProgramChipGPU, testing::assert_eq_cpu_and_gpu_matrix};
 

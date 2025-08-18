@@ -10,9 +10,12 @@ use openvm_circuit::{
 };
 use openvm_stark_backend::prover::types::AirProvingContext;
 
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU, system::cuda::access_adapters::tracegen,
-};
+use crate::cuda_abi::access_adapters::tracegen;
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_backend::prover_backend::GpuBackend;
+use openvm_cuda_common::copy::MemCopyH2D;
 
 pub(crate) const NUM_ADAPTERS: usize = 5;
 

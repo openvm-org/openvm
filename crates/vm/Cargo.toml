@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 p3-baby-bear = { workspace = true }
+p3-field = { workspace = true }
 
 openvm-poseidon2-air = { workspace = true }
 openvm-stark-backend = { workspace = true }
@@ -36,6 +37,7 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 openvm-cuda-common.workspace = true
+openvm-cuda-backend.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder.workspace = true
@@ -78,4 +80,4 @@ mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk/nightly-features"]
-cuda = []
+cuda = ["openvm-circuit-primitives/cuda"]

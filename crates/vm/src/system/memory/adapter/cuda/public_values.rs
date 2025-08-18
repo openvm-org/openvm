@@ -9,13 +9,10 @@ use openvm_circuit::{
     utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::encoder::Encoder;
+use openvm_cuda_backend::prelude::F;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
-};
-
-use crate::{
-    get_empty_air_proving_ctx, primitives::var_range::VariableRangeCheckerChipGPU, system::cuda,
 };
 
 use openvm_cuda_common::copy::MemCopyH2D;
@@ -111,13 +108,13 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+    use openvm_cuda_common::types::F;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode, NATIVE_AS,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
-    use openvm_cuda_common::types::F;
 
     use crate::{
         system::public_values::PublicValuesChipGPU,

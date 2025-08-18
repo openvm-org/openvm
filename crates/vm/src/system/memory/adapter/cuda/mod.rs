@@ -8,19 +8,19 @@ use openvm_circuit::{
         SystemChipComplex, SystemRecords,
     },
 };
+use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_stark_backend::{
     prover::types::{AirProvingContext, CommittedTraceData},
     Chip,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
 
 use {
-        connector::VmConnectorChipGPU, memory::MemoryInventoryGPU,
-        poseidon2::Poseidon2PeripheryChipGPU, program::ProgramChipGPU,
-        public_values::PublicValuesChipGPU,
+    connector::VmConnectorChipGPU, memory::MemoryInventoryGPU,
+    poseidon2::Poseidon2PeripheryChipGPU, program::ProgramChipGPU,
+    public_values::PublicValuesChipGPU,
 };
 
 pub(crate) const DIGEST_WIDTH: usize = 8;

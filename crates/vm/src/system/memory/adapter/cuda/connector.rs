@@ -1,6 +1,6 @@
 use openvm_circuit::{arch::ExecutionState, system::connector::VmConnectorChip};
 
-use crate::utils::HybridChip;
+use openvm_cuda_backend::{chip::HybridChip, prelude::F};
 
 pub type VmConnectorChipGPU = HybridChip<(), VmConnectorChip<F>>;
 

@@ -6,15 +6,12 @@ use openvm_circuit::{
     system::phantom::{PhantomCols, PhantomRecord},
     utils::next_power_of_two_or_zero,
 };
+use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
-use openvm_cuda_common::{
-    base::DeviceMatrix, copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
-
-use crate::{get_empty_air_proving_ctx, system::cuda};
 
 #[derive(new)]
 pub struct PhantomChipGPU;
@@ -63,10 +60,10 @@ mod tests {
         system::phantom::{PhantomAir, PhantomExecutor, PhantomFiller, PhantomRecord},
         utils::next_power_of_two_or_zero,
     };
+    use openvm_cuda_common::types::F;
     use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
     use p3_air::BaseAir;
     use p3_field::{FieldAlgebra, PrimeField32};
-    use openvm_cuda_common::types::F;
 
     use crate::{system::phantom::PhantomChipGPU, testing::GpuChipTestBuilder};
 

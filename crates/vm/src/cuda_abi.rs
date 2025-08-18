@@ -1,11 +1,9 @@
 #![allow(clippy::missing_safety_doc)]
 
+use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
-    cuda::{
-        d_buffer::{DeviceBuffer, DeviceBufferView},
-        error::CudaError,
-    },
-    prelude::F,
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
 };
 
 pub mod boundary {
@@ -248,7 +246,6 @@ pub mod public_values {
 
 pub mod access_adapters {
     use super::*;
-    use crate::system::access_adapters::{OffsetInfo, NUM_ADAPTERS};
 
     extern "C" {
         fn _access_adapters_tracegen(
