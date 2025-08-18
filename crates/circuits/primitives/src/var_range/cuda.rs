@@ -1,3 +1,5 @@
+#![cfg(feature = "cuda")]
+
 use std::sync::{atomic::Ordering, Arc};
 
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};

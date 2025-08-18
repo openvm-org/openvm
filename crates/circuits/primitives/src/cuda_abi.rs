@@ -1,4 +1,4 @@
-#![allow(clippy::missing_safety_doc)]
+#![cfg_attr(feature = "cuda", allow(clippy::missing_safety_doc))]
 
 use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
