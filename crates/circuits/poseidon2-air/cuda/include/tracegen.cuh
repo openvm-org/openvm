@@ -1,8 +1,8 @@
 #pragma once
 
 #include "poseidon2.cuh"
-#include "poseidon2/columns.cuh"
-#include "poseidon2/linearlayer.cuh"
+#include "columns.cuh"
+#include "linearlayer.cuh"
 #include "trace_access.h"
 
 namespace poseidon2 {
