@@ -926,7 +926,6 @@ impl TracingMemory {
         // accesses.
         access_timestamp: FN,
     ) -> Vec<u32> {
-        // dbg!(BLOCK_SIZE, ALIGN, address_space, pointer, len);
         // Goal: read a batch of memory with the same `BLOCK_SIZE` at given the timestamps.
         // High-level overview:
         // The batch read splits memory into the following segments:
@@ -1065,7 +1064,7 @@ impl TracingMemory {
                         AccessRecordHeader {
                             timestamp_and_mask: max_timestamp,
                             address_space,
-                            pointer,
+                            pointer: block_start_ptr,
                             block_size: BLOCK_SIZE as u32,
                             lowest_block_size: ALIGN as u32,
                             type_size: size_of::<T>() as u32,
