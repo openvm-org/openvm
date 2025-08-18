@@ -37,9 +37,11 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
         .optimize();
 ```
 
-You can also use the `SdkVmConfig::standard()` or `SdkVmConfig::riscv32()` methods to get commonly used default
-configurations supporting all default OpenVM extensions or just RV32IM, respectively. To use a custom OpenVM configuration
-specified in an `openvm.toml` file, you can use the `SdkVmConfig::from_toml()` method.
+The following convenience methods are also available to construct a `SdkVmConfig` object:
+
+- `SdkVmConfig::riscv32()` returns a `SdkVmConfig` supporting the RV32IM extension.
+- `SdkVmConfig::standard()` returns a `SdkVmConfig` supporting all default OpenVM extensions, including RV32IM.
+- `SdkVmConfig::from_toml()` returns a `SdkVmConfig` from a custom OpenVM configuration specified in an `openvm.toml` file.
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
