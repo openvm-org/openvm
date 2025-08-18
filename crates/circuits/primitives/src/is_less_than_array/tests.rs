@@ -16,9 +16,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec, config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
 };
-
-use super::*;
-
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::less_than_array_dummy_tracegen,
@@ -27,6 +24,8 @@ use {
     },
     openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
 };
+
+use super::*;
 
 #[repr(C)]
 #[derive(AlignedBorrow, Clone, Copy, Debug)]

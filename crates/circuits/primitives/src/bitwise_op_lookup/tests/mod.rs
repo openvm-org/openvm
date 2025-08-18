@@ -14,9 +14,6 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear, utils::create_seeded_rng,
 };
 use rand::Rng;
-
-use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
-
 #[cfg(feature = "cuda")]
 use {
     crate::bitwise_op_lookup::{cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir},
@@ -32,6 +29,8 @@ use {
         config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     },
 };
+
+use crate::bitwise_op_lookup::{BitwiseOperationLookupBus, BitwiseOperationLookupChip};
 
 mod dummy;
 

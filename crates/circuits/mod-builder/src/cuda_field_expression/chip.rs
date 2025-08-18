@@ -11,15 +11,12 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
     var_range::cuda::VariableRangeCheckerChipGPU,
 };
-use openvm_stark_backend::p3_air::BaseAir;
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{
-        copy::{MemCopyD2H, MemCopyH2D},
-        d_buffer::DeviceBuffer,
-    },
-    prelude::F,
+use openvm_cuda_backend::{base::DeviceMatrix, types::F};
+use openvm_cuda_common::{
+    copy::{MemCopyD2H, MemCopyH2D},
+    d_buffer::DeviceBuffer,
 };
+use openvm_stark_backend::p3_air::BaseAir;
 
 use crate::{
     cuda_abi::field_expression::tracegen,

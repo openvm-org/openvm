@@ -4,7 +4,7 @@ use openvm_circuit_primitives::{
     bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
     var_range::cuda::VariableRangeCheckerChipGPU,
 };
-use stark_backend_gpu::cuda::d_buffer::DeviceBuffer;
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 use crate::{
     cuda_field_expression::{constants::LIMB_BITS, expr_op::ExprOp},
