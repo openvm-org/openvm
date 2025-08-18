@@ -12,11 +12,27 @@ use rand::Rng;
 
 use crate::var_range::{
     bus::VariableRangeCheckerBus,
-    tests::dummy_airs::{TestRangeCheckAir, TestSendAir},
+    tests::dummy::{TestRangeCheckAir, TestSendAir},
     VariableRangeCheckerChip,
 };
 
-pub mod dummy_airs;
+#[cfg(feature = "cuda")]
+use {
+    crate::var_range::{cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerAir},
+    dummy::cuda::DummyInteractionChipGPU,
+    openvm_stark_backend::{p3_air::BaseAir, prover::types::AirProvingContext, Chip},
+    openvm_stark_sdk::{
+        config::FriParameters, dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
+    },
+    stark_backend_gpu::{
+        base::DeviceMatrix,
+        cuda::copy::MemCopyH2D as _,
+        engine::GpuBabyBearPoseidon2Engine,
+        types::{F, SC},
+    },
+};
+
+pub mod dummy;
 
 #[test]
 fn test_variable_range_checker_chip_send() {
@@ -238,4 +254,99 @@ fn negative_test_variable_range_checker_chip_range_check() {
         Some(VerificationError::ChallengePhaseError),
         "Expected constraint to fail"
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_var_range() {
+    const RANGE_MAX_BITS: usize = 10;
+    const RANGE_BIT_MASK: u32 = (1 << RANGE_MAX_BITS) - 1;
+    const NUM_INPUTS: usize = 1 << 16;
+
+    let mut rng = create_seeded_rng();
+    let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
+    let random_values: Vec<u32> = (0..NUM_INPUTS)
+        .map(|_| rng.gen::<u32>() & RANGE_BIT_MASK)
+        .collect();
+
+    let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(bus));
+    let dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), random_values);
+
+    let airs: Vec<AirRef<SC>> = vec![
+        Arc::new(DummyInteractionAir::new(2, true, bus.index())),
+        Arc::new(VariableRangeCheckerAir::new(bus)),
+    ];
+    let ctxs = vec![
+        dummy_chip.generate_proving_ctx(()),
+        range_checker.generate_proving_ctx(()),
+    ];
+
+    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    engine.run_test(airs, ctxs).expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_var_range_hybrid() {
+    const RANGE_MAX_BITS: usize = 10;
+    const RANGE_BIT_MASK: u32 = (1 << RANGE_MAX_BITS) - 1;
+    const NUM_INPUTS: usize = 1 << 16;
+
+    let mut rng = create_seeded_rng();
+    let bus = VariableRangeCheckerBus::new(1, RANGE_MAX_BITS);
+    let range_checker = Arc::new(VariableRangeCheckerChipGPU::hybrid(Arc::new(
+        VariableRangeCheckerChip::new(bus),
+    )));
+
+    let gpu_random_values: Vec<u32> = (0..NUM_INPUTS)
+        .map(|_| rng.gen::<u32>() & RANGE_BIT_MASK)
+        .collect();
+    let gpu_dummy_chip = DummyInteractionChipGPU::new(range_checker.clone(), gpu_random_values);
+
+    let cpu_chip = range_checker.cpu_chip.clone().unwrap();
+    let cpu_pairs = (0..NUM_INPUTS)
+        .map(|_| {
+            let bits = rng.gen_range(0..=(RANGE_MAX_BITS as u32));
+            let mask = (1 << bits) - 1;
+            let value = rng.gen::<u32>() & mask;
+            cpu_chip.add_count(value, bits as usize);
+            [value, bits]
+        })
+        .collect::<Vec<_>>();
+    let cpu_dummy_trace = (0..NUM_INPUTS)
+        .map(|_| F::ONE)
+        .chain(
+            cpu_pairs
+                .iter()
+                .map(|pair| F::from_canonical_u32(pair[0]))
+                .chain(cpu_pairs.iter().map(|pair| F::from_canonical_u32(pair[1]))),
+        )
+        .collect::<Vec<_>>()
+        .to_device()
+        .unwrap();
+
+    let dummy_air = DummyInteractionAir::new(2, true, bus.index());
+    let cpu_proving_ctx = AirProvingContext {
+        cached_mains: vec![],
+        common_main: Some(DeviceMatrix::new(
+            Arc::new(cpu_dummy_trace),
+            NUM_INPUTS,
+            BaseAir::<F>::width(&dummy_air),
+        )),
+        public_values: vec![],
+    };
+
+    let airs: Vec<AirRef<SC>> = vec![
+        Arc::new(dummy_air),
+        Arc::new(dummy_air),
+        Arc::new(VariableRangeCheckerAir::new(bus)),
+    ];
+    let ctxs = vec![
+        cpu_proving_ctx,
+        gpu_dummy_chip.generate_proving_ctx(()),
+        range_checker.generate_proving_ctx(()),
+    ];
+
+    let engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    engine.run_test(airs, ctxs).expect("Verification failed");
 }

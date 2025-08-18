@@ -17,10 +17,13 @@ use openvm_stark_backend::{
 };
 
 mod bus;
+pub use bus::*;
+
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
 #[cfg(test)]
 mod tests;
-
-pub use bus::*;
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]

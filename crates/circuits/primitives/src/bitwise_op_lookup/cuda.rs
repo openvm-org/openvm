@@ -1,8 +1,5 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupChip, NUM_BITWISE_OP_LOOKUP_COLS,
-};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use stark_backend_gpu::{
     base::DeviceMatrix,
@@ -11,10 +8,10 @@ use stark_backend_gpu::{
     types::F,
 };
 
-use crate::primitives::cuda::bitwise_op_lookup::tracegen;
-
-#[cfg(test)]
-mod tests;
+use crate::{
+    bitwise_op_lookup::{BitwiseOperationLookupChip, NUM_BITWISE_OP_LOOKUP_COLS},
+    cuda_abi::bitwise_op_lookup::tracegen,
+};
 
 pub struct BitwiseOperationLookupChipGPU<const NUM_BITS: usize> {
     pub count: Arc<DeviceBuffer<F>>,
