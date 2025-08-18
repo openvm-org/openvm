@@ -6,10 +6,9 @@ fn main() {
     }
 
     let common = CudaBuilder::new()
-        .include_from_dep("DEP_CUDA_COMMON_INCLUDE")  // Import headers
+        .include_from_dep("DEP_CUDA_COMMON_INCLUDE") // Import headers
         .include("../../cuda-includes")
         .include("../circuits/primitives/cuda/include")
-        // TODO: we need to reference the new ones? Like crates/circuits/primitives/cuda/include?
         .watch("cuda")
         .watch("src/cuda");
 

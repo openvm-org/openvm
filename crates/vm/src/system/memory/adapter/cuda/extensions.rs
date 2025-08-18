@@ -14,6 +14,13 @@ use openvm_circuit_primitives::{
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
 
+use super::phantom::PhantomChipGPU;
+use super::Poseidon2PeripheryChipGPU;
+use super::SystemChipInventoryGPU;
+use super::DIGEST_WIDTH;
+use openvm_circuit_primitives::bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU;
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine;
 use openvm_cuda_backend::prover_backend::GpuBackend;
 
 /// A utility method to get the `VariableRangeCheckerChipGPU` from [ChipInventory].

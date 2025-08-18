@@ -1,11 +1,13 @@
 use std::mem::size_of;
 
+use crate::cuda_abi::phantom;
 use derive_new::new;
 use openvm_circuit::{
     arch::DenseRecordArena,
     system::phantom::{PhantomCols, PhantomRecord},
     utils::next_power_of_two_or_zero,
 };
+use openvm_cuda_backend::chip::get_empty_air_proving_ctx;
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
@@ -38,7 +40,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
         unsafe {
-            cuda_abi::phantom::tracegen(
+            phantom::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),

@@ -1,4 +1,6 @@
-use std::sync::{atomic::AtomicUsize, Arc};
+use std::sync::Arc;
+#[cfg(feature = "metrics")]
+use std::sync::AtomicUsize;
 
 use openvm_circuit::{
     system::poseidon2::columns::Poseidon2PeripheryCols, utils::next_power_of_two_or_zero,

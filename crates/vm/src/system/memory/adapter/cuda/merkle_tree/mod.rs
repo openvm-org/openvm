@@ -1,5 +1,8 @@
 use std::{ffi::c_void, sync::Arc};
 
+use super::poseidon2::SharedBuffer;
+use super::Poseidon2PeripheryChipGPU;
+use super::DIGEST_WIDTH;
 use openvm_circuit::{
     arch::{MemoryConfig, ADDR_SPACE_OFFSET},
     system::memory::{merkle::MemoryMerkleCols, TimestampedEquipartition},

@@ -121,8 +121,8 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
         let program_ctx = self.program.generate_proving_ctx(filtered_exec_frequencies);
 
-        self.connector.begin(from_state);
-        self.connector.end(to_state, exit_code);
+        self.connector.cpu_chip.begin(from_state);
+        self.connector.cpu_chip.end(to_state, exit_code);
         let connector_ctx = self.connector.generate_proving_ctx(());
 
         let pv_ctx = self.public_values.as_mut().map(|chip| {

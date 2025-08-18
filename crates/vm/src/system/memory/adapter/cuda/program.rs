@@ -1,5 +1,6 @@
 use std::{mem::size_of, sync::Arc};
 
+use crate::cuda_abi::program;
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
 use openvm_cuda_backend::{
     base::DeviceMatrix, gpu_device::GpuDevice, prover_backend::GpuBackend, types::F,
@@ -57,7 +58,7 @@ impl ProgramChipGPU {
 
         let trace = DeviceMatrix::<F>::with_capacity(height, size_of::<ProgramExecutionCols<u8>>());
         unsafe {
-            cuda_abi::program::cached_tracegen(
+            program::cached_tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),

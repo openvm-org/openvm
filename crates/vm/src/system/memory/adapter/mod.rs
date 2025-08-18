@@ -41,7 +41,7 @@ use crate::{
 mod air;
 mod columns;
 #[cfg(feature = "cuda")]
-mod cuda;
+pub mod cuda;
 pub mod records;
 
 #[derive(Setters)]

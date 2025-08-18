@@ -1,5 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
+use crate::system::memory::adapter::cuda::access_adapters::OffsetInfo;
+use crate::system::memory::adapter::cuda::access_adapters::NUM_ADAPTERS;
 use openvm_cuda_backend::prelude::F;
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},

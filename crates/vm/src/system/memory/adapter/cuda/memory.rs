@@ -1,5 +1,12 @@
 use std::sync::Arc;
 
+use super::access_adapters::AccessAdapterInventoryGPU;
+use super::boundary::BoundaryChipGPU;
+use super::boundary::BoundaryFields;
+use super::merkle_tree::MemoryMerkleTree;
+use super::merkle_tree::TIMESTAMPED_BLOCK_WIDTH;
+use super::Poseidon2PeripheryChipGPU;
+use super::DIGEST_WIDTH;
 use openvm_circuit::{
     arch::{AddressSpaceHostLayout, DenseRecordArena, MemoryConfig, ADDR_SPACE_OFFSET},
     system::{
@@ -7,6 +14,7 @@ use openvm_circuit::{
         TouchedMemory,
     },
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},

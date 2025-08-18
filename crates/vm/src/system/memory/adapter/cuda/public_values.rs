@@ -15,6 +15,11 @@ use openvm_stark_backend::{
     Chip,
 };
 
+use crate::cuda_abi::public_values;
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::base::DeviceMatrix;
+use openvm_cuda_backend::chip::get_empty_air_proving_ctx;
+use openvm_cuda_backend::prover_backend::GpuBackend;
 use openvm_cuda_common::copy::MemCopyH2D;
 
 #[repr(C)]
@@ -75,7 +80,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
         unsafe {
-            cuda::public_values::tracegen(
+            public_values::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
