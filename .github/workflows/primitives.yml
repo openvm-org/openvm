@@ -26,13 +26,12 @@ jobs:
     strategy:
       matrix:
         config:
-          - { runner: "32cpu-linux-arm64", image: "ubuntu24-full-arm64" }
-          - { runner: "gpu-small", image: "ubuntu24-gpu-x64" }
+          - { runner: "32cpu-arm64" }
+          - { runner: "gpu-small-x64" }
 
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=${{ matrix.config.runner }}
-      - image=${{ matrix.config.image }}
       - extras=s3-cache
 
     steps:
@@ -45,13 +44,13 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Set CPU tests environment variables
-        if: matrix.config.runner != 'gpu-small'
+        if: matrix.config.runner != 'gpu-small-x64'
         run: |
           echo "NEXTEST_ENV=" >> $GITHUB_ENV
           echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
 
       - name: Check CUDA status and set environment variables
-        if: matrix.config.runner == 'gpu-small'
+        if: matrix.config.runner == 'gpu-small-x64'
         run: |
           nvidia-smi
           nvidia-smi -L
@@ -71,13 +70,13 @@ jobs:
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for sha256-air
-        if: matrix.config.runner != 'gpu-small'
+        if: matrix.config.runner != 'gpu-small-x64'
         working-directory: crates/circuits/sha256-air
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for mod-builder
-        if: matrix.config.runner != 'gpu-small'
+        if: matrix.config.runner != 'gpu-small-x64'
         working-directory: crates/circuits/mod-builder
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
