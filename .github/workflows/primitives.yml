@@ -58,7 +58,7 @@ jobs:
           nvcc --version
 
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
-          echo "NEXTEST_ARGS=cuda --features parallel,cuda --no-tests=pass" >> $GITHUB_ENV
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda" >> $GITHUB_ENV
 
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives
@@ -71,11 +71,13 @@ jobs:
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }} 
 
       - name: Run tests for sha256-air
+        if: matrix.config.family != 'g6.xlarge'
         working-directory: crates/circuits/sha256-air
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for mod-builder
+        if: matrix.config.family != 'g6.xlarge'
         working-directory: crates/circuits/mod-builder
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
