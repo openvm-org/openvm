@@ -83,7 +83,7 @@ jobs:
           clean: false
 
       - name: Build tagged CLI
-        run: cargo install --force --locked --path crates/cli
+        run: cargo install --force --locked --path crates/cli --bin cargo-openvm
 
       - name: Run setup from tagged version
         run: |
