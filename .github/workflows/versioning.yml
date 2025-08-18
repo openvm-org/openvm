@@ -50,19 +50,19 @@ jobs:
           rm -rf ~/.openvm-base
           mv ~/.openvm ~/.openvm-base
 
-      # - name: Build and keygen examples from base branch
-      #   run: |
-      #     mkdir -p ./base-outputs/examples
-      #     for example in examples/*/; do
-      #       if [ -f "$example/Cargo.toml" ]; then
-      #         example_name=$(basename "$example")
-      #         echo "Building and generating keys for example: $example_name"
-      #         cd "$example"
-      #         # cargo openvm build --no-transpile
-      #         cargo openvm keygen --output-dir "../../base-outputs/examples/$example_name"
-      #         cd ../..
-      #       fi
-      #     done
+      - name: Build and keygen examples from base branch
+        run: |
+          mkdir -p ./base-outputs/examples
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Building and generating keys for example: $example_name"
+              cd "$example"
+              # cargo openvm build --no-transpile
+              cargo openvm keygen --output-dir "../../base-outputs/examples/$example_name"
+              cd ../..
+            fi
+          done
 
       - name: Build and keygen benchmarks from base branch
         run: |
@@ -92,20 +92,21 @@ jobs:
         run: |
           cargo openvm setup --evm
 
-      # - name: Build and keygen examples from tagged version
-      #   run: |
-      #     mkdir -p ./tagged-outputs/examples
-      #     for example in examples/*/; do
-      #       if [ -f "$example/Cargo.toml" ]; then
-      #         example_name=$(basename "$example")
-      #         echo "Building and generating keys for example: $example_name"
-      #         cd "$example"
-      #         # cargo openvm build --no-transpile
-      #         mkdir -p "../../tagged-outputs/examples/$example_name"
-      #         cargo openvm keygen --output-dir "../../tagged-outputs/examples/$example_name/app.vk"
-      #         cd ../..
-      #       fi
-      #     done
+      - name: Build and keygen examples from tagged version
+        run: |
+          mkdir -p ./tagged-outputs/examples
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Building and generating keys for example: $example_name"
+              cd "$example"
+              # cargo openvm build --no-transpile
+              mkdir -p "../../tagged-outputs/examples/$example_name"
+              cargo openvm keygen --output-dir "../../tagged-outputs/examples/$example_name/app.vk"
+              $HOME/convert_vkey --path "../../tagged-outputs/examples/$example_name/app.vk"
+              cd ../..
+            fi
+          done
 
       - name: Build and keygen benchmarks from tagged version
         run: |
@@ -123,28 +124,28 @@ jobs:
             fi
           done
 
-      # - name: Compare example verification keys
-      #   run: |
-      #     echo "Comparing example verification keys between base branch and ${{ env.version }}..."
-      #     failed=0
-      #     for example in examples/*/; do
-      #       if [ -f "$example/Cargo.toml" ]; then
-      #         example_name=$(basename "$example")
-      #         echo "Checking example: $example_name"
-      #         if cmp "./base-outputs/examples/$example_name/app.vk" "./tagged-outputs/examples/$example_name/app.vk"; then
-      #           echo "✅ $example_name verification keys are identical"
-      #         else
-      #           echo "❌ $example_name verification keys differ"
-      #           failed=1
-      #         fi
-      #       fi
-      #     done
-      #     if [ $failed -eq 1 ]; then
-      #       echo "❌ Some example verification keys differ - versioning policy violated"
-      #       exit 1
-      #     else
-      #       echo "✅ All example verification keys are identical"
-      #     fi
+      - name: Compare example verification keys
+        run: |
+          echo "Comparing example verification keys between base branch and ${{ env.version }}..."
+          failed=0
+          for example in examples/*/; do
+            if [ -f "$example/Cargo.toml" ]; then
+              example_name=$(basename "$example")
+              echo "Checking example: $example_name"
+              if cmp "./base-outputs/examples/$example_name/app.vk" "./tagged-outputs/examples/$example_name/app.1.vk"; then
+                echo "✅ $example_name verification keys are identical"
+              else
+                echo "❌ $example_name verification keys differ"
+                failed=1
+              fi
+            fi
+          done
+          if [ $failed -eq 1 ]; then
+            echo "❌ Some example verification keys differ - versioning policy violated"
+            exit 1
+          else
+            echo "✅ All example verification keys are identical"
+          fi
 
       - name: Compare benchmark verification keys
         run: |
@@ -176,21 +177,22 @@ jobs:
 
           failed=0
 
-          # Compare agg_stark.pk
-          if cmp ~/.openvm-base/agg_stark.pk ~/.openvm/agg_stark.pk; then
-            echo "✅ agg_stark.pk are identical"
-          else
-            echo "❌ agg_stark.pk differ"
-            failed=1
-          fi
+          # pk format changed in what was in VmCommittedExe
+          # # Compare agg_stark.pk
+          # if cmp ~/.openvm-base/agg_stark.pk ~/.openvm/agg_stark.pk; then
+          #   echo "✅ agg_stark.pk are identical"
+          # else
+          #   echo "❌ agg_stark.pk differ"
+          #   failed=1
+          # fi
 
-          # Compare agg_halo2.pk
-          if cmp ~/.openvm-base/agg_halo2.pk ~/.openvm/agg_halo2.pk; then
-            echo "✅ agg_halo2.pk are identical"
-          else
-            echo "❌ agg_halo2.pk differ"
-            failed=1
-          fi
+          # # Compare agg_halo2.pk
+          # if cmp ~/.openvm-base/agg_halo2.pk ~/.openvm/agg_halo2.pk; then
+          #   echo "✅ agg_halo2.pk are identical"
+          # else
+          #   echo "❌ agg_halo2.pk differ"
+          #   failed=1
+          # fi
 
           # Compare halo2 directories recursively
           if diff -r ~/.openvm-base/halo2 ~/.openvm/halo2; then
