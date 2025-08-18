@@ -16,6 +16,9 @@ pub enum Cargo {
 pub struct VmCli {
     #[command(subcommand)]
     pub command: VmCliCommands,
+
+    #[arg(long)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]
@@ -36,7 +39,13 @@ pub enum VmCliCommands {
 async fn main() -> Result<()> {
     let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
-    setup_tracing_with_log_level(Level::INFO);
+    let log_level = if args.verbose {
+        Level::INFO
+    } else {
+        Level::WARN
+    };
+    setup_tracing_with_log_level(log_level);
+
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),
         VmCliCommands::Commit(cmd) => cmd.run(),
