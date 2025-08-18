@@ -133,6 +133,15 @@ where
             self.vm_config().as_ref().continuation_enabled,
             "Use generate_app_proof_without_continuations instead."
         );
+        if self.vm_config().as_ref().max_constraint_degree
+            != self.instance.vm.engine.fri_params().max_constraint_degree()
+        {
+            tracing::warn!(
+                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
+                self.vm_config().as_ref().max_constraint_degree,
+                self.instance.vm.engine.fri_params().max_constraint_degree()
+            );
+        }
         let proofs = info_span!(
             "app proof",
             group = self

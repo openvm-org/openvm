@@ -124,6 +124,20 @@ where
         &mut self,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
+        if self.leaf_prover.vm.config().as_ref().max_constraint_degree
+            != self
+                .leaf_prover
+                .vm
+                .engine
+                .fri_params()
+                .max_constraint_degree()
+        {
+            tracing::warn!(
+                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
+                self.leaf_prover.vm.config().as_ref().max_constraint_degree,
+                self.leaf_prover.vm.engine.fri_params().max_constraint_degree()
+            );
+        }
         self.leaf_controller
             .generate_proof(&mut self.leaf_prover, app_proofs)
     }
@@ -146,6 +160,21 @@ where
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
     ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
+        if self.leaf_prover.vm.config().as_ref().max_constraint_degree
+            != self
+                .leaf_prover
+                .vm
+                .engine
+                .fri_params()
+                .max_constraint_degree()
+        {
+            tracing::warn!(
+                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
+                self.leaf_prover.vm.config().as_ref().max_constraint_degree,
+                self.leaf_prover.vm.engine.fri_params().max_constraint_degree()
+            );
+        }
+
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;

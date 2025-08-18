@@ -667,16 +667,6 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        // TODO(ayush): why does engine return an Option?
-        if self.config().as_ref().max_constraint_degree
-            != self.engine.max_constraint_degree().unwrap()
-        {
-            tracing::warn!(
-                "config.max_constraint_degree ({}) != engine.max_constraint_degree() ({})",
-                self.config().as_ref().max_constraint_degree,
-                self.engine.max_constraint_degree().unwrap()
-            );
-        }
         self.transport_init_memory_to_device(&state.memory);
 
         let PreflightExecutionOutput {
