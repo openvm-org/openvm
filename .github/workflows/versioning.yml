@@ -195,7 +195,7 @@ jobs:
           # fi
 
           # Compare halo2 directories recursively
-          if diff -r ~/.openvm-base/halo2 ~/.openvm/halo2; then
+          if diff -r ~/.openvm-base/halo2/src/v1.4 ~/.openvm/halo2/src/v1.3; then
             echo "✅ halo2 directories are identical"
           else
             echo "❌ halo2 directories differ"
