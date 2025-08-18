@@ -26,6 +26,10 @@ itertools.workspace = true
 # CUDA dependencies (only included when cuda feature is enabled)
 stark-backend-gpu = { workspace = true, optional = true }
 cuda-runtime-sys = { workspace = true, optional = true }
+openvm-cuda-common.workspace = true
+
+[build-dependencies]
+openvm-cuda-builder.workspace = true
 
 [dev-dependencies]
 openvm-circuit-primitives = { workspace = true }

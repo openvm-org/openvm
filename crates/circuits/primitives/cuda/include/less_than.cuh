@@ -1,7 +1,7 @@
 #pragma once
 
 #include "histogram.cuh"
-#include "poseidon2/fp_array.cuh"
+#include "fp_array.cuh"
 
 static const size_t AUX_LEN = 2;
 

@@ -1734,6 +1734,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e93abca9e28e0a1b9877922aacb20576e05d4679ffa78c3d6dc22a26a216659"
 
 [[package]]
+name = "bytesize"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3c8f83209414aacf0eeae3cf730b18d6981697fba62f200fcfb92b9f082acba"
+
+[[package]]
 name = "bzip2"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4432,7 +4438,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -5371,6 +5377,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-cuda-builder"
+version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+dependencies = [
+ "cc",
+ "glob",
+]
+
+[[package]]
+name = "openvm-cuda-common"
+version = "1.2.0-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e6130ee864ae28776519b799873c5429ab43bcc8"
+dependencies = [
+ "bytesize 2.0.1",
+ "lazy_static",
+ "metrics",
+ "openvm-cuda-builder",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-custom-insn"
 version = "0.1.0"
 dependencies = [
@@ -5603,6 +5631,8 @@ dependencies = [
  "num-traits",
  "openvm-circuit",
  "openvm-circuit-primitives",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
  "openvm-instructions",
  "openvm-pairing-guest",
  "openvm-stark-backend",
@@ -8585,11 +8615,11 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stark-backend-gpu"
 version = "0.1.0"
-source = "git+https://github.com/axiom-crypto/axiom-gpu.git#b13f43c5abea574f50e88506e06ae6b91a02ac4c"
+source = "git+https://github.com/axiom-crypto/axiom-gpu.git#7a42a76bbfdc66bfd28a7af9e8f82b251965c141"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
- "bytesize",
+ "bytesize 1.3.3",
  "cc",
  "derivative",
  "derive-new 0.6.0",

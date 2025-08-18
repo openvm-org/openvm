@@ -1,11 +1,11 @@
 #include "fp.h"
 #include "launcher.cuh"
-#include "../include/bigint_ops.cuh"
-#include "../include/expr_codec.cuh"
-#include "../include/meta.cuh"
-#include "../include/overflow_ops.cuh"
-#include "../include/records.cuh"
-#include "../include/rv32_vec_heap_router.cuh"
+#include "bigint_ops.cuh"
+#include "expr_codec.cuh"
+#include "meta.cuh"
+#include "overflow_ops.cuh"
+#include "records.cuh"
+#include "rv32_vec_heap_router.cuh"
 #include "trace_access.h"
 #include <cstdint>
 

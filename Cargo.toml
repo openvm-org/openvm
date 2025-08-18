@@ -253,6 +253,10 @@ sha2 = { version = "0.10", default-features = false }
 
 # specific to CUDA and GPU
 cuda-runtime-sys = "0.3.0-alpha.1"
+# Cuda related stuff
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/gpu", default-features = false }
 
 # For local development. Add to your `.cargo/config.toml`
 # [patch."https://github.com/Plonky3/Plonky3.git"]
