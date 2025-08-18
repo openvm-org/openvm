@@ -12,7 +12,7 @@ pub enum Cargo {
 }
 
 #[derive(clap::Args)]
-#[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = OPENVM_VERSION_MESSAGE)]
+#[command(author, about, long_about = None, version = OPENVM_VERSION_MESSAGE)]
 pub struct VmCli {
     #[command(subcommand)]
     pub command: VmCliCommands,
