@@ -300,7 +300,7 @@ impl<A> FieldExpressionExecutor<A> {
             opcode_flag_idx
         };
         assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
-        tracing::info!(
+        tracing::debug!(
             "FieldExpressionCoreExecutor: opcode={name}, main_width={}",
             BaseAir::<BabyBear>::width(&expr)
         );
