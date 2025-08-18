@@ -23,10 +23,16 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        config:
+          - { runner: "32cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "g6.xlarge", image: "ubuntu22-gpu-x64" }
+
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=32cpu-linux-arm64
-      - image=ubuntu24-full-arm64
+      - runner=${{ matrix.config.runner }}
+      - image=${{ matrix.config.image }}
       - extras=s3-cache
 
     steps:
@@ -38,22 +44,45 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Check CUDA status
+        if: matrix.config.runner == 'g6.xlarge'
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+
       - name: Run tests for primitives
+        if: matrix.config.runner != 'g6.xlarge'
         working-directory: crates/circuits/primitives
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 
+      - name: Run CUDA tests for primitives
+        if: matrix.config.runner == 'g6.xlarge'
+        working-directory: crates/circuits/primitives
+        run: |
+          CUDA_OPT_LEVEL=1 cargo nextest run --features parallel,cuda,touchemall --filter-expr 'test(~"cuda")'
+
       - name: Run tests for poseidon2-air
+        if: matrix.config.runner != 'g6.xlarge'
         working-directory: crates/circuits/poseidon2-air
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 
+      - name: Run CUDA tests for poseidon2-air
+        if: matrix.config.runner == 'g6.xlarge'
+        working-directory: crates/circuits/poseidon2-air
+        run: |
+          CUDA_OPT_LEVEL=1 cargo nextest run --features parallel,cuda,touchemall --filter-expr 'test(~"cuda")'
+
       - name: Run tests for sha256-air
+        if: matrix.config.runner != 'g6.xlarge'
         working-directory: crates/circuits/sha256-air
         run: |
           cargo nextest run --cargo-profile fast --features parallel
 
       - name: Run tests for mod-builder
+        if: matrix.config.runner != 'g6.xlarge'
         working-directory: crates/circuits/mod-builder
         run: |
           cargo nextest run --cargo-profile fast --features parallel
