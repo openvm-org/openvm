@@ -61,9 +61,9 @@ The above applies to the Rust `std` library. Users should also be aware that whe
 
 To use the standard library, you must enable the `"std"` feature in the `openvm` crate. This is **not** one of the default features.
 
-**Note**: If you write a program that only imports `openvm` in `Cargo.toml` but does not import it anywhere in your crate, the Rust linker may optimize away the dependency, which will cause a compile error. To fix this, you may need to explicitly import the `openvm` crate in your code.
-
-### When to use `std` vs `no_std`
+:::note
+If you write a program that only imports `openvm` in `Cargo.toml` but does not import it anywhere in your crate, the Rust linker may optimize away the dependency, which will cause a compile error. To fix this, you may need to explicitly import the `openvm` crate in your code.
+:::
 
 Due to the limitations described above, our general recommendation is that developers should write OpenVM library crates as Rust `no_std` libraries when possible (see [below](#writing-no_std-rust)).
 Binary crates can generally be written using the standard library, although for more control over the expected behavior, we provide [entrypoints](#no_std-binary-crates) for writing `no_std` binaries.
