@@ -151,8 +151,8 @@ where
 //
 //         if wrapper_count >= agg_prover.max_internal_wrapper_layers {
 //             panic!(
-//                 "The heights of the root verifier still exceed the required heights after {} internal layers",
-//                 agg_prover.max_internal_wrapper_layers
+//                 "The heights of the root verifier still exceed the required heights after {}
+// internal layers",                 agg_prover.max_internal_wrapper_layers
 //             );
 //         }
 //
@@ -365,7 +365,8 @@ fn main() -> Result<()> {
         //     program = %program,
         //     leaf_proofs = leaf_proofs.len(),
         //     total_internals = total_internals,
-        //     "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, root.pk, app.proof, {} leaf proofs, {} internal proofs, root.input, and root.proof",
+        //     "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk,
+        // root.pk, app.proof, {} leaf proofs, {} internal proofs, root.input, and root.proof",
         //     program,
         //     leaf_proofs.len(),
         //     total_internals
