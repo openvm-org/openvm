@@ -36,11 +36,11 @@ derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
-openvm-cuda-common.workspace = true
-openvm-cuda-backend.workspace = true
+openvm-cuda-common = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
 
 [build-dependencies]
-openvm-cuda-builder.workspace = true
+openvm-cuda-builder = { workspace = true, optional = true }
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true
@@ -80,4 +80,9 @@ mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk/nightly-features"]
-cuda = ["openvm-circuit-primitives/cuda"]
+cuda = [
+    "openvm-circuit-primitives/cuda",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-builder",
+]
