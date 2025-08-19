@@ -288,23 +288,14 @@ fn main() -> Result<()> {
     }
 
     tracing::info!("Generating internal proofs");
-    let (final_internal_proof, internal_proof_count) =
-        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
-
-    // Save final internal proof
-    write_fixture(
-        fixtures_dir.join(format!(
-            "{}.internal.{}.proof",
-            PROGRAM, internal_proof_count
-        )),
-        &final_internal_proof,
-        &format!("final internal proof {}", internal_proof_count),
-    )?;
 
     #[cfg(feature = "evm-prove")]
-    let mut total_internals = internal_proof_count + 1; // +1 for final_internal_proof
+    let (final_internal_proof, mut total_internals) =
+        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
+
     #[cfg(not(feature = "evm-prove"))]
-    let total_internals = internal_proof_count + 1; // +1 for final_internal_proof
+    let (_, total_internals) =
+        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
 
     #[cfg(feature = "evm-prove")]
     {
@@ -315,7 +306,7 @@ fn main() -> Result<()> {
             &mut agg_prover,
             final_internal_proof,
             public_values,
-            internal_proof_count + 1, // Start wrapper indices after final internal proof
+            internal_proof_count, // Start wrapper indices after all internal proofs
             &fixtures_dir,
         )?;
 
