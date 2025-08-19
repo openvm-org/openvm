@@ -36,8 +36,9 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
         }
 
         // Parse U-type instruction format
-        let dec_insn = UType::new(instruction_u32);
+        let mut dec_insn = UType::new(instruction_u32);
         let shift = dec_insn.imm >> 12;
+        dec_insn.rd = 1; // avoid using x0, otherwise we get nop()
 
         // Validate shift value (0, 1, 2, or 3)
         if ![0, 1, 2, 3].contains(&shift) {

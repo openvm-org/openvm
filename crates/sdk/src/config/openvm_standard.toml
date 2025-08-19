@@ -3,6 +3,7 @@
 [app_vm_config.io]
 
 [app_vm_config.keccak]
+[app_vm_config.memcpy]
 [app_vm_config.sha256]
 [app_vm_config.bigint]
 
