@@ -20,15 +20,12 @@ use openvm_circuit::{
     derive::VmConfig,
     system::*,
 };
-use openvm_continuations::{
-    verifier::{common::types::VmVerifierPvs, leaf::types::LeafVmVerifierInput},
-    SC,
-};
+use openvm_continuations::{verifier::leaf::types::LeafVmVerifierInput, SC};
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
@@ -40,7 +37,7 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::config::{DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE};
+use openvm_sdk::config::{AggregationConfig, DEFAULT_NUM_CHILDREN_LEAF};
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
@@ -313,16 +310,13 @@ fn setup_leaf_verifier() -> (
     let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
     let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
-    let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
+    let leaf_inputs =
+        LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, DEFAULT_NUM_CHILDREN_LEAF);
     let leaf_input = leaf_inputs.first().expect("No leaf input available");
 
-    let config = NativeConfig::aggregation(
-        VmVerifierPvs::<u8>::width(),
-        SBOX_SIZE.min(FriParameters::standard_fast().max_constraint_degree()),
-    );
-    let fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_LEAF_LOG_BLOWUP);
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let agg_config = AggregationConfig::default();
+    let config = agg_config.leaf_vm_config();
+    let engine = BabyBearPoseidon2Engine::new(agg_config.leaf_fri_params);
     let d_pk = engine.device().transport_pk_to_device(&leaf_pk);
     let vm = VirtualMachine::new(engine, NativeCpuBuilder, config, d_pk).unwrap();
     let input_stream = leaf_input.write_to_stream();

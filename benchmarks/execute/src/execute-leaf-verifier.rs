@@ -4,14 +4,11 @@ use clap::{arg, Parser, ValueEnum};
 use eyre::Result;
 use openvm_benchmarks_utils::get_fixtures_dir;
 use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VirtualMachine};
-use openvm_continuations::{
-    verifier::{common::types::VmVerifierPvs, leaf::types::LeafVmVerifierInput},
-    SC,
-};
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_sdk::config::{DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE};
+use openvm_continuations::{verifier::leaf::types::LeafVmVerifierInput, SC};
+use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_sdk::config::{AggregationConfig, DEFAULT_NUM_CHILDREN_LEAF};
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
     openvm_stark_backend::prover::hal::DeviceDataTransporter,
     p3_baby_bear::BabyBear,
@@ -59,16 +56,13 @@ fn main() -> Result<()> {
     let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.pk", PROGRAM_NAME))).unwrap();
     let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
-    let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, 2);
+    let leaf_inputs =
+        LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, DEFAULT_NUM_CHILDREN_LEAF);
     let leaf_input = leaf_inputs.first().expect("No leaf input available");
 
-    let config = NativeConfig::aggregation(
-        VmVerifierPvs::<u8>::width(),
-        SBOX_SIZE.min(FriParameters::standard_fast().max_constraint_degree()),
-    );
-    let fri_params =
-        FriParameters::standard_with_100_bits_conjectured_security(DEFAULT_LEAF_LOG_BLOWUP);
-    let engine = BabyBearPoseidon2Engine::new(fri_params);
+    let agg_config = AggregationConfig::default();
+    let config = agg_config.leaf_vm_config();
+    let engine = BabyBearPoseidon2Engine::new(agg_config.leaf_fri_params);
     let d_pk = engine.device().transport_pk_to_device(&leaf_pk);
     let vm = VirtualMachine::new(engine, NativeCpuBuilder, config, d_pk)?;
     let input_stream = leaf_input.write_to_stream();

@@ -5174,6 +5174,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-continuations",
  "openvm-native-circuit",
+ "openvm-native-recursion",
  "openvm-sdk",
  "openvm-stark-sdk",
  "openvm-transpiler",

@@ -1,26 +1,82 @@
-use std::{fs, sync::Arc};
+use std::fs;
 
 use eyre::Result;
 use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, read_elf_file};
-use openvm_circuit::arch::{instructions::exe::VmExe, VmCircuitConfig};
-use openvm_continuations::verifier::common::types::VmVerifierPvs;
-use openvm_native_circuit::NativeConfig;
+use openvm_circuit::arch::{
+    PreflightExecutor, SingleSegmentVmProver, VmBuilder, VmExecutionConfig,
+};
+use openvm_continuations::verifier::internal::types::{InternalVmVerifierInput, VmStarkProof};
+use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_recursion::hints::Hintable;
 use openvm_sdk::{
-    commit::commit_app_exe,
-    config::{
-        AppConfig, AppFriParams, LeafFriParams, SdkVmConfig, SdkVmCpuBuilder,
-        DEFAULT_APP_LOG_BLOWUP, DEFAULT_LEAF_LOG_BLOWUP, SBOX_SIZE,
-    },
-    Sdk, StdIn,
+    codec::Encode,
+    config::{AggregationTreeConfig, AppConfig, AppFriParams, SdkVmConfig},
+    prover::AggStarkProver,
+    Sdk, StdIn, F, SC,
 };
-use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
-    engine::StarkFriEngine,
-};
-use openvm_transpiler::FromElf;
+use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
+use tracing::info_span;
 use tracing_subscriber::{fmt, EnvFilter};
 
 const PROGRAM: &str = "kitchen-sink";
+
+fn aggregate_leaf_proofs_and_collect_internals<E, NativeBuilder>(
+    agg_prover: &mut AggStarkProver<E, NativeBuilder>,
+    leaf_proofs: Vec<Proof<SC>>,
+    public_values: Vec<F>,
+) -> Result<(VmStarkProof<SC>, Vec<Proof<SC>>)>
+where
+    E: StarkFriEngine<SC = SC>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+{
+    let mut internal_node_idx = -1;
+    let mut internal_node_height = 0;
+    let mut all_internal_proofs = Vec::new();
+    let mut proofs = leaf_proofs;
+
+    // We will always generate at least one internal proof, even if there is only one leaf
+    // proof, in order to shrink the proof size
+    while proofs.len() > 1 || internal_node_height == 0 {
+        let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
+            (*agg_prover.internal_prover.program_commitment()).into(),
+            &proofs,
+            agg_prover.num_children_internal,
+        );
+        proofs = info_span!(
+            "agg_layer",
+            group = format!("internal.{internal_node_height}")
+        )
+        .in_scope(|| {
+            internal_inputs
+                .into_iter()
+                .map(|input| {
+                    internal_node_idx += 1;
+                    info_span!("single_internal_agg", idx = internal_node_idx).in_scope(|| {
+                        SingleSegmentVmProver::prove(
+                            &mut agg_prover.internal_prover,
+                            input.write(),
+                            NATIVE_MAX_TRACE_HEIGHTS,
+                        )
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+        })?;
+
+        // Store internal proofs for fixtures
+        all_internal_proofs.extend(proofs.clone());
+        internal_node_height += 1;
+    }
+
+    let proof = proofs.pop().unwrap();
+    let vm_stark_proof = VmStarkProof {
+        inner: proof,
+        user_public_values: public_values,
+    };
+
+    Ok((vm_stark_proof, all_internal_proofs))
+}
 
 fn main() -> Result<()> {
     // Set up logging
@@ -37,54 +93,43 @@ fn main() -> Result<()> {
     let elf_path = get_elf_path(&program_dir);
     let elf = read_elf_file(&elf_path)?;
 
-    let exe = VmExe::from_elf(elf, vm_config.transpiler())?;
-
-    let sdk = Sdk::new();
-
     // Create app config with default parameters
-    let app_config = AppConfig {
-        app_fri_params: AppFriParams {
-            fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_APP_LOG_BLOWUP,
-            ),
-        },
-        leaf_fri_params: LeafFriParams {
-            fri_params: FriParameters::standard_with_100_bits_conjectured_security(
-                DEFAULT_LEAF_LOG_BLOWUP,
-            ),
-        },
-        app_vm_config: vm_config,
-        compiler_options: Default::default(),
-    };
+    let app_config = AppConfig::new(AppFriParams::default().fri_params, vm_config);
 
-    tracing::info!("Generating app proving key");
-    let app_pk = Arc::new(sdk.app_keygen(app_config.clone())?);
-    let app_committed_exe = commit_app_exe(app_pk.app_fri_params(), exe);
+    let sdk = Sdk::new(app_config.clone())?;
+    let exe = sdk.convert_to_exe(elf)?;
 
     tracing::info!("Generating app proof");
-    let app_proof = sdk.generate_app_proof(
-        SdkVmCpuBuilder,
-        app_pk.clone(),
-        app_committed_exe,
-        StdIn::default(),
+    let app_proof = sdk.app_prover(exe)?.prove(StdIn::default())?;
+
+    tracing::info!("Getting keys");
+    let app_pk = sdk.app_pk();
+    let agg_pk = sdk.agg_pk();
+
+    tracing::info!("Creating aggregation provers");
+    let native_builder = sdk.native_builder().clone();
+    let leaf_verifier_exe = app_pk.leaf_committed_exe.exe.clone();
+
+    let tree_config = AggregationTreeConfig::default();
+    let mut agg_prover = AggStarkProver::new(
+        native_builder.clone(),
+        &agg_pk,
+        leaf_verifier_exe,
+        tree_config,
     )?;
 
-    tracing::info!("Generating leaf proving key");
-    // Generate leaf VM proving key using the circuit keygen approach
-    let leaf_vm_config = NativeConfig::aggregation(
-        VmVerifierPvs::<u8>::width(),
-        SBOX_SIZE.min(
-            app_config
-                .leaf_fri_params
-                .fri_params
-                .max_constraint_degree(),
-        ),
-    );
-    let circuit = leaf_vm_config.create_airs()?;
-    let engine = BabyBearPoseidon2Engine::new(app_config.leaf_fri_params.fri_params);
-    let pk = circuit.keygen(&engine);
+    tracing::info!("Generating leaf proofs");
+    let leaf_proofs = agg_prover.generate_leaf_proofs(&app_proof)?;
 
-    tracing::info!("Saving keys and proof to files");
+    tracing::info!("Generating internal proofs");
+    let public_values = app_proof.user_public_values.public_values.clone();
+    let (final_proof, internal_proofs) = aggregate_leaf_proofs_and_collect_internals(
+        &mut agg_prover,
+        leaf_proofs.clone(),
+        public_values,
+    )?;
+
+    tracing::info!("Saving keys and proofs to files");
     // Create fixtures directory if it doesn't exist
     let fixtures_dir = get_fixtures_dir();
     fs::create_dir_all(&fixtures_dir)?;
@@ -96,10 +141,16 @@ fn main() -> Result<()> {
         leaf_exe_bytes,
     )?;
 
-    let leaf_pk_bytes = bitcode::serialize(&pk)?;
+    let leaf_pk_bytes = bitcode::serialize(&agg_pk.leaf_vm_pk)?;
     fs::write(
         fixtures_dir.join(&format!("{}.leaf.pk", PROGRAM)),
         leaf_pk_bytes,
+    )?;
+
+    let internal_pk_bytes = bitcode::serialize(&agg_pk.internal_vm_pk)?;
+    fs::write(
+        fixtures_dir.join(&format!("{}.internal.pk", PROGRAM)),
+        internal_pk_bytes,
     )?;
 
     let app_proof_bytes = bitcode::serialize(&app_proof)?;
@@ -108,8 +159,35 @@ fn main() -> Result<()> {
         app_proof_bytes,
     )?;
 
+    // Save leaf proofs
+    for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
+        let leaf_proof_bytes = bitcode::serialize(leaf_proof)?;
+        fs::write(
+            fixtures_dir.join(&format!("{}.leaf.{}.proof", PROGRAM, i)),
+            leaf_proof_bytes,
+        )?;
+    }
+
+    // Save internal proofs
+    for (i, internal_proof) in internal_proofs.iter().enumerate() {
+        let internal_proof_bytes = bitcode::serialize(internal_proof)?;
+        fs::write(
+            fixtures_dir.join(&format!("{}.internal.{}.proof", PROGRAM, i)),
+            internal_proof_bytes,
+        )?;
+    }
+
+    // Save final aggregated proof
+    let final_proof_bytes = final_proof.encode_to_vec()?;
+    fs::write(
+        fixtures_dir.join(&format!("{}.final.proof", PROGRAM)),
+        final_proof_bytes,
+    )?;
+
     tracing::info!(
-        "Generated and saved {name}.leaf.committed.exe, {name}.leaf.pk, and {name}.app.proof",
+        "Generated and saved {name} fixtures: leaf.exe, leaf.pk, internal.pk, app.proof, {} leaf proofs, {} internal proofs, and final.proof",
+        leaf_proofs.len(),
+        internal_proofs.len(),
         name = PROGRAM
     );
 
