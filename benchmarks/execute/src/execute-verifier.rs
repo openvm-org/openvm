@@ -1,3 +1,15 @@
+//! OpenVM verifier execution
+//!
+//! To profile this binary, first build with the profiling profile:
+//! ```bash
+//! cargo b --profile profiling --bin execute-verifier
+//! ```
+//!
+//! Then run with samply for profiling:
+//! ```bash
+//! samply record --rate 10000 target/profiling/execute-verifier --mode preflight --verifier internal kitchen-sink
+//! ```
+
 use std::fs;
 
 use clap::{arg, Parser, ValueEnum};
