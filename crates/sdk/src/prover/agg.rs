@@ -16,7 +16,8 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::{info_span, instrument};
 
 use crate::{
-    config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover, F, SC,
+    config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover,
+    util::check_max_constraint_degrees, F, SC,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
@@ -124,6 +125,10 @@ where
         &mut self,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
+        check_max_constraint_degrees(
+            self.leaf_prover.vm.config().as_ref(),
+            &self.leaf_prover.vm.engine.fri_params(),
+        );
         self.leaf_controller
             .generate_proof(&mut self.leaf_prover, app_proofs)
     }
@@ -146,6 +151,11 @@ where
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
     ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
+        check_max_constraint_degrees(
+            self.internal_prover.vm.config().as_ref(),
+            &self.internal_prover.vm.engine.fri_params(),
+        );
+
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
         let mut proofs = leaf_proofs;
@@ -258,6 +268,10 @@ where
         &mut self,
         root_input: RootVmVerifierInput<SC>,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
+        check_max_constraint_degrees(
+            self.root_prover.vm_config().as_ref(),
+            self.root_prover.fri_params(),
+        );
         let input = root_input.write();
         #[cfg(feature = "metrics")]
         metrics::counter!("fri.log_blowup")

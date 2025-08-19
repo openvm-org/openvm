@@ -27,6 +27,7 @@ use crate::{
     commit::{AppExecutionCommit, CommitBytes},
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
+    util::check_max_constraint_degrees,
     StdIn, F, SC,
 };
 
@@ -132,6 +133,10 @@ where
         assert!(
             self.vm_config().as_ref().continuation_enabled,
             "Use generate_app_proof_without_continuations instead."
+        );
+        check_max_constraint_degrees(
+            self.vm_config().as_ref(),
+            &self.instance.vm.engine.fri_params(),
         );
         let proofs = info_span!(
             "app proof",
