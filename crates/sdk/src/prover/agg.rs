@@ -32,7 +32,7 @@ where
 
     pub internal_prover: VmInstance<E, NativeBuilder>,
     #[cfg(feature = "evm-prove")]
-    pub root_prover: RootVerifierLocalProver,
+    root_prover: RootVerifierLocalProver,
     pub num_children_internal: usize,
     pub max_internal_wrapper_layers: usize,
 }
@@ -264,7 +264,7 @@ where
 
     #[cfg(feature = "evm-prove")]
     #[instrument(name = "agg_layer", skip_all, fields(group = "root", idx = 0))]
-    pub fn generate_root_proof_impl(
+    fn generate_root_proof_impl(
         &mut self,
         root_input: RootVmVerifierInput<SC>,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
