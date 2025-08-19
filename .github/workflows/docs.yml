@@ -51,7 +51,7 @@ jobs:
 
       - name: Sync static S3 bucket
         working-directory: target/doc
-        if: github.ref_type == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
         run: s5cmd sync . s3://${S3_BUCKET%/}/static/
