@@ -138,12 +138,16 @@ where
             .write(address_space, pointer, value.map(F::from_canonical_usize));
     }
 
-    fn write_cell(&mut self, _address_space: usize, _pointer: usize, _value: F) {
-        unimplemented!()
+    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
+        self.write(address_space, pointer, [value]);
     }
 
-    fn read_cell(&mut self, _address_space: usize, _pointer: usize) -> F {
-        unimplemented!()
+    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
+        self.read::<1>(address_space, pointer)[0]
+    }
+
+    fn execution_final_state(&self) -> ExecutionState<F> {
+        self.execution.records.last().unwrap().final_state
     }
 }
 

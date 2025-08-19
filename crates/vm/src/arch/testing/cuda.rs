@@ -183,6 +183,10 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     ) {
         self.write(address_space, pointer, value.map(F::from_canonical_usize));
     }
+
+    fn execution_final_state(&self) -> ExecutionState<F> {
+        self.execution.0.records.last().unwrap().final_state
+    }
 }
 
 pub struct GpuChipTestBuilder {
