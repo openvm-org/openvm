@@ -1,11 +1,16 @@
 //! OpenVM verifier execution
 //!
-//! To profile this binary, first build with the profiling profile:
+//! First, generate the fixtures by running:
+//! ```bash
+//! cargo r -r --bin generate-fixtures --features generate-fixtures
+//! ```
+//!
+//! To profile this binary, build it with the profiling profile:
 //! ```bash
 //! cargo b --profile profiling --bin execute-verifier
 //! ```
 //!
-//! Then run with samply for profiling:
+//! Then run it with samply for profiling:
 //! ```bash
 //! samply record --rate 10000 target/profiling/execute-verifier --mode preflight --verifier internal kitchen-sink
 //! ```
