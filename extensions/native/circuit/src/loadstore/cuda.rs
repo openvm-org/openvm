@@ -69,15 +69,16 @@ impl<const NUM_CELLS: usize> Chip<DenseRecordArena, GpuBackend>
 mod test {
     use std::array;
 
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
-    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
-    use openvm_native_circuit::{
-        adapters::{
-            NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor, NativeLoadStoreAdapterFiller,
-        },
+    use crate::adapters::{
+        NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor, NativeLoadStoreAdapterFiller,
+    };
+    use crate::loadstore::{
         NativeLoadStoreAir, NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreFiller,
         NativeLoadStoreExecutor,
     };
+    use crate::write_native_array;
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
     use openvm_native_compiler::{
         conversion::AS, NativeLoadStore4Opcode, NativeLoadStoreOpcode, BLOCK_LOAD_STORE_SIZE,
     };
@@ -87,10 +88,6 @@ mod test {
     use test_case::test_case;
 
     use super::*;
-    use crate::{
-        extensions::native::write_native_array,
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    };
 
     const MAX_INS_CAPACITY: usize = 128;
 

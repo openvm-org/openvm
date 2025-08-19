@@ -59,27 +59,22 @@ impl Chip<DenseRecordArena, GpuBackend> for FieldExtensionChipGpu {
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
-    use openvm_instructions::{instruction::Instruction, LocalOpcode};
-    use openvm_native_circuit::{
-        adapters::{
-            NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor,
-            NativeVectorizedAdapterFiller,
-        },
+    use crate::adapters::{
+        NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,
+    };
+    use crate::field_extension::{
         FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreFiller,
         FieldExtensionExecutor,
     };
+    use crate::write_native_array;
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+    use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::rngs::StdRng;
     use test_case::test_case;
 
     use super::*;
-    use crate::{
-        extensions::native::write_native_array,
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    };
-
     const MAX_INS_CAPACITY: usize = 128;
 
     fn create_test_harness(

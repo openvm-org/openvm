@@ -58,24 +58,20 @@ impl Chip<DenseRecordArena, GpuBackend> for FieldArithmeticChipGpu {
 
 #[cfg(test)]
 mod tests {
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
-    use openvm_instructions::{instruction::Instruction, LocalOpcode};
-    use openvm_native_circuit::{
-        adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
+    use super::*;
+    use crate::adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller};
+    use crate::field_arithmetic::{
         FieldArithmeticAir, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreFiller,
         FieldArithmeticExecutor,
     };
+    use crate::write_native_array;
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+    use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
     use openvm_stark_backend::p3_field::{Field, FieldAlgebra};
     use openvm_stark_sdk::utils::create_seeded_rng;
     use rand::Rng;
     use test_case::test_case;
-
-    use super::*;
-    use crate::{
-        extensions::native::write_native_array,
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    };
 
     const MAX_INS_CAPACITY: usize = 128;
 

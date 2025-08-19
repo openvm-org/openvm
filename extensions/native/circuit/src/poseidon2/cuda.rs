@@ -93,13 +93,13 @@ impl<const SBOX_REGISTERS: usize> Chip<DenseRecordArena, GpuBackend>
 mod tests {
     use std::{array::from_fn, cmp::min};
 
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    use openvm_instructions::{instruction::Instruction, LocalOpcode};
-    use openvm_native_circuit::{
+    use crate::poseidon2::{
         air::{NativePoseidon2Air, VerifyBatchBus},
         chip::{NativePoseidon2Executor, NativePoseidon2Filler, NativePoseidon2RecordMut},
         NativePoseidon2Chip,
     };
+    use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, Poseidon2Opcode, VerifyBatchOpcode};
     use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
     use openvm_stark_backend::p3_field::{Field, FieldAlgebra, PrimeField32};
@@ -108,7 +108,6 @@ mod tests {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{GpuChipTestBuilder, GpuTestChipHarness};
 
     const MAX_INS_CAPACITY: usize = 128;
     const SBOX_REGISTERS: usize = 1;

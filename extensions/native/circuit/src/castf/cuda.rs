@@ -55,15 +55,15 @@ impl Chip<DenseRecordArena, GpuBackend> for CastFChipGpu {
 
 #[cfg(test)]
 mod test {
+    use crate::adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller};
+    use crate::castf::{CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor};
+    use crate::write_native_array;
+    use crate::CASTF_MAX_BITS;
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_instructions::{
         instruction::Instruction,
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
         LocalOpcode,
-    };
-    use openvm_native_circuit::{
-        adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller},
-        CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor,
     };
     use openvm_native_compiler::{conversion::AS, CastfOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -72,13 +72,6 @@ mod test {
     use test_case::test_case;
 
     use super::*;
-    use crate::{
-        extensions::native::write_native_array,
-        testing::{
-            default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
-    };
 
     const MAX_INS_CAPACITY: usize = 128;
 

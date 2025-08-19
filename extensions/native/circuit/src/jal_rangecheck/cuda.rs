@@ -53,11 +53,11 @@ impl Chip<DenseRecordArena, GpuBackend> for JalRangeCheckGpu {
 
 #[cfg(test)]
 mod test {
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyMultiRowLayout};
-    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
-    use openvm_native_circuit::{
+    use crate::jal_rangecheck::{
         JalRangeCheckAir, JalRangeCheckExecutor, JalRangeCheckFiller, NativeJalRangeCheckChip,
     };
+    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyMultiRowLayout};
+    use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
     use openvm_native_compiler::{conversion::AS, NativeJalOpcode, NativeRangeCheckOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -65,9 +65,6 @@ mod test {
     use test_case::test_case;
 
     use super::*;
-    use crate::testing::{
-        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
-    };
 
     const MAX_INS_CAPACITY: usize = 128;
 
