@@ -102,6 +102,6 @@ jobs:
 
       - name: Run ignored tests
         working-directory: crates/sdk
-        if: ${{ github.event_name == 'push' }}
+        # if: ${{ github.event_name == 'push' }}
         run: |
           cargo nextest run --cargo-profile=fast --features parallel,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
