@@ -289,13 +289,17 @@ fn main() -> Result<()> {
 
     tracing::info!("Generating internal proofs");
 
+    #[cfg(not(feature = "evm-prove"))]
+    let (_, internal_proof_count) =
+        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
     #[cfg(feature = "evm-prove")]
-    let (final_internal_proof, mut total_internals) =
+    let (final_internal_proof, internal_proof_count) =
         aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
 
     #[cfg(not(feature = "evm-prove"))]
-    let (_, total_internals) =
-        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
+    let total_internals = internal_proof_count;
+    #[cfg(feature = "evm-prove")]
+    let mut total_internals = internal_proof_count;
 
     #[cfg(feature = "evm-prove")]
     {
