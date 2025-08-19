@@ -12,9 +12,9 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE") // Import headers
             .include("../../cuda-includes")
             .include("../circuits/primitives/cuda/include")
-            .watch("cuda/system")
+            .watch("cuda/src/system")
             .library_name("tracegen_gpu_system")
-            .files_from_glob("cuda/system/**/*.cu");
+            .files_from_glob("cuda/src/system/**/*.cu");
 
         builder.emit_link_directives();
         builder.build();
