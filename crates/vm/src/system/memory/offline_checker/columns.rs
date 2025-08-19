@@ -26,6 +26,15 @@ impl<F: PrimeField32> MemoryBaseAuxCols<F> {
     }
 }
 
+impl<F: PrimeField32> Default for MemoryBaseAuxCols<F> {
+    fn default() -> Self {
+        Self {
+            prev_timestamp: F::ZERO,
+            timestamp_lt_aux: LessThanAuxCols::default(),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryWriteAuxCols<T, const N: usize> {
@@ -41,6 +50,11 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
     #[inline(always)]
     pub fn get_base(self) -> MemoryBaseAuxCols<T> {
         self.base
+    }
+
+    #[inline(always)]
+    pub fn set_base(&mut self, base: MemoryBaseAuxCols<T>) {
+        self.base = base;
     }
 
     #[inline(always)]
@@ -78,6 +92,11 @@ impl<F: PrimeField32> MemoryReadAuxCols<F> {
     #[inline(always)]
     pub fn get_base(self) -> MemoryBaseAuxCols<F> {
         self.base
+    }
+
+    #[inline(always)]
+    pub fn set_base(&mut self, base: MemoryBaseAuxCols<F>) {
+        self.base = base;
     }
 
     /// Sets the previous timestamp **without** updating the less than auxiliary columns.

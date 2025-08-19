@@ -5741,6 +5741,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-memcpy-circuit"
+version = "1.4.0-rc.2"
+dependencies = [
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-memcpy-transpiler",
+ "openvm-rv32im-circuit",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "serde",
+ "strum",
+]
+
+[[package]]
+name = "openvm-memcpy-transpiler"
+version = "1.4.0-rc.2"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
+]
+
+[[package]]
 name = "openvm-mod-circuit-builder"
 version = "1.4.1-rc.0"
 dependencies = [
