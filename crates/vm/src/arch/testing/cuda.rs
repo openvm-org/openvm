@@ -542,7 +542,7 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            use stark_backend_gpu::engine::check_trace_validity;
+            use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
@@ -572,7 +572,7 @@ impl GpuChipTester {
         }
         #[cfg(feature = "touchemall")]
         {
-            use stark_backend_gpu::engine::check_trace_validity;
+            use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
