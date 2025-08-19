@@ -100,7 +100,9 @@ impl SetupCmd {
 
             Self::download_params(10, 24).await?;
             // halo2 keygen does not depend on the app config
-            let sdk = Sdk::standard();
+            let mut sdk = Sdk::standard();
+            // CHANGING FOR COMPATIBILITY WITH v1.3
+            sdk.halo2_config_mut().verifier_k = 24;
 
             let agg_vk = if !self.force_agg_keygen
                 && PathBuf::from(&default_agg_stark_pk_path).exists()
