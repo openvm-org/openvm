@@ -17,6 +17,7 @@ mod tests {
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -60,7 +61,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
@@ -82,7 +84,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
@@ -105,7 +108,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
@@ -152,7 +156,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let p = Secp256k1Affine::generator();
@@ -265,7 +270,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )
         .unwrap();
         let config =

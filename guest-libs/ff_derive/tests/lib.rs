@@ -8,6 +8,7 @@ mod tests {
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_instructions::exe::VmExe;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -43,7 +44,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -62,7 +64,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -81,7 +84,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -105,7 +109,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -129,7 +134,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -154,7 +160,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -178,7 +185,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);

@@ -36,6 +36,7 @@ mod bn254 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_stark_sdk::{
         config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };
@@ -85,7 +86,8 @@ mod bn254 {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
@@ -108,7 +110,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
@@ -144,7 +147,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(2);
@@ -202,7 +206,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(20);
@@ -251,7 +256,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -304,7 +310,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -361,7 +368,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -426,7 +434,8 @@ mod bn254 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let P = G1Affine::generator();
@@ -490,6 +499,7 @@ mod bls12_381 {
         AffinePoint,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
     };
@@ -560,7 +570,8 @@ mod bls12_381 {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(EccTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
@@ -583,7 +594,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(50);
@@ -619,7 +631,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(5);
@@ -678,7 +691,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(88);
@@ -727,7 +741,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -786,7 +801,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -843,7 +859,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let S = G1Affine::generator();
@@ -907,7 +924,8 @@ mod bls12_381 {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(PairingTranspilerExtension)
                 .with_extension(ModularTranspilerExtension)
-                .with_extension(Fp2TranspilerExtension),
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let P = G1Affine::generator();

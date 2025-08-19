@@ -12,6 +12,7 @@ mod tests {
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -49,7 +50,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -66,7 +68,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
@@ -93,7 +96,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
@@ -125,7 +129,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
@@ -145,7 +150,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
@@ -173,7 +179,8 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Fp2TranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )
         .unwrap();
         air_test(Rv32ModularBuilder, config, openvm_exe);
@@ -189,7 +196,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(ModularTranspilerExtension),
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())

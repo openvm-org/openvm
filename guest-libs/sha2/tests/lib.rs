@@ -9,6 +9,7 @@ mod tests {
     use openvm_sha256_circuit::{Sha256Rv32Builder, Sha256Rv32Config};
     use openvm_sha256_transpiler::Sha256TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -25,7 +26,8 @@ mod tests {
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Sha256TranspilerExtension),
+                .with_extension(Sha256TranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Sha256Rv32Builder, config, openvm_exe);
         Ok(())
