@@ -315,12 +315,8 @@ fn main() -> Result<()> {
 
         tracing::info!(program = %program, "Generating internal proofs");
 
-        #[cfg(not(feature = "evm-prove"))]
-        let (_, internal_proof_count) =
+        let (_final_internal_proof, internal_proof_count) =
             aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir, program)?;
-        // #[cfg(feature = "evm-prove")]
-        // let (final_internal_proof, internal_proof_count) =
-        //     aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir, program)?;
 
         #[cfg(not(feature = "evm-prove"))]
         let total_internals = internal_proof_count;
@@ -334,7 +330,7 @@ fn main() -> Result<()> {
         //
         //     let (root_verifier_input, wrapper_count) = wrap_e2e_stark_proof(
         //         &mut agg_prover,
-        //         final_internal_proof,
+        //         _final_internal_proof,
         //         public_values,
         //         internal_proof_count, // Start wrapper indices after all internal proofs
         //         &fixtures_dir,
@@ -360,6 +356,16 @@ fn main() -> Result<()> {
         //     total_internals += wrapper_count;
         // }
 
+        #[cfg(not(feature = "evm-prove"))]
+        tracing::info!(
+            program = %program,
+            leaf_proofs = leaf_proofs.len(),
+            total_internals = total_internals,
+            "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, app.proof, {} leaf proofs, and {} internal proofs",
+            program,
+            leaf_proofs.len(),
+            total_internals
+        );
         // #[cfg(feature = "evm-prove")]
         // tracing::info!(
         //     program = %program,
@@ -371,17 +377,6 @@ fn main() -> Result<()> {
         //     leaf_proofs.len(),
         //     total_internals
         // );
-
-        #[cfg(not(feature = "evm-prove"))]
-        tracing::info!(
-            program = %program,
-            leaf_proofs = leaf_proofs.len(),
-            total_internals = total_internals,
-            "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, app.proof, {} leaf proofs, and {} internal proofs",
-            program,
-            leaf_proofs.len(),
-            total_internals
-        );
     }
 
     tracing::info!("Successfully processed all programs");
