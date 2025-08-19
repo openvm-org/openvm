@@ -4,7 +4,7 @@ use std::{
     mem::offset_of,
 };
 
-use itertools::{izip, zip_eq};
+use itertools::{izip, zip_eq, Itertools};
 use openvm_circuit::{
     arch::*,
     system::{
@@ -805,14 +805,22 @@ where
 
         if !is_init {
             let hint_stream = &mut state.streams.hint_space[hint_id];
-            // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
-            unsafe {
-                state.memory.data.memory.copy_slice_nonoverlapping(
-                    (NATIVE_AS, record.common.a_ptr),
-                    &hint_stream[..length],
-                );
+            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
+                .iter_mut()
+                .rev()
+                .zip_eq(hint_stream.drain(0..length))
+                .enumerate()
+            {
+                let mut values = [hint_value];
+                // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+                unsafe {
+                    state
+                        .memory
+                        .data
+                        .swap::<F, 1>(NATIVE_AS, a_ptr + i as u32, &mut values)
+                };
+                *prev_data = values[0];
             }
-            hint_stream.drain(0..length);
         };
 
         // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
