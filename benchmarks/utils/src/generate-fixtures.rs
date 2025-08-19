@@ -14,7 +14,10 @@ use openvm_sdk::{
     prover::AggStarkProver,
     Sdk, StdIn, F, SC,
 };
-use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proof};
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, engine::StarkFriEngine,
+    openvm_stark_backend::proof::Proof,
+};
 use tracing::info_span;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -111,9 +114,9 @@ fn main() -> Result<()> {
     let leaf_verifier_exe = app_pk.leaf_committed_exe.exe.clone();
 
     let tree_config = AggregationTreeConfig::default();
-    let mut agg_prover = AggStarkProver::new(
+    let mut agg_prover = AggStarkProver::<BabyBearPoseidon2Engine, _>::new(
         native_builder.clone(),
-        &agg_pk,
+        agg_pk,
         leaf_verifier_exe,
         tree_config,
     )?;
@@ -137,25 +140,25 @@ fn main() -> Result<()> {
     // Serialize and write to files in fixtures directory
     let leaf_exe_bytes = bitcode::serialize(&app_pk.leaf_committed_exe.exe)?;
     fs::write(
-        fixtures_dir.join(&format!("{}.leaf.exe", PROGRAM)),
+        fixtures_dir.join(format!("{}.leaf.exe", PROGRAM)),
         leaf_exe_bytes,
     )?;
 
     let leaf_pk_bytes = bitcode::serialize(&agg_pk.leaf_vm_pk)?;
     fs::write(
-        fixtures_dir.join(&format!("{}.leaf.pk", PROGRAM)),
+        fixtures_dir.join(format!("{}.leaf.pk", PROGRAM)),
         leaf_pk_bytes,
     )?;
 
     let internal_pk_bytes = bitcode::serialize(&agg_pk.internal_vm_pk)?;
     fs::write(
-        fixtures_dir.join(&format!("{}.internal.pk", PROGRAM)),
+        fixtures_dir.join(format!("{}.internal.pk", PROGRAM)),
         internal_pk_bytes,
     )?;
 
     let app_proof_bytes = bitcode::serialize(&app_proof)?;
     fs::write(
-        fixtures_dir.join(&format!("{}.app.proof", PROGRAM)),
+        fixtures_dir.join(format!("{}.app.proof", PROGRAM)),
         app_proof_bytes,
     )?;
 
@@ -163,7 +166,7 @@ fn main() -> Result<()> {
     for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
         let leaf_proof_bytes = bitcode::serialize(leaf_proof)?;
         fs::write(
-            fixtures_dir.join(&format!("{}.leaf.{}.proof", PROGRAM, i)),
+            fixtures_dir.join(format!("{}.leaf.{}.proof", PROGRAM, i)),
             leaf_proof_bytes,
         )?;
     }
@@ -172,7 +175,7 @@ fn main() -> Result<()> {
     for (i, internal_proof) in internal_proofs.iter().enumerate() {
         let internal_proof_bytes = bitcode::serialize(internal_proof)?;
         fs::write(
-            fixtures_dir.join(&format!("{}.internal.{}.proof", PROGRAM, i)),
+            fixtures_dir.join(format!("{}.internal.{}.proof", PROGRAM, i)),
             internal_proof_bytes,
         )?;
     }
@@ -180,7 +183,7 @@ fn main() -> Result<()> {
     // Save final aggregated proof
     let final_proof_bytes = final_proof.encode_to_vec()?;
     fs::write(
-        fixtures_dir.join(&format!("{}.final.proof", PROGRAM)),
+        fixtures_dir.join(format!("{}.final.proof", PROGRAM)),
         final_proof_bytes,
     )?;
 
