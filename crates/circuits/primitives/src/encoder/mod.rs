@@ -7,6 +7,9 @@ use openvm_stark_backend::{
 
 use crate::SubAir;
 
+#[cfg(all(test, feature = "cuda"))]
+mod tests;
+
 /// Efficient encoding of circuit selectors
 ///
 /// This encoder represents selectors as points in a k-dimensional space where each
