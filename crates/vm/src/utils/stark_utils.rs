@@ -5,39 +5,46 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing, FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
 
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as E;
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as E;
+
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MatrixRecordArena, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
+
+#[cfg(feature = "cuda")]
+use crate::arch::DenseRecordArena;
+#[cfg(not(feature = "cuda"))]
+use crate::arch::MatrixRecordArena;
+
+#[cfg(feature = "cuda")]
+type RA = DenseRecordArena;
+#[cfg(not(feature = "cuda"))]
+type RA = MatrixRecordArena<BabyBear>;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
+    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -51,33 +58,25 @@ pub fn air_test_with_min_segments<VB, VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
+    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    <VC as VmExecutionConfig<BabyBear>>::Executor:
+        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VB>(
-        fri_params,
-        builder,
-        config,
-        exe,
-        input,
-        min_segments,
-        true,
-    )
-    .unwrap();
+    #[cfg(feature = "cuda")]
+    let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
+    #[cfg(not(feature = "cuda"))]
+    let debug = true;
+    let (final_memory, _) =
+        air_test_impl::<E, VB>(fri_params, builder, config, exe, input, min_segments, debug)
+            .unwrap();
     final_memory
 }
 

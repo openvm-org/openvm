@@ -26,21 +26,22 @@ jobs:
     strategy:
       matrix:
         extension:
-          - { name: "rv32im", path: "rv32im" }
-          - { name: "native", path: "native" }
-          - { name: "keccak256", path: "keccak256" }
-          - { name: "sha256", path: "sha256" }
-          - { name: "bigint", path: "bigint" }
-          - { name: "algebra", path: "algebra" }
-          - { name: "ecc", path: "ecc" }
-          - { name: "pairing", path: "pairing" }
+          - { name: "rv32im", path: "rv32im", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "rv32im", path: "rv32im", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "native", path: "native", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "sha256", path: "sha256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "bigint", path: "bigint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
+      - family=${{ matrix.extension.family }}
+      - image=${{ matrix.extension.image }}
       - tag=extension-${{ matrix.extension.name }}
       - extras=s3-cache
 
@@ -54,7 +55,7 @@ jobs:
             - "crates/circuits/**"
             - "crates/vm/**"
             - "crates/toolchain/**"
-            - "extensions/${{ matrix.extensions.path }}/**"
+            - "extensions/${{ matrix.extension.path }}/**"
             - ".github/workflows/extension-tests.yml"
       - name: Skip if no changes
         if: steps.filter.outputs.matched == 'false'
@@ -68,23 +69,33 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Check CUDA status and set environment variables
+        if: matrix.extension.family == 'g6.2xlarge'
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+
       - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: cargo nextest run --cargo-profile=fast --test-threads=32
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --test-threads=32
 
       - name: Run ${{ matrix.extension.name }} guest crate tests
         if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/guest
         run: |
-          FEATURE_ARGS=""
+          FEATURE_GUEST_ARGS=""
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
-            FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
+            FEATURE_GUEST_ARGS="--features=bn254,bls12_381,halo2curves"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $FEATURE_GUEST_ARGS --no-tests=pass
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
