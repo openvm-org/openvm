@@ -28,9 +28,9 @@ use crate::{
     adapters::{
         ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterExecutor, ConvertAdapterFiller,
     },
-    castf::run_castf,
+    castf::{run_castf, CastFAir, CastFCoreFiller},
     test_utils::write_native_array,
-    CastFAir, CastFCoreFiller, CASTF_MAX_BITS,
+    utils::CASTF_MAX_BITS,
 };
 
 const MAX_INS_CAPACITY: usize = 128;

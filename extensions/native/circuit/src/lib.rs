@@ -28,14 +28,17 @@ mod jal_rangecheck;
 mod loadstore;
 mod poseidon2;
 
-pub use branch_eq::*;
-pub use castf::*;
-pub use field_arithmetic::*;
-pub use field_extension::*;
-pub use fri::*;
-pub use jal_rangecheck::*;
-pub use loadstore::*;
-pub use poseidon2::*;
+// pub use branch_eq::*;
+// pub use castf::*;
+// pub use field_arithmetic::*;
+// pub use field_extension::*;
+// pub use fri::*;
+// pub use jal_rangecheck::*;
+// pub use loadstore::*;
+// pub use poseidon2::*;
+
+#[cfg(feature = "cuda")]
+pub mod cuda_abi;
 
 mod extension;
 pub use extension::*;

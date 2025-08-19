@@ -23,8 +23,8 @@ use super::{
     FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
 };
 use crate::{
-    fri::{WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
-    write_native_array, FriReducedOpeningFiller,
+    fri::{FriReducedOpeningFiller, WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
+    write_native_array,
 };
 
 const MAX_INS_CAPACITY: usize = 1024;

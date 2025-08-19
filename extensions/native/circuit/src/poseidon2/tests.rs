@@ -35,10 +35,12 @@ use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
 use crate::{
-    air::NativePoseidon2Air,
-    chip::NativePoseidon2Executor,
-    poseidon2::{chip::NativePoseidon2Filler, CHUNK},
-    NativeConfig, NativeCpuBuilder, NativePoseidon2Chip,
+    poseidon2::{
+        air::NativePoseidon2Air,
+        chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+        NativePoseidon2Chip, CHUNK,
+    },
+    NativeConfig, NativeCpuBuilder,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);

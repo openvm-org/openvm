@@ -24,9 +24,8 @@ use super::{
 };
 use crate::{
     adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
-    field_arithmetic::{run_field_arithmetic, FieldArithmeticAir},
+    field_arithmetic::{run_field_arithmetic, FieldArithmeticAir, FieldArithmeticCoreFiller},
     test_utils::write_native_or_imm,
-    FieldArithmeticCoreFiller,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
