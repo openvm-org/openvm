@@ -10,8 +10,9 @@ fn main() {
 
         let builder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE") // Import headers
-            .include("../../cuda-includes")
             .include("../circuits/primitives/cuda/include")
+            .include("../circuits/mod-builder/cuda/include")
+            .include("../circuits/poseidon2-air/cuda/include")
             .watch("cuda/src/system")
             .library_name("tracegen_gpu_system")
             .files_from_glob("cuda/src/system/**/*.cu");

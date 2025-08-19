@@ -74,14 +74,14 @@ perf-metrics = ["metrics"]
 basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
-test-utils = ["openvm-stark-sdk"]
+test-utils = ["dep:openvm-stark-sdk"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk?/nightly-features"]
 cuda = [
-    "openvm-stark-sdk", # for BabyBearPoseidon2Config
+    "dep:openvm-stark-sdk", # for BabyBearPoseidon2Config
     "openvm-circuit-primitives/cuda",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
