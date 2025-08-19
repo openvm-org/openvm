@@ -414,7 +414,11 @@ mod tests {
             poseidon2::Poseidon2PeripheryChip,
         },
     };
-    use openvm_cuda_common::copy::{MemCopyD2H, MemCopyH2D};
+    use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+    };
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         NATIVE_AS,
@@ -423,10 +427,8 @@ mod tests {
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
 
-    use super::{
-        merkle_tree::{DeviceBuffer, MemoryMerkleTree},
-        Poseidon2PeripheryChipGPU, DIGEST_WIDTH, F,
-    };
+    use super::MemoryMerkleTree;
+    use crate::system::memory::adapter::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
     #[test]
     fn test_merkle_tree_cpu_gpu_root_equivalence() {

@@ -167,11 +167,11 @@ mod tests {
         system::memory::{offline_checker::MemoryBus, MemoryController},
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+    use openvm_cuda_backend::prelude::SC;
     use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
-    use crate::testing::{assert_eq_cpu_and_gpu_matrix, GpuChipTestBuilder};
 
     #[test]
     fn test_access_adapters_cpu_gpu_equivalence() {

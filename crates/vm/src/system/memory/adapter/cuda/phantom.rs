@@ -64,12 +64,12 @@ mod tests {
         system::phantom::{PhantomAir, PhantomExecutor, PhantomFiller, PhantomRecord},
         utils::next_power_of_two_or_zero,
     };
-    use openvm_cuda_common::types::F;
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
-    use p3_air::BaseAir;
+    use openvm_stark_backend::p3_air::BaseAir;
     use p3_field::{FieldAlgebra, PrimeField32};
 
-    use crate::{system::phantom::PhantomChipGPU, testing::GpuChipTestBuilder};
+    use super::PhantomChipGPU;
 
     #[test]
     fn test_phantom_tracegen() {

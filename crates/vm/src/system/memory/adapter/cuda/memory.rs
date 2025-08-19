@@ -237,6 +237,7 @@ mod tests {
     use std::array;
 
     use openvm_circuit::arch::MemoryConfig;
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         NATIVE_AS,
@@ -244,11 +245,6 @@ mod tests {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::FieldAlgebra;
     use rand::Rng;
-
-    use crate::{
-        system::F,
-        testing::{default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder},
-    };
 
     #[test]
     fn test_persistent_memory() {

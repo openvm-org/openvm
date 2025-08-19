@@ -5,17 +5,14 @@ fn main() {
         return; // Skip CUDA compilation
     }
 
-    let common = CudaBuilder::new()
+    let builder = CudaBuilder::new()
         .include_from_dep("DEP_CUDA_COMMON_INCLUDE") // Import headers
         .include("../../cuda-includes")
         .include("../circuits/primitives/cuda/include")
-        .watch("cuda/system");
-
-    common
-        .clone()
+        .watch("cuda/system")
         .library_name("tracegen_gpu_system")
-        .files_from_glob("cuda/system/**/*.cu")
-        .build();
+        .files_from_glob("cuda/system/**/*.cu");
 
-    common.emit_link_directives(); // Call once at end
+    builder.emit_link_directives();
+    builder.build();
 }

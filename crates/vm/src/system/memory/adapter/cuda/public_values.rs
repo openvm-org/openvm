@@ -111,7 +111,7 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-    use openvm_cuda_common::types::F;
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode, NATIVE_AS,
     };
@@ -119,10 +119,7 @@ mod tests {
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
 
-    use crate::{
-        system::public_values::PublicValuesChipGPU,
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    };
+    use super::PublicValuesChipGPU;
 
     type Harness = GpuTestChipHarness<
         F,

@@ -129,7 +129,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 #[cfg(test)]
 mod tests {
     use openvm_circuit::system::program::trace::VmCommittedExe;
-    use openvm_cuda_common::{engine::GpuBabyBearPoseidon2Engine, types::F};
+    use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prelude::F};
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -151,7 +151,7 @@ mod tests {
         engine::{StarkEngine, StarkFriEngine},
     };
 
-    use crate::{system::program::ProgramChipGPU, testing::assert_eq_cpu_and_gpu_matrix};
+    use super::ProgramChipGPU;
 
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));

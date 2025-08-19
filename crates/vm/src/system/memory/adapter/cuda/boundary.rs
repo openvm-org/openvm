@@ -187,6 +187,10 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+    use openvm_cuda_backend::{
+        prelude::{F, SC},
+        prover_backend::GpuBackend,
+    };
     use openvm_stark_backend::{
         p3_util::log2_ceil_usize,
         prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -196,11 +200,7 @@ mod tests {
     use p3_field::FieldAlgebra;
     use rand::Rng;
 
-    use crate::{
-        primitives::var_range::VariableRangeCheckerChipGPU,
-        system::boundary::BoundaryChipGPU,
-        testing::{assert_eq_cpu_and_gpu_matrix, default_var_range_checker_bus},
-    };
+    use super::{BoundaryChipGPU, VariableRangeCheckerChipGPU};
 
     const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
