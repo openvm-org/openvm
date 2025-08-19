@@ -127,7 +127,7 @@ where
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
         check_max_constraint_degrees(
             self.leaf_prover.vm.config().as_ref(),
-            self.leaf_prover.vm.engine.fri_params(),
+            &self.leaf_prover.vm.engine.fri_params(),
         );
         self.leaf_controller
             .generate_proof(&mut self.leaf_prover, app_proofs)
@@ -152,8 +152,8 @@ where
         public_values: Vec<F>,
     ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
         check_max_constraint_degrees(
-            self.leaf_prover.vm.config().as_ref(),
-            self.leaf_prover.vm.engine.fri_params(),
+            self.internal_prover.vm.config().as_ref(),
+            &self.internal_prover.vm.engine.fri_params(),
         );
 
         let mut internal_node_idx = -1;
@@ -268,6 +268,10 @@ where
         &mut self,
         root_input: RootVmVerifierInput<SC>,
     ) -> Result<Proof<RootSC>, VirtualMachineError> {
+        check_max_constraint_degrees(
+            self.root_prover.vm_config().as_ref(),
+            self.root_prover.fri_params(),
+        );
         let input = root_input.write();
         #[cfg(feature = "metrics")]
         metrics::counter!("fri.log_blowup")

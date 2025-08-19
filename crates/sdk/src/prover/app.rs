@@ -136,7 +136,7 @@ where
         );
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
-            self.instance.vm.engine.fri_params(),
+            &self.instance.vm.engine.fri_params(),
         );
         let proofs = info_span!(
             "app proof",
