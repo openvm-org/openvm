@@ -39,7 +39,7 @@ use openvm_stark_backend::{
 
 use crate::{bus::MemcpyBus, MemcpyIterChip};
 use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
+    execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
     get_record_from_slice, ExecuteFunc, ExecutionError, Executor,
     MeteredExecutor, RecordArena, StaticProgramError, TraceFiller, VmExecState,
 };
@@ -324,7 +324,7 @@ where
     }
 
     fn execute(
-        &mut self,
+        &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
@@ -565,7 +565,7 @@ impl<F: PrimeField32> Executor<F> for MemcpyLoopExecutor {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut MemcpyLoopPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
@@ -586,7 +586,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for MemcpyLoopExecutor {
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<MemcpyLoopPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
@@ -596,7 +596,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for MemcpyLoopExecutor {
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MemcpyLoopPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -674,7 +674,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     vm_state.instret += 1;
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -682,7 +682,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     execute_e12_impl::<F, CTX>(pre_compute, vm_state);
 }
 
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
