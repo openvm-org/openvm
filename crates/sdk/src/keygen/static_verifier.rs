@@ -24,6 +24,13 @@ impl RootVerifierProvingKey {
         root_proof: Proof<RootSC>,
         pv_handler: &impl StaticVerifierPvHandler,
     ) -> Halo2VerifierProvingKey {
+        println!("Root proof:");
+        for dat in root_proof.per_air.iter() {
+            println!(
+                "air_id={}, height={}, pvs={:?}",
+                dat.air_id, dat.degree, dat.public_values
+            );
+        }
         let mut witness = Witness::default();
         root_proof.write(&mut witness);
         let special_air_ids = self.air_id_permutation().get_special_air_ids();
