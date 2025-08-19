@@ -394,9 +394,13 @@ impl AggProvingKey {
             // ATTENTION: make sure to permute everything in vm_pk that references the original AIR
             // ID ordering:
             root_air_perm.permute(&mut vm_pk.per_air);
-            for thc in &mut vm_pk.trace_height_constraints {
-                root_air_perm.permute(&mut thc.coefficients);
-            }
+            // TEMPORARY: skip this permutation for backwards compatibility with v1.3
+            // Trace height constraints are not required by the static verifier because the trace
+            // heights are fixed.
+            //
+            // for thc in &mut vm_pk.trace_height_constraints {
+            //     root_air_perm.permute(&mut thc.coefficients);
+            // }
 
             RootVerifierProvingKey {
                 vm_pk: Arc::new(VmProvingKey {
