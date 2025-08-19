@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -108,7 +110,8 @@ fn set_and_execute(
     );
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
@@ -106,7 +108,7 @@ fn set_and_execute(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(harness, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 
     let (a, _, _) = run_shift::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode, &b, &c);
     assert_eq!(

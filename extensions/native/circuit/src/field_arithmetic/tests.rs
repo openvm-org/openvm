@@ -1,6 +1,8 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
 use openvm_stark_backend::{
@@ -68,7 +70,8 @@ fn set_and_execute(
     let a = gen_pointer(rng, 1);
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::new(
             opcode.global_opcode(),
             F::from_canonical_usize(a),
@@ -248,7 +251,8 @@ fn new_field_arithmetic_air_test_panic() {
     tester.write(4, 0, [BabyBear::ZERO]);
     // should panic
     tester.execute(
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             FieldArithmeticOpcode::DIV.global_opcode(),
             [0, 0, 0, 4, 4, 4],

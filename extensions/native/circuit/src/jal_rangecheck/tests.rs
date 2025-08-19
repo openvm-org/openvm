@@ -1,6 +1,8 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -66,7 +68,8 @@ fn set_and_execute(
         let final_pc = F::from_canonical_u32(rng.gen_range(0..(1 << PC_BITS)));
         let b = b.unwrap_or((final_pc - F::from_canonical_u32(initial_pc)).as_canonical_u32());
         tester.execute_with_pc(
-            harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &Instruction::from_usize(opcode, [a, b as usize, 0, AS::Native as usize, 0, 0, 0]),
             initial_pc,
         );
@@ -88,7 +91,8 @@ fn set_and_execute(
         let b = b.unwrap_or(rng.gen_range(min_b..=16));
         let c = c.unwrap_or(rng.gen_range(min_c..=14));
         tester.execute(
-            harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &Instruction::from_usize(
                 opcode,
                 [a, b as usize, c as usize, AS::Native as usize, 0, 0, 0],

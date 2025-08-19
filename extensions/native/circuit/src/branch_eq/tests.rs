@@ -1,6 +1,6 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -74,7 +74,8 @@ fn set_and_execute(
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)) - imm.unsigned_abs());
 
     tester.execute_with_pc(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::new(
             opcode.global_opcode(),
             a,

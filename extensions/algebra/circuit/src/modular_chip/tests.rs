@@ -5,7 +5,9 @@ use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
-    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    },
     Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
 };
 use openvm_circuit_primitives::{
@@ -183,7 +185,7 @@ mod addsub_tests {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
@@ -446,7 +448,7 @@ mod muldiv_tests {
             ptr_as as isize,
             data_as as isize,
         );
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 
         let expected_limbs: Vec<F> = biguint_to_limbs_vec(&expected_answer, NUM_LIMBS)
             .into_iter()
@@ -637,7 +639,7 @@ mod is_equal_tests {
                 offset + Rv32ModularArithmeticOpcode::IS_EQ as usize,
             )
         };
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
     }
 
     //////////////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,4 @@
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder, VmChipTestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;

@@ -12,7 +12,7 @@ pub mod test_utils {
     use openvm_circuit::{
         arch::{
             execution_mode::Segment,
-            testing::{memory::gen_pointer, VmChipTestBuilder},
+            testing::{memory::gen_pointer, TestBuilder, VmChipTestBuilder},
             MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
             VirtualMachineError, VmBuilder, VmState,
         },

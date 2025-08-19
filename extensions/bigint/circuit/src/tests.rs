@@ -7,7 +7,8 @@ use openvm_bigint_transpiler::{
 use openvm_circuit::{
     arch::{
         testing::{
-            TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+            TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+            RANGE_TUPLE_CHECKER_BUS,
         },
         MatrixRecordArena, PreflightExecutor,
     },
@@ -79,7 +80,8 @@ fn set_and_execute_rand<STEP, AIR, CHIP>(
         );
 
         tester.execute_with_pc(
-            harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &instruction,
             rng.gen_range((ABS_MAX_BRANCH as u32)..(1 << (PC_BITS - 1))),
         );
@@ -95,7 +97,7 @@ fn set_and_execute_rand<STEP, AIR, CHIP>(
             vec![c.map(F::from_canonical_u32)],
             opcode,
         );
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
     }
 }
 

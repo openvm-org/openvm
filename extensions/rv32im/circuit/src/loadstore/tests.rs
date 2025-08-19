@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         MemoryConfig,
     },
     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
@@ -128,7 +128,8 @@ fn set_and_execute(
     let enabled_write = !(is_load & (a == 0));
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

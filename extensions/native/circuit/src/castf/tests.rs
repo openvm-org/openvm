@@ -1,7 +1,7 @@
 use std::borrow::BorrowMut;
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     MemoryConfig,
 };
 use openvm_instructions::{
@@ -64,7 +64,8 @@ fn set_and_execute(
 
     let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             CastfOpcode::CASTF.global_opcode(),
             [a, b_ptr, 0, RV32_MEMORY_AS as usize, AS::Native as usize],

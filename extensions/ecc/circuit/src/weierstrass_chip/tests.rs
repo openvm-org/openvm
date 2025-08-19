@@ -4,7 +4,9 @@ use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    },
     MatrixRecordArena,
 };
 use openvm_circuit_primitives::{
@@ -261,7 +263,7 @@ mod ec_addne_tests {
             data_as as isize,
         );
 
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
     }
 
     fn run_ec_addne_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
@@ -517,7 +519,7 @@ mod ec_double_tests {
             data_as as isize,
         );
 
-        tester.execute(harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
     }
 
     fn run_ec_double_test<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(

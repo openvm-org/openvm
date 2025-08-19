@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS};
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS,
+};
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
@@ -88,7 +90,7 @@ fn set_and_execute(
         rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
-    tester.execute(harness, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 
     let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
     assert_eq!(

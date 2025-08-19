@@ -15,7 +15,7 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{interaction::BusIndex, p3_air::BaseAir};
 use p3_field::Field;
-pub use test_builder::{TestSC, VmChipTestBuilder};
+pub use test_builder::*;
 
 use crate::arch::{Arena, ExecutionState, MatrixRecordArena, PreflightExecutor};
 

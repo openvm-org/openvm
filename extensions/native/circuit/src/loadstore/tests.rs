@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
     conversion::AS,
@@ -83,7 +85,8 @@ fn set_and_execute<const NUM_CELLS: usize>(
     }
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

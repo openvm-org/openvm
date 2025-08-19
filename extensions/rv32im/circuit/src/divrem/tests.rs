@@ -2,8 +2,8 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::testing::{
-        memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-        RANGE_TUPLE_CHECKER_BUS,
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+        BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
     },
     utils::generate_long_number,
 };
@@ -137,7 +137,8 @@ fn set_and_execute(
     let (q, r, _, _, _, _) =
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
