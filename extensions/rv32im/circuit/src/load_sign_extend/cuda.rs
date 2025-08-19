@@ -1,9 +1,5 @@
 use std::sync::Arc;
 
-use crate::{
-    adapters::{Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterRecord},
-    LoadSignExtendCoreCols, LoadSignExtendCoreRecord,
-};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
@@ -14,7 +10,11 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::load_sign_extend_cuda::tracegen;
+use crate::{
+    adapters::{Rv32LoadStoreAdapterCols, Rv32LoadStoreAdapterRecord},
+    cuda_abi::load_sign_extend_cuda::tracegen,
+    LoadSignExtendCoreCols, LoadSignExtendCoreRecord,
+};
 
 #[derive(new)]
 pub struct Rv32LoadSignExtendChipGpu {

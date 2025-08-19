@@ -1,11 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::{
-    adapters::{
-        Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
-    },
-    LessThanCoreCols, LessThanCoreRecord,
-};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
@@ -18,7 +12,13 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::less_than_cuda::tracegen;
+use crate::{
+    adapters::{
+        Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+    },
+    cuda_abi::less_than_cuda::tracegen,
+    LessThanCoreCols, LessThanCoreRecord,
+};
 
 #[derive(new)]
 pub struct Rv32LessThanChipGpu {

@@ -736,12 +736,14 @@ fn run_mul_unsigned_sanity_test() {
 // const MAX_INS_CAPACITY: usize = 128;
 
 // type Harness =
-//     GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
+//     GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu,
+// Rv32DivRemChip<F>>;
 
 // fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
 //     // getting bus's from tester since `gpu_chip` and `air` must use the same bus
 //     let bitwise_bus = default_bitwise_lookup_bus();
-//     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+//     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS,
+// TUPLE_CHECKER_SIZES);
 
 //     // creating dummy chips for Cpu so we only count `add_count`s from GPU
 //     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(

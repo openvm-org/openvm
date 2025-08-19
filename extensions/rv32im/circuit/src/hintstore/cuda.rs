@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::{Rv32HintStoreCols, Rv32HintStoreLayout, Rv32HintStoreRecordMut};
 use derive_new::new;
 use openvm_circuit::{
     arch::{DenseRecordArena, RecordSeeker},
@@ -17,7 +16,10 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::hintstore_cuda::tracegen;
+use crate::{
+    cuda_abi::hintstore_cuda::tracegen, Rv32HintStoreCols, Rv32HintStoreLayout,
+    Rv32HintStoreRecordMut,
+};
 
 #[derive(new)]
 pub struct Rv32HintStoreChipGpu {

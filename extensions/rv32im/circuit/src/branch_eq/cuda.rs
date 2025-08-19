@@ -9,9 +9,9 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::beq_cuda::tracegen;
 use crate::{
     adapters::{Rv32BranchAdapterCols, Rv32BranchAdapterRecord, RV32_REGISTER_NUM_LIMBS},
+    cuda_abi::beq_cuda::tracegen,
     BranchEqualCoreCols, BranchEqualCoreRecord,
 };
 

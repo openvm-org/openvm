@@ -1,8 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use openvm_cuda_backend::chip::UInt2;
-use openvm_cuda_backend::prelude::F;
+use openvm_cuda_backend::{chip::UInt2, prelude::F};
 use openvm_cuda_common::{
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::CudaError,

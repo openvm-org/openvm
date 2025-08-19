@@ -409,7 +409,8 @@ fn test_additional_bits() {
 // const MAX_INS_CAPACITY: usize = 128;
 
 // type Harness =
-//     GpuTestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChipGpu, Rv32JalLuiChip<F>>;
+//     GpuTestChipHarness<F, Rv32JalLuiExecutor, Rv32JalLuiAir, Rv32JalLuiChipGpu,
+// Rv32JalLuiChip<F>>;
 
 // fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
 //     // getting bus from tester since `gpu_chip` and `air` must use the same bus

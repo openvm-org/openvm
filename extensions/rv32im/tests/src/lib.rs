@@ -18,7 +18,6 @@ mod tests {
     use openvm_rv32im_circuit::{
         Rv32IGpuBuilder as Rv32IBuilder, Rv32ImGpuBuilder as Rv32ImBuilder,
     };
-
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,

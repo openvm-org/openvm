@@ -340,8 +340,8 @@ fn run_jalr_sanity_test() {
 // use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 // use openvm_rv32im_circuit::{
 //     adapters::{
-//         Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller, Rv32JalrAdapterRecord,
-//         RV32_CELL_BITS,
+//         Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
+// Rv32JalrAdapterRecord,         RV32_CELL_BITS,
 //     },
 //     Rv32JalrAir, Rv32JalrChip, Rv32JalrCoreAir, Rv32JalrCoreRecord, Rv32JalrExecutor,
 //     Rv32JalrFiller,

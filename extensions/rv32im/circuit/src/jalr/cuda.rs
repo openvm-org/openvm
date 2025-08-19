@@ -1,9 +1,5 @@
 use std::{mem::size_of, sync::Arc};
 
-use crate::{
-    adapters::{Rv32JalrAdapterCols, Rv32JalrAdapterRecord, RV32_CELL_BITS},
-    Rv32JalrCoreCols, Rv32JalrCoreRecord,
-};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
@@ -16,7 +12,11 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::jalr_cuda::tracegen;
+use crate::{
+    adapters::{Rv32JalrAdapterCols, Rv32JalrAdapterRecord, RV32_CELL_BITS},
+    cuda_abi::jalr_cuda::tracegen,
+    Rv32JalrCoreCols, Rv32JalrCoreRecord,
+};
 #[derive(new)]
 pub struct Rv32JalrChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,

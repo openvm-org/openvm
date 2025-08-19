@@ -12,11 +12,11 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::cuda_abi::shift_cuda::tracegen as rv32_shift_tracegen;
 use crate::{
     adapters::{
         Rv32BaseAluAdapterCols, Rv32BaseAluAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
+    cuda_abi::shift_cuda::tracegen as rv32_shift_tracegen,
     ShiftCoreCols, ShiftCoreRecord,
 };
 

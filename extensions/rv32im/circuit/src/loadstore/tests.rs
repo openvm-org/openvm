@@ -483,9 +483,9 @@ fn run_loadbu_sanity_test() {
 //     LocalOpcode,
 // };
 // use openvm_rv32im_circuit::{
-//     adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor, Rv32LoadStoreAdapterFiller},
-//     LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir, Rv32LoadStoreChip, Rv32LoadStoreExecutor,
-// };
+//     adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor,
+// Rv32LoadStoreAdapterFiller},     LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir,
+// Rv32LoadStoreChip, Rv32LoadStoreExecutor, };
 // use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 // use openvm_stark_backend::p3_field::FieldAlgebra;
 // use openvm_stark_sdk::utils::create_seeded_rng;

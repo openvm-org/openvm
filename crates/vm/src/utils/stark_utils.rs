@@ -1,9 +1,13 @@
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as E;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
 };
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as E;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
@@ -11,10 +15,9 @@ use openvm_stark_sdk::{
 };
 
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as E;
+use crate::arch::DenseRecordArena;
 #[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as E;
-
+use crate::arch::MatrixRecordArena;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
@@ -23,11 +26,6 @@ use crate::{
     },
     system::memory::{MemoryImage, CHUNK},
 };
-
-#[cfg(feature = "cuda")]
-use crate::arch::DenseRecordArena;
-#[cfg(not(feature = "cuda"))]
-use crate::arch::MatrixRecordArena;
 
 #[cfg(feature = "cuda")]
 type RA = DenseRecordArena;
