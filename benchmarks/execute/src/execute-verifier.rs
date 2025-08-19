@@ -32,7 +32,7 @@ const PROGRAM_NAME: &str = "kitchen-sink";
 
 #[derive(Clone, Debug, ValueEnum)]
 enum ExecutionMode {
-    Normal,
+    Pure,
     Metered,
     Preflight,
 }
@@ -306,8 +306,8 @@ fn execute_verifier(
     input_stream: impl Into<Streams<BabyBear>>,
 ) -> Result<()> {
     match mode {
-        ExecutionMode::Normal => {
-            tracing::info!("Running normal execute...");
+        ExecutionMode::Pure => {
+            tracing::info!("Running pure execute...");
             let interpreter = vm.executor().instance(exe)?;
             interpreter.execute(input_stream, None)?;
         }
