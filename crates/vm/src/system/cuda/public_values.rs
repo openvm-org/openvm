@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_public_values_tracegen() {
+    fn test_cuda_public_values_tracegen() {
         let mut rng = create_seeded_rng();
         let system_config = SystemConfig::default();
         let mem_config = MemoryConfig::default();

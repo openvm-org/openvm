@@ -174,7 +174,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_access_adapters_cpu_gpu_equivalence() {
+    fn test_cuda_access_adapters_cpu_gpu_equivalence() {
         let mem_config = MemoryConfig::default();
 
         let mut rng = StdRng::seed_from_u64(42);

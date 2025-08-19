@@ -428,10 +428,10 @@ mod tests {
     use rand::Rng;
 
     use super::MemoryMerkleTree;
-    use crate::system::memory::adapter::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
+    use crate::system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
 
     #[test]
-    fn test_merkle_tree_cpu_gpu_root_equivalence() {
+    fn test_cuda_merkle_tree_cpu_gpu_root_equivalence() {
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);

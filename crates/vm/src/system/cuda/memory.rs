@@ -247,7 +247,7 @@ mod tests {
     use rand::Rng;
 
     #[test]
-    fn test_persistent_memory() {
+    fn test_cuda_persistent_memory() {
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn test_persistent_memory_do_not_touch_anything() {
+    fn test_cuda_persistent_memory_do_not_touch_anything() {
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_cells = 1 << 12;

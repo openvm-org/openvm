@@ -170,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_1() {
+    fn test_cuda_program_cached_tracegen_1() {
         let instructions = vec![
             Instruction::large_from_isize(STOREW.global_opcode(), 2, 0, 0, 0, 1, 0, 1),
             Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
@@ -198,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_2() {
+    fn test_cuda_program_cached_tracegen_2() {
         let instructions = vec![
             Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
             Instruction::from_isize(
@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_undefined_instructions() {
+    fn test_cuda_program_cached_tracegen_undefined_instructions() {
         let instructions = vec![
             Some(Instruction::large_from_isize(
                 STOREW.global_opcode(),

@@ -56,6 +56,8 @@ use crate::{
 };
 
 pub mod connector;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 pub mod memory;
 // Necessary for the PublicValuesChip
 pub mod native_adapter;

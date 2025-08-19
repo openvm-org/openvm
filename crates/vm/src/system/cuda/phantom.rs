@@ -72,7 +72,7 @@ mod tests {
     use super::PhantomChipGPU;
 
     #[test]
-    fn test_phantom_tracegen() {
+    fn test_cuda_phantom_tracegen() {
         const NUM_NOPS: usize = 100;
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
         let mut tester = GpuChipTestBuilder::default();

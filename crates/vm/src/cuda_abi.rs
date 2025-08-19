@@ -6,7 +6,7 @@ use openvm_cuda_common::{
     error::CudaError,
 };
 
-use crate::system::memory::adapter::cuda::access_adapters::{OffsetInfo, NUM_ADAPTERS};
+use crate::system::cuda::access_adapters::{OffsetInfo, NUM_ADAPTERS};
 
 pub mod boundary {
     use super::*;

@@ -206,7 +206,7 @@ mod tests {
     const LIMB_BITS: usize = 15;
 
     #[test]
-    fn test_volatile_boundary_tracegen() {
+    fn test_cuda_volatile_boundary_tracegen() {
         const NUM_ADDRESSES: usize = 10;
         let mut rng = create_seeded_rng();
 
