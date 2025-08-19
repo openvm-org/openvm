@@ -33,6 +33,8 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
+use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::{
@@ -81,6 +83,7 @@ pub struct SdkVmConfig {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
+    pub memcpy: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
@@ -118,6 +121,7 @@ impl SdkVmConfig {
             .rv32m(Default::default())
             .io(Default::default())
             .keccak(Default::default())
+            .memcpy(Default::default())
             .sha256(Default::default())
             .bigint(Default::default())
             .modular(ModularExtension::new(vec![
@@ -199,6 +203,9 @@ impl TranspilerConfig<F> for SdkVmConfig {
         if self.keccak.is_some() {
             transpiler = transpiler.with_extension(Keccak256TranspilerExtension);
         }
+        if self.memcpy.is_some() {
+            transpiler = transpiler.with_extension(MemcpyTranspilerExtension);
+        }
         if self.sha256.is_some() {
             transpiler = transpiler.with_extension(Sha256TranspilerExtension);
         }
@@ -269,6 +276,7 @@ impl SdkVmConfig {
         let rv32i = config.rv32i.map(|_| Rv32I);
         let io = config.io.map(|_| Rv32Io);
         let keccak = config.keccak.map(|_| Keccak256);
+        let memcpy = config.memcpy.map(|_| Memcpy);
         let sha256 = config.sha256.map(|_| Sha256);
         let native = config.native.map(|_| Native);
         let castf = config.castf.map(|_| CastFExtension);
@@ -284,6 +292,7 @@ impl SdkVmConfig {
             rv32i,
             io,
             keccak,
+            memcpy,
             sha256,
             native,
             castf,
@@ -315,6 +324,8 @@ pub struct SdkVmConfigInner {
     pub io: Option<Rv32Io>,
     #[extension(executor = "Keccak256Executor")]
     pub keccak: Option<Keccak256>,
+    #[extension(executor = "MemcpyExecutor")]
+    pub memcpy: Option<Memcpy>,
     #[extension(executor = "Sha256Executor")]
     pub sha256: Option<Sha256>,
     #[extension(executor = "NativeExecutor<F>")]
@@ -391,6 +402,9 @@ where
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+        }
+        if let Some(memcpy) = &config.memcpy {
+            VmProverExtension::<E, _, _>::extend_prover(&MemcpyCpuProverExt, memcpy, inventory)?;
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
@@ -566,6 +580,12 @@ impl From<Keccak256> for UnitStruct {
     }
 }
 
+impl From<Memcpy> for UnitStruct {
+    fn from(_: Memcpy) -> Self {
+        UnitStruct {}
+    }
+}
+
 impl From<Sha256> for UnitStruct {
     fn from(_: Sha256) -> Self {
         UnitStruct {}
@@ -592,6 +612,7 @@ struct SdkVmConfigWithDefaultDeser {
     pub rv32i: Option<UnitStruct>,
     pub io: Option<UnitStruct>,
     pub keccak: Option<UnitStruct>,
+    pub memcpy: Option<UnitStruct>,
     pub sha256: Option<UnitStruct>,
     pub native: Option<UnitStruct>,
     pub castf: Option<UnitStruct>,
@@ -611,6 +632,7 @@ impl From<SdkVmConfigWithDefaultDeser> for SdkVmConfig {
             rv32i: config.rv32i,
             io: config.io,
             keccak: config.keccak,
+            memcpy: config.memcpy,
             sha256: config.sha256,
             native: config.native,
             castf: config.castf,

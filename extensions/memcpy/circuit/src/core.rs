@@ -311,7 +311,7 @@ pub type MemcpyLoopChip<F> = VmChipWrapper<F, MemcpyLoopFiller>;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct MemcpyLoopPreCompute {
-    a: u8,
+    c: u8,
 }
 
 impl<F, RA> PreflightExecutor<F, RA> for MemcpyLoopExecutor
@@ -328,9 +328,9 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let Instruction { opcode, a, .. } = instruction;
+        let Instruction { opcode, c, .. } = instruction;
         debug_assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
-        let shift = a.as_canonical_u32() as u8;
+        let shift = c.as_canonical_u32() as u8;
         debug_assert!([0, 1, 2, 3].contains(&shift));
         let mut record = state.ctx.alloc(EmptyMultiRowLayout::default());
 
@@ -600,7 +600,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
     pre_compute: &MemcpyLoopPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let shift = pre_compute.a;
+    let shift = pre_compute.c;
     let (dest, source) = if shift == 0 {
         (
             vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
@@ -700,12 +700,12 @@ impl MemcpyLoopExecutor {
         inst: &Instruction<F>,
         data: &mut MemcpyLoopPreCompute,
     ) -> Result<(), StaticProgramError> {
-        let Instruction { opcode, a, .. } = inst;
-        let a_u32 = a.as_canonical_u32();
-        if ![0, 1, 2, 3].contains(&a_u32) {
+        let Instruction { opcode, c, .. } = inst;
+        let c_u32 = c.as_canonical_u32();
+        if ![0, 1, 2, 3].contains(&c_u32) {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        *data = MemcpyLoopPreCompute { a: a_u32 as u8 };
+        *data = MemcpyLoopPreCompute { c: c_u32 as u8 };
         assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
         Ok(())
     }
