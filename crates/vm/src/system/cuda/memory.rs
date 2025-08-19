@@ -7,26 +7,22 @@ use openvm_circuit::{
         TouchedMemory,
     },
 };
-use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip};
-use p3_field::FieldAlgebra;
-use stark_backend_gpu::{
-    cuda::{
-        copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
-        d_buffer::DeviceBuffer,
-        memory_manager::MemTracker,
-    },
-    prover_backend::GpuBackend,
-    types::F,
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
+use openvm_cuda_common::{
+    copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+    memory_manager::MemTracker,
+};
+use openvm_stark_backend::{
+    p3_field::FieldAlgebra, p3_util::log2_ceil_usize, prover::types::AirProvingContext, Chip,
 };
 
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{
-        access_adapters::AccessAdapterInventoryGPU,
-        boundary::{BoundaryChipGPU, BoundaryFields},
-        merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
-        Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
-    },
+use super::{
+    access_adapters::AccessAdapterInventoryGPU,
+    boundary::{BoundaryChipGPU, BoundaryFields},
+    merkle_tree::{MemoryMerkleTree, TIMESTAMPED_BLOCK_WIDTH},
+    Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
 };
 
 pub struct MemoryInventoryGPU {
@@ -241,6 +237,7 @@ mod tests {
     use std::array;
 
     use openvm_circuit::arch::MemoryConfig;
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
         NATIVE_AS,
@@ -249,13 +246,8 @@ mod tests {
     use p3_field::FieldAlgebra;
     use rand::Rng;
 
-    use crate::{
-        system::F,
-        testing::{default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder},
-    };
-
     #[test]
-    fn test_persistent_memory() {
+    fn test_cuda_persistent_memory() {
         let mut rng = create_seeded_rng();
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
@@ -320,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn test_persistent_memory_do_not_touch_anything() {
+    fn test_cuda_persistent_memory_do_not_touch_anything() {
         let mem_config = {
             let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
             let max_cells = 1 << 12;

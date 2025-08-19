@@ -5340,6 +5340,9 @@ dependencies = [
  "openvm-circuit-derive",
  "openvm-circuit-primitives",
  "openvm-circuit-primitives-derive",
+ "openvm-cuda-backend",
+ "openvm-cuda-builder",
+ "openvm-cuda-common",
  "openvm-instructions",
  "openvm-native-circuit",
  "openvm-native-compiler",
@@ -5348,6 +5351,7 @@ dependencies = [
  "openvm-stark-backend",
  "openvm-stark-sdk",
  "p3-baby-bear",
+ "p3-field",
  "rand 0.8.5",
  "rustc-hash 2.1.1",
  "serde",
@@ -5412,8 +5416,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
+version = "1.2.0-rc.3"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e9c9e9b0cbccb072f30ceb745354ecd74ed52ace"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5444,8 +5448,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
+version = "1.2.0-rc.3"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e9c9e9b0cbccb072f30ceb745354ecd74ed52ace"
 dependencies = [
  "cc",
  "glob",
@@ -5453,8 +5457,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
+version = "1.2.0-rc.3"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e9c9e9b0cbccb072f30ceb745354ecd74ed52ace"
 dependencies = [
  "bytesize",
  "lazy_static",
@@ -6160,8 +6164,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
+version = "1.2.0-rc.3"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e9c9e9b0cbccb072f30ceb745354ecd74ed52ace"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6188,8 +6192,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.0-rc.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#f78cdb93faeb73e60c22a15d5c7dc0fd44a8fa98"
+version = "1.2.0-rc.3"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fgpu#e9c9e9b0cbccb072f30ceb745354ecd74ed52ace"
 dependencies = [
  "dashmap",
  "derivative",

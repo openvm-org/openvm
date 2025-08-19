@@ -6,15 +6,16 @@ use openvm_circuit::{
     system::phantom::{PhantomCols, PhantomRecord},
     utils::next_power_of_two_or_zero,
 };
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
+};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
 
-use crate::{get_empty_air_proving_ctx, system::cuda};
+use crate::cuda_abi::phantom;
 
 #[derive(new)]
 pub struct PhantomChipGPU;
@@ -41,7 +42,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PhantomChipGPU {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, Self::trace_width());
         unsafe {
-            cuda::phantom::tracegen(
+            phantom::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
@@ -63,15 +64,15 @@ mod tests {
         system::phantom::{PhantomAir, PhantomExecutor, PhantomFiller, PhantomRecord},
         utils::next_power_of_two_or_zero,
     };
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
-    use p3_air::BaseAir;
+    use openvm_stark_backend::p3_air::BaseAir;
     use p3_field::{FieldAlgebra, PrimeField32};
-    use stark_backend_gpu::types::F;
 
-    use crate::{system::phantom::PhantomChipGPU, testing::GpuChipTestBuilder};
+    use super::PhantomChipGPU;
 
     #[test]
-    fn test_phantom_tracegen() {
+    fn test_cuda_phantom_tracegen() {
         const NUM_NOPS: usize = 100;
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
         let mut tester = GpuChipTestBuilder::default();

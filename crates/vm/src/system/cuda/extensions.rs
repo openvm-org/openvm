@@ -8,20 +8,19 @@ use openvm_circuit::{
     system::poseidon2::air::Poseidon2PeripheryAir,
 };
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChip},
-    var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip},
+    bitwise_op_lookup::{
+        cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir, BitwiseOperationLookupChip,
+    },
+    var_range::{
+        cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerAir, VariableRangeCheckerChip,
+    },
 };
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_baby_bear::BabyBear;
-use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
-use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-    system::{
-        phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInventoryGPU, DIGEST_WIDTH,
-    },
+use super::{
+    phantom::PhantomChipGPU, Poseidon2PeripheryChipGPU, SystemChipInventoryGPU, DIGEST_WIDTH,
 };
 
 /// A utility method to get the `VariableRangeCheckerChipGPU` from [ChipInventory].

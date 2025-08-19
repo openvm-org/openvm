@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use connector::VmConnectorChipGPU;
+use memory::MemoryInventoryGPU;
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
     system::{
@@ -8,28 +10,22 @@ use openvm_circuit::{
         SystemChipComplex, SystemRecords,
     },
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_stark_backend::{
     prover::types::{AirProvingContext, CommittedTraceData},
     Chip,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{prover_backend::GpuBackend, types::F};
-
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{
-        connector::VmConnectorChipGPU, memory::MemoryInventoryGPU,
-        poseidon2::Poseidon2PeripheryChipGPU, program::ProgramChipGPU,
-        public_values::PublicValuesChipGPU,
-    },
-};
+use poseidon2::Poseidon2PeripheryChipGPU;
+use program::ProgramChipGPU;
+use public_values::PublicValuesChipGPU;
 
 pub(crate) const DIGEST_WIDTH: usize = 8;
 
 pub mod access_adapters;
 pub mod boundary;
 pub mod connector;
-pub mod cuda;
 pub mod extensions;
 pub mod memory;
 pub mod merkle_tree;
@@ -123,8 +119,8 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
         let program_ctx = self.program.generate_proving_ctx(filtered_exec_frequencies);
 
-        self.connector.begin(from_state);
-        self.connector.end(to_state, exit_code);
+        self.connector.cpu_chip.begin(from_state);
+        self.connector.cpu_chip.end(to_state, exit_code);
         let connector_ctx = self.connector.generate_proving_ctx(());
 
         let pv_ctx = self.public_values.as_mut().map(|chip| {
@@ -146,7 +142,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::boundary::BoundaryFields;
+        use crate::system::cuda::boundary::BoundaryFields;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values.is_some());
         let mut access_adapter_offset = boundary_idx + 1;
