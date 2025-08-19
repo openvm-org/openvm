@@ -49,7 +49,7 @@ use crate::{
         perm::AirIdPermutation,
     },
     prover::vm::types::VmProvingKey,
-    util::warn_if_constraint_degree_mismatch,
+    util::check_max_constraint_degrees,
     RootSC, SC,
 };
 
@@ -127,7 +127,7 @@ where
                 vm_pk.max_constraint_degree
                     <= config.app_fri_params.fri_params.max_constraint_degree()
             );
-            warn_if_constraint_degree_mismatch(
+            check_max_constraint_degrees(
                 config.app_vm_config.as_ref(),
                 config.app_fri_params.fri_params,
             );
@@ -311,7 +311,7 @@ impl AggProvingKey {
                 leaf_vm_config.clone(),
             )?;
             assert!(vm_pk.max_constraint_degree <= config.leaf_fri_params.max_constraint_degree());
-            warn_if_constraint_degree_mismatch(&leaf_vm_config.system, config.leaf_fri_params);
+            check_max_constraint_degrees(&leaf_vm_config.system, config.leaf_fri_params);
             Arc::new(VmProvingKey {
                 fri_params: config.leaf_fri_params,
                 vm_config: leaf_vm_config,
@@ -331,7 +331,7 @@ impl AggProvingKey {
             NativeCpuBuilder,
             internal_vm_config.clone(),
         )?;
-        warn_if_constraint_degree_mismatch(&internal_vm_config.system, config.internal_fri_params);
+        check_max_constraint_degrees(&internal_vm_config.system, config.internal_fri_params);
         assert!(vm_pk.max_constraint_degree <= config.internal_fri_params.max_constraint_degree());
         let internal_vm_pk = Arc::new(VmProvingKey {
             fri_params: config.internal_fri_params,
