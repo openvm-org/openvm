@@ -23,6 +23,7 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
+        baby_bear_poseidon2::BabyBearPoseidon2Engine,
         FriParameters,
     },
     engine::StarkFriEngine,
@@ -591,12 +592,12 @@ fn test_vm_compress_poseidon2_as4() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(
+    air_test::<BabyBearPoseidon2Engine, _, _>(
         NativeCpuBuilder,
         NativeConfig::aggregation(0, 3),
         program.clone(),
     );
-    air_test(
+    air_test::<BabyBearPoseidon2Engine, _, _>(
         NativeCpuBuilder,
         NativeConfig::aggregation(0, 7),
         program.clone(),

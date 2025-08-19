@@ -15,7 +15,9 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2Engine, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, NoInitFile};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -52,7 +54,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -68,7 +70,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -95,7 +97,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -127,7 +129,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -147,7 +149,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularWithFp2CpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -176,7 +178,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularCpuBuilder, config, openvm_exe);
     }
 
     #[test]
@@ -191,7 +193,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32ModularCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ModularCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

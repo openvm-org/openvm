@@ -26,7 +26,10 @@ mod tests {
         StdIn,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;
-    use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2Engine, openvm_stark_backend,
+        p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
@@ -63,7 +66,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -85,7 +88,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -108,7 +111,7 @@ mod tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -174,7 +177,7 @@ mod tests {
             .into_iter()
             .map(FieldAlgebra::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(
+        air_test_with_min_segments::<BabyBearPoseidon2Engine, _, _>(
             Rv32WeierstrassCpuBuilder,
             config,
             openvm_exe,
@@ -197,7 +200,7 @@ mod tests {
             &config,
         )?;
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
-        air_test(SdkVmCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(SdkVmCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -215,7 +218,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments::<BabyBearPoseidon2Engine, _, _>(
+            SdkVmCpuBuilder,
+            config,
+            openvm_exe,
+            input,
+            1,
+        );
         Ok(())
     }
 
@@ -233,7 +242,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments::<BabyBearPoseidon2Engine, _, _>(
+            SdkVmCpuBuilder,
+            config,
+            openvm_exe,
+            input,
+            1,
+        );
         Ok(())
     }
 
@@ -251,7 +266,13 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&k256_sec1_decoding_test_vectors());
-        air_test_with_min_segments(SdkVmCpuBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments::<BabyBearPoseidon2Engine, _, _>(
+            SdkVmCpuBuilder,
+            config,
+            openvm_exe,
+            input,
+            1,
+        );
         Ok(())
     }
 
@@ -277,6 +298,6 @@ mod tests {
         .unwrap();
         let config =
             test_rv32weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
     }
 }

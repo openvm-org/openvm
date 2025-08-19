@@ -14,7 +14,9 @@ mod guest_tests {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sha256_transpiler::Sha256TranspilerExtension;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_stark_sdk::{
+        config::baby_bear_poseidon2::BabyBearPoseidon2Engine, p3_baby_bear::BabyBear,
+    };
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -43,7 +45,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -61,7 +63,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -82,7 +84,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -189,7 +191,7 @@ mod guest_tests {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(EcdsaCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(EcdsaCpuBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -210,7 +212,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test::<BabyBearPoseidon2Engine, _, _>(Rv32WeierstrassCpuBuilder, config, openvm_exe);
         Ok(())
     }
 }

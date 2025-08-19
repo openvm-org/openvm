@@ -102,7 +102,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 // See crates/sdk/src/prover/root.rs for intended usage
@@ -271,7 +271,7 @@ fn test_vm_initial_memory() {
         init_memory,
         fn_bounds: Default::default(),
     };
-    air_test(NativeCpuBuilder, config, exe);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, config, exe);
 }
 
 #[test]
@@ -375,7 +375,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -422,7 +422,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -481,7 +481,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -505,7 +505,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -554,7 +554,7 @@ fn test_vm_max_access_adapter_8() {
             num_sys_airs2 + num_ext_airs
         );
     }
-    air_test(NativeCpuBuilder, test_native_config(), program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, test_native_config(), program);
 }
 
 #[test]
@@ -578,7 +578,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = test_native_continuations_config();
-    air_test(NativeCpuBuilder, config, program);
+    air_test::<BabyBearPoseidon2Engine, _, _>(NativeCpuBuilder, config, program);
 }
 
 #[test]
@@ -639,7 +639,13 @@ fn test_vm_hint() {
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = test_native_config();
-    air_test_with_min_segments(NativeCpuBuilder, config, program, input_stream, 1);
+    air_test_with_min_segments::<BabyBearPoseidon2Engine, _, _>(
+        NativeCpuBuilder,
+        config,
+        program,
+        input_stream,
+        1,
+    );
 }
 
 #[test]

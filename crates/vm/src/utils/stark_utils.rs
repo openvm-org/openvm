@@ -5,12 +5,8 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing, FriParameters,
-    },
+    config::{setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
-    p3_baby_bear::BabyBear,
 };
 
 use crate::{
@@ -25,59 +21,46 @@ use crate::{
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
-pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
+pub fn air_test<E, VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<Val<E::SC>>>)
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
-    VC: VmExecutionConfig<BabyBear>
-        + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E, VmConfig = VC, RecordArena = MatrixRecordArena<Val<E::SC>>>,
+    VC: VmExecutionConfig<Val<E::SC>> + VmCircuitConfig<E::SC> + VmConfig<E::SC>,
+    <VC as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, MatrixRecordArena<Val<E::SC>>>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
 
 /// Executes and proves the VM and returns the final memory state.
-pub fn air_test_with_min_segments<VB, VC>(
+pub fn air_test_with_min_segments<E, VB, VC>(
     builder: VB,
     config: VC,
-    exe: impl Into<VmExe<BabyBear>>,
-    input: impl Into<Streams<BabyBear>>,
+    exe: impl Into<VmExe<Val<E::SC>>>,
+    input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<
-        BabyBearPoseidon2Engine,
-        VmConfig = VC,
-        RecordArena = MatrixRecordArena<BabyBear>,
-    >,
-    VC: VmExecutionConfig<BabyBear>
-        + VmCircuitConfig<BabyBearPoseidon2Config>
-        + VmConfig<BabyBearPoseidon2Config>,
-    <VC as VmExecutionConfig<BabyBear>>::Executor: Executor<BabyBear>
-        + MeteredExecutor<BabyBear>
-        + PreflightExecutor<BabyBear, MatrixRecordArena<BabyBear>>,
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E, VmConfig = VC, RecordArena = MatrixRecordArena<Val<E::SC>>>,
+    VC: VmExecutionConfig<Val<E::SC>> + VmCircuitConfig<E::SC> + VmConfig<E::SC>,
+    <VC as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, MatrixRecordArena<Val<E::SC>>>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    let (final_memory, _) = air_test_impl::<BabyBearPoseidon2Engine, VB>(
-        fri_params,
-        builder,
-        config,
-        exe,
-        input,
-        min_segments,
-        true,
-    )
-    .unwrap();
+    let (final_memory, _) =
+        air_test_impl::<E, VB>(fri_params, builder, config, exe, input, min_segments, true)
+            .unwrap();
     final_memory
 }
 

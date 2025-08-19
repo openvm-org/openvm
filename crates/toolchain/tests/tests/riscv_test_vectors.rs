@@ -9,7 +9,9 @@ use openvm_rv32im_circuit::{Rv32ImConfig, Rv32ImCpuBuilder};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, p3_baby_bear::BabyBear,
+};
 use openvm_toolchain_tests::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
@@ -81,7 +83,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(Rv32ImCpuBuilder, config.clone(), exe);
+                air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ImCpuBuilder, config.clone(), exe);
             });
 
             match result {

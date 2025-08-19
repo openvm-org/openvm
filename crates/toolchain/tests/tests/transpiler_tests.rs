@@ -21,7 +21,9 @@ use openvm_rv32im_circuit::*;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use openvm_stark_sdk::{
+    config::baby_bear_poseidon2::BabyBearPoseidon2Engine, p3_baby_bear::BabyBear,
+};
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
@@ -156,6 +158,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(Rv32ImCpuBuilder, config, openvm_exe);
+    air_test::<BabyBearPoseidon2Engine, _, _>(Rv32ImCpuBuilder, config, openvm_exe);
     Ok(())
 }
