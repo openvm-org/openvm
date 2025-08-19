@@ -8,18 +8,17 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::encoder::Encoder;
+use openvm_circuit_primitives::{encoder::Encoder, var_range::cuda::VariableRangeCheckerChipGPU};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
 
-use crate::{
-    get_empty_air_proving_ctx, primitives::var_range::VariableRangeCheckerChipGPU, system::cuda,
-};
+use crate::cuda_abi::public_values;
 
 #[repr(C)]
 struct FullPublicValuesRecord {
@@ -79,7 +78,7 @@ impl Chip<DenseRecordArena, GpuBackend> for PublicValuesChipGPU {
         let trace_height = next_power_of_two_or_zero(num_records);
         let trace = DeviceMatrix::<F>::with_capacity(trace_height, self.trace_width());
         unsafe {
-            cuda::public_values::tracegen(
+            public_values::tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
@@ -112,18 +111,15 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+    use openvm_cuda_backend::prelude::F;
     use openvm_instructions::{
         instruction::Instruction, riscv::RV32_IMM_AS, LocalOpcode, PublishOpcode, NATIVE_AS,
     };
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::{FieldAlgebra, PrimeField32};
     use rand::Rng;
-    use stark_backend_gpu::types::F;
 
-    use crate::{
-        system::public_values::PublicValuesChipGPU,
-        testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    };
+    use super::PublicValuesChipGPU;
 
     type Harness = GpuTestChipHarness<
         F,
@@ -168,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn test_public_values_tracegen() {
+    fn test_cuda_public_values_tracegen() {
         let mut rng = create_seeded_rng();
         let system_config = SystemConfig::default();
         let mem_config = MemoryConfig::default();

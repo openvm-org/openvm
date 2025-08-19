@@ -1,27 +1,24 @@
 use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{system::program::ProgramExecutionCols, utils::next_power_of_two_or_zero};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, gpu_device::GpuDevice, prover_backend::GpuBackend, types::F,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::{
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode, SystemOpcode,
 };
 use openvm_stark_backend::{
-    p3_field::FieldAlgebra,
     prover::{
         hal::{MatrixDimensions, TraceCommitter},
         types::{AirProvingContext, CommittedTraceData},
     },
     Chip,
 };
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    gpu_device::GpuDevice,
-    prover_backend::GpuBackend,
-    types::F,
-};
+use p3_field::FieldAlgebra;
 
-use crate::system::cuda;
+use crate::cuda_abi::program;
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -62,7 +59,7 @@ impl ProgramChipGPU {
 
         let trace = DeviceMatrix::<F>::with_capacity(height, size_of::<ProgramExecutionCols<u8>>());
         unsafe {
-            cuda::program::cached_tracegen(
+            program::cached_tracegen(
                 trace.buffer(),
                 trace.height(),
                 trace.width(),
@@ -132,6 +129,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 #[cfg(test)]
 mod tests {
     use openvm_circuit::system::program::trace::VmCommittedExe;
+    use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prelude::F};
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -152,9 +150,8 @@ mod tests {
         },
         engine::{StarkEngine, StarkFriEngine},
     };
-    use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, types::F};
 
-    use crate::{system::program::ProgramChipGPU, testing::assert_eq_cpu_and_gpu_matrix};
+    use super::ProgramChipGPU;
 
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));
@@ -173,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_1() {
+    fn test_cuda_program_cached_tracegen_1() {
         let instructions = vec![
             Instruction::large_from_isize(STOREW.global_opcode(), 2, 0, 0, 0, 1, 0, 1),
             Instruction::large_from_isize(STOREW.global_opcode(), 1, 1, 0, 0, 1, 0, 1),
@@ -201,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_2() {
+    fn test_cuda_program_cached_tracegen_2() {
         let instructions = vec![
             Instruction::large_from_isize(STOREW.global_opcode(), 5, 0, 0, 0, 1, 0, 1),
             Instruction::from_isize(
@@ -235,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_program_cached_tracegen_undefined_instructions() {
+    fn test_cuda_program_cached_tracegen_undefined_instructions() {
         let instructions = vec![
             Some(Instruction::large_from_isize(
                 STOREW.global_opcode(),

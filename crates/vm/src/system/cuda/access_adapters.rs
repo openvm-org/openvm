@@ -8,14 +8,12 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::types::AirProvingContext;
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
 
-use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU, system::cuda::access_adapters::tracegen,
-};
+use crate::cuda_abi::access_adapters::tracegen;
 
 pub(crate) const NUM_ADAPTERS: usize = 5;
 
@@ -169,15 +167,14 @@ mod tests {
         system::memory::{offline_checker::MemoryBus, MemoryController},
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+    use openvm_cuda_backend::prelude::SC;
     use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
-    use stark_backend_gpu::{prelude::SC, types::F};
 
     use super::*;
-    use crate::testing::{assert_eq_cpu_and_gpu_matrix, GpuChipTestBuilder};
 
     #[test]
-    fn test_access_adapters_cpu_gpu_equivalence() {
+    fn test_cuda_access_adapters_cpu_gpu_equivalence() {
         let mem_config = MemoryConfig::default();
 
         let mut rng = StdRng::seed_from_u64(42);

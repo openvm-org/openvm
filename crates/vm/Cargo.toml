@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 p3-baby-bear = { workspace = true }
+p3-field = { workspace = true }
 
 openvm-poseidon2-air = { workspace = true }
 openvm-stark-backend = { workspace = true }
@@ -35,6 +36,11 @@ derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
+openvm-cuda-common = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
 
 [target.'cfg(any(unix, windows))'.dependencies]
 memmap2.workspace = true
@@ -67,9 +73,16 @@ perf-metrics = ["metrics"]
 basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
-test-utils = ["openvm-stark-sdk"]
+test-utils = ["dep:openvm-stark-sdk"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk?/nightly-features"]
+cuda = [
+    "dep:openvm-stark-sdk", # for BabyBearPoseidon2Config
+    "openvm-circuit-primitives/cuda",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-builder",
+]

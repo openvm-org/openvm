@@ -1,6 +1,6 @@
 #include "launcher.cuh"
 #include "less_than.cuh"
-#include "poseidon2/fp_array.cuh"
+#include "fp_array.cuh"
 #include "shared_buffer.cuh"
 #include "trace_access.h"
 

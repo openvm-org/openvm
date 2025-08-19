@@ -7,28 +7,20 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{
     p3_field::PrimeField32,
     p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
 };
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
-    prover_backend::GpuBackend,
-};
 
-use crate::{
-    get_empty_air_proving_ctx,
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{
-        cuda::boundary::{persistent_boundary_tracegen, volatile_boundary_tracegen},
-        merkle_tree::TIMESTAMPED_BLOCK_WIDTH,
-        poseidon2::SharedBuffer,
-    },
-};
+use super::{merkle_tree::TIMESTAMPED_BLOCK_WIDTH, poseidon2::SharedBuffer};
+use crate::cuda_abi::boundary::{persistent_boundary_tracegen, volatile_boundary_tracegen};
 
 pub struct PersistentBoundary {
     pub poseidon2_buffer: SharedBuffer<F>,
@@ -195,6 +187,10 @@ mod tests {
         },
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+    use openvm_cuda_backend::{
+        prelude::{F, SC},
+        prover_backend::GpuBackend,
+    };
     use openvm_stark_backend::{
         p3_util::log2_ceil_usize,
         prover::{cpu::CpuBackend, types::AirProvingContext},
@@ -203,22 +199,14 @@ mod tests {
     use openvm_stark_sdk::utils::create_seeded_rng;
     use p3_field::FieldAlgebra;
     use rand::Rng;
-    use stark_backend_gpu::{
-        prover_backend::GpuBackend,
-        types::{F, SC},
-    };
 
-    use crate::{
-        primitives::var_range::VariableRangeCheckerChipGPU,
-        system::boundary::BoundaryChipGPU,
-        testing::{assert_eq_cpu_and_gpu_matrix, default_var_range_checker_bus},
-    };
+    use super::{BoundaryChipGPU, VariableRangeCheckerChipGPU};
 
     const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
 
     #[test]
-    fn test_volatile_boundary_tracegen() {
+    fn test_cuda_volatile_boundary_tracegen() {
         const NUM_ADDRESSES: usize = 10;
         let mut rng = create_seeded_rng();
 
