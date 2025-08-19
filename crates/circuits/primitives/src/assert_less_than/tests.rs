@@ -28,11 +28,10 @@ use crate::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
 #[cfg(feature = "cuda")]
 use {
     crate::cuda_abi::less_than::assert_less_than_dummy_tracegen,
-    stark_backend_gpu::{
-        base::DeviceMatrix,
-        cuda::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
-        types::F,
+    openvm_cuda_backend::{
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix, types::F,
     },
+    openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer},
 };
 
 // We only create an Air for testing purposes
@@ -271,7 +270,7 @@ fn test_cuda_assert_less_than_tracegen() {
         [28, 120, 1, 91, 0, 0, 0],
         [337, 456, 1, 118, 0, 0, 0],
     ];
-    let _expected_cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
+    let expected_cpu_matrix = Arc::new(RowMajorMatrix::<F>::new(
         expected_cpu_matrix_vals
             .into_iter()
             .flatten()
@@ -279,7 +278,5 @@ fn test_cuda_assert_less_than_tracegen() {
             .collect(),
         3 + AUX_LEN,
     ));
-
-    // TODO[stephenh]: Uncomment this when we decide where to put it
-    // assert_eq_cpu_and_gpu_matrix(expected_cpu_matrix, &trace);
+    assert_eq_host_and_device_matrix(expected_cpu_matrix, &trace);
 }
