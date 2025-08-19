@@ -27,6 +27,7 @@ use crate::{
     commit::{AppExecutionCommit, CommitBytes},
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
+    util::warn_constraint_degree_mismatch,
     StdIn, F, SC,
 };
 
@@ -133,15 +134,10 @@ where
             self.vm_config().as_ref().continuation_enabled,
             "Use generate_app_proof_without_continuations instead."
         );
-        if self.vm_config().as_ref().max_constraint_degree
-            != self.instance.vm.engine.fri_params().max_constraint_degree()
-        {
-            tracing::warn!(
-                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
-                self.vm_config().as_ref().max_constraint_degree,
-                self.instance.vm.engine.fri_params().max_constraint_degree()
-            );
-        }
+        warn_constraint_degree_mismatch(
+            self.vm_config().as_ref(),
+            self.instance.vm.engine.fri_params(),
+        );
         let proofs = info_span!(
             "app proof",
             group = self

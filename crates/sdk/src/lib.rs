@@ -73,6 +73,7 @@ pub mod fs;
 pub mod keygen;
 pub mod prover;
 pub mod types;
+pub mod util;
 
 mod error;
 mod stdin;

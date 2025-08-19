@@ -16,7 +16,8 @@ use openvm_stark_sdk::{engine::StarkFriEngine, openvm_stark_backend::proof::Proo
 use tracing::{info_span, instrument};
 
 use crate::{
-    config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover, F, SC,
+    config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover,
+    util::warn_constraint_degree_mismatch, F, SC,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
@@ -124,20 +125,10 @@ where
         &mut self,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
-        if self.leaf_prover.vm.config().as_ref().max_constraint_degree
-            != self
-                .leaf_prover
-                .vm
-                .engine
-                .fri_params()
-                .max_constraint_degree()
-        {
-            tracing::warn!(
-                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
-                self.leaf_prover.vm.config().as_ref().max_constraint_degree,
-                self.leaf_prover.vm.engine.fri_params().max_constraint_degree()
-            );
-        }
+        warn_constraint_degree_mismatch(
+            self.leaf_prover.vm.config().as_ref(),
+            self.leaf_prover.vm.engine.fri_params(),
+        );
         self.leaf_controller
             .generate_proof(&mut self.leaf_prover, app_proofs)
     }
@@ -160,20 +151,10 @@ where
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
     ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
-        if self.leaf_prover.vm.config().as_ref().max_constraint_degree
-            != self
-                .leaf_prover
-                .vm
-                .engine
-                .fri_params()
-                .max_constraint_degree()
-        {
-            tracing::warn!(
-                "config.max_constraint_degree ({}) != engine.fri_params().max_constraint_degree() ({})",
-                self.leaf_prover.vm.config().as_ref().max_constraint_degree,
-                self.leaf_prover.vm.engine.fri_params().max_constraint_degree()
-            );
-        }
+        warn_constraint_degree_mismatch(
+            self.leaf_prover.vm.config().as_ref(),
+            self.leaf_prover.vm.engine.fri_params(),
+        );
 
         let mut internal_node_idx = -1;
         let mut internal_node_height = 0;
