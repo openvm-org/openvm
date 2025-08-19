@@ -8,6 +8,8 @@ description = "OpenVM circuit extension for sha256"
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -28,12 +30,25 @@ hex = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [features]
-default = ["parallel", "jemalloc"]
+default = ["parallel", "jemalloc", "cuda"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
+
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
+
+cuda = [
+    "dep:openvm-cuda-builder",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
+    "openvm-circuit-primitives/cuda",
+    "openvm-circuit/cuda",
+    # "openvm-rv32im-circuit/cuda",
+]

@@ -25,6 +25,9 @@ pub use sha256_chip::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(feature = "cuda")]
+mod cuda_abi;
+
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha256Rv32Config {
     #[config(executor = "SystemExecutor<F>")]

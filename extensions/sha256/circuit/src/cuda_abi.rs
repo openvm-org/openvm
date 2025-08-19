@@ -1,9 +1,7 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::{
-    cuda::{d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-};
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 pub mod sha256 {
     use super::*;
