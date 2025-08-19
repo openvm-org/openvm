@@ -56,8 +56,8 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
             "app proof",
             group = self
                 .program_name
-                .as_ref()
-                .unwrap_or(&"app_proof".to_string())
+                .as_deref()
+                .unwrap_or("app_proof")
         )
         .in_scope(|| {
             #[cfg(feature = "bench-metrics")]
@@ -81,8 +81,8 @@ impl<VC, E: StarkFriEngine<SC>> AppProver<VC, E> {
             "app proof",
             group = self
                 .program_name
-                .as_ref()
-                .unwrap_or(&"app_proof".to_string())
+                .as_deref()
+                .unwrap_or("app_proof")
         )
         .in_scope(|| {
             #[cfg(feature = "bench-metrics")]
