@@ -6,8 +6,6 @@ use openvm_circuit::arch::{
     PreflightExecutor, SingleSegmentVmProver, VmBuilder, VmExecutionConfig,
 };
 use openvm_continuations::verifier::internal::types::InternalVmVerifierInput;
-// #[cfg(feature = "evm-prove")]
-// use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::hints::Hintable;
 use openvm_sdk::{
@@ -105,96 +103,6 @@ where
     Ok((final_internal_proof, internal_proof_count))
 }
 
-// #[cfg(feature = "evm-prove")]
-// /// Wraps the final internal proof with additional internal proofs until it meets root verifier
-// /// requirements Returns the root verifier input and the count of wrapper proofs generated
-// fn wrap_e2e_stark_proof<E, NativeBuilder>(
-//     agg_prover: &mut AggStarkProver<E, NativeBuilder>,
-//     final_internal_proof: Proof<SC>,
-//     public_values: Vec<F>,
-//     starting_internal_idx: usize,
-//     fixtures_dir: &Path,
-//     program: &str,
-// ) -> Result<(RootVmVerifierInput<SC>, usize)>
-// where
-//     E: StarkFriEngine<SC = SC>,
-//     NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
-//     <NativeConfig as VmExecutionConfig<F>>::Executor:
-//         PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
-// {
-//     let internal_commit = (*agg_prover.internal_prover.program_commitment()).into();
-//     let mut proof = final_internal_proof;
-//     let mut wrapper_count = 0;
-//
-//     fn heights_le(a: &[u32], b: &[u32]) -> bool {
-//         assert_eq!(a.len(), b.len());
-//         a.iter().zip(b.iter()).all(|(a, b)| a <= b)
-//     }
-//
-//     loop {
-//         let input = RootVmVerifierInput {
-//             proofs: vec![proof.clone()],
-//             public_values: public_values.clone(),
-//         };
-//
-//         let actual_air_heights = agg_prover
-//             .root_prover
-//             .execute_for_air_heights(input.clone())?;
-//
-//         // Root verifier can handle the internal proof. We can stop here.
-//         if heights_le(
-//             &actual_air_heights,
-//             agg_prover.root_prover.fixed_air_heights(),
-//         ) {
-//             break;
-//         }
-//
-//         if wrapper_count >= agg_prover.max_internal_wrapper_layers {
-//             panic!(
-//                 "The heights of the root verifier still exceed the required heights after {}
-// internal layers",                 agg_prover.max_internal_wrapper_layers
-//             );
-//         }
-//
-//         let input = InternalVmVerifierInput {
-//             self_program_commit: internal_commit,
-//             proofs: vec![proof.clone()],
-//         };
-//
-//         proof = info_span!(
-//             "internal_layer",
-//             group = format!("internal.{}", wrapper_count)
-//         )
-//         .in_scope(|| {
-//             SingleSegmentVmProver::prove(
-//                 &mut agg_prover.internal_prover,
-//                 input.write(),
-//                 NATIVE_MAX_TRACE_HEIGHTS,
-//             )
-//         })?;
-//
-//         // Save the wrapper proof
-//         write_fixture(
-//             fixtures_dir.join(format!(
-//                 "{}.internal.{}.proof",
-//                 program,
-//                 starting_internal_idx + wrapper_count
-//             )),
-//             &proof,
-//             &format!("wrapper internal proof {}", wrapper_count),
-//         )?;
-//
-//         wrapper_count += 1;
-//     }
-//
-//     let root_verifier_input = RootVmVerifierInput {
-//         proofs: vec![proof],
-//         public_values,
-//     };
-//
-//     Ok((root_verifier_input, wrapper_count))
-// }
-
 fn main() -> Result<()> {
     // Set up logging
     fmt::fmt().with_env_filter(EnvFilter::new("info")).init();
@@ -281,13 +189,6 @@ fn main() -> Result<()> {
             "internal proving key",
         )?;
 
-        // #[cfg(feature = "evm-prove")]
-        // write_fixture(
-        //     fixtures_dir.join(format!("{}.root.pk", program)),
-        //     &agg_pk.root_verifier_pk.vm_pk.vm_pk,
-        //     "root proving key",
-        // )?;
-
         tracing::info!(program = %program, "Creating aggregation provers");
         let native_builder = sdk.native_builder().clone();
         let leaf_verifier_exe = app_pk.leaf_committed_exe.exe.clone();
@@ -318,65 +219,15 @@ fn main() -> Result<()> {
         let (_final_internal_proof, internal_proof_count) =
             aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir, program)?;
 
-        #[cfg(not(feature = "evm-prove"))]
-        let total_internals = internal_proof_count;
-        // #[cfg(feature = "evm-prove")]
-        // let mut total_internals = internal_proof_count;
-
-        // #[cfg(feature = "evm-prove")]
-        // {
-        //     tracing::info!(program = %program, "Generating root verifier input and proof");
-        //     let public_values = app_proof.user_public_values.public_values.clone();
-        //
-        //     let (root_verifier_input, wrapper_count) = wrap_e2e_stark_proof(
-        //         &mut agg_prover,
-        //         _final_internal_proof,
-        //         public_values,
-        //         internal_proof_count, // Start wrapper indices after all internal proofs
-        //         &fixtures_dir,
-        //         program,
-        //     )?;
-        //
-        //     // Save root verifier input
-        //     write_fixture(
-        //         fixtures_dir.join(format!("{}.root.input", program)),
-        //         &root_verifier_input,
-        //         "root verifier input",
-        //     )?;
-        //
-        //     let root_proof = agg_prover.generate_root_proof_impl(root_verifier_input.clone())?;
-        //
-        //     // Save root proof
-        //     write_fixture(
-        //         fixtures_dir.join(format!("{}.root.proof", program)),
-        //         &root_proof,
-        //         "root proof",
-        //     )?;
-        //
-        //     total_internals += wrapper_count;
-        // }
-
-        #[cfg(not(feature = "evm-prove"))]
         tracing::info!(
             program = %program,
             leaf_proofs = leaf_proofs.len(),
-            total_internals = total_internals,
+            total_internals = internal_proof_count,
             "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, app.proof, {} leaf proofs, and {} internal proofs",
             program,
             leaf_proofs.len(),
-            total_internals
+            internal_proof_count
         );
-        // #[cfg(feature = "evm-prove")]
-        // tracing::info!(
-        //     program = %program,
-        //     leaf_proofs = leaf_proofs.len(),
-        //     total_internals = total_internals,
-        //     "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk,
-        // root.pk, app.proof, {} leaf proofs, {} internal proofs, root.input, and root.proof",
-        //     program,
-        //     leaf_proofs.len(),
-        //     total_internals
-        // );
     }
 
     tracing::info!("Successfully processed all programs");

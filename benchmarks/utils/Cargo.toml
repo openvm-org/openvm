@@ -42,7 +42,6 @@ generate-fixtures = [
     "dep:openvm-sdk",
     "dep:openvm-stark-sdk",
 ]
-evm-prove = ["generate-fixtures"]
 
 [[bin]]
 name = "build-elfs"
