@@ -1,4 +1,8 @@
-use std::{fs, io, path::Path, sync::OnceLock};
+use std::{
+    fs, io,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use divan::Bencher;
 use eyre::Result;
@@ -20,12 +24,16 @@ use openvm_circuit::{
     derive::VmConfig,
     system::*,
 };
-use openvm_continuations::{verifier::leaf::types::LeafVmVerifierInput, SC};
+use openvm_continuations::{
+    verifier::{internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput},
+    SC,
+};
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
@@ -37,7 +45,10 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::config::{AggregationConfig, DEFAULT_NUM_CHILDREN_LEAF};
+use openvm_sdk::{
+    commit::VmCommittedExe,
+    config::{AggregationConfig, DEFAULT_NUM_CHILDREN_INTERNAL, DEFAULT_NUM_CHILDREN_LEAF},
+};
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
@@ -47,6 +58,7 @@ use openvm_stark_sdk::{
         self,
         config::{StarkGenericConfig, Val},
         p3_field::PrimeField32,
+        proof::Proof,
         prover::{
             cpu::{CpuBackend, CpuDevice},
             hal::DeviceDataTransporter,
@@ -75,6 +87,8 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
 static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
+
+type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
@@ -295,12 +309,9 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
         });
 }
 
-fn setup_leaf_verifier() -> (
-    VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>,
-    VmExe<BabyBear>,
-    Vec<Vec<BabyBear>>,
-) {
+fn setup_leaf_verifier() -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
+
     let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
     let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
@@ -324,19 +335,55 @@ fn setup_leaf_verifier() -> (
     (vm, leaf_exe, input_stream)
 }
 
+fn setup_internal_verifier() -> (NativeVm, Arc<VmExe<BabyBear>>, Vec<Vec<BabyBear>>) {
+    let fixtures_dir = get_fixtures_dir();
+
+    let internal_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.internal.exe")).unwrap();
+    let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
+
+    let internal_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.internal.pk")).unwrap();
+    let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
+
+    // Load leaf proof by index (using index 0)
+    let leaf_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.0.proof"))
+        .expect("No leaf proof available at index 0");
+    let leaf_proof: Proof<SC> = bitcode::deserialize(&leaf_proof_bytes).unwrap();
+
+    let agg_config = AggregationConfig::default();
+    let config = agg_config.internal_vm_config();
+    let engine = BabyBearPoseidon2Engine::new(agg_config.internal_fri_params);
+
+    let internal_committed_exe = VmCommittedExe::<SC>::commit(internal_exe, engine.config().pcs());
+    let internal_inputs = InternalVmVerifierInput::chunk_leaf_or_internal_proofs(
+        internal_committed_exe.get_program_commit().into(),
+        &[leaf_proof],
+        DEFAULT_NUM_CHILDREN_INTERNAL,
+    );
+
+    let d_pk = engine.device().transport_pk_to_device(&internal_pk);
+    let vm = VirtualMachine::new(engine, NativeCpuBuilder, config, d_pk).unwrap();
+    let input_stream = internal_inputs.first().unwrap().write();
+
+    (vm, internal_committed_exe.exe, input_stream)
+}
+
+// Safe wrapper for the unsafe transmute operation
+fn transmute_interpreter_lifetime<'a, Ctx>(
+    interpreter: InterpretedInstance<'_, BabyBear, Ctx>,
+) -> InterpretedInstance<'a, BabyBear, Ctx> {
+    // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
+    // This is safe because the vm is moved into the tuple and will remain
+    // alive for the entire duration that the interpreter is used.
+    unsafe { std::mem::transmute(interpreter) }
+}
+
 #[divan::bench(sample_count = 5)]
 fn benchmark_leaf_verifier_execute(bencher: Bencher) {
     bencher
         .with_inputs(|| {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
             let interpreter = vm.executor().instance(&leaf_exe).unwrap();
-
-            // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
-            // This is safe because the vm is moved into the tuple and will remain
-            // alive for the entire duration that the interpreter is used.
-            #[allow(clippy::missing_transmute_annotations)]
-            let interpreter =
-                unsafe { std::mem::transmute::<_, InterpretedInstance<'_, _, _>>(interpreter) };
+            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream)
         })
@@ -358,13 +405,7 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
                 .executor()
                 .metered_instance(&leaf_exe, &executor_idx_to_air_idx)
                 .unwrap();
-
-            // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
-            // This is safe because the vm is moved into the tuple and will remain
-            // alive for the entire duration that the interpreter is used.
-            #[allow(clippy::missing_transmute_annotations)]
-            let interpreter =
-                unsafe { std::mem::transmute::<_, InterpretedInstance<'_, _, _>>(interpreter) };
+            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream, ctx)
         })
@@ -382,6 +423,62 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
             let state = vm.create_initial_state(&leaf_exe, input_stream);
             let interpreter = vm.preflight_interpreter(&leaf_exe).unwrap();
+
+            (vm, state, interpreter)
+        })
+        .bench_values(|(vm, state, mut interpreter)| {
+            let _out = vm
+                .execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
+                .expect("Failed to execute preflight");
+        });
+}
+
+#[divan::bench(sample_count = 5)]
+fn benchmark_internal_verifier_execute(bencher: Bencher) {
+    bencher
+        .with_inputs(|| {
+            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let interpreter = vm.executor().instance(&internal_exe).unwrap();
+            let interpreter = transmute_interpreter_lifetime(interpreter);
+
+            (vm, interpreter, input_stream)
+        })
+        .bench_values(|(_vm, interpreter, input_stream)| {
+            interpreter
+                .execute(input_stream, None)
+                .expect("Failed to execute program in interpreted mode");
+        });
+}
+
+#[divan::bench(sample_count = 5)]
+fn benchmark_internal_verifier_execute_metered(bencher: Bencher) {
+    bencher
+        .with_inputs(|| {
+            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let ctx = vm.build_metered_ctx();
+            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+            let interpreter = vm
+                .executor()
+                .metered_instance(&internal_exe, &executor_idx_to_air_idx)
+                .unwrap();
+            let interpreter = transmute_interpreter_lifetime(interpreter);
+
+            (vm, interpreter, input_stream, ctx)
+        })
+        .bench_values(|(_vm, interpreter, input_stream, ctx)| {
+            interpreter
+                .execute_metered(input_stream, ctx)
+                .expect("Failed to execute program");
+        });
+}
+
+#[divan::bench(sample_count = 5)]
+fn benchmark_internal_verifier_execute_preflight(bencher: Bencher) {
+    bencher
+        .with_inputs(|| {
+            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let state = vm.create_initial_state(&internal_exe, input_stream);
+            let interpreter = vm.preflight_interpreter(&internal_exe).unwrap();
 
             (vm, state, interpreter)
         })

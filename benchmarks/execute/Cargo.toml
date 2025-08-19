@@ -29,6 +29,7 @@ openvm-rv32im-transpiler.workspace = true
 openvm-sha256-circuit.workspace = true
 openvm-sha256-transpiler.workspace = true
 openvm-continuations = { workspace = true }
+openvm-native-recursion = { workspace = true }
 openvm-sdk = { workspace = true }
 
 clap.workspace = true
@@ -53,6 +54,7 @@ perf-metrics = [
     "openvm-circuit/perf-metrics",
     "openvm-transpiler/function-span",
 ]
+evm-prove = []
 
 # [[bench]]
 # name = "fibonacci_execute"
@@ -67,8 +69,8 @@ name = "execute"
 harness = false
 
 [[bin]]
-name = "execute-leaf-verifier"
-path = "src/execute-leaf-verifier.rs"
+name = "execute-verifier"
+path = "src/execute-verifier.rs"
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]
