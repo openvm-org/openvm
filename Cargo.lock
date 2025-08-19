@@ -5205,6 +5205,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
  "openvm-native-circuit",
  "openvm-native-recursion",
  "openvm-pairing-circuit",
@@ -5711,7 +5713,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-memcpy-circuit"
-version = "1.4.0-rc.2"
+version = "1.4.0-rc.6"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5730,7 +5732,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-memcpy-transpiler"
-version = "1.4.0-rc.2"
+version = "1.4.0-rc.6"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
@@ -6128,6 +6130,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",

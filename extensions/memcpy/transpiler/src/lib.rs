@@ -15,12 +15,8 @@ pub enum Rv32MemcpyOpcode {
     MEMCPY_LOOP,
 }
 
-// pub const OPCODE: u8 = 0x0b;
-// pub const KECCAK256_FUNCT3: u8 = 0b100;
-// pub const KECCAK256_FUNCT7: u8 = 0;
 // Custom opcode for memcpy_loop instruction
-pub const MEMCPY_LOOP_OPCODE: u8 = 0x73; // Custom opcode
-pub const MEMCPY_LOOP_FUNCT3: u8 = 0x0; // Custom funct3
+pub const MEMCPY_LOOP_OPCODE: u8 = 0x72; // Custom opcode
 
 #[derive(Default)]
 pub struct MemcpyTranspilerExtension;
@@ -33,19 +29,18 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
 
         let instruction_u32 = instruction_stream[0];
         let opcode = (instruction_u32 & 0x7f) as u8;
-        let funct3 = ((instruction_u32 >> 12) & 0b111) as u8;
 
         // Check if this is our custom memcpy_loop instruction
-        if (opcode, funct3) != (MEMCPY_LOOP_OPCODE, MEMCPY_LOOP_FUNCT3) {
+        if opcode != MEMCPY_LOOP_OPCODE {
             return None;
         }
 
-        // Parse I-type instruction format
+        // Parse U-type instruction format
         let dec_insn = UType::new(instruction_u32);
-        let shift = dec_insn.imm as u8;
+        let shift = dec_insn.imm >> 12;
 
         // Validate shift value (0, 1, 2, or 3)
-        if shift > 3u8 {
+        if ![0, 1, 2, 3].contains(&shift) {
             return None;
         }
 
