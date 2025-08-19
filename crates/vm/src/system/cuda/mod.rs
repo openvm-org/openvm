@@ -142,7 +142,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
     #[cfg(feature = "metrics")]
     fn finalize_trace_heights(&self, heights: &mut [usize]) {
-        use crate::system::boundary::BoundaryFields;
+        use crate::system::cuda::boundary::BoundaryFields;
 
         let boundary_idx = PUBLIC_VALUES_AIR_ID + usize::from(self.public_values.is_some());
         let mut access_adapter_offset = boundary_idx + 1;
