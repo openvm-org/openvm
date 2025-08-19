@@ -9,21 +9,12 @@ fn main() {
         .include_from_dep("DEP_CUDA_COMMON_INCLUDE") // Import headers
         .include("../../cuda-includes")
         .include("../circuits/primitives/cuda/include")
-        .watch("cuda")
-        .watch("src/cuda");
+        .watch("cuda/system");
 
     common
         .clone()
         .library_name("tracegen_gpu_system")
-        .files([
-            "cuda/public_values.cu",
-            "cuda/program.cu",
-            "cuda/memory/merkle_tree.cu",
-            "cuda/boundary.cu",
-            "cuda/poseidon2.cu",
-            "cuda/access_adapters.cu",
-            "cuda/phantom.cu",
-        ])
+        .files_from_glob("cuda/system/**/*.cu")
         .build();
 
     common.emit_link_directives(); // Call once at end
