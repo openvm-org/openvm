@@ -1,27 +1,26 @@
 use std::sync::Arc;
 
-use openvm_circuit::arch::{
-    ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension,
-};
-use openvm_circuit_primitives::range_tuple::RangeTupleCheckerAir;
-use openvm_rv32im_circuit::{
+use crate::{
     Rv32AuipcAir, Rv32BaseAluAir, Rv32BranchEqualAir, Rv32BranchLessThanAir, Rv32DivRemAir,
     Rv32HintStoreAir, Rv32I, Rv32Io, Rv32JalLuiAir, Rv32JalrAir, Rv32LessThanAir,
     Rv32LoadSignExtendAir, Rv32LoadStoreAir, Rv32M, Rv32MulHAir, Rv32MultiplicationAir,
     Rv32ShiftAir,
 };
+use openvm_circuit::{
+    arch::{ChipInventory, ChipInventoryError, DenseRecordArena, VmProverExtension},
+    system::cuda::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+};
+use openvm_circuit_primitives::range_tuple::{
+    cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir,
+};
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 
 use crate::{
-    extensions::rv32im::{
-        Rv32AuipcChipGpu, Rv32BaseAluChipGpu, Rv32BranchEqualChipGpu, Rv32BranchLessThanChipGpu,
-        Rv32DivRemChipGpu, Rv32HintStoreChipGpu, Rv32JalLuiChipGpu, Rv32JalrChipGpu,
-        Rv32LessThanChipGpu, Rv32LoadSignExtendChipGpu, Rv32LoadStoreChipGpu, Rv32MulHChipGpu,
-        Rv32MultiplicationChipGpu, Rv32ShiftChipGpu,
-    },
-    primitives::range_tuple::RangeTupleCheckerChipGPU,
-    system::extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+    Rv32AuipcChipGpu, Rv32BaseAluChipGpu, Rv32BranchEqualChipGpu, Rv32BranchLessThanChipGpu,
+    Rv32DivRemChipGpu, Rv32HintStoreChipGpu, Rv32JalLuiChipGpu, Rv32JalrChipGpu,
+    Rv32LessThanChipGpu, Rv32LoadSignExtendChipGpu, Rv32LoadStoreChipGpu, Rv32MulHChipGpu,
+    Rv32MultiplicationChipGpu, Rv32ShiftChipGpu,
 };
 
 pub struct Rv32ImGpuProverExt;

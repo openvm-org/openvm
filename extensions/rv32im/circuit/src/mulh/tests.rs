@@ -451,3 +451,140 @@ fn run_mulhsu_neg_sanity_test() {
     assert_eq!(x_ext, 255);
     assert_eq!(y_ext, 0);
 }
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// CUDA TESTS
+///
+/// Ensure GPU tracegen is equivalent to CPU tracegen
+///////////////////////////////////////////////////////////////////////////////////////
+
+// use openvm_circuit::{
+//     arch::{
+//         testing::{memory::gen_pointer, RANGE_TUPLE_CHECKER_BUS},
+//         EmptyAdapterCoreLayout,
+//     },
+//     utils::generate_long_number,
+// };
+// use openvm_circuit_primitives::{
+//     bitwise_op_lookup::BitwiseOperationLookupChip,
+//     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip},
+// };
+// use openvm_instructions::{instruction::Instruction, LocalOpcode};
+// use openvm_rv32im_circuit::{
+//     adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller},
+//     MulHCoreAir, MulHFiller, Rv32MulHAir, Rv32MulHChip, Rv32MulHExecutor,
+// };
+// use openvm_rv32im_transpiler::MulHOpcode;
+// use openvm_stark_backend::p3_field::FieldAlgebra;
+// use openvm_stark_sdk::utils::create_seeded_rng;
+// use rand::rngs::StdRng;
+// use test_case::test_case;
+
+// use super::*;
+// use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
+
+// const MAX_INS_CAPACITY: usize = 128;
+// const TUPLE_CHECKER_SIZES: [u32; 2] = [
+//     (1 << RV32_CELL_BITS) as u32,
+//     (8 * (1 << RV32_CELL_BITS)) as u32,
+// ];
+// type Harness =
+//     GpuTestChipHarness<F, Rv32MulHExecutor, Rv32MulHAir, Rv32MulHChipGpu, Rv32MulHChip<F>>;
+
+// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
+//     // getting bus's from tester since `gpu_chip` and `air` must use the same bus
+//     let bitwise_bus = default_bitwise_lookup_bus();
+//     let range_tuple_bus =
+//         RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+
+//     // creating a dummy chips for Cpu so we only count `add_count`s from GPU
+//     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+//         bitwise_bus,
+//     ));
+//     let dummy_range_tuple_chip =
+//         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+//     let air = Rv32MulHAir::new(
+//         Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+//         MulHCoreAir::new(bitwise_bus, range_tuple_bus),
+//     );
+//     let executor = Rv32MulHExecutor::new(Rv32MultAdapterExecutor, MulHOpcode::CLASS_OFFSET);
+//     let cpu_chip = Rv32MulHChip::<F>::new(
+//         MulHFiller::new(
+//             Rv32MultAdapterFiller,
+//             dummy_bitwise_chip,
+//             dummy_range_tuple_chip,
+//         ),
+//         tester.dummy_memory_helper(),
+//     );
+//     let gpu_chip = Rv32MulHChipGpu::new(
+//         tester.range_checker(),
+//         tester.bitwise_op_lookup(),
+//         tester.range_tuple_checker(),
+//         tester.timestamp_max_bits(),
+//     );
+
+//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+// }
+
+// fn set_and_execute(
+//     tester: &mut GpuChipTestBuilder,
+//     harness: &mut Harness,
+//     rng: &mut StdRng,
+//     opcode: MulHOpcode,
+// ) {
+//     let b = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(rng);
+//     let c = generate_long_number::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(rng);
+
+//     let rs1 = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+//     let rs2 = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+//     let rd = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
+
+//     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u32));
+//     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u32));
+
+//     tester.execute(
+//         &mut harness.executor,
+//         &mut harness.dense_arena,
+//         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
+//     );
+// }
+
+// #[test_case(MulHOpcode::MULH, 100)]
+// #[test_case(MulHOpcode::MULHSU, 100)]
+// #[test_case(MulHOpcode::MULHU, 100)]
+// fn rand_mulh_tracegen_test(opcode: MulHOpcode, num_ops: usize) {
+//     let mut tester = GpuChipTestBuilder::default()
+//         .with_bitwise_op_lookup(default_bitwise_lookup_bus())
+//         .with_range_tuple_checker(RangeTupleCheckerBus::new(
+//             RANGE_TUPLE_CHECKER_BUS,
+//             TUPLE_CHECKER_SIZES,
+//         ));
+//     let mut rng = create_seeded_rng();
+
+//     let mut harness = create_test_harness(&tester);
+
+//     for _ in 0..num_ops {
+//         set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+//     }
+
+//     type Record<'a> = (
+//         &'a mut Rv32MultAdapterRecord,
+//         &'a mut MulHCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+//     );
+
+//     harness
+//         .dense_arena
+//         .get_record_seeker::<Record, _>()
+//         .transfer_to_matrix_arena(
+//             &mut harness.matrix_arena,
+//             EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+//         );
+
+//     tester
+//         .build()
+//         .load_gpu_harness(harness)
+//         .finalize()
+//         .simple_test()
+//         .unwrap();
+// }

@@ -335,3 +335,104 @@ fn dense_record_arena_test() {
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// CUDA TESTS
+///
+/// Ensure GPU tracegen is equivalent to CPU tracegen
+///////////////////////////////////////////////////////////////////////////////////////
+
+// use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+// use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
+// use openvm_instructions::{
+//     instruction::Instruction, program::PC_BITS, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode,
+// };
+// use openvm_rv32im_circuit::{
+//     adapters::{
+//         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
+//         Rv32RdWriteAdapterRecord, RV32_CELL_BITS,
+//     },
+//     Rv32AuipcAir, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreRecord, Rv32AuipcExecutor,
+//     Rv32AuipcFiller,
+// };
+// use openvm_rv32im_transpiler::Rv32AuipcOpcode::*;
+// use openvm_stark_sdk::utils::create_seeded_rng;
+// use rand::Rng;
+// use stark_backend_gpu::prelude::F;
+
+// use super::*;
+// use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
+
+// const IMM_BITS: usize = 24;
+// const MAX_INS_CAPACITY: usize = 128;
+// type Harness =
+//     GpuTestChipHarness<F, Rv32AuipcExecutor, Rv32AuipcAir, Rv32AuipcChipGpu, Rv32AuipcChip<F>>;
+
+// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
+//     // getting bus from tester since `gpu_chip` and `air` must use the same bus
+//     let bitwise_bus = default_bitwise_lookup_bus();
+//     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+//     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+//         bitwise_bus,
+//     ));
+
+//     let air = Rv32AuipcAir::new(
+//         Rv32RdWriteAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
+//         Rv32AuipcCoreAir::new(bitwise_bus),
+//     );
+//     let executor = Rv32AuipcExecutor::new(Rv32RdWriteAdapterExecutor::new());
+//     let cpu_chip = Rv32AuipcChip::new(
+//         Rv32AuipcFiller::new(Rv32RdWriteAdapterFiller::new(), dummy_bitwise_chip.clone()),
+//         tester.dummy_memory_helper(),
+//     );
+
+//     let gpu_chip = Rv32AuipcChipGpu::new(
+//         tester.range_checker(),
+//         tester.bitwise_op_lookup(),
+//         tester.timestamp_max_bits(),
+//     );
+
+//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+// }
+
+// #[test]
+// fn rand_auipc_tracegen_test() {
+//     let mut tester =
+//         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+//     let mut rng = create_seeded_rng();
+
+//     let mut harness = create_test_harness(&tester);
+//     let num_ops = 100;
+
+//     for _ in 0..num_ops {
+//         let imm = rng.gen_range(0..(1 << IMM_BITS)) as usize;
+//         let a = gen_pointer(&mut rng, RV32_REGISTER_NUM_LIMBS);
+//         let initial_pc = rng.gen_range(0..(1 << PC_BITS));
+
+//         tester.execute_with_pc(
+//             &mut harness.executor,
+//             &mut harness.dense_arena,
+//             &Instruction::from_usize(AUIPC.global_opcode(), [a, 0, imm, 1, 0]),
+//             initial_pc,
+//         );
+//     }
+
+//     type Record<'a> = (
+//         &'a mut Rv32RdWriteAdapterRecord,
+//         &'a mut Rv32AuipcCoreRecord,
+//     );
+//     harness
+//         .dense_arena
+//         .get_record_seeker::<Record, _>()
+//         .transfer_to_matrix_arena(
+//             &mut harness.matrix_arena,
+//             EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterExecutor>::new(),
+//         );
+
+//     tester
+//         .build()
+//         .load_gpu_harness(harness)
+//         .finalize()
+//         .simple_test()
+//         .unwrap();
+// }

@@ -14,6 +14,15 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::arch::DenseRecordArena,
+    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
+    openvm_circuit::system::cuda::SystemChipInventoryGPU,
+    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+};
+
 pub mod adapters;
 mod auipc;
 mod base_alu;
@@ -47,6 +56,9 @@ pub use shift::*;
 
 mod extension;
 pub use extension::*;
+
+#[cfg(feature = "cuda")]
+pub mod cuda_abi;
 
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
@@ -181,6 +193,87 @@ where
             VmBuilder::<E>::create_chip_complex(&Rv32ICpuBuilder, &config.rv32i, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.mul, inventory)?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone)]
+pub struct Rv32IGpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32IGpuBuilder {
+    type VmConfig = Rv32IConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Rv32IConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.base,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.io,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone)]
+pub struct Rv32ImGpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv32ImGpuBuilder {
+    type VmConfig = Rv32ImConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &Rv32IGpuBuilder,
+            &config.rv32i,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.mul,
+            inventory,
+        )?;
         Ok(chip_complex)
     }
 }

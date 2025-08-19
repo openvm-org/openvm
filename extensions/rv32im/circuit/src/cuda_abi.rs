@@ -1,15 +1,12 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use stark_backend_gpu::{
-    cuda::{
-        d_buffer::{DeviceBuffer, DeviceBufferView},
-        error::CudaError,
-    },
-    prelude::F,
+use openvm_cuda_backend::chip::UInt2;
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
 };
-
-use crate::UInt2;
 
 pub mod auipc_cuda {
     use super::*;
@@ -183,6 +180,7 @@ pub mod less_than_cuda {
 }
 
 pub mod mul_cuda {
+
     use super::*;
 
     extern "C" {

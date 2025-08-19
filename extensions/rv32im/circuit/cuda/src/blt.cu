@@ -1,6 +1,6 @@
 #include "adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
 #include "constants.h"         // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
-#include "cores/branch_less_than.cuh"
+#include "cores/blt.cuh"
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
