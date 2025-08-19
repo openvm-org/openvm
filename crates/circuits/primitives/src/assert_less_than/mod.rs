@@ -3,7 +3,7 @@ use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::AirBuilder,
-    p3_field::{Field, FieldAlgebra},
+    p3_field::{Field, FieldAlgebra, PrimeField32},
 };
 
 use crate::{
@@ -56,6 +56,14 @@ pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
     // lower_decomp consists of lower decomposed into limbs of size bus.range_max_bits
     // note: the final limb might have less than bus.range_max_bits bits
     pub lower_decomp: [T; AUX_LEN],
+}
+
+impl<F: PrimeField32, const AUX_LEN: usize> Default for LessThanAuxCols<F, AUX_LEN> {
+    fn default() -> Self {
+        Self {
+            lower_decomp: [F::ZERO; AUX_LEN],
+        }
+    }
 }
 
 /// This is intended for use as a **SubAir**, not as a standalone Air.
