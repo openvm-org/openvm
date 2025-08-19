@@ -152,6 +152,7 @@ mod tests {
     };
 
     use super::ProgramChipGPU;
+    use crate::utils::cuda_utils::assert_eq_cpu_and_gpu_matrix;
 
     fn test_cached_committed_trace_data(program: Program<F>) {
         let gpu_engine = GpuBabyBearPoseidon2Engine::new(FriParameters::new_for_testing(2));

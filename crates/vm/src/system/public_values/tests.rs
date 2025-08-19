@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, Rng};
 
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
         MemoryConfig, SystemConfig, VmCoreAir,
     },
     system::{
@@ -123,7 +123,7 @@ fn set_and_execute(
         g: F::ZERO,
     };
 
-    tester.execute(harness, &instruction);
+    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 }
 
 #[test]

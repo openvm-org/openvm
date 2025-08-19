@@ -246,6 +246,11 @@ mod tests {
     use p3_field::FieldAlgebra;
     use rand::Rng;
 
+    use crate::{
+        arch::testing::{GpuChipTestBuilder, TestBuilder},
+        utils::cuda_utils::{default_bitwise_lookup_bus, default_var_range_checker_bus},
+    };
+
     #[test]
     fn test_cuda_persistent_memory() {
         let mut rng = create_seeded_rng();

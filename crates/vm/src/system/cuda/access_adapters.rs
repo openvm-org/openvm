@@ -172,6 +172,10 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
+    use crate::{
+        arch::testing::{GpuChipTestBuilder, TestBuilder},
+        utils::cuda_utils::assert_eq_cpu_and_gpu_matrix,
+    };
 
     #[test]
     fn test_cuda_access_adapters_cpu_gpu_equivalence() {

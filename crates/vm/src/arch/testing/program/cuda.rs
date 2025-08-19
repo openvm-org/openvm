@@ -7,12 +7,13 @@ use openvm_circuit::{
     system::program::{ProgramBus, ProgramExecutionCols},
     utils::next_power_of_two_or_zero,
 };
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,
 };
+use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip, ChipUsageGetter};
 
-use crate::{get_empty_air_proving_ctx, testing::cuda::program_testing};
+use crate::cuda_abi::program_testing;
 
 pub struct DeviceProgramTester(ProgramTester<F>);
 

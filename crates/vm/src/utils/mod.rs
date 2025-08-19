@@ -2,6 +2,9 @@
 mod stark_utils;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+// TODO[arayi]: delete [cuda_utils] once it's migrated to stark-backend-gpu
+#[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]
+pub mod cuda_utils;
 
 use std::mem::size_of_val;
 

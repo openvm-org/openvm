@@ -10,21 +10,20 @@ use openvm_circuit::{
         online::TracingMemory,
     },
 };
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
+use openvm_circuit_primitives::var_range::{
+    cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerBus,
+};
+use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
+use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     prover::types::AirProvingContext,
     Chip, ChipUsageGetter,
 };
-use rand::Rng;
-use stark_backend_gpu::{
-    base::DeviceMatrix, cuda::copy::MemCopyH2D, prover_backend::GpuBackend, types::F,
-};
 
 use crate::{
-    primitives::var_range::VariableRangeCheckerChipGPU,
-    system::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
-    testing::cuda::memory_testing,
+    cuda_abi::memory_testing,
+    system::cuda::{memory::MemoryInventoryGPU, poseidon2::Poseidon2PeripheryChipGPU},
 };
 
 pub struct DeviceMemoryTester {
@@ -151,14 +150,6 @@ impl DeviceMemoryTester {
             .unwrap()
             .send(addr_space as u32, ptr as u32, &data, t);
     }
-}
-
-pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
-where
-    R: Rng + ?Sized,
-{
-    const MAX_MEMORY: usize = 1 << 29;
-    rng.gen_range(0..MAX_MEMORY - len) / len * len
 }
 
 pub struct FixedSizeMemoryTester(pub(crate) MemoryDummyChip<F>);

@@ -9,7 +9,10 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{distributions::Standard, prelude::Distribution, thread_rng, Rng};
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, MemoryConfig},
+    arch::{
+        testing::{TestBuilder, VmChipTestBuilder},
+        MemoryConfig,
+    },
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::TracingMemory},
 };
 

@@ -201,6 +201,7 @@ mod tests {
     use rand::Rng;
 
     use super::{BoundaryChipGPU, VariableRangeCheckerChipGPU};
+    use crate::utils::cuda_utils::{assert_eq_cpu_and_gpu_matrix, default_var_range_checker_bus};
 
     const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;

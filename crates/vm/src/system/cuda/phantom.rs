@@ -70,6 +70,7 @@ mod tests {
     use p3_field::{FieldAlgebra, PrimeField32};
 
     use super::PhantomChipGPU;
+    use crate::arch::testing::{GpuChipTestBuilder, TestBuilder};
 
     #[test]
     fn test_cuda_phantom_tracegen() {

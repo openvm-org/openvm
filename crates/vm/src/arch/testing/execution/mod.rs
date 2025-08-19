@@ -12,6 +12,10 @@ use openvm_stark_backend::{
 use crate::arch::{ExecutionBus, ExecutionState};
 
 pub mod air;
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[derive(Debug)]
 pub struct ExecutionTester<F: Field> {

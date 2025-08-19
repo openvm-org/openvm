@@ -120,6 +120,7 @@ mod tests {
     use rand::Rng;
 
     use super::PublicValuesChipGPU;
+    use crate::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness, TestBuilder};
 
     type Harness = GpuTestChipHarness<
         F,

@@ -6,7 +6,7 @@ use super::PhantomExecutor;
 use crate::{
     arch::{
         instructions::LocalOpcode,
-        testing::{TestChipHarness, VmChipTestBuilder},
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
         ExecutionState, VmChipWrapper,
     },
     system::phantom::{PhantomAir, PhantomFiller},
@@ -29,7 +29,12 @@ fn test_nops_and_terminate() {
     let nop = Instruction::from_isize(phantom_opcode, 0, 0, 0, 0, 0);
     let mut state: ExecutionState<F> = ExecutionState::new(F::ZERO, F::ONE);
     for _ in 0..num_nops {
-        tester.execute_with_pc(&mut harness, &nop, state.pc.as_canonical_u32());
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.arena,
+            &nop,
+            state.pc.as_canonical_u32(),
+        );
         let new_state = tester.execution.records.last().unwrap().final_state;
         assert_eq!(state.pc + F::from_canonical_usize(4), new_state.pc);
         assert_eq!(state.timestamp + F::ONE, new_state.timestamp);
