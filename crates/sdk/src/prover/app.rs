@@ -27,7 +27,7 @@ use crate::{
     commit::{AppExecutionCommit, CommitBytes},
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
-    util::warn_constraint_degree_mismatch,
+    util::warn_if_constraint_degree_mismatch,
     StdIn, F, SC,
 };
 
@@ -134,7 +134,7 @@ where
             self.vm_config().as_ref().continuation_enabled,
             "Use generate_app_proof_without_continuations instead."
         );
-        warn_constraint_degree_mismatch(
+        warn_if_constraint_degree_mismatch(
             self.vm_config().as_ref(),
             self.instance.vm.engine.fri_params(),
         );

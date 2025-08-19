@@ -17,7 +17,7 @@ use tracing::{info_span, instrument};
 
 use crate::{
     config::AggregationTreeConfig, keygen::AggProvingKey, prover::vm::new_local_prover,
-    util::warn_constraint_degree_mismatch, F, SC,
+    util::warn_if_constraint_degree_mismatch, F, SC,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{prover::RootVerifierLocalProver, RootSC};
@@ -125,7 +125,7 @@ where
         &mut self,
         app_proofs: &ContinuationVmProof<SC>,
     ) -> Result<Vec<Proof<SC>>, VirtualMachineError> {
-        warn_constraint_degree_mismatch(
+        warn_if_constraint_degree_mismatch(
             self.leaf_prover.vm.config().as_ref(),
             self.leaf_prover.vm.engine.fri_params(),
         );
@@ -151,7 +151,7 @@ where
         leaf_proofs: Vec<Proof<SC>>,
         public_values: Vec<F>,
     ) -> Result<VmStarkProof<SC>, VirtualMachineError> {
-        warn_constraint_degree_mismatch(
+        warn_if_constraint_degree_mismatch(
             self.leaf_prover.vm.config().as_ref(),
             self.leaf_prover.vm.engine.fri_params(),
         );
