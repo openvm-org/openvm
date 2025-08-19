@@ -1,7 +1,7 @@
 #include "launcher.cuh"
 #include "fp_array.cuh"
-#include "poseidon2/tracegen.cuh"
-#include "poseidon2/params.cuh"
+#include "tracegen.cuh"
+#include "params.cuh"
 #include "trace_access.h"
 #include "utils.cuh"
 #include <cstdint>
