@@ -23,7 +23,8 @@ use serde::Serialize;
 use tracing::info_span;
 use tracing_subscriber::{fmt, EnvFilter};
 
-const PROGRAM: &str = "kitchen-sink";
+const PROGRAMS_AND_INPUTS: &[(&str, Option<u64>)] =
+    &[("fibonacci", Some(1 << 22)), ("kitchen-sink", None)];
 
 /// Helper function to serialize and write data to a file
 fn write_fixture<T: Serialize>(path: impl AsRef<Path>, data: &T, description: &str) -> Result<()> {
@@ -39,6 +40,7 @@ fn aggregate_leaf_proofs<E, NativeBuilder>(
     agg_prover: &mut AggStarkProver<E, NativeBuilder>,
     leaf_proofs: Vec<Proof<SC>>,
     fixtures_dir: &Path,
+    program: &str,
 ) -> Result<(Proof<SC>, usize)>
 where
     E: StarkFriEngine<SC = SC>,
@@ -83,7 +85,7 @@ where
                     write_fixture(
                         fixtures_dir.join(format!(
                             "{}.internal.{}.proof",
-                            PROGRAM,
+                            program,
                             internal_proof_count + i
                         )),
                         &proof,
@@ -112,6 +114,7 @@ fn wrap_e2e_stark_proof<E, NativeBuilder>(
     public_values: Vec<F>,
     starting_internal_idx: usize,
     fixtures_dir: &Path,
+    program: &str,
 ) -> Result<(RootVmVerifierInput<SC>, usize)>
 where
     E: StarkFriEngine<SC = SC>,
@@ -174,7 +177,7 @@ where
         write_fixture(
             fixtures_dir.join(format!(
                 "{}.internal.{}.proof",
-                PROGRAM,
+                program,
                 starting_internal_idx + wrapper_count
             )),
             &proof,
@@ -200,154 +203,186 @@ fn main() -> Result<()> {
     let fixtures_dir = get_fixtures_dir();
     fs::create_dir_all(&fixtures_dir)?;
 
-    let program_dir = get_programs_dir().join(PROGRAM);
+    tracing::info!("Processing {} programs", PROGRAMS_AND_INPUTS.len());
 
-    tracing::info!("Loading VM config");
-    let config_path = program_dir.join("openvm.toml");
-    let config_content = fs::read_to_string(&config_path)?;
-    let vm_config = SdkVmConfig::from_toml(&config_content)?.app_vm_config;
+    for (idx, &(program, input)) in PROGRAMS_AND_INPUTS.iter().enumerate() {
+        tracing::info!(
+            "Processing program {}/{}: {} {}",
+            idx + 1,
+            PROGRAMS_AND_INPUTS.len(),
+            program,
+            input
+                .map(|i| format!("(input: {})", i))
+                .unwrap_or_else(|| "(no input)".to_string())
+        );
 
-    tracing::info!("Preparing ELF");
-    let elf_path = get_elf_path(&program_dir);
-    let elf = read_elf_file(&elf_path)?;
+        let program_dir = get_programs_dir().join(program);
 
-    // Create app config with default parameters
-    let app_config = AppConfig::new(AppFriParams::default().fri_params, vm_config);
+        tracing::info!(program = %program, "Loading VM config");
+        let config_path = program_dir.join("openvm.toml");
+        let config_content = fs::read_to_string(&config_path)?;
+        let vm_config = SdkVmConfig::from_toml(&config_content)?.app_vm_config;
 
-    let sdk = Sdk::new(app_config.clone())?;
-    let exe = sdk.convert_to_exe(elf)?;
+        tracing::info!(program = %program, "Preparing ELF");
+        let elf_path = get_elf_path(&program_dir);
+        let elf = read_elf_file(&elf_path)?;
 
-    tracing::info!("Generating app proof");
-    let app_proof = sdk.app_prover(exe)?.prove(StdIn::default())?;
+        // Create app config with default parameters
+        let app_config = AppConfig::new(AppFriParams::default().fri_params, vm_config);
 
-    // Save app proof
-    write_fixture(
-        fixtures_dir.join(format!("{}.app.proof", PROGRAM)),
-        &app_proof,
-        "app proof",
-    )?;
+        let sdk = Sdk::new(app_config.clone())?;
+        let exe = sdk.convert_to_exe(elf)?;
 
-    tracing::info!("Getting keys");
-    let app_pk = sdk.app_pk();
-    let agg_pk = sdk.agg_pk();
+        // Prepare stdin
+        let mut stdin = StdIn::default();
+        if let Some(input_value) = input {
+            tracing::info!(program = %program, input = %input_value, "Preparing stdin with input");
+            stdin.write(&input_value);
+        } else {
+            tracing::info!(program = %program, "No input provided for program");
+        }
 
-    // Save keys
-    write_fixture(
-        fixtures_dir.join(format!("{}.leaf.exe", PROGRAM)),
-        &app_pk.leaf_committed_exe.exe,
-        "leaf exe",
-    )?;
+        tracing::info!(program = %program, "Generating app proof");
+        let app_proof = sdk.app_prover(exe)?.prove(stdin)?;
 
-    write_fixture(
-        fixtures_dir.join(format!("{}.leaf.pk", PROGRAM)),
-        &agg_pk.leaf_vm_pk.vm_pk,
-        "leaf proving key",
-    )?;
-
-    write_fixture(
-        fixtures_dir.join(format!("{}.internal.exe", PROGRAM)),
-        &agg_pk.internal_committed_exe.exe,
-        "internal exe",
-    )?;
-
-    write_fixture(
-        fixtures_dir.join(format!("{}.internal.pk", PROGRAM)),
-        &agg_pk.internal_vm_pk.vm_pk,
-        "internal proving key",
-    )?;
-
-    #[cfg(feature = "evm-prove")]
-    write_fixture(
-        fixtures_dir.join(format!("{}.root.pk", PROGRAM)),
-        &agg_pk.root_verifier_pk.vm_pk.vm_pk,
-        "root proving key",
-    )?;
-
-    tracing::info!("Creating aggregation provers");
-    let native_builder = sdk.native_builder().clone();
-    let leaf_verifier_exe = app_pk.leaf_committed_exe.exe.clone();
-
-    let tree_config = AggregationTreeConfig::default();
-    let mut agg_prover = AggStarkProver::<BabyBearPoseidon2Engine, _>::new(
-        native_builder.clone(),
-        agg_pk,
-        leaf_verifier_exe,
-        tree_config,
-    )?;
-
-    tracing::info!("Generating leaf proofs");
-    let leaf_proofs = agg_prover.generate_leaf_proofs(&app_proof)?;
-
-    // Save leaf proofs
-    for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
+        // Save app proof
         write_fixture(
-            fixtures_dir.join(format!("{}.leaf.{}.proof", PROGRAM, i)),
-            leaf_proof,
-            &format!("leaf proof {}", i),
+            fixtures_dir.join(format!("{}.app.proof", program)),
+            &app_proof,
+            "app proof",
         )?;
+
+        tracing::info!(program = %program, "Getting keys");
+        let app_pk = sdk.app_pk();
+        let agg_pk = sdk.agg_pk();
+
+        // Save keys
+        write_fixture(
+            fixtures_dir.join(format!("{}.leaf.exe", program)),
+            &app_pk.leaf_committed_exe.exe,
+            "leaf exe",
+        )?;
+
+        write_fixture(
+            fixtures_dir.join(format!("{}.leaf.pk", program)),
+            &agg_pk.leaf_vm_pk.vm_pk,
+            "leaf proving key",
+        )?;
+
+        write_fixture(
+            fixtures_dir.join(format!("{}.internal.exe", program)),
+            &agg_pk.internal_committed_exe.exe,
+            "internal exe",
+        )?;
+
+        write_fixture(
+            fixtures_dir.join(format!("{}.internal.pk", program)),
+            &agg_pk.internal_vm_pk.vm_pk,
+            "internal proving key",
+        )?;
+
+        #[cfg(feature = "evm-prove")]
+        write_fixture(
+            fixtures_dir.join(format!("{}.root.pk", program)),
+            &agg_pk.root_verifier_pk.vm_pk.vm_pk,
+            "root proving key",
+        )?;
+
+        tracing::info!(program = %program, "Creating aggregation provers");
+        let native_builder = sdk.native_builder().clone();
+        let leaf_verifier_exe = app_pk.leaf_committed_exe.exe.clone();
+
+        let tree_config = AggregationTreeConfig::default();
+        let mut agg_prover = AggStarkProver::<BabyBearPoseidon2Engine, _>::new(
+            native_builder.clone(),
+            agg_pk,
+            leaf_verifier_exe,
+            tree_config,
+        )?;
+
+        tracing::info!(program = %program, "Generating leaf proofs");
+        let leaf_proofs = agg_prover.generate_leaf_proofs(&app_proof)?;
+        tracing::info!(program = %program, leaf_proof_count = leaf_proofs.len(), "Generated leaf proofs");
+
+        // Save leaf proofs
+        for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
+            write_fixture(
+                fixtures_dir.join(format!("{}.leaf.{}.proof", program, i)),
+                leaf_proof,
+                &format!("leaf proof {}", i),
+            )?;
+        }
+
+        tracing::info!(program = %program, "Generating internal proofs");
+
+        #[cfg(not(feature = "evm-prove"))]
+        let (_, internal_proof_count) =
+            aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir, program)?;
+        #[cfg(feature = "evm-prove")]
+        let (final_internal_proof, internal_proof_count) =
+            aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir, program)?;
+
+        #[cfg(not(feature = "evm-prove"))]
+        let total_internals = internal_proof_count;
+        #[cfg(feature = "evm-prove")]
+        let mut total_internals = internal_proof_count;
+
+        #[cfg(feature = "evm-prove")]
+        {
+            tracing::info!(program = %program, "Generating root verifier input and proof");
+            let public_values = app_proof.user_public_values.public_values.clone();
+
+            let (root_verifier_input, wrapper_count) = wrap_e2e_stark_proof(
+                &mut agg_prover,
+                final_internal_proof,
+                public_values,
+                internal_proof_count, // Start wrapper indices after all internal proofs
+                &fixtures_dir,
+                program,
+            )?;
+
+            // Save root verifier input
+            write_fixture(
+                fixtures_dir.join(format!("{}.root.input", program)),
+                &root_verifier_input,
+                "root verifier input",
+            )?;
+
+            let root_proof = agg_prover.generate_root_proof_impl(root_verifier_input.clone())?;
+
+            // Save root proof
+            write_fixture(
+                fixtures_dir.join(format!("{}.root.proof", program)),
+                &root_proof,
+                "root proof",
+            )?;
+
+            total_internals += wrapper_count;
+        }
+
+        #[cfg(feature = "evm-prove")]
+        tracing::info!(
+            program = %program,
+            leaf_proofs = leaf_proofs.len(),
+            total_internals = total_internals,
+            "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, root.pk, app.proof, {} leaf proofs, {} internal proofs, root.input, and root.proof",
+            program,
+            leaf_proofs.len(),
+            total_internals
+        );
+
+        #[cfg(not(feature = "evm-prove"))]
+        tracing::info!(
+            program = %program,
+            leaf_proofs = leaf_proofs.len(),
+            total_internals = total_internals,
+            "Generated and saved {} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, app.proof, {} leaf proofs, and {} internal proofs",
+            program,
+            leaf_proofs.len(),
+            total_internals
+        );
     }
 
-    tracing::info!("Generating internal proofs");
-
-    #[cfg(not(feature = "evm-prove"))]
-    let (_, internal_proof_count) =
-        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
-    #[cfg(feature = "evm-prove")]
-    let (final_internal_proof, internal_proof_count) =
-        aggregate_leaf_proofs(&mut agg_prover, leaf_proofs.clone(), &fixtures_dir)?;
-
-    #[cfg(not(feature = "evm-prove"))]
-    let total_internals = internal_proof_count;
-    #[cfg(feature = "evm-prove")]
-    let mut total_internals = internal_proof_count;
-
-    #[cfg(feature = "evm-prove")]
-    {
-        tracing::info!("Generating root verifier input and proof");
-        let public_values = app_proof.user_public_values.public_values.clone();
-
-        let (root_verifier_input, wrapper_count) = wrap_e2e_stark_proof(
-            &mut agg_prover,
-            final_internal_proof,
-            public_values,
-            internal_proof_count, // Start wrapper indices after all internal proofs
-            &fixtures_dir,
-        )?;
-
-        // Save root verifier input
-        write_fixture(
-            fixtures_dir.join(format!("{}.root.input", PROGRAM)),
-            &root_verifier_input,
-            "root verifier input",
-        )?;
-
-        let root_proof = agg_prover.generate_root_proof_impl(root_verifier_input.clone())?;
-
-        // Save root proof
-        write_fixture(
-            fixtures_dir.join(format!("{}.root.proof", PROGRAM)),
-            &root_proof,
-            "root proof",
-        )?;
-
-        total_internals += wrapper_count;
-    }
-
-    #[cfg(feature = "evm-prove")]
-    tracing::info!(
-        "Generated and saved {name} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, root.pk, app.proof, {} leaf proofs, {} internal proofs, root.input, and root.proof",
-        leaf_proofs.len(),
-        total_internals,
-        name = PROGRAM
-    );
-
-    #[cfg(not(feature = "evm-prove"))]
-    tracing::info!(
-        "Generated and saved {name} fixtures: leaf.exe, leaf.pk, internal.exe, internal.pk, app.proof, {} leaf proofs, and {} internal proofs",
-        leaf_proofs.len(),
-        total_internals,
-        name = PROGRAM
-    );
-
+    tracing::info!("Successfully processed all programs");
     Ok(())
 }

@@ -69,7 +69,7 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
-static AVAILABLE_PROGRAMS: &[&str] = &[
+const APP_PROGRAMS: &[&str] = &[
     "fibonacci_recursive",
     "fibonacci_iterative",
     "quicksort",
@@ -83,6 +83,8 @@ static AVAILABLE_PROGRAMS: &[&str] = &[
     "revm_transfer",
     "pairing",
 ];
+const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
+const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
 static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
@@ -258,7 +260,7 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
-#[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=10)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=10)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -273,7 +275,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(args = AVAILABLE_PROGRAMS, sample_count=5)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -291,7 +293,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(ignore = true, args = AVAILABLE_PROGRAMS, sample_count=5)]
+#[divan::bench(ignore = true, args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -309,16 +311,16 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
         });
 }
 
-fn setup_leaf_verifier() -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
+fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
-    let app_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.app.proof")).unwrap();
+    let app_proof_bytes = fs::read(fixtures_dir.join(format!("{}.app.proof", program))).unwrap();
     let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
-    let leaf_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.exe")).unwrap();
+    let leaf_exe_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.exe", program))).unwrap();
     let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
-    let leaf_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.pk")).unwrap();
+    let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.pk", program))).unwrap();
     let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
     let leaf_inputs =
@@ -335,17 +337,19 @@ fn setup_leaf_verifier() -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     (vm, leaf_exe, input_stream)
 }
 
-fn setup_internal_verifier() -> (NativeVm, Arc<VmExe<BabyBear>>, Vec<Vec<BabyBear>>) {
+fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
-    let internal_exe_bytes = fs::read(fixtures_dir.join("kitchen-sink.internal.exe")).unwrap();
+    let internal_exe_bytes =
+        fs::read(fixtures_dir.join(format!("{}.internal.exe", program))).unwrap();
     let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
 
-    let internal_pk_bytes = fs::read(fixtures_dir.join("kitchen-sink.internal.pk")).unwrap();
+    let internal_pk_bytes =
+        fs::read(fixtures_dir.join(format!("{}.internal.pk", program))).unwrap();
     let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
 
     // Load leaf proof by index (using index 0)
-    let leaf_proof_bytes = fs::read(fixtures_dir.join("kitchen-sink.leaf.0.proof"))
+    let leaf_proof_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.0.proof", program)))
         .expect("No leaf proof available at index 0");
     let leaf_proof: Proof<SC> = bitcode::deserialize(&leaf_proof_bytes).unwrap();
 
@@ -377,11 +381,11 @@ fn transmute_interpreter_lifetime<'a, Ctx>(
     unsafe { std::mem::transmute(interpreter) }
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_leaf_verifier_execute(bencher: Bencher) {
+#[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier(program);
             let interpreter = vm.executor().instance(&leaf_exe).unwrap();
             let interpreter = transmute_interpreter_lifetime(interpreter);
 
@@ -394,11 +398,11 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
+#[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier(program);
             let ctx = vm.build_metered_ctx();
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             let interpreter = vm
@@ -416,11 +420,11 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
+#[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, leaf_exe, input_stream) = setup_leaf_verifier();
+            let (vm, leaf_exe, input_stream) = setup_leaf_verifier(program);
             let state = vm.create_initial_state(&leaf_exe, input_stream);
             let interpreter = vm.preflight_interpreter(&leaf_exe).unwrap();
 
@@ -433,11 +437,11 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_internal_verifier_execute(bencher: Bencher) {
+#[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_internal_verifier_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let (vm, internal_exe, input_stream) = setup_internal_verifier(program);
             let interpreter = vm.executor().instance(&internal_exe).unwrap();
             let interpreter = transmute_interpreter_lifetime(interpreter);
 
@@ -450,11 +454,11 @@ fn benchmark_internal_verifier_execute(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_internal_verifier_execute_metered(bencher: Bencher) {
+#[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let (vm, internal_exe, input_stream) = setup_internal_verifier(program);
             let ctx = vm.build_metered_ctx();
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             let interpreter = vm
@@ -472,11 +476,11 @@ fn benchmark_internal_verifier_execute_metered(bencher: Bencher) {
         });
 }
 
-#[divan::bench(sample_count = 5)]
-fn benchmark_internal_verifier_execute_preflight(bencher: Bencher) {
+#[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
+fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
-            let (vm, internal_exe, input_stream) = setup_internal_verifier();
+            let (vm, internal_exe, input_stream) = setup_internal_verifier(program);
             let state = vm.create_initial_state(&internal_exe, input_stream);
             let interpreter = vm.preflight_interpreter(&internal_exe).unwrap();
 

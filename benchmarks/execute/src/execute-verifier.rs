@@ -28,8 +28,6 @@ use openvm_stark_sdk::{
 };
 use tracing_subscriber::{fmt, EnvFilter};
 
-const PROGRAM_NAME: &str = "kitchen-sink";
-
 #[derive(Clone, Debug, ValueEnum)]
 enum ExecutionMode {
     Pure,
@@ -54,6 +52,10 @@ enum ProofType {
 #[derive(Parser)]
 #[command(author, version, about = "OpenVM verifier execution")]
 struct Cli {
+    /// Program name to use for fixtures
+    #[arg(value_name = "PROGRAM", default_value = "kitchen-sink")]
+    program: String,
+
     #[arg(short, long, value_enum, default_value = "leaf")]
     verifier: VerifierType,
 
@@ -178,17 +180,17 @@ fn main() -> Result<()> {
 
     let fixtures_dir = get_fixtures_dir();
     let app_proof_bytes =
-        fs::read(fixtures_dir.join(format!("{}.app.proof", PROGRAM_NAME))).unwrap();
+        fs::read(fixtures_dir.join(format!("{}.app.proof", cli.program))).unwrap();
     let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
     match cli.verifier {
         VerifierType::Leaf => {
             let leaf_exe_bytes =
-                fs::read(fixtures_dir.join(format!("{}.leaf.exe", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.leaf.exe", cli.program))).unwrap();
             let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
             let leaf_pk_bytes =
-                fs::read(fixtures_dir.join(format!("{}.leaf.pk", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.leaf.pk", cli.program))).unwrap();
             let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
             let leaf_inputs = LeafVmVerifierInput::chunk_continuation_vm_proof(
@@ -211,11 +213,11 @@ fn main() -> Result<()> {
         }
         VerifierType::Internal => {
             let internal_exe_bytes =
-                fs::read(fixtures_dir.join(format!("{}.internal.exe", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.internal.exe", cli.program))).unwrap();
             let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
 
             let internal_pk_bytes =
-                fs::read(fixtures_dir.join(format!("{}.internal.pk", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.internal.pk", cli.program))).unwrap();
             let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
 
             let index = cli.index.unwrap_or(0);
@@ -224,7 +226,7 @@ fn main() -> Result<()> {
             let leaf_proof_count = {
                 let mut count = 0;
                 while fixtures_dir
-                    .join(format!("{}.leaf.{}.proof", PROGRAM_NAME, count))
+                    .join(format!("{}.leaf.{}.proof", cli.program, count))
                     .exists()
                 {
                     count += 1;
@@ -242,7 +244,7 @@ fn main() -> Result<()> {
             // Load the determined proofs
             let proofs: Vec<_> = proof_indices
                 .into_iter()
-                .map(|idx| load_proof(&fixtures_dir, PROGRAM_NAME, proof_type.clone(), idx))
+                .map(|idx| load_proof(&fixtures_dir, &cli.program, proof_type.clone(), idx))
                 .collect::<Result<Vec<_>, _>>()?;
 
             tracing::info!(
@@ -272,16 +274,16 @@ fn main() -> Result<()> {
         #[cfg(feature = "evm-prove")]
         VerifierType::Root => {
             let root_exe_bytes =
-                fs::read(fixtures_dir.join(format!("{}.root.exe", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.root.exe", cli.program))).unwrap();
             let root_exe: VmExe<BabyBear> = bitcode::deserialize(&root_exe_bytes).unwrap();
 
             let root_pk_bytes =
-                fs::read(fixtures_dir.join(format!("{}.root.pk", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.root.pk", cli.program))).unwrap();
             let root_pk = bitcode::deserialize(&root_pk_bytes).unwrap();
 
             // Load root verifier input
             let root_input_bytes =
-                fs::read(fixtures_dir.join(format!("{}.root.input", PROGRAM_NAME))).unwrap();
+                fs::read(fixtures_dir.join(format!("{}.root.input", cli.program))).unwrap();
             let root_input: RootVmVerifierInput<SC> =
                 bitcode::deserialize(&root_input_bytes).unwrap();
 
