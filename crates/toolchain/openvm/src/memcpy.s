@@ -208,7 +208,7 @@
 
 	# Define memcpy_loop macro for custom instruction (U-type)
 	.macro memcpy_loop shift
-		.word 0x72000000 | (\shift << 12)  # opcode 0x72 + shift in immediate field (bits 12-31)
+		.word 0x00000072 | (\shift << 12)  # opcode 0x72 + shift in immediate field (bits 12-31)
 	.endm
 	.globl	memcpy
 	.p2align	2
