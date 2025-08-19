@@ -173,6 +173,8 @@ openvm-ecc-sw-macros = { path = "extensions/ecc/sw-macros", default-features = f
 openvm-pairing-circuit = { path = "extensions/pairing/circuit", default-features = false }
 openvm-pairing-transpiler = { path = "extensions/pairing/transpiler", default-features = false }
 openvm-pairing-guest = { path = "extensions/pairing/guest", default-features = false }
+openvm-memcpy-circuit = { path = "extensions/memcpy/circuit", default-features = false }
+openvm-memcpy-transpiler = { path = "extensions/memcpy/transpiler", default-features = false }
 openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = false }
 
 # Benchmarking

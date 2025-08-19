@@ -32,6 +32,8 @@ use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExten
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
+use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
 use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{
@@ -107,6 +109,8 @@ pub struct ExecuteConfig {
     #[extension]
     pub keccak: Keccak256,
     #[extension]
+    pub memcpy: Memcpy,
+    #[extension]
     pub sha256: Sha256,
     #[extension]
     pub modular: ModularExtension,
@@ -128,6 +132,7 @@ impl Default for ExecuteConfig {
             io: Rv32Io,
             bigint: Int256::default(),
             keccak: Keccak256,
+            memcpy: Memcpy,
             sha256: Sha256,
             modular: ModularExtension::new(vec![
                 bn_config.modulus.clone(),
@@ -188,6 +193,7 @@ where
             &config.keccak,
             inventory,
         )?;
+        VmProverExtension::<E, _, _>::extend_prover(&MemcpyCpuProverExt, &config.memcpy, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
@@ -216,6 +222,7 @@ fn create_default_transpiler() -> Transpiler<BabyBear> {
         .with_extension(Rv32MTranspilerExtension)
         .with_extension(Int256TranspilerExtension)
         .with_extension(Keccak256TranspilerExtension)
+        .with_extension(MemcpyTranspilerExtension)
         .with_extension(Sha256TranspilerExtension)
         .with_extension(ModularTranspilerExtension)
         .with_extension(Fp2TranspilerExtension)
