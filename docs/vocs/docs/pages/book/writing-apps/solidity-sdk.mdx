@@ -17,13 +17,13 @@ forge install openvm-org/openvm-solidity-sdk
 Once you have the SDK installed, you can import the SDK contracts into your Solidity project:
 
 ```solidity
-import "openvm-solidity-sdk/v1.3/OpenVmHalo2Verifier.sol";
+import "openvm-solidity-sdk/v1.4/OpenVmHalo2Verifier.sol";
 ```
 
 If you are using an already-deployed verifier contract, you can simply import the `IOpenVmHalo2Verifier` interface:
 
 ```solidity
-import { IOpenVmHalo2Verifier } from "openvm-solidity-sdk/v1.3/interfaces/IOpenVmHalo2Verifier.sol";
+import { IOpenVmHalo2Verifier } from "openvm-solidity-sdk/v1.4/interfaces/IOpenVmHalo2Verifier.sol";
 
 contract MyContract {
     function myFunction() public view {
@@ -49,7 +49,7 @@ To deploy an instance of a verifier contract, you can clone the repo and simply 
 ```bash
 git clone --recursive https://github.com/openvm-org/openvm-solidity-sdk.git
 cd openvm-solidity-sdk
-forge create src/v1.3/OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier --rpc-url $RPC --private-key $PRIVATE_KEY --broadcast
+forge create src/v1.4/OpenVmHalo2Verifier.sol:OpenVmHalo2Verifier --rpc-url $RPC --private-key $PRIVATE_KEY --broadcast
 ```
 
 We recommend a direct deployment from the SDK repo since the proper compiler configurations are all pre-set.
