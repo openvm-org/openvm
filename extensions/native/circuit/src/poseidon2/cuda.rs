@@ -146,7 +146,7 @@ mod tests {
 
     #[test_case(Poseidon2Opcode::PERM_POS2)]
     #[test_case(Poseidon2Opcode::COMP_POS2)]
-    fn test_poseidon2_chip_gpu(opcode: Poseidon2Opcode) {
+    fn test_cuda_poseidon2_chip_gpu(opcode: Poseidon2Opcode) {
         let mut rng = create_seeded_rng();
         let mut tester = GpuChipTestBuilder::default();
 
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_verify_batch() {
+    fn test_cuda_verify_batch() {
         let mut rng = create_seeded_rng();
         let mut tester = GpuChipTestBuilder::default();
         const ADDRESS_SPACE: usize = AS::Native as usize;

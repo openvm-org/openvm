@@ -68,7 +68,6 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
 }
 
 #[cfg(feature = "cuda")]
-
 fn create_test_harness(
     tester: &GpuChipTestBuilder,
 ) -> GpuTestChipHarness<
