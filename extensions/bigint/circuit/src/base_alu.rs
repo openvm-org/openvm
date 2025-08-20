@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    mem::transmute,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BaseAlu256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
@@ -17,6 +14,7 @@ use openvm_rv32im_circuit::BaseAluExecutor;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use crate::common::{bytes_to_u64_array, u64_array_to_bytes};
 use crate::{Rv32BaseAlu256Executor, INT256_NUM_LIMBS};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
@@ -167,10 +165,8 @@ struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         let (res, mut carry) = rs1_u64[0].overflowing_add(rs2_u64[0]);
         rd_u64[0] = res;
@@ -180,17 +176,14 @@ impl AluOp for AddOp {
             carry = c1 || c2;
             rd_u64[i] = res2;
         }
-        // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for SubOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         let (res, mut borrow) = rs1_u64[0].overflowing_sub(rs2_u64[0]);
         rd_u64[0] = res;
@@ -200,55 +193,45 @@ impl AluOp for SubOp {
             borrow = c1 || c2;
             rd_u64[i] = res2;
         }
-        // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for XorOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] ^ rs2_u64[i];
         }
-        // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for OrOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] | rs2_u64[i];
         }
-        // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for AndOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] & rs2_u64[i];
         }
-        // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }

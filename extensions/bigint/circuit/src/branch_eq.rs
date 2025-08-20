@@ -14,6 +14,7 @@ use openvm_rv32im_circuit::BranchEqualExecutor;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use crate::common::bytes_to_u64_array;
 use crate::{Rv32BranchEqual256Executor, INT256_NUM_LIMBS};
 
 type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
@@ -159,10 +160,8 @@ impl Rv32BranchEqual256Executor {
 }
 
 fn u256_eq(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
-    // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-    let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    // SAFETY: Transmuting [u8; 32] to [u64; 4] is safe because both types have the same size (32 bytes) and compatible alignment
-    let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
     for i in 0..4 {
         if rs1_u64[i] != rs2_u64[i] {
             return false;
