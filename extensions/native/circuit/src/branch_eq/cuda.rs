@@ -73,6 +73,9 @@ mod test {
         LocalOpcode,
     };
 
+    use openvm_circuit::arch::testing::GpuChipTestBuilder;
+    use openvm_circuit::arch::testing::GpuTestChipHarness;
+    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_native_compiler::NativeBranchEqualOpcode;
     use openvm_rv32im_circuit::{adapters::RV_B_TYPE_IMM_BITS, BranchEqualCoreAir};
     use openvm_rv32im_transpiler::BranchEqualOpcode;

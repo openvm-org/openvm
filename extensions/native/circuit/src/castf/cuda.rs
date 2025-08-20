@@ -59,7 +59,12 @@ mod test {
     use crate::castf::{CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor};
     use crate::write_native_array;
     use crate::CASTF_MAX_BITS;
+    use openvm_circuit::arch::testing::GpuChipTestBuilder;
+    use openvm_circuit::arch::testing::GpuTestChipHarness;
+    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
+    use openvm_circuit::utils::cuda_utils::default_var_range_checker_bus;
+    use openvm_circuit::utils::cuda_utils::dummy_range_checker;
     use openvm_instructions::{
         instruction::Instruction,
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},

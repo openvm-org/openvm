@@ -67,6 +67,9 @@ mod tests {
         FieldExtensionExecutor,
     };
     use crate::write_native_array;
+    use openvm_circuit::arch::testing::GpuChipTestBuilder;
+    use openvm_circuit::arch::testing::GpuTestChipHarness;
+    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
@@ -115,8 +118,8 @@ mod tests {
         rng: &mut StdRng,
         opcode: FieldExtensionOpcode,
     ) {
-        let (_, y_ptr) = write_native_array::<EXT_DEG>(tester, rng, None);
-        let (_, z_ptr) = write_native_array::<EXT_DEG>(tester, rng, None);
+        let (_, y_ptr) = write_native_array::<F, EXT_DEG>(tester, rng, None);
+        let (_, z_ptr) = write_native_array::<F, EXT_DEG>(tester, rng, None);
 
         let x_ptr = gen_pointer(rng, EXT_DEG);
 

@@ -91,6 +91,9 @@ mod test {
     };
     use crate::write_native_array;
     use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::GpuChipTestBuilder;
+    use openvm_circuit::arch::testing::GpuTestChipHarness;
+    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, FriOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -137,15 +140,16 @@ mod test {
         let a_ptr = gen_pointer(rng, len);
         let b_ptr = gen_pointer(rng, len);
         let a_ptr_ptr =
-            write_native_array::<1>(tester, rng, Some([F::from_canonical_usize(a_ptr)])).1;
+            write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(a_ptr)])).1;
         let b_ptr_ptr =
-            write_native_array::<1>(tester, rng, Some([F::from_canonical_usize(b_ptr)])).1;
+            write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(b_ptr)])).1;
 
-        let len_ptr = write_native_array::<1>(tester, rng, Some([F::from_canonical_usize(len)])).1;
-        let (_alpha, alpha_ptr) = write_native_array::<EXT_DEG>(tester, rng, None);
+        let len_ptr =
+            write_native_array::<F, 1>(tester, rng, Some([F::from_canonical_usize(len)])).1;
+        let (_alpha, alpha_ptr) = write_native_array::<F, EXT_DEG>(tester, rng, None);
         let out_ptr = gen_pointer(rng, EXT_DEG);
         let is_init = true;
-        let is_init_ptr = write_native_array::<1>(tester, rng, Some([F::from_bool(is_init)])).1;
+        let is_init_ptr = write_native_array::<F, 1>(tester, rng, Some([F::from_bool(is_init)])).1;
 
         for i in 0..len {
             let a = rng.gen();

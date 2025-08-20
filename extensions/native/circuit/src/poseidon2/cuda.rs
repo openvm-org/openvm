@@ -99,6 +99,9 @@ mod tests {
         NativePoseidon2Chip,
     };
     use openvm_circuit::arch::testing::memory::gen_pointer;
+    use openvm_circuit::arch::testing::GpuChipTestBuilder;
+    use openvm_circuit::arch::testing::GpuTestChipHarness;
+    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, Poseidon2Opcode, VerifyBatchOpcode};
     use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};

@@ -50,4 +50,4 @@ test-log = { workspace = true }
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-cuda = ["dep:openvm-cuda-backend", "dep:openvm-cuda-common", "dep:openvm-cuda-builder", "openvm-circuit-primitives/cuda"]
+cuda = ["dep:openvm-cuda-backend", "dep:openvm-cuda-common", "dep:openvm-cuda-builder", "openvm-circuit-primitives/cuda", "openvm-circuit/cuda"]
