@@ -1,6 +1,6 @@
 #include "adapters/mul.cuh"
 #include "constants.h"
-#include "cores/multiplication.cuh"
+#include "cores/mul.cuh"
 #include "histogram.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
