@@ -372,7 +372,7 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Keccak256ProverExt, keccak, inventory)?;
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
