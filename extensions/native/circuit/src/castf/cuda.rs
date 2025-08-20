@@ -55,16 +55,13 @@ impl Chip<DenseRecordArena, GpuBackend> for CastFChipGpu {
 
 #[cfg(test)]
 mod test {
-    use crate::adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller};
-    use crate::castf::{CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor};
-    use crate::write_native_array;
-    use crate::CASTF_MAX_BITS;
-    use openvm_circuit::arch::testing::GpuChipTestBuilder;
-    use openvm_circuit::arch::testing::GpuTestChipHarness;
-    use openvm_circuit::arch::testing::TestBuilder;
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
-    use openvm_circuit::utils::cuda_utils::default_var_range_checker_bus;
-    use openvm_circuit::utils::cuda_utils::dummy_range_checker;
+    use openvm_circuit::{
+        arch::{
+            testing::{memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness, TestBuilder},
+            EmptyAdapterCoreLayout,
+        },
+        utils::cuda_utils::{default_var_range_checker_bus, dummy_range_checker},
+    };
     use openvm_instructions::{
         instruction::Instruction,
         riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
@@ -77,6 +74,11 @@ mod test {
     use test_case::test_case;
 
     use super::*;
+    use crate::{
+        adapters::{ConvertAdapterAir, ConvertAdapterExecutor, ConvertAdapterFiller},
+        castf::{CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor},
+        write_native_array, CASTF_MAX_BITS,
+    };
 
     const MAX_INS_CAPACITY: usize = 128;
 

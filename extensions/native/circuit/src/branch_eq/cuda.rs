@@ -58,24 +58,16 @@ impl Chip<DenseRecordArena, GpuBackend> for NativeBranchEqChipGpu {
 
 #[cfg(test)]
 mod test {
-    use crate::adapters::{
-        BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller,
+    use openvm_circuit::arch::{
+        testing::{GpuChipTestBuilder, GpuTestChipHarness, TestBuilder},
+        EmptyAdapterCoreLayout,
     };
-    use crate::branch_eq::{
-        NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqExecutor, NativeBranchEqualFiller,
-    };
-    use crate::write_native_or_imm;
-    use openvm_circuit::arch::EmptyAdapterCoreLayout;
     use openvm_instructions::{
         instruction::Instruction,
         program::{DEFAULT_PC_STEP, PC_BITS},
         utils::isize_to_field,
         LocalOpcode,
     };
-
-    use openvm_circuit::arch::testing::GpuChipTestBuilder;
-    use openvm_circuit::arch::testing::GpuTestChipHarness;
-    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_native_compiler::NativeBranchEqualOpcode;
     use openvm_rv32im_circuit::{adapters::RV_B_TYPE_IMM_BITS, BranchEqualCoreAir};
     use openvm_rv32im_transpiler::BranchEqualOpcode;
@@ -85,6 +77,15 @@ mod test {
     use test_case::test_case;
 
     use super::*;
+    use crate::{
+        adapters::{
+            BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller,
+        },
+        branch_eq::{
+            NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqExecutor, NativeBranchEqualFiller,
+        },
+        write_native_or_imm,
+    };
 
     const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
     const MAX_INS_CAPACITY: usize = 128;

@@ -69,18 +69,10 @@ impl<const NUM_CELLS: usize> Chip<DenseRecordArena, GpuBackend>
 mod test {
     use std::array;
 
-    use crate::adapters::{
-        NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor, NativeLoadStoreAdapterFiller,
+    use openvm_circuit::arch::{
+        testing::{memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness, TestBuilder},
+        EmptyAdapterCoreLayout,
     };
-    use crate::loadstore::{
-        NativeLoadStoreAir, NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreFiller,
-        NativeLoadStoreExecutor,
-    };
-    use crate::write_native_array;
-    use openvm_circuit::arch::testing::GpuChipTestBuilder;
-    use openvm_circuit::arch::testing::GpuTestChipHarness;
-    use openvm_circuit::arch::testing::TestBuilder;
-    use openvm_circuit::arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout};
     use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode, VmOpcode};
     use openvm_native_compiler::{
         conversion::AS, NativeLoadStore4Opcode, NativeLoadStoreOpcode, BLOCK_LOAD_STORE_SIZE,
@@ -91,6 +83,16 @@ mod test {
     use test_case::test_case;
 
     use super::*;
+    use crate::{
+        adapters::{
+            NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor, NativeLoadStoreAdapterFiller,
+        },
+        loadstore::{
+            NativeLoadStoreAir, NativeLoadStoreChip, NativeLoadStoreCoreAir,
+            NativeLoadStoreCoreFiller, NativeLoadStoreExecutor,
+        },
+        write_native_array,
+    };
 
     const MAX_INS_CAPACITY: usize = 128;
 

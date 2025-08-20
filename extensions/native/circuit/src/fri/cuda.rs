@@ -85,15 +85,9 @@ pub struct RowInfo {
 mod test {
     use std::array;
 
-    use crate::fri::{
-        FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor,
-        FriReducedOpeningFiller, FriReducedOpeningRecordMut, EXT_DEG,
+    use openvm_circuit::arch::testing::{
+        memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness, TestBuilder,
     };
-    use crate::write_native_array;
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-    use openvm_circuit::arch::testing::GpuChipTestBuilder;
-    use openvm_circuit::arch::testing::GpuTestChipHarness;
-    use openvm_circuit::arch::testing::TestBuilder;
     use openvm_instructions::{instruction::Instruction, LocalOpcode};
     use openvm_native_compiler::{conversion::AS, FriOpcode};
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -102,6 +96,13 @@ mod test {
     use test_case::test_case;
 
     use super::*;
+    use crate::{
+        fri::{
+            FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor,
+            FriReducedOpeningFiller, FriReducedOpeningRecordMut, EXT_DEG,
+        },
+        write_native_array,
+    };
 
     const MAX_INS_CAPACITY: usize = 1024;
 
