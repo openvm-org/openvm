@@ -1,0 +1,6 @@
+# .github/merge-queue.yml
+queue_rules:
+  - name: default
+    conditions:
+      # Require all status checks to pass
+      - status-success~=.*
