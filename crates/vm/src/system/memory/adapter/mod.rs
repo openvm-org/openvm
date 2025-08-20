@@ -125,11 +125,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         );
         let mut ptr = 0;
         while ptr < bytes.len() {
-            let header: &AccessRecordHeader = bytes[ptr..].borrow();
-            // SAFETY: The bytes at ptr contain a valid AccessRecordHeader followed by
-            // record data. extract_layout reads the header to determine the full layout
-            // without modifying the underlying memory.
-            let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
+            let bytes_slice = &bytes[ptr..];
+            let header: &AccessRecordHeader = bytes_slice.borrow();
+            // SAFETY:
+            // - bytes[ptr..] is a valid starting pointer to a previously allocated record
+            // - The record contains self-describing layout information
+            let layout: AccessLayout = unsafe { bytes_slice.extract_layout() };
             ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
 
             let log_max_block_size = log2_strict_usize(header.block_size as usize);
@@ -192,11 +193,12 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         let bytes = self.arena.allocated_mut();
         let mut ptr = 0;
         while ptr < bytes.len() {
-            // SAFETY: The bytes at ptr contain a valid AccessRecordHeader followed by
-            // record data. extract_layout reads the header to determine the full layout
-            // without modifying the underlying memory.
-            let layout: AccessLayout = unsafe { bytes[ptr..].extract_layout() };
-            let record: AccessRecordMut<'_> = bytes[ptr..].custom_borrow(layout.clone());
+            let bytes_slice = &mut bytes[ptr..];
+            // SAFETY:
+            // - bytes[ptr..] is a valid starting pointer to a previously allocated record
+            // - The record contains self-describing layout information
+            let layout: AccessLayout = unsafe { bytes_slice.extract_layout() };
+            let record: AccessRecordMut<'_> = bytes_slice.custom_borrow(layout.clone());
             ptr += <AccessRecordMut<'_> as SizedRecord<AccessLayout>>::size(&layout);
 
             let log_min_block_size = log2_strict_usize(record.header.lowest_block_size as usize);
