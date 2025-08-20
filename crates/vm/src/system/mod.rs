@@ -521,6 +521,7 @@ where
 #[derive(Clone)]
 pub struct SystemBuilder;
 
+#[cfg(not(feature = "cuda"))]
 impl<SC, E> VmBuilder<E> for SystemBuilder
 where
     SC: StarkGenericConfig,
