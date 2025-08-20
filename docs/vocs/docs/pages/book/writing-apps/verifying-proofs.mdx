@@ -39,6 +39,11 @@ CLI command as described [here](book/writing-apps/compiling-a-program#generating
 If you omit `--proof`, the command will search the working directory for files with the `.stark.proof` extension. In this 
 case, we expect to find a single proof, and `verify` will fail otherwise.
 
+:::info
+The `cargo openvm verify stark` command implicitly reads the STARK aggregation verification fee `cargo openvm setup` command
+from `~/.openvm/agg_stark.vk`. 
+:::
+
 ## Verifying EVM Proofs
 
 To verify an EVM proof, you can run the following command or call the `IOpenVmHalo2Verifier.verify()` function in the [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk).
