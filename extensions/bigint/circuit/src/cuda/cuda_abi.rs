@@ -1,14 +1,10 @@
 #![allow(clippy::missing_safety_doc)]
 
-use stark_backend_gpu::{
-    cuda::{
-        d_buffer::{DeviceBuffer, DeviceBufferView},
-        error::CudaError,
-    },
-    prelude::F,
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
 };
-
-use crate::UInt2;
 
 pub mod alu256 {
     use super::*;
@@ -236,6 +232,8 @@ pub mod shift256 {
 }
 
 pub mod mul256 {
+    use openvm_cuda_backend::chip::UInt2;
+
     use super::*;
 
     extern "C" {
