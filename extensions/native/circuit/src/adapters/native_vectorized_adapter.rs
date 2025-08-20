@@ -211,7 +211,8 @@ impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorized
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - adapter_row contains a valid NativeVectorizedAdapterRecord<F, N> representation
-        // - get_record_from_slice correctly interprets the bytes as NativeVectorizedAdapterRecord<F, N>
+        // - get_record_from_slice correctly interprets the bytes as
+        //   NativeVectorizedAdapterRecord<F, N>
         let record: &NativeVectorizedAdapterRecord<F, N> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();

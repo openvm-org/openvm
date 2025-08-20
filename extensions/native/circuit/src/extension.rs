@@ -383,7 +383,8 @@ pub(crate) mod phantom {
             _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            // SAFETY: Reading one field element from valid memory address using the provided interface.
+            // SAFETY: Reading one field element from valid memory address using the provided
+            // interface.
             let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
             println!("{value}");
             Ok(())
@@ -401,7 +402,8 @@ pub(crate) mod phantom {
             len: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            // SAFETY: Reading one field element from valid memory address using the provided interface.
+            // SAFETY: Reading one field element from valid memory address using the provided
+            // interface.
             let [val] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
             let mut val = val.as_canonical_u32();
 

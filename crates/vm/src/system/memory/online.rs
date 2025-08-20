@@ -516,7 +516,8 @@ impl TracingMemory {
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
         // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within bounds
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -538,7 +539,8 @@ impl TracingMemory {
     fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
         // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within bounds
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -580,8 +582,9 @@ impl TracingMemory {
         // SAFETY:
         // - header.address_space is validated during instruction decoding and within bounds
         // - header.pointer and header.type_size define valid memory bounds within the address space
-        // - The memory access range (header.pointer * header.type_size)..(header.pointer + header.block_size) * header.type_size
-        //   is within the allocated size for the address space, preventing out of bounds access
+        // - The memory access range (header.pointer * header.type_size)..(header.pointer +
+        //   header.block_size) * header.type_size is within the allocated size for the address
+        //   space, preventing out of bounds access
         let data_slice = unsafe {
             self.data.memory.get_u8_slice(
                 header.address_space,
@@ -680,7 +683,8 @@ impl TracingMemory {
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
         // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within bounds
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         for i in 0..(block_size as usize / MIN_BLOCK_SIZE) {
@@ -712,7 +716,8 @@ impl TracingMemory {
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
         // SAFETY:
-        // - address_space is validated during instruction decoding and guaranteed to be within bounds
+        // - address_space is validated during instruction decoding and guaranteed to be within
+        //   bounds
         debug_assert_eq!(
             unsafe {
                 self.data

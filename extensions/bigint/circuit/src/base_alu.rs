@@ -14,8 +14,10 @@ use openvm_rv32im_circuit::BaseAluExecutor;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::common::{bytes_to_u64_array, u64_array_to_bytes};
-use crate::{Rv32BaseAlu256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u64_array, u64_array_to_bytes},
+    Rv32BaseAlu256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 

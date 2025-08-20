@@ -396,8 +396,10 @@ where
         let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, adapter_row);
         // SAFETY:
-        // - row_slice is guaranteed by the caller to have at least A::WIDTH + ModularIsEqualCoreCols::width() elements
-        // - caller ensures core_row contains a valid record written by the executor during trace generation
+        // - row_slice is guaranteed by the caller to have at least A::WIDTH +
+        //   ModularIsEqualCoreCols::width() elements
+        // - caller ensures core_row contains a valid record written by the executor during trace
+        //   generation
         let record: &ModularIsEqualRecord<READ_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();

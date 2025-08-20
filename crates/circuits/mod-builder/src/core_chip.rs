@@ -446,8 +446,11 @@ where
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: The core_row slice is transmuted to FieldExpressionCoreRecordMut using
-        // the specified layout, which satisfies CustomBorrow requirements for safe access.
+        // SAFETY:
+        // - caller ensures `core_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - core_row slice is transmuted to FieldExpressionCoreRecordMut using the specified
+        //   layout, which satisfies CustomBorrow requirements for safe access.
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 

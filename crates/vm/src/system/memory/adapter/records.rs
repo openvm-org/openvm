@@ -79,7 +79,8 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
 
         // timestamps: [u32] (block_size / cell_size * 4 bytes)
         // SAFETY:
-        // - size: (layout.block_size / layout.lowest_block_size) * size_of::<u32>() from size_by_layout()
+        // - size: (layout.block_size / layout.lowest_block_size) * size_of::<u32>() from
+        //   size_by_layout()
         // - alignment: u32 aligned due to AccessRecordHeader alignment
         let timestamps = unsafe {
             std::slice::from_raw_parts_mut(

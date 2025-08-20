@@ -294,7 +294,8 @@ impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceFiller<F>
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - adapter_row contains a valid NativeLoadStoreAdapterRecord<F, NUM_CELLS> representation
-        // - get_record_from_slice correctly interprets the bytes as NativeLoadStoreAdapterRecord<F, NUM_CELLS>
+        // - get_record_from_slice correctly interprets the bytes as NativeLoadStoreAdapterRecord<F,
+        //   NUM_CELLS>
         let record: &NativeLoadStoreAdapterRecord<F, NUM_CELLS> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();

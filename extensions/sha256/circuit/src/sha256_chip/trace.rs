@@ -110,7 +110,8 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] 
         // SAFETY: Alignment and conversion are safe because:
         // - rest is a valid mutable slice from the previous split
         // - align_to_mut guarantees the middle slice is properly aligned for MemoryReadAuxRecord
-        // - The subslice operation [..num_blocks * SHA256_NUM_READ_ROWS] validates sufficient capacity
+        // - The subslice operation [..num_blocks * SHA256_NUM_READ_ROWS] validates sufficient
+        //   capacity
         // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
@@ -304,7 +305,8 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                         // SAFETY: Memory zeroing is safe because:
                         // - row is a valid mutable slice of F elements with length SHA256VM_WIDTH
                         // - Casting F* to u8* preserves validity for write_bytes operation
-                        // - SHA256VM_WIDTH * size_of::<F>() correctly calculates total bytes to zero
+                        // - SHA256VM_WIDTH * size_of::<F>() correctly calculates total bytes to
+                        //   zero
                         // - Zeroing prevents field overflow from uninitialized data
                         unsafe {
                             std::ptr::write_bytes(
@@ -321,7 +323,8 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 }
 
                 // SAFETY: Record extraction with layout is safe because:
-                // - slice was sized according to SizedRecord::size(layout) ensuring sufficient space
+                // - slice was sized according to SizedRecord::size(layout) ensuring sufficient
+                //   space
                 // - Layout metadata (num_blocks) matches the actual record's block count
                 // - get_record_from_slice uses CustomBorrow trait to properly split the buffer
                 // - The record header, input data, and aux records are properly aligned

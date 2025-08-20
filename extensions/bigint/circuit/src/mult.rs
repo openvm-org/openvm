@@ -14,8 +14,10 @@ use openvm_rv32im_circuit::MultiplicationExecutor;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::common::{bytes_to_u32_array, u32_array_to_bytes};
-use crate::{Rv32Multiplication256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u32_array, u32_array_to_bytes},
+    Rv32Multiplication256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
@@ -167,8 +169,7 @@ mod tests {
     use alloy_primitives::U256;
     use rand::{prelude::StdRng, Rng, SeedableRng};
 
-    use crate::common::u64_array_to_bytes;
-    use crate::{mult::u256_mul, INT256_NUM_LIMBS};
+    use crate::{common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_LIMBS};
 
     #[test]
     fn test_u256_mul() {
