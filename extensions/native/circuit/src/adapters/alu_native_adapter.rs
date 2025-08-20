@@ -203,6 +203,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for AluNativeAdapterFiller {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
+        // - adapter_row contains a valid AluNativeAdapterRecord<F> representation
+        // - get_record_from_slice correctly interprets the bytes as AluNativeAdapterRecord<F>
         let record: &AluNativeAdapterRecord<F> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut AluNativeAdapterCols<F> = adapter_row.borrow_mut();
