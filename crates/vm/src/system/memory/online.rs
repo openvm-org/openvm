@@ -516,6 +516,8 @@ impl TracingMemory {
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
         // SAFETY:
+        // - address_space is assumed valid and within bounds of self.meta vector
+        // - address_space corresponds to a valid memory address space from TracingMemory construction
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -537,6 +539,8 @@ impl TracingMemory {
     fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
         let ptr_index = pointer / ALIGN;
         // SAFETY:
+        // - address_space is assumed valid and within bounds of self.meta vector
+        // - address_space corresponds to a valid memory address space from TracingMemory construction
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
@@ -576,6 +580,9 @@ impl TracingMemory {
             return;
         }
         // SAFETY:
+        // - header.address_space is valid as it comes from AccessRecordHeader created during memory operations
+        // - header.pointer and header.type_size define valid memory bounds within the address space
+        // - Memory access is within the allocated size for the given address space
         let data_slice = unsafe {
             self.data.memory.get_u8_slice(
                 header.address_space,
@@ -674,6 +681,8 @@ impl TracingMemory {
         }
         let begin = start_ptr as usize / MIN_BLOCK_SIZE;
         // SAFETY:
+        // - address_space is assumed valid and within bounds of self.meta vector
+        // - address_space corresponds to a valid memory address space from TracingMemory construction
         let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
 
         for i in 0..(block_size as usize / MIN_BLOCK_SIZE) {
@@ -705,6 +714,8 @@ impl TracingMemory {
     ) -> u32 {
         debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
         // SAFETY:
+        // - address_space is assumed valid and within bounds of self.data.memory.config vector
+        // - address_space corresponds to a valid memory address space from TracingMemory construction  
         debug_assert_eq!(
             unsafe {
                 self.data
