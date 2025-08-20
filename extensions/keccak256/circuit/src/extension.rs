@@ -29,7 +29,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-
 #[cfg(feature = "cuda")]
 use {
     openvm_circuit::{
@@ -130,12 +129,27 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32Builder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex =
-            VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+        )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32i,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32m,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
             &Keccak256GpuProverExt,
             &config.keccak,

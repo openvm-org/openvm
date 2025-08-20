@@ -8,7 +8,9 @@ use openvm_circuit::{
             BITWISE_OP_LOOKUP_BUS,
         },
         Arena, DenseRecordArena, PreflightExecutor,
-    }, system::memory::SharedMemoryHelper, utils::get_random_message
+    },
+    system::memory::SharedMemoryHelper,
+    utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -63,7 +65,6 @@ fn create_harness_fields(
     );
     (air, executor, chip)
 }
-
 
 fn create_test_harness<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
