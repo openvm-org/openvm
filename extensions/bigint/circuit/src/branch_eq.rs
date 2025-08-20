@@ -54,6 +54,25 @@ impl<F: PrimeField32> Executor<F> for Rv32BranchEqual256Executor {
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BranchEqPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = match local_opcode {
+            BranchEqualOpcode::BEQ => execute_e1_tco_handler::<_, _, false>,
+            BranchEqualOpcode::BNE => execute_e1_tco_handler::<_, _, true>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchEqual256Executor {
@@ -101,6 +120,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

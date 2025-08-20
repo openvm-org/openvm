@@ -55,6 +55,26 @@ impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = match local_opcode {
+            ShiftOpcode::SLL => execute_e1_tco_handler::<_, _, SllOp>,
+            ShiftOpcode::SRA => execute_e1_tco_handler::<_, _, SraOp>,
+            ShiftOpcode::SRL => execute_e1_tco_handler::<_, _, SrlOp>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F: PrimeField32> MeteredExecutor<F> for Rv32Shift256Executor {
@@ -100,6 +120,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

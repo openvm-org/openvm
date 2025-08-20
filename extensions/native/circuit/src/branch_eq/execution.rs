@@ -2,7 +2,6 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
-    system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -79,6 +78,34 @@ impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut NativeBranchEqualPreCompute = data.borrow_mut();
+
+        let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = match (a_is_imm, b_is_imm, is_bne) {
+            (true, true, true) => execute_e1_tco_handler::<_, _, true, true, true>,
+            (true, true, false) => execute_e1_tco_handler::<_, _, true, true, false>,
+            (true, false, true) => execute_e1_tco_handler::<_, _, true, false, true>,
+            (true, false, false) => execute_e1_tco_handler::<_, _, true, false, false>,
+            (false, true, true) => execute_e1_tco_handler::<_, _, false, true, true>,
+            (false, true, false) => execute_e1_tco_handler::<_, _, false, true, false>,
+            (false, false, true) => execute_e1_tco_handler::<_, _, false, false, true>,
+            (false, false, false) => execute_e1_tco_handler::<_, _, false, false, false>,
+        };
+
+        Ok(fn_ptr)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<NativeBranchEqualPreCompute>()
@@ -177,6 +204,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

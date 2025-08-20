@@ -54,6 +54,25 @@ impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut LessThanPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        let fn_ptr = match local_opcode {
+            LessThanOpcode::SLT => execute_e1_tco_handler::<_, _, false>,
+            LessThanOpcode::SLTU => execute_e1_tco_handler::<_, _, true>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F: PrimeField32> MeteredExecutor<F> for Rv32LessThan256Executor {
@@ -105,6 +124,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

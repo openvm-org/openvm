@@ -29,7 +29,8 @@ openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
-default = ["parallel", "jemalloc"]
+default = ["parallel", "jemalloc", "tco"]
+tco = ["openvm-circuit/tco"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 # performance features:

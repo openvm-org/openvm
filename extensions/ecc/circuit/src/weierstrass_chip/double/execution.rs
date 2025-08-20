@@ -4,10 +4,7 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_circuit::{
-    arch::*,
-    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
-};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{
@@ -87,6 +84,98 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcDoubleExecutor<BLOCKS, 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut EcDoublePreCompute = data.borrow_mut();
+
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        if let Some(curve_type) = {
+            let modulus = &pre_compute.expr.builder.prime;
+            let a_coeff = &pre_compute.expr.setup_values[0];
+            get_curve_type(modulus, a_coeff)
+        } {
+            match (is_setup, curve_type) {
+                (true, CurveType::K256) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::K256 as u8 },
+                    true,
+                >),
+                (true, CurveType::P256) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::P256 as u8 },
+                    true,
+                >),
+                (true, CurveType::BN254) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BN254 as u8 },
+                    true,
+                >),
+                (true, CurveType::BLS12_381) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BLS12_381 as u8 },
+                    true,
+                >),
+                (false, CurveType::K256) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::K256 as u8 },
+                    false,
+                >),
+                (false, CurveType::P256) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::P256 as u8 },
+                    false,
+                >),
+                (false, CurveType::BN254) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BN254 as u8 },
+                    false,
+                >),
+                (false, CurveType::BLS12_381) => Ok(execute_e1_tco_handler::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { CurveType::BLS12_381 as u8 },
+                    false,
+                >),
+            }
+        } else if is_setup {
+            Ok(execute_e1_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
+        } else {
+            Ok(execute_e1_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
+        }
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<EcDoublePreCompute>()
@@ -318,6 +407,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

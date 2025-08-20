@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
@@ -61,6 +61,31 @@ impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExtensionPreCompute = data.borrow_mut();
+
+        let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = match opcode {
+            0 => execute_e1_tco_handler::<_, _, 0>, // FE4ADD
+            1 => execute_e1_tco_handler::<_, _, 1>, // FE4SUB
+            2 => execute_e1_tco_handler::<_, _, 2>, // BBE4MUL
+            3 => execute_e1_tco_handler::<_, _, 3>, // BBE4DIV
+            _ => panic!("Invalid field extension opcode: {opcode}"),
+        };
+
+        Ok(fn_ptr)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<FieldExtensionPreCompute>()
@@ -145,6 +170,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

@@ -2,7 +2,6 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::*,
-    system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -80,6 +79,74 @@ impl<F, A> Executor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldArithmeticPreCompute = data.borrow_mut();
+
+        let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
+            (FieldArithmeticOpcode::ADD, true, true) => {
+                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, true, false) => {
+                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, false, true) => {
+                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::ADD, false, false) => {
+                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, true, true) => {
+                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, true, false) => {
+                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, false, true) => {
+                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::SUB, false, false) => {
+                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, true, true) => {
+                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, true, false) => {
+                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, false, true) => {
+                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::MUL, false, false) => {
+                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, true, true) => {
+                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, true, false) => {
+                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, false, true) => {
+                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+            (FieldArithmeticOpcode::DIV, false, false) => {
+                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>
+            }
+        };
+
+        Ok(fn_ptr)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<FieldArithmeticPreCompute>()
@@ -276,6 +343,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
+use openvm_circuit::arch::*;
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP};
 use openvm_native_compiler::conversion::AS;
@@ -66,6 +66,24 @@ impl<F> Executor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
+
+        self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = execute_e1_tco_handler;
+        Ok(fn_ptr)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<FriReducedOpeningPreCompute>()
@@ -114,6 +132,7 @@ where
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

@@ -7,10 +7,7 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
-    system::memory::{
-        online::{GuestMemory, TracingMemory},
-        MemoryAuxColsFactory, POINTER_MAX_BITS,
-    },
+    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
@@ -550,6 +547,34 @@ where
 
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _opcode: u32,
+        _instruction: &Instruction<F>,
+        _data: &mut [u8],
+    ) -> Result<
+        for<'a, 'b, 'c> unsafe fn(
+            &'a InterpretedInstance<'b, F, Ctx>,
+            &'c mut VmExecState<F, GuestMemory, Ctx>,
+        ) -> Result<(), ExecutionError>,
+        StaticProgramError,
+    >
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
+
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = if is_setup {
+            execute_e1_tco_handler::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
+        } else {
+            execute_e1_tco_handler::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
+        };
+
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
@@ -584,6 +609,7 @@ where
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

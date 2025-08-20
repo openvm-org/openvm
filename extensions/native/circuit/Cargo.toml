@@ -40,6 +40,8 @@ test-case = { workspace = true }
 test-log = { workspace = true }
 
 [features]
-default = ["parallel"]
+default = ["parallel", "jemalloc", "tco"]
+tco = ["openvm-circuit/tco"]
+jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
