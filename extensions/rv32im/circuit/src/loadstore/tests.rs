@@ -1,12 +1,15 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::{
         testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-        MemoryConfig,
+        Arena, ExecutionBridge, MemoryConfig, PreflightExecutor,
     },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+    system::memory::{
+        merkle::public_values::PUBLIC_VALUES_AS, offline_checker::MemoryBridge, SharedMemoryHelper,
+    },
 };
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -21,6 +24,17 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, seq::SliceRandom, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32LoadStoreAdapterRecord, LoadStoreCoreRecord, Rv32LoadStoreChipGpu},
+    openvm_circuit::arch::{
+        testing::{
+            default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{run_write_data, LoadStoreCoreAir, Rv32LoadStoreChip};
 use crate::{
@@ -39,36 +53,56 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv32LoadStoreExecutor, Rv32LoadStoreAir, Rv32LoadStoreChip<F>>;
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
-    let range_checker_chip = tester.range_checker();
-
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    range_checker_chip: Arc<VariableRangeCheckerChip>,
+    memory_helper: SharedMemoryHelper<F>,
+    address_bits: usize,
+) -> (
+    Rv32LoadStoreAir,
+    Rv32LoadStoreExecutor,
+    Rv32LoadStoreChip<F>,
+) {
     let air = Rv32LoadStoreAir::new(
         Rv32LoadStoreAdapterAir::new(
-            tester.memory_bridge(),
-            tester.execution_bridge(),
+            memory_bridge,
+            execution_bridge,
             range_checker_chip.bus(),
-            tester.address_bits(),
+            address_bits,
         ),
         LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
     );
     let executor = Rv32LoadStoreExecutor::new(
-        Rv32LoadStoreAdapterExecutor::new(tester.address_bits()),
+        Rv32LoadStoreAdapterExecutor::new(address_bits),
         Rv32LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv32LoadStoreChip::<F>::new(
         LoadStoreFiller::new(
-            Rv32LoadStoreAdapterFiller::new(tester.address_bits(), range_checker_chip.clone()),
+            Rv32LoadStoreAdapterFiller::new(address_bits, range_checker_chip),
             Rv32LoadStoreOpcode::CLASS_OFFSET,
         ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.range_checker(),
         tester.memory_helper(),
+        tester.address_bits(),
     );
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv32LoadStoreOpcode,
     rs1: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -128,8 +162,8 @@ fn set_and_execute(
     let enabled_write = !(is_load & (a == 0));
 
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -185,12 +219,13 @@ fn rand_loadstore_test(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
-    let mut harness = create_test_chip(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -237,11 +272,12 @@ fn run_negative_loadstore_test(
         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     }
     let mut tester = VmChipTestBuilder::volatile(mem_config);
-    let mut harness = create_test_chip(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         rs1,
@@ -471,190 +507,84 @@ fn run_loadbu_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-// use std::array;
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32LoadStoreExecutor,
+    Rv32LoadStoreAir,
+    Rv32LoadStoreChipGpu,
+    Rv32LoadStoreChip<F>,
+>;
 
-// use openvm_circuit::{
-//     arch::{testing::memory::gen_pointer, EmptyAdapterCoreLayout, MemoryConfig},
-//     system::memory::merkle::public_values::PUBLIC_VALUES_AS,
-// };
-// use openvm_instructions::{
-//     instruction::Instruction,
-//     riscv::{RV32_CELL_BITS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-//     LocalOpcode,
-// };
-// use openvm_rv32im_circuit::{
-//     adapters::{Rv32LoadStoreAdapterAir, Rv32LoadStoreAdapterExecutor,
-// Rv32LoadStoreAdapterFiller},     LoadStoreCoreAir, LoadStoreFiller, Rv32LoadStoreAir,
-// Rv32LoadStoreChip, Rv32LoadStoreExecutor, };
-// use openvm_rv32im_transpiler::Rv32LoadStoreOpcode::{self, *};
-// use openvm_stark_backend::p3_field::FieldAlgebra;
-// use openvm_stark_sdk::utils::create_seeded_rng;
-// use rand::{rngs::StdRng, Rng};
-// use test_case::test_case;
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let range_bus = default_var_range_checker_bus();
+    let dummy_range_checker_chip = dummy_range_checker(range_bus);
 
-// use super::*;
-// use crate::testing::{
-//     default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
-// };
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_checker_chip,
+        tester.dummy_memory_helper(),
+        tester.address_bits(),
+    );
+    let gpu_chip = Rv32LoadStoreChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
 
-// const IMM_BITS: usize = 16;
-// const MAX_INS_CAPACITY: usize = 128;
-// type Harness = GpuTestChipHarness<
-//     F,
-//     Rv32LoadStoreExecutor,
-//     Rv32LoadStoreAir,
-//     Rv32LoadStoreChipGpu,
-//     Rv32LoadStoreChip<F>,
-// >;
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
 
-// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
-//     // getting bus from tester since `gpu_chip` and `air` must use the same bus
-//     let range_bus = default_var_range_checker_bus();
-//     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-//     let dummy_range_checker_chip = dummy_range_checker(range_bus);
-//     let air = Rv32LoadStoreAir::new(
-//         Rv32LoadStoreAdapterAir::new(
-//             tester.memory_bridge(),
-//             tester.execution_bridge(),
-//             range_bus,
-//             tester.address_bits(),
-//         ),
-//         LoadStoreCoreAir::new(Rv32LoadStoreOpcode::CLASS_OFFSET),
-//     );
-//     let executor = Rv32LoadStoreExecutor::new(
-//         Rv32LoadStoreAdapterExecutor::new(tester.address_bits()),
-//         Rv32LoadStoreOpcode::CLASS_OFFSET,
-//     );
-//     let cpu_chip = Rv32LoadStoreChip::<F>::new(
-//         LoadStoreFiller::new(
-//             Rv32LoadStoreAdapterFiller::new(tester.address_bits(), dummy_range_checker_chip),
-//             Rv32LoadStoreOpcode::CLASS_OFFSET,
-//         ),
-//         tester.dummy_memory_helper(),
-//     );
+#[cfg(feature = "cuda")]
+#[test_case(LOADW, 100)]
+#[test_case(LOADBU, 100)]
+#[test_case(LOADHU, 100)]
+#[test_case(STOREW, 100)]
+#[test_case(STOREB, 100)]
+#[test_case(STOREH, 100)]
+fn test_cuda_rand_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut mem_config = MemoryConfig::default();
+    mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    if [STOREW, STOREB, STOREH].contains(&opcode) {
+        mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
+    }
+    let mut tester = GpuChipTestBuilder::volatile(mem_config, default_var_range_checker_bus());
 
-//     let gpu_chip = Rv32LoadStoreChipGpu::new(
-//         tester.range_checker(),
-//         tester.address_bits(),
-//         tester.timestamp_max_bits(),
-//     );
+    let mut harness = create_cuda_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
 
-//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-// }
+    type Record<'a> = (
+        &'a mut Rv32LoadStoreAdapterRecord,
+        &'a mut LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+    );
 
-// #[allow(clippy::too_many_arguments)]
-// fn set_and_execute(
-//     tester: &mut GpuChipTestBuilder,
-//     harness: &mut Harness,
-//     rng: &mut StdRng,
-//     opcode: Rv32LoadStoreOpcode,
-// ) {
-//     let imm = rng.gen_range(0..(1 << IMM_BITS));
-//     let imm_sign = rng.gen_range(0..2);
-//     let imm_ext = imm + imm_sign * 0xffff0000;
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
+        );
 
-//     let alignment = match opcode {
-//         LOADW | STOREW => 2,
-//         LOADHU | STOREH => 1,
-//         LOADBU | STOREB => 0,
-//         _ => unreachable!(),
-//     };
-
-//     let is_load = [LOADW, LOADHU, LOADBU].contains(&opcode);
-//     let mem_as = if is_load { 2 } else { rng.gen_range(2..=4) };
-
-//     let ptr_val: u32 = rng.gen_range(0..(1 << (tester.address_bits() - alignment))) << alignment;
-//     let rs1 = ptr_val.wrapping_sub(imm_ext).to_le_bytes();
-
-//     let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-//     let b = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-
-//     let shift_amount = ptr_val % 4;
-//     tester.write(1, b, rs1.map(F::from_canonical_u8));
-
-//     let mut some_prev_data: [F; RV32_REGISTER_NUM_LIMBS] =
-//         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
-//     let mut read_data: [F; RV32_REGISTER_NUM_LIMBS] =
-//         array::from_fn(|_| F::from_canonical_u32(rng.gen_range(0..(1 << RV32_CELL_BITS))));
-
-//     if is_load {
-//         if a == 0 {
-//             some_prev_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
-//         }
-//         tester.write(1, a, some_prev_data);
-//         if mem_as == 1 && ptr_val - shift_amount == 0 {
-//             read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
-//         }
-//         tester.write(mem_as, (ptr_val - shift_amount) as usize, read_data);
-//     } else {
-//         if mem_as == 4 {
-//             some_prev_data = array::from_fn(|_| rng.gen());
-//         }
-//         if a == 0 {
-//             read_data = [F::ZERO; RV32_REGISTER_NUM_LIMBS];
-//         }
-
-//         tester.write(mem_as, (ptr_val - shift_amount) as usize, some_prev_data);
-//         tester.write(1, a, read_data);
-//     }
-
-//     let enabled_write = !(is_load & (a == 0));
-
-//     tester.execute(
-//         &mut harness.executor,
-//         &mut harness.dense_arena,
-//         &Instruction::from_usize(
-//             opcode.global_opcode(),
-//             [
-//                 a,
-//                 b,
-//                 imm as usize,
-//                 1,
-//                 mem_as,
-//                 enabled_write as usize,
-//                 imm_sign as usize,
-//             ],
-//         ),
-//     );
-// }
-
-// #[test_case(LOADW, 100)]
-// #[test_case(LOADBU, 100)]
-// #[test_case(LOADHU, 100)]
-// #[test_case(STOREW, 100)]
-// #[test_case(STOREB, 100)]
-// #[test_case(STOREH, 100)]
-// fn test_load_store_tracegen(opcode: Rv32LoadStoreOpcode, num_ops: usize) {
-//     let mut rng = create_seeded_rng();
-//     let mut mem_config = MemoryConfig::default();
-//     mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-//     if [STOREW, STOREB, STOREH].contains(&opcode) {
-//         mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
-//     }
-//     let mut tester = GpuChipTestBuilder::volatile(mem_config, default_var_range_checker_bus());
-
-//     let mut harness = create_test_harness(&tester);
-//     for _ in 0..num_ops {
-//         set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
-//     }
-
-//     type Record<'a> = (
-//         &'a mut Rv32LoadStoreAdapterRecord,
-//         &'a mut LoadStoreCoreRecord<RV32_REGISTER_NUM_LIMBS>,
-//     );
-
-//     harness
-//         .dense_arena
-//         .get_record_seeker::<Record, _>()
-//         .transfer_to_matrix_arena(
-//             &mut harness.matrix_arena,
-//             EmptyAdapterCoreLayout::<F, Rv32LoadStoreAdapterExecutor>::new(),
-//         );
-
-//     tester
-//         .build()
-//         .load_gpu_harness(harness)
-//         .finalize()
-//         .simple_test()
-//         .unwrap();
-// }
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

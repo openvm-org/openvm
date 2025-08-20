@@ -1,10 +1,14 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
-    arch::testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
-        BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+    arch::{
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS, RANGE_TUPLE_CHECKER_BUS,
+        },
+        Arena, ExecutionBridge, PreflightExecutor,
     },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::generate_long_number,
 };
 use openvm_circuit_primitives::{
@@ -31,6 +35,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32MultAdapterRecord, DivRemCoreRecord, Rv32DivRemChipGpu},
+    openvm_circuit::arch::{
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::core::run_divrem;
 use crate::{
@@ -49,6 +61,10 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
+const TUPLE_CHECKER_SIZES: [u32; 2] = [
+    (1 << RV32_CELL_BITS) as u32,
+    (MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)),
+];
 type Harness = TestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChip<F>>;
 
 fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
@@ -60,7 +76,35 @@ fn limb_sra<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     array::from_fn(|i| if i + shift < NUM_LIMBS { x[i] } else { ext })
 }
 
-fn create_test_chip(
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (Rv32DivRemAir, Rv32DivRemExecutor, Rv32DivRemChip<F>) {
+    let air = Rv32DivRemAir::new(
+        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
+        DivRemCoreAir::new(
+            bitwise_chip.bus(),
+            *range_tuple_chip.bus(),
+            DivRemOpcode::CLASS_OFFSET,
+        ),
+    );
+    let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
+    let chip = Rv32DivRemChip::<F>::new(
+        DivRemFiller::new(
+            Rv32MultAdapterFiller,
+            bitwise_chip,
+            range_tuple_chip,
+            DivRemOpcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Harness,
@@ -71,10 +115,7 @@ fn create_test_chip(
     (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
 ) {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let range_tuple_bus = RangeTupleCheckerBus::new(
-        RANGE_TUPLE_CHECKER_BUS,
-        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
-    );
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
@@ -82,22 +123,14 @@ fn create_test_chip(
     let range_tuple_chip =
         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
-    let air = Rv32DivRemAir::new(
-        Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
-    );
-    let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
-    let chip = Rv32DivRemChip::<F>::new(
-        DivRemFiller::new(
-            Rv32MultAdapterFiller,
-            bitwise_chip.clone(),
-            range_tuple_chip.clone(),
-            DivRemOpcode::CLASS_OFFSET,
-        ),
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-
-    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(executor, air, cpu_chip, MAX_INS_CAPACITY);
 
     (
         harness,
@@ -107,9 +140,10 @@ fn create_test_chip(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: DivRemOpcode,
     b: Option<[u32; RV32_REGISTER_NUM_LIMBS]>,
@@ -137,8 +171,8 @@ fn set_and_execute(
     let (q, r, _, _, _, _) =
         run_divrem::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(is_signed, &b, &c);
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
     );
 
@@ -162,17 +196,26 @@ fn set_and_execute(
 fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise, range_tuple) = create_test_chip(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_harness(&mut tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
     }
 
     // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
     // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([98, 188, 163, 127]),
@@ -180,7 +223,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([98, 188, 163, 229]),
@@ -188,7 +232,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([0, 0, 0, 128]),
@@ -196,7 +241,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([0, 0, 0, 127]),
@@ -204,7 +250,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([0, 0, 0, 0]),
@@ -212,7 +259,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([0, 0, 0, 0]),
@@ -220,7 +268,8 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
     );
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some([0, 0, 0, 128]),
@@ -262,11 +311,12 @@ fn run_negative_divrem_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise, range_tuple) = create_test_chip(&mut tester);
+    let (mut harness, bitwise, range_tuple) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -705,197 +755,147 @@ fn run_mul_unsigned_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-// use openvm_circuit::arch::{
-//     testing::{memory::gen_pointer, RANGE_TUPLE_CHECKER_BUS},
-//     EmptyAdapterCoreLayout,
-// };
-// use openvm_circuit_primitives::{
-//     bitwise_op_lookup::BitwiseOperationLookupChip,
-//     range_tuple::{RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip},
-// };
-// use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, LocalOpcode};
-// use openvm_rv32im_circuit::{
-//     adapters::{Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller},
-//     DivRemCoreAir, DivRemFiller, Rv32DivRemAir, Rv32DivRemChip, Rv32DivRemExecutor,
-// };
-// use openvm_rv32im_transpiler::DivRemOpcode::{self, *};
-// use openvm_stark_backend::p3_field::FieldAlgebra;
-// use openvm_stark_sdk::utils::create_seeded_rng;
-// use rand::{rngs::StdRng, Rng};
-// use test_case::test_case;
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu, Rv32DivRemChip<F>>;
 
-// use super::*;
-// use crate::testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness};
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
 
-// // the max number of limbs we currently support DIVREM for is 32 (i.e. for U256s)
-// const MAX_NUM_LIMBS: u32 = 32;
-// const TUPLE_CHECKER_SIZES: [u32; 2] = [
-//     (1 << RV32_CELL_BITS) as u32,
-//     (MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)),
-// ];
-// const MAX_INS_CAPACITY: usize = 128;
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let dummy_range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
 
-// type Harness =
-//     GpuTestChipHarness<F, Rv32DivRemExecutor, Rv32DivRemAir, Rv32DivRemChipGpu,
-// Rv32DivRemChip<F>>;
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_tuple_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32DivRemChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.range_tuple_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
 
-// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
-//     // getting bus's from tester since `gpu_chip` and `air` must use the same bus
-//     let bitwise_bus = default_bitwise_lookup_bus();
-//     let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS,
-// TUPLE_CHECKER_SIZES);
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
 
-//     // creating dummy chips for Cpu so we only count `add_count`s from GPU
-//     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-//         bitwise_bus,
-//     ));
-//     let dummy_range_tuple_chip =
-//         SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+#[cfg(feature = "cuda")]
+#[test_case(DIV, 100)]
+#[test_case(DIVU, 100)]
+#[test_case(REM, 100)]
+#[test_case(REMU, 100)]
+fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default()
+        .with_bitwise_op_lookup(default_bitwise_lookup_bus())
+        .with_range_tuple_checker(RangeTupleCheckerBus::new(
+            RANGE_TUPLE_CHECKER_BUS,
+            TUPLE_CHECKER_SIZES,
+        ));
 
-//     let air = Rv32DivRemAir::new(
-//         Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-//         DivRemCoreAir::new(bitwise_bus, range_tuple_bus, DivRemOpcode::CLASS_OFFSET),
-//     );
-//     let executor = Rv32DivRemExecutor::new(Rv32MultAdapterExecutor, DivRemOpcode::CLASS_OFFSET);
-//     let cpu_chip = Rv32DivRemChip::<F>::new(
-//         DivRemFiller::new(
-//             Rv32MultAdapterFiller,
-//             dummy_bitwise_chip,
-//             dummy_range_tuple_chip,
-//             DivRemOpcode::CLASS_OFFSET,
-//         ),
-//         tester.dummy_memory_helper(),
-//     );
+    let mut harness = create_cuda_harness(&tester);
 
-//     let gpu_chip = Rv32DivRemChipGpu::new(
-//         tester.range_checker(),
-//         tester.bitwise_op_lookup(),
-//         tester.range_tuple_checker(),
-//         tester.address_bits(),
-//         tester.timestamp_max_bits(),
-//     );
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+        );
+    }
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([98, 188, 163, 127]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([98, 188, 163, 229]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 127]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &mut rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([255, 255, 255, 255]),
+    );
 
-//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-// }
+    type Record<'a> = (
+        &'a mut Rv32MultAdapterRecord,
+        &'a mut DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+    );
 
-// #[allow(clippy::too_many_arguments)]
-// fn set_and_execute(
-//     tester: &mut GpuChipTestBuilder,
-//     harness: &mut Harness,
-//     rng: &mut StdRng,
-//     opcode: DivRemOpcode,
-//     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-//     c: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
-// ) {
-//     let b: [u8; RV32_REGISTER_NUM_LIMBS] = b.unwrap_or_else(|| rng.gen());
-//     let c: [u8; RV32_REGISTER_NUM_LIMBS] = c.unwrap_or_else(|| rng.gen());
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+        );
 
-//     let rs1 = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-//     let rs2 = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-//     let rd = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-
-//     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs1, b.map(F::from_canonical_u8));
-//     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, c.map(F::from_canonical_u8));
-
-//     tester.execute(
-//         &mut harness.executor,
-//         &mut harness.dense_arena,
-//         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 0]),
-//     );
-// }
-
-// #[test_case(DIV, 100)]
-// #[test_case(DIVU, 100)]
-// #[test_case(REM, 100)]
-// #[test_case(REMU, 100)]
-// fn test_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
-//     let mut rng = create_seeded_rng();
-//     let mut tester = GpuChipTestBuilder::default()
-//         .with_bitwise_op_lookup(default_bitwise_lookup_bus())
-//         .with_range_tuple_checker(RangeTupleCheckerBus::new(
-//             RANGE_TUPLE_CHECKER_BUS,
-//             TUPLE_CHECKER_SIZES,
-//         ));
-
-//     let mut harness = create_test_harness(&tester);
-
-//     for _ in 0..num_ops {
-//         set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
-//     }
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([98, 188, 163, 127]),
-//         Some([0, 0, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([98, 188, 163, 229]),
-//         Some([0, 0, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([0, 0, 0, 128]),
-//         Some([0, 1, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([0, 0, 0, 127]),
-//         Some([0, 1, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([0, 0, 0, 0]),
-//         Some([0, 0, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([0, 0, 0, 0]),
-//         Some([0, 0, 0, 0]),
-//     );
-//     set_and_execute(
-//         &mut tester,
-//         &mut harness,
-//         &mut rng,
-//         opcode,
-//         Some([0, 0, 0, 128]),
-//         Some([255, 255, 255, 255]),
-//     );
-
-//     type Record<'a> = (
-//         &'a mut Rv32MultAdapterRecord,
-//         &'a mut DivRemCoreRecord<RV32_REGISTER_NUM_LIMBS>,
-//     );
-
-//     harness
-//         .dense_arena
-//         .get_record_seeker::<Record, _>()
-//         .transfer_to_matrix_arena(
-//             &mut harness.matrix_arena,
-//             EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
-//         );
-
-//     tester
-//         .build()
-//         .load_gpu_harness(harness)
-//         .finalize()
-//         .simple_test()
-//         .unwrap();
-// }
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

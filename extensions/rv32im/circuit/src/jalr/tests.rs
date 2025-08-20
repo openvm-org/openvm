@@ -1,11 +1,18 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        Arena, ExecutionBridge, PreflightExecutor,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerChip,
 };
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
@@ -20,6 +27,17 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32JalrAdapterRecord, Rv32JalrChipGpu, Rv32JalrCoreRecord},
+    openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::Rv32JalrCoreAir;
 use crate::{
@@ -41,7 +59,30 @@ fn into_limbs(num: u32) -> [u32; 4] {
     array::from_fn(|i| (num >> (8 * i)) & 255)
 }
 
-fn create_test_chip(
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    range_checker_chip: Arc<VariableRangeCheckerChip>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (Rv32JalrAir, Rv32JalrExecutor, Rv32JalrChip<F>) {
+    let air = Rv32JalrAir::new(
+        Rv32JalrAdapterAir::new(memory_bridge, execution_bridge),
+        Rv32JalrCoreAir::new(bitwise_chip.bus(), range_checker_chip.bus()),
+    );
+    let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
+    let chip = Rv32JalrChip::<F>::new(
+        Rv32JalrFiller::new(
+            Rv32JalrAdapterFiller::new(),
+            bitwise_chip,
+            range_checker_chip,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Harness,
@@ -54,32 +95,25 @@ fn create_test_chip(
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-
     let range_checker_chip = tester.range_checker().clone();
 
-    let air = Rv32JalrAir::new(
-        Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-        Rv32JalrCoreAir::new(bitwise_bus, range_checker_chip.bus()),
-    );
-    let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
-    let chip = Rv32JalrChip::<F>::new(
-        Rv32JalrFiller::new(
-            Rv32JalrAdapterFiller::new(),
-            bitwise_chip.clone(),
-            range_checker_chip.clone(),
-        ),
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        range_checker_chip,
         tester.memory_helper(),
     );
-
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv32JalrOpcode,
     initial_imm: Option<u32>,
@@ -101,8 +135,8 @@ fn set_and_execute(
 
     let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -117,7 +151,7 @@ fn set_and_execute(
         ),
         initial_pc,
     );
-    let final_pc = tester.execution.last_to_pc().as_canonical_u32();
+    let final_pc = tester.last_to_pc().as_canonical_u32();
 
     let rs1 = compose(rs1);
 
@@ -138,13 +172,14 @@ fn set_and_execute(
 fn rand_jalr_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     let num_ops = 100;
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             JALR,
             None,
@@ -191,11 +226,12 @@ fn run_negative_jalr_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         initial_imm,
@@ -334,121 +370,71 @@ fn run_jalr_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-// use openvm_circuit_primitives::{
-//     bitwise_op_lookup::BitwiseOperationLookupChip, var_range::VariableRangeCheckerChip,
-// };
-// use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
-// use openvm_rv32im_circuit::{
-//     adapters::{
-//         Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
-// Rv32JalrAdapterRecord,         RV32_CELL_BITS,
-//     },
-//     Rv32JalrAir, Rv32JalrChip, Rv32JalrCoreAir, Rv32JalrCoreRecord, Rv32JalrExecutor,
-//     Rv32JalrFiller,
-// };
-// use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
-// use openvm_stark_backend::p3_field::FieldAlgebra;
-// use openvm_stark_sdk::utils::create_seeded_rng;
-// use rand::{rngs::StdRng, Rng};
-// use stark_backend_gpu::prelude::F;
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
 
-// use super::*;
-// use crate::testing::{
-//     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-//     GpuTestChipHarness,
-// };
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let range_bus = default_var_range_checker_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
 
-// const IMM_BITS: usize = 12;
-// const MAX_INS_CAPACITY: usize = 128;
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_checker_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32JalrChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
 
-// type Harness =
-//     GpuTestChipHarness<F, Rv32JalrExecutor, Rv32JalrAir, Rv32JalrChipGpu, Rv32JalrChip<F>>;
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
 
-// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
-//     // getting bus from tester since `gpu_chip` and `air` must use the same bus
-//     let bitwise_bus = default_bitwise_lookup_bus();
-//     let range_bus = default_var_range_checker_bus();
-//     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-//     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-//         bitwise_bus,
-//     ));
-//     let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_rand_jalr_tracegen() {
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut rng = create_seeded_rng();
 
-//     let air = Rv32JalrAir::new(
-//         Rv32JalrAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
-//         Rv32JalrCoreAir::new(bitwise_bus, range_bus),
-//     );
-//     let executor = Rv32JalrExecutor::new(Rv32JalrAdapterExecutor);
-//     let cpu_chip = Rv32JalrChip::<F>::new(
-//         Rv32JalrFiller::new(
-//             Rv32JalrAdapterFiller,
-//             dummy_bitwise_chip,
-//             dummy_range_checker_chip,
-//         ),
-//         tester.dummy_memory_helper(),
-//     );
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            JALR,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
 
-//     let gpu_chip = Rv32JalrChipGpu::new(
-//         tester.range_checker(),
-//         tester.bitwise_op_lookup(),
-//         tester.timestamp_max_bits(),
-//     );
+    type Record<'a> = (&'a mut Rv32JalrAdapterRecord, &'a mut Rv32JalrCoreRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32JalrAdapterExecutor>::new(),
+        );
 
-//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-// }
-
-// fn set_and_execute(
-//     tester: &mut GpuChipTestBuilder,
-//     harness: &mut Harness,
-//     rng: &mut StdRng,
-//     opcode: Rv32JalrOpcode,
-// ) {
-//     let imm = rng.gen_range(0..(1 << IMM_BITS)) as usize;
-//     let imm_sign = rng.gen_range(0..2) as usize; // 0 or 1
-//     let imm_ext = imm + (imm_sign * 0xffff0000);
-
-//     let a = rng.gen_range(0..32) << 2;
-//     let b = rng.gen_range(1..32) << 2;
-//     let to_pc = rng.gen_range(0..(1 << PC_BITS));
-
-//     let rs1_val = (to_pc as u32).wrapping_sub(imm_ext as u32);
-//     tester.write(1, b, rs1_val.to_le_bytes().map(F::from_canonical_u8));
-
-//     tester.execute(
-//         &mut harness.executor,
-//         &mut harness.dense_arena,
-//         &Instruction::from_usize(
-//             opcode.global_opcode(),
-//             [a, b, imm, 1, 0, (a != 0) as usize, imm_sign],
-//         ),
-//     );
-// }
-
-// #[test]
-// fn rand_jalr_tracegen_test() {
-//     let mut tester =
-//         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-//     let mut rng = create_seeded_rng();
-
-//     let mut harness = create_test_harness(&tester);
-//     let num_ops = 100;
-//     for _ in 0..num_ops {
-//         set_and_execute(&mut tester, &mut harness, &mut rng, JALR);
-//     }
-
-//     type Record<'a> = (&'a mut Rv32JalrAdapterRecord, &'a mut Rv32JalrCoreRecord);
-//     harness
-//         .dense_arena
-//         .get_record_seeker::<Record, _>()
-//         .transfer_to_matrix_arena(
-//             &mut harness.matrix_arena,
-//             EmptyAdapterCoreLayout::<F, Rv32JalrAdapterExecutor>::new(),
-//         );
-
-//     tester
-//         .build()
-//         .load_gpu_harness(harness)
-//         .finalize()
-//         .simple_test()
-//         .unwrap();
-// }
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

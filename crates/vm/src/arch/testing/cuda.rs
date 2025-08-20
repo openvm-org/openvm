@@ -180,6 +180,22 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.write(address_space, pointer, value.map(F::from_canonical_usize));
     }
 
+    fn address_bits(&self) -> usize {
+        self.memory.config.pointer_max_bits
+    }
+
+    fn last_to_pc(&self) -> F {
+        self.execution.0.last_to_pc()
+    }
+
+    fn last_from_pc(&self) -> F {
+        self.execution.0.last_from_pc()
+    }
+
+    fn streams(&mut self) -> &mut Streams<F> {
+        &mut self.streams
+    }
+
     fn execution_final_state(&self) -> ExecutionState<F> {
         self.execution.0.records.last().unwrap().final_state
     }
@@ -397,10 +413,6 @@ impl GpuChipTestBuilder {
 
     pub fn memory_bus(&self) -> MemoryBus {
         self.memory.mem_bus
-    }
-
-    pub fn address_bits(&self) -> usize {
-        self.memory.config.pointer_max_bits
     }
 
     pub fn rng(&mut self) -> &mut StdRng {

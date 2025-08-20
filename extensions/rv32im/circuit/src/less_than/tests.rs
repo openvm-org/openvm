@@ -1,7 +1,11 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
-    arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        Arena, ExecutionBridge, PreflightExecutor,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::i32_to_f,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -22,6 +26,14 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32BaseAluAdapterRecord, LessThanCoreRecord, Rv32LessThanChipGpu},
+    openvm_circuit::arch::{
+        testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::{core::run_less_than, LessThanCoreAir, Rv32LessThanChip};
 use crate::{
@@ -40,6 +52,29 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 type Harness = TestChipHarness<F, Rv32LessThanExecutor, Rv32LessThanAir, Rv32LessThanChip<F>>;
 
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (Rv32LessThanAir, Rv32LessThanExecutor, Rv32LessThanChip<F>) {
+    let air = Rv32LessThanAir::new(
+        Rv32BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        LessThanCoreAir::new(bitwise_chip.bus(), LessThanOpcode::CLASS_OFFSET),
+    );
+    let executor =
+        Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+    let chip = Rv32LessThanChip::<F>::new(
+        LessThanFiller::new(
+            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            bitwise_chip,
+            LessThanOpcode::CLASS_OFFSET,
+        ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
 fn create_test_chip(
     tester: &VmChipTestBuilder<F>,
 ) -> (
@@ -53,33 +88,22 @@ fn create_test_chip(
     let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
         bitwise_bus,
     ));
-    let air = Rv32LessThanAir::new(
-        Rv32BaseAluAdapterAir::new(
-            tester.execution_bridge(),
-            tester.memory_bridge(),
-            bitwise_bus,
-        ),
-        LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
-    );
-    let executor =
-        Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
-    let chip = Rv32LessThanChip::<F>::new(
-        LessThanFiller::new(
-            Rv32BaseAluAdapterFiller::new(bitwise_chip.clone()),
-            bitwise_chip.clone(),
-            LessThanOpcode::CLASS_OFFSET,
-        ),
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
         tester.memory_helper(),
     );
-
     let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: LessThanOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -109,7 +133,7 @@ fn set_and_execute(
         opcode.global_opcode().as_usize(),
         rng,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(executor, arena, &instruction);
 
     let (cmp, _, _, _) =
         run_less_than::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(opcode == SLT, &b, &c);
@@ -135,7 +159,8 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             opcode,
             None,
@@ -148,7 +173,8 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let b = [101, 128, 202, 255];
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -159,7 +185,8 @@ fn run_rv32_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
     let b = [36, 0, 0, 0];
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -205,7 +232,8 @@ fn run_negative_less_than_test(
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(b),
@@ -486,146 +514,75 @@ fn run_less_than_equal_sanity_test() {
 //  Ensure GPU tracegen is equivalent to CPU tracegen
 // ////////////////////////////////////////////////////////////////////////////////////
 
-// use std::array;
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32LessThanExecutor,
+    Rv32LessThanAir,
+    Rv32LessThanChipGpu,
+    Rv32LessThanChip<F>,
+>;
 
-// use openvm_circuit::arch::EmptyAdapterCoreLayout;
-// use openvm_circuit_primitives::bitwise_op_lookup::BitwiseOperationLookupChip;
-// use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, LocalOpcode};
-// use openvm_rv32im_circuit::{
-//     adapters::{
-//         Rv32BaseAluAdapterAir, Rv32BaseAluAdapterExecutor, Rv32BaseAluAdapterFiller,
-//         RV_IS_TYPE_IMM_BITS,
-//     },
-//     LessThanCoreAir, LessThanFiller, Rv32LessThanAir, Rv32LessThanChip, Rv32LessThanExecutor,
-// };
-// use openvm_rv32im_transpiler::LessThanOpcode;
-// use openvm_stark_backend::p3_field::FieldAlgebra;
-// use openvm_stark_sdk::utils::create_seeded_rng;
-// use rand::{rngs::StdRng, Rng};
-// use test_case::test_case;
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
 
-// use super::*;
-// use crate::testing::{
-//     default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
-// };
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32LessThanChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.timestamp_max_bits(),
+    );
 
-// const MAX_INS_CAPACITY: usize = 128;
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
 
-// type Harness = GpuTestChipHarness<
-//     F,
-//     Rv32LessThanExecutor,
-//     Rv32LessThanAir,
-//     Rv32LessThanChipGpu,
-//     Rv32LessThanChip<F>,
-// >;
+#[cfg(feature = "cuda")]
+#[test_case(LessThanOpcode::SLT, 100)]
+#[test_case(LessThanOpcode::SLTU, 100)]
+fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut rng = create_seeded_rng();
 
-// fn create_test_harness(tester: &GpuChipTestBuilder) -> Harness {
-//     // getting bus from tester since `gpu_chip` and `air` must use the same bus
-//     let bitwise_bus = default_bitwise_lookup_bus();
-//     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
-//     let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-//         bitwise_bus,
-//     ));
-//     let air = Rv32LessThanAir::new(
-//         Rv32BaseAluAdapterAir::new(
-//             tester.execution_bridge(),
-//             tester.memory_bridge(),
-//             bitwise_bus,
-//         ),
-//         LessThanCoreAir::new(bitwise_bus, LessThanOpcode::CLASS_OFFSET),
-//     );
-//     let executor =
-//         Rv32LessThanExecutor::new(Rv32BaseAluAdapterExecutor, LessThanOpcode::CLASS_OFFSET);
-//     let cpu_chip = Rv32LessThanChip::<F>::new(
-//         LessThanFiller::new(
-//             Rv32BaseAluAdapterFiller::new(dummy_bitwise_chip.clone()),
-//             dummy_bitwise_chip,
-//             LessThanOpcode::CLASS_OFFSET,
-//         ),
-//         tester.dummy_memory_helper(),
-//     );
+    let mut harness = create_cuda_harness(&tester);
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
+    }
 
-//     let gpu_chip = Rv32LessThanChipGpu::new(
-//         tester.range_checker(),
-//         tester.bitwise_op_lookup(),
-//         tester.timestamp_max_bits(),
-//     );
+    type Record<'a> = (
+        &'a mut Rv32BaseAluAdapterRecord,
+        &'a mut LessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
+        );
 
-//     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-// }
-
-// fn set_and_execute(
-//     tester: &mut GpuChipTestBuilder,
-//     harness: &mut Harness,
-//     rng: &mut StdRng,
-//     opcode: LessThanOpcode,
-// ) {
-//     let b: [u8; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| rng.gen_range(0..=u8::MAX));
-//     let rs1_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-//     tester.write(
-//         RV32_REGISTER_AS as usize,
-//         rs1_ptr,
-//         b.map(F::from_canonical_u8),
-//     );
-
-//     let is_imm = rng.gen_bool(0.5);
-//     let rs2_ptr = if is_imm {
-//         let mut imm: u32 = rng.gen_range(0..(1 << RV_IS_TYPE_IMM_BITS));
-//         if (imm & 0x800) != 0 {
-//             imm |= !0xFFF
-//         }
-//         (imm & 0xFFFFFF) as usize
-//     } else {
-//         let c: [u8; RV32_REGISTER_NUM_LIMBS] = array::from_fn(|_| rng.gen_range(0..=u8::MAX));
-//         let rs2_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-//         tester.write(
-//             RV32_REGISTER_AS as usize,
-//             rs2_ptr,
-//             c.map(F::from_canonical_u8),
-//         );
-//         rs2_ptr
-//     };
-
-//     let rd_ptr = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
-
-//     tester.execute(
-//         &mut harness.executor,
-//         &mut harness.dense_arena,
-//         &Instruction::from_usize(
-//             opcode.global_opcode(),
-//             [rd_ptr, rs1_ptr, rs2_ptr, 1, (!is_imm) as usize],
-//         ),
-//     );
-// }
-
-// #[test_case(LessThanOpcode::SLT, 100)]
-// #[test_case(LessThanOpcode::SLTU, 100)]
-// fn less_than_gpu_chip_test(opcode: LessThanOpcode, num_ops: usize) {
-//     let mut tester =
-//         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-//     let mut rng = create_seeded_rng();
-
-//     let mut harness = create_test_harness(&tester);
-//     for _ in 0..num_ops {
-//         set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
-//     }
-
-//     type Record<'a> = (
-//         &'a mut Rv32BaseAluAdapterRecord,
-//         &'a mut LessThanCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
-//     );
-//     harness
-//         .dense_arena
-//         .get_record_seeker::<Record, _>()
-//         .transfer_to_matrix_arena(
-//             &mut harness.matrix_arena,
-//             EmptyAdapterCoreLayout::<F, Rv32BaseAluAdapterExecutor<RV32_CELL_BITS>>::new(),
-//         );
-
-//     tester
-//         .build()
-//         .load_gpu_harness(harness)
-//         .finalize()
-//         .simple_test()
-//         .unwrap();
-// }
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
