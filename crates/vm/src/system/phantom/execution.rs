@@ -7,6 +7,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
+#[cfg(feature = "tco")]
+use crate::arch::{create_tco_handler, Handler};
 use crate::{
     arch::{
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
@@ -53,6 +55,20 @@ where
         self.pre_compute_impl(inst, data);
         Ok(execute_e1_impl)
     }
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut PhantomPreCompute<F> = data.borrow_mut();
+        self.pre_compute_impl(inst, data);
+        Ok(execute_e1_tco_handler)
+    }
 }
 
 pub(super) struct PhantomStateMut<'a, F> {
@@ -85,6 +101,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     vm_state.instret += 1;
 }
 
+#[cfg_attr(feature = "tco", create_tco_handler)]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],

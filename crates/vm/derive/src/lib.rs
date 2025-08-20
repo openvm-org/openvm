@@ -9,6 +9,8 @@ use syn::{
     GenericParam, Ident, Meta, Token,
 };
 
+mod tco;
+
 #[proc_macro_derive(PreflightExecutor)]
 pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -172,6 +174,18 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         self.0.pre_compute(pc, inst, data)
                     }
+
+                    #[cfg(feature = "tco")]
+                    fn handler<Ctx>(
+                        &self,
+                        pc: u32,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
+                        self.0.handler(pc, inst, data)
+                    }
                 }
             }
             .into()
@@ -205,7 +219,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, pre_compute_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, pre_compute_arms, handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
@@ -213,10 +227,13 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 let pre_compute_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
                 };
+                let handler_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::handler(x, pc, instruction, data)
+                };
                 let where_predicate = syn::parse_quote! {
                     #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
                 };
-                (pre_compute_size_arm, pre_compute_arm, where_predicate)
+                (pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -245,6 +262,20 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         match self {
                             #(#pre_compute_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "tco")]
+                    fn handler<Ctx>(
+                        &self,
+                        pc: u32,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
+                        match self {
+                            #(#handler_arms,)*
                         }
                     }
                 }
@@ -501,7 +532,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         .iter()
         .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("config")))
         .exactly_one()
-        .clone()
+        .ok()
         .expect("Exactly one field must have the #[config] attribute");
     let (source_name, source_name_upper) =
         gen_name_with_uppercase_idents(source_field.ident.as_ref().unwrap());
@@ -699,4 +730,31 @@ fn parse_executor_type(
             quote! { #executor_name }
         })
     }
+}
+
+/// An attribute procedural macro for creating TCO (Tail Call Optimization) handlers.
+///
+/// This macro generates a handler function that wraps an execute implementation
+/// with tail call optimization using the `become` keyword. It extracts the generics
+/// and where clauses from the original function.
+///
+/// # Usage
+///
+/// Place this attribute above a function definition:
+/// ```
+/// #[create_tco_handler = "handler_name"]
+/// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
+///     pre_compute: &[u8],
+///     state: &mut VmExecState<F, GuestMemory, CTX>,
+/// ) where
+///     CTX: ExecutionCtxTrait,
+/// {
+///     // function body
+/// }
+/// ```
+///
+/// This will generate a TCO handler function with the same generics and where clauses.
+#[proc_macro_attribute]
+pub fn create_tco_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    tco::tco_impl(item)
 }

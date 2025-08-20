@@ -15,6 +15,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use tracing::info_span;
 
+#[cfg(feature = "tco")]
+use crate::arch::Handler;
 use crate::{
     arch::{
         execution_mode::{
@@ -44,6 +46,11 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     /// Instruction table of function pointers and pointers to the pre-computed buffer. Indexed by
     /// `pc_index = (pc - pc_base) / DEFAULT_PC_STEP`.
     pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
+    #[cfg(feature = "tco")]
+    pre_compute_max_size: usize,
+    /// Handler function pointers for tail call optimization.
+    #[cfg(feature = "tco")]
+    handlers: Vec<Handler<F, Ctx>>, // *const ()>,
 
     pc_base: u32,
     pc_start: u32,
@@ -116,6 +123,30 @@ where
         let pc_base = program.pc_base;
         let pc_start = exe.pc_start;
         let init_memory = exe.init_memory.clone();
+        #[cfg(feature = "tco")]
+        let handlers = program
+            .instructions_and_debug_infos
+            .iter()
+            .zip_eq(split_pre_compute_buf.iter_mut())
+            .enumerate()
+            .map(
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                    if let Some((inst, _)) = inst_opt {
+                        let pc = pc_base + pc_idx as u32 * DEFAULT_PC_STEP;
+                        if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
+                            Ok(terminate_execute_e12_tco_handler)
+                        } else {
+                            // unwrap because get_pre_compute_instructions would have errored
+                            // already on DisabledOperation
+                            let executor = inventory.get_executor(inst.opcode).unwrap();
+                            executor.handler(pc, inst, *pre_compute)
+                        }
+                    } else {
+                        Ok(unreachable_tco_handler)
+                    }
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             system_config: inventory.config().clone(),
@@ -124,7 +155,52 @@ where
             pc_base,
             pc_start,
             init_memory,
+            #[cfg(feature = "tco")]
+            pre_compute_max_size,
+            #[cfg(feature = "tco")]
+            handlers,
         })
+    }
+
+    /// # Safety
+    /// - This function assumes that the `pc` is within program bounds - this should be the case if
+    ///   the pc is checked to be in bounds before jumping to it.
+    /// - The returned slice may not be entirely initialized, but it is the job of each Executor to
+    /// initialize the parts of the buffer that the instruction handler will use.
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    pub fn get_pre_compute(&self, pc: u32) -> &[u8] {
+        let pc_idx = get_pc_index(self.pc_base, pc);
+        // SAFETY:
+        // - we assume that pc is in bounds
+        // - pre_compute_buf is allocated for pre_compute_max_size * program_len bytes, with each
+        //   instruction getting pre_compute_max_size bytes
+        // - self.pre_compute_buf.ptr is non-null
+        // - initialization of the contents of the slice is the responsibility of each Executor
+        unsafe {
+            let ptr = self
+                .pre_compute_buf
+                .ptr
+                .add(pc_idx * self.pre_compute_max_size);
+            std::slice::from_raw_parts(ptr, self.pre_compute_max_size)
+        }
+    }
+
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    pub fn get_handler(&self, pc: u32) -> Result<Handler<F, Ctx>, ExecutionError> {
+        let pc_idx = get_pc_index(self.pc_base, pc);
+        if std::hint::unlikely(pc_idx > self.handlers.len()) {
+            return Err(ExecutionError::PcOutOfBounds {
+                pc,
+                pc_base: self.pc_base,
+                program_len: self.handlers.len(),
+            });
+        }
+        // SAFETY:
+        // - we checked above that pc_idx is within bounds
+        let handler = unsafe { self.handlers.get_unchecked(pc_idx) };
+        Ok(*handler)
     }
 }
 
@@ -166,6 +242,10 @@ where
             pc_base,
             pc_start,
             init_memory,
+            #[cfg(feature = "tco")]
+            pre_compute_max_size,
+            #[cfg(feature = "tco")]
+            handlers: vec![],
         })
     }
 }
@@ -423,6 +503,7 @@ impl Drop for AlignedBuf {
     }
 }
 
+#[inline(always)]
 unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -430,6 +511,23 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
     vm_state.instret += 1;
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
+}
+
+#[cfg(feature = "tco")]
+unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    interpreter: &InterpretedInstance<F, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
+    let pre_compute = interpreter.get_pre_compute(vm_state.pc);
+    terminate_execute_e12_impl(pre_compute, vm_state);
+    Ok(())
+}
+#[cfg(feature = "tco")]
+unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
+    _: &InterpretedInstance<F, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) -> Result<(), ExecutionError> {
+    Err(ExecutionError::Unreachable(vm_state.pc))
 }
 
 fn get_pre_compute_max_size<F, E: Executor<F>>(
