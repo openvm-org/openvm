@@ -10,10 +10,8 @@ pub fn keccak_f(mut state: [u64; 25]) -> [u64; 25] {
 }
 
 pub fn keccak256(input: &[u8]) -> [u8; 32] {
-    let mut hasher = Keccak::v256();
-    hasher.update(input);
     let mut output = [0u8; 32];
-    hasher.finalize(&mut output);
+    xkcp_rs::keccak256(input, &mut output);
     output
 }
 
