@@ -67,8 +67,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             }
             let next_handler = next_handler.unwrap_unchecked();
 
-            // The `become` keyword has a bug that is not re-passing the `interpreter`, `exec_state` references properly. But llvm seems to almost always guarantee tail call elimination when the function signature is the same as the current function.
-            next_handler(interpreter, exec_state)
+            become next_handler(interpreter, exec_state)
         }
     };
 
