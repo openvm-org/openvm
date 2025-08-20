@@ -45,6 +45,7 @@ divan = { package = "codspeed-divan-compat", version = "3.0.2" }
 
 [features]
 default = ["jemalloc"]
+tco = ["openvm-sdk/tco"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]

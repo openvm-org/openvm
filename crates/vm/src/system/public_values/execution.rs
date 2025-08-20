@@ -8,9 +8,10 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
 #[cfg(feature = "tco")]
-use crate::arch::{create_tco_handler, Handler};
+use crate::arch::Handler;
 use crate::{
     arch::{
+        create_tco_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
         E2PreCompute, ExecuteFunc, Executor, MeteredExecutor, StaticProgramError, VmExecState,
     },

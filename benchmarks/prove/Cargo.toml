@@ -35,6 +35,7 @@ metrics.workspace = true
 [features]
 default = ["parallel", "jemalloc", "metrics", "evm"]
 metrics = ["openvm-sdk/metrics"]
+tco = ["openvm-sdk/tco"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
 # runs leaf aggregation benchmarks:
