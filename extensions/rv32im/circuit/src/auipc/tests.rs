@@ -3,8 +3,7 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, EmptyAdapterCoreLayout, ExecutionBridge, PreflightExecutor, VmAirWrapper,
-        VmChipWrapper,
+        Arena, ExecutionBridge, PreflightExecutor, VmAirWrapper, VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -27,19 +26,23 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::Rv32AuipcChipGpu,
-    openvm_circuit::arch::testing::{default_bitwise_lookup_bus, memory::gen_pointer},
-    openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    crate::{adapters::Rv32RdWriteAdapterRecord, Rv32AuipcChipGpu, Rv32AuipcCoreRecord},
+    openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, memory::gen_pointer, GpuChipTestBuilder, GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
 };
 
 use super::{run_auipc, Rv32AuipcChip, Rv32AuipcCoreAir, Rv32AuipcCoreCols, Rv32AuipcExecutor};
 use crate::{
     adapters::{
         Rv32RdWriteAdapterAir, Rv32RdWriteAdapterExecutor, Rv32RdWriteAdapterFiller,
-        Rv32RdWriteAdapterRecord, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
+        RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     test_utils::get_verification_error,
-    Rv32AuipcAir, Rv32AuipcCoreRecord, Rv32AuipcFiller,
+    Rv32AuipcAir, Rv32AuipcFiller,
 };
 
 const IMM_BITS: usize = 24;

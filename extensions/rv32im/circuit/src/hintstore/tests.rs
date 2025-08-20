@@ -32,14 +32,14 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
 #[cfg(feature = "cuda")]
 use {
-    crate::Rv32HintStoreChipGpu,
+    crate::{Rv32HintStoreChipGpu, Rv32HintStoreLayout},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
 };
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv32HintStoreFiller, Rv32HintStoreLayout};
+use crate::{test_utils::get_verification_error, Rv32HintStoreFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
