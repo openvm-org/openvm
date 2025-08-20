@@ -24,7 +24,7 @@ Our design for the configuration procedure above was inspired by the [EVMMAX pro
 
 The `openvm` crate provides an `init!` macro to automate the **init** step:
 1. Call `openvm::init!()` exactly once in the code of the final program binary.
-2. When [compiling the program](/book/writing-apps/compiling), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
+2. When [compiling the program](/book/writing-apps/compiling-a-program), `cargo openvm build` will read the [configuration file](#configuration) to automatically generate the correct init code and write it to `<INIT_FILE_NAME>`, which defaults to `openvm_init.rs` in the manifest directory.
 3. The `openvm::init!()` macro will include the `openvm_init.rs` file into the final binary to complete the init process. You can call `openvm::init!(INIT_FILE_NAME)` to include init code from a different file if needed.
 
 ## Configuration
