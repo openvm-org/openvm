@@ -16,10 +16,10 @@ use openvm_instructions::{
     LocalOpcode, VmOpcode,
 };
 use openvm_native_compiler::{
-    conversion::AS,
-    NativeJalOpcode::{self, *},
-    NativeRangeCheckOpcode::{self, RANGE_CHECK},
+    conversion::AS, NativeJalOpcode::*, NativeRangeCheckOpcode::RANGE_CHECK,
 };
+#[cfg(feature = "cuda")]
+use openvm_native_compiler::{NativeJalOpcode, NativeRangeCheckOpcode};
 use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{

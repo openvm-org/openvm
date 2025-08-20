@@ -22,6 +22,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
 use test_case::test_case;
 
 use super::{

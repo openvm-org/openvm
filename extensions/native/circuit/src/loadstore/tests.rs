@@ -9,9 +9,10 @@ use openvm_circuit::arch::{
     Arena, PreflightExecutor,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
+#[cfg(feature = "cuda")]
+use openvm_native_compiler::NativeLoadStore4Opcode;
 use openvm_native_compiler::{
     conversion::AS,
-    NativeLoadStore4Opcode,
     NativeLoadStoreOpcode::{self, *},
 };
 use openvm_stark_backend::{

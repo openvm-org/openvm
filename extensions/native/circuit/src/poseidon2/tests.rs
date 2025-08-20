@@ -70,35 +70,6 @@ fn create_test_chip<F: PrimeField32, const SBOX_REGISTERS: usize>(
     Harness::with_capacity(step, air, chip, MAX_INS_CAPACITY)
 }
 
-#[cfg(feature = "cuda")]
-fn create_test_harness(
-    tester: &GpuChipTestBuilder,
-    config: Poseidon2Config<F>,
-) -> GpuTestChipHarness<
-    F,
-    NativePoseidon2Executor<F, SBOX_REGISTERS>,
-    NativePoseidon2Air<F, SBOX_REGISTERS>,
-    NativePoseidon2ChipGpu<SBOX_REGISTERS>,
-    NativePoseidon2Chip<F, SBOX_REGISTERS>,
-> {
-    let air = NativePoseidon2Air::new(
-        tester.execution_bridge(),
-        tester.memory_bridge(),
-        VerifyBatchBus::new(7),
-        config,
-    );
-    let executor = NativePoseidon2Executor::new(config);
-
-    let cpu_chip = NativePoseidon2Chip::new(
-        NativePoseidon2Filler::new(config),
-        tester.dummy_memory_helper(),
-    );
-
-    let gpu_chip = NativePoseidon2ChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
-
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
-}
-
 fn compute_commit<F: Field>(
     dim: &[usize],
     opened: &[Vec<F>],
