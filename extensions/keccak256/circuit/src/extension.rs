@@ -103,7 +103,7 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &Keccak256CpuProverExt,
+            &Keccak256ProverExt,
             &config.keccak,
             inventory,
         )?;

@@ -26,7 +26,7 @@ use openvm_continuations::{
 };
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
+use openvm_keccak256_circuit::{Keccak256, Keccak256ProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_pairing_circuit::{
@@ -171,7 +171,7 @@ where
             inventory,
         )?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &Keccak256CpuProverExt,
+            &Keccak256ProverExt,
             &config.keccak,
             inventory,
         )?;
