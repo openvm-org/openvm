@@ -26,7 +26,6 @@ use openvm_stark_backend::{
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
-
 #[cfg(feature = "cuda")]
 use {
     openvm_circuit::{

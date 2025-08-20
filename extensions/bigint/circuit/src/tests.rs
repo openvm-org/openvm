@@ -43,6 +43,24 @@ use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(feature = "cuda")]
+use {
+    crate::{
+        BaseAlu256AdapterRecord, BaseAlu256ChipGpu, BaseAlu256CoreRecord,
+        BranchEqual256AdapterRecord, BranchEqual256ChipGpu, BranchEqual256CoreRecord,
+        BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
+        LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
+        Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
+        Shift256AdapterRecord, Shift256ChipGpu, Shift256CoreRecord,
+    },
+    openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use crate::{
     Rv32BaseAlu256Air, Rv32BaseAlu256Chip, Rv32BaseAlu256Executor, Rv32BranchEqual256Air,
@@ -595,25 +613,6 @@ fn run_blt_256_rand_test(opcode: BranchLessThanOpcode, num_ops: usize) {
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
-
-#[cfg(feature = "cuda")]
-use {
-    crate::{
-        BaseAlu256AdapterRecord, BaseAlu256ChipGpu, BaseAlu256CoreRecord,
-        BranchEqual256AdapterRecord, BranchEqual256ChipGpu, BranchEqual256CoreRecord,
-        BranchLessThan256AdapterRecord, BranchLessThan256ChipGpu, BranchLessThan256CoreRecord,
-        LessThan256AdapterRecord, LessThan256ChipGpu, LessThan256CoreRecord,
-        Multiplication256AdapterRecord, Multiplication256ChipGpu, Multiplication256CoreRecord,
-        Shift256AdapterRecord, Shift256ChipGpu, Shift256CoreRecord,
-    },
-    openvm_circuit::arch::{
-        testing::{
-            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-            GpuTestChipHarness,
-        },
-        EmptyAdapterCoreLayout,
-    },
-};
 
 #[cfg(feature = "cuda")]
 #[test_case(BaseAluOpcode::ADD, 24)]
