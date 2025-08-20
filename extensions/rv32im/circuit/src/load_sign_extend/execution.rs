@@ -4,7 +4,10 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{arch::*, system::memory::{online::GuestMemory, POINTER_MAX_BITS}};
+use openvm_circuit::{
+    arch::*,
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
+};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
