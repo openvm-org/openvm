@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 default = ["jemalloc", "tco"]
-tco = ["openvm-circuit/tco"]
+tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
 jemalloc = ["openvm-circuit/jemalloc"]
 
 [dependencies]

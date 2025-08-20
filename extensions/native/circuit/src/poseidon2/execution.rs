@@ -173,6 +173,33 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
             Ok(execute_verify_batch_e1_impl::<_, _, SBOX_REGISTERS>)
         }
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let &Instruction { opcode, .. } = inst;
+
+        let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
+
+        if is_pos2 {
+            let pos2_data: &mut Pos2PreCompute<F, SBOX_REGISTERS> = data.borrow_mut();
+            self.pre_compute_pos2_impl(pc, inst, pos2_data)?;
+            if opcode == PERM_POS2.global_opcode() {
+                Ok(execute_pos2_e1_tco_handler::<_, _, SBOX_REGISTERS, true>)
+            } else {
+                Ok(execute_pos2_e1_tco_handler::<_, _, SBOX_REGISTERS, false>)
+            }
+        } else {
+            let verify_batch_data: &mut VerifyBatchPreCompute<F, SBOX_REGISTERS> =
+                data.borrow_mut();
+            self.pre_compute_verify_batch_impl(pc, inst, verify_batch_data)?;
+            Ok(execute_verify_batch_e1_tco_handler::<_, _, SBOX_REGISTERS>)
+        }
+    }
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
@@ -220,6 +247,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -250,6 +278,7 @@ unsafe fn execute_pos2_e2_impl<
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
+#[create_tco_handler]
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

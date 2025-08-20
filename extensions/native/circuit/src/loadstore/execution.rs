@@ -82,6 +82,28 @@ where
 
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut NativeLoadStorePreCompute<F> = data.borrow_mut();
+
+        let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = match local_opcode {
+            NativeLoadStoreOpcode::LOADW => execute_e1_loadw_tco_handler::<F, Ctx, NUM_CELLS>,
+            NativeLoadStoreOpcode::STOREW => execute_e1_storew_tco_handler::<F, Ctx, NUM_CELLS>,
+            NativeLoadStoreOpcode::HINT_STOREW => {
+                execute_e1_hint_storew_tco_handler::<F, Ctx, NUM_CELLS>
+            }
+        };
+
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
@@ -116,6 +138,7 @@ where
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -124,6 +147,7 @@ unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CE
     execute_e12_loadw::<_, _, NUM_CELLS>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -132,6 +156,7 @@ unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_C
     execute_e12_storew::<_, _, NUM_CELLS>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_hint_storew<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

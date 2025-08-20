@@ -4,7 +4,10 @@ use std::{
 };
 
 use num_bigint::BigUint;
-use openvm_circuit::arch::*;
+use openvm_circuit::{
+    arch::*,
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
+};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::{

@@ -7,7 +7,10 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
-    system::memory::{online::TracingMemory, MemoryAuxColsFactory},
+    system::memory::{
+        online::{GuestMemory, TracingMemory},
+        MemoryAuxColsFactory, POINTER_MAX_BITS,
+    },
 };
 use openvm_circuit_primitives::{
     bigint::utils::big_uint_to_limbs,
@@ -551,16 +554,10 @@ where
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
-        _opcode: u32,
-        _instruction: &Instruction<F>,
-        _data: &mut [u8],
-    ) -> Result<
-        for<'a, 'b, 'c> unsafe fn(
-            &'a InterpretedInstance<'b, F, Ctx>,
-            &'c mut VmExecState<F, GuestMemory, Ctx>,
-        ) -> Result<(), ExecutionError>,
-        StaticProgramError,
-    >
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {

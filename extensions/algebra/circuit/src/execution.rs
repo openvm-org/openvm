@@ -5,7 +5,10 @@ use std::{
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
-use openvm_circuit::arch::*;
+use openvm_circuit::{
+    arch::*,
+    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
+};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -174,94 +177,6 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> Executor<F>
     for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
-    #[cfg(feature = "tco")]
-    fn handler<Ctx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
-    where
-        Ctx: ExecutionCtxTrait,
-    {
-        let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
-
-        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
-
-        if let Some(op) = op {
-            let modulus = &pre_compute.expr.prime;
-            if IS_FP2 {
-                if let Some(field_type) = get_fp2_field_type(modulus) {
-                    generate_fp2_dispatch!(
-                        field_type,
-                        op,
-                        BLOCKS,
-                        BLOCK_SIZE,
-                        execute_e1_tco_handler,
-                        [
-                            (BN254Coordinate, Add),
-                            (BN254Coordinate, Sub),
-                            (BN254Coordinate, Mul),
-                            (BN254Coordinate, Div),
-                            (BLS12_381Coordinate, Add),
-                            (BLS12_381Coordinate, Sub),
-                            (BLS12_381Coordinate, Mul),
-                            (BLS12_381Coordinate, Div),
-                        ]
-                    )
-                } else {
-                    Ok(execute_e1_generic_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-                }
-            } else if let Some(field_type) = get_field_type(modulus) {
-                generate_field_dispatch!(
-                    field_type,
-                    op,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    execute_e1_tco_handler,
-                    [
-                        (K256Coordinate, Add),
-                        (K256Coordinate, Sub),
-                        (K256Coordinate, Mul),
-                        (K256Coordinate, Div),
-                        (K256Scalar, Add),
-                        (K256Scalar, Sub),
-                        (K256Scalar, Mul),
-                        (K256Scalar, Div),
-                        (P256Coordinate, Add),
-                        (P256Coordinate, Sub),
-                        (P256Coordinate, Mul),
-                        (P256Coordinate, Div),
-                        (P256Scalar, Add),
-                        (P256Scalar, Sub),
-                        (P256Scalar, Mul),
-                        (P256Scalar, Div),
-                        (BN254Coordinate, Add),
-                        (BN254Coordinate, Sub),
-                        (BN254Coordinate, Mul),
-                        (BN254Coordinate, Div),
-                        (BN254Scalar, Add),
-                        (BN254Scalar, Sub),
-                        (BN254Scalar, Mul),
-                        (BN254Scalar, Div),
-                        (BLS12_381Coordinate, Add),
-                        (BLS12_381Coordinate, Sub),
-                        (BLS12_381Coordinate, Mul),
-                        (BLS12_381Coordinate, Div),
-                        (BLS12_381Scalar, Add),
-                        (BLS12_381Scalar, Sub),
-                        (BLS12_381Scalar, Mul),
-                        (BLS12_381Scalar, Div),
-                    ]
-                )
-            } else {
-                Ok(execute_e1_generic_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-            }
-        } else {
-            Ok(execute_e1_setup_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-        }
-    }
-
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         std::mem::size_of::<FieldExpressionPreCompute>()
@@ -351,6 +266,94 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
             }
         } else {
             Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+        }
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
+
+        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        if let Some(op) = op {
+            let modulus = &pre_compute.expr.prime;
+            if IS_FP2 {
+                if let Some(field_type) = get_fp2_field_type(modulus) {
+                    generate_fp2_dispatch!(
+                        field_type,
+                        op,
+                        BLOCKS,
+                        BLOCK_SIZE,
+                        execute_e1_tco_handler,
+                        [
+                            (BN254Coordinate, Add),
+                            (BN254Coordinate, Sub),
+                            (BN254Coordinate, Mul),
+                            (BN254Coordinate, Div),
+                            (BLS12_381Coordinate, Add),
+                            (BLS12_381Coordinate, Sub),
+                            (BLS12_381Coordinate, Mul),
+                            (BLS12_381Coordinate, Div),
+                        ]
+                    )
+                } else {
+                    Ok(execute_e1_generic_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                }
+            } else if let Some(field_type) = get_field_type(modulus) {
+                generate_field_dispatch!(
+                    field_type,
+                    op,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    execute_e1_tco_handler,
+                    [
+                        (K256Coordinate, Add),
+                        (K256Coordinate, Sub),
+                        (K256Coordinate, Mul),
+                        (K256Coordinate, Div),
+                        (K256Scalar, Add),
+                        (K256Scalar, Sub),
+                        (K256Scalar, Mul),
+                        (K256Scalar, Div),
+                        (P256Coordinate, Add),
+                        (P256Coordinate, Sub),
+                        (P256Coordinate, Mul),
+                        (P256Coordinate, Div),
+                        (P256Scalar, Add),
+                        (P256Scalar, Sub),
+                        (P256Scalar, Mul),
+                        (P256Scalar, Div),
+                        (BN254Coordinate, Add),
+                        (BN254Coordinate, Sub),
+                        (BN254Coordinate, Mul),
+                        (BN254Coordinate, Div),
+                        (BN254Scalar, Add),
+                        (BN254Scalar, Sub),
+                        (BN254Scalar, Mul),
+                        (BN254Scalar, Div),
+                        (BLS12_381Coordinate, Add),
+                        (BLS12_381Coordinate, Sub),
+                        (BLS12_381Coordinate, Mul),
+                        (BLS12_381Coordinate, Div),
+                        (BLS12_381Scalar, Add),
+                        (BLS12_381Scalar, Sub),
+                        (BLS12_381Scalar, Mul),
+                        (BLS12_381Scalar, Div),
+                    ]
+                )
+            } else {
+                Ok(execute_e1_generic_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            }
+        } else {
+            Ok(execute_e1_setup_tco_handler::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
         }
     }
 }
@@ -581,6 +584,7 @@ unsafe fn execute_e12_setup_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -629,6 +633,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -651,6 +656,7 @@ unsafe fn execute_e2_impl<
     );
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_generic_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

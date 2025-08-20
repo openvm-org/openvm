@@ -61,7 +61,7 @@ rrs-lib.workspace = true
 num-bigint.workspace = true
 
 [features]
-default = ["parallel", "jemalloc"]
+default = ["parallel", "jemalloc", "tco"]
 evm-prove = [
     "openvm-continuations/static-verifier",
     "openvm-native-recursion/evm-prove",
@@ -78,6 +78,17 @@ metrics = [
     "openvm-circuit/metrics",
     "openvm-native-recursion/metrics",
     "openvm-native-compiler/metrics",
+]
+tco = [
+    "openvm-circuit/tco",
+    "openvm-rv32im-circuit/tco",
+    "openvm-native-circuit/tco",
+    "openvm-sha256-circuit/tco",
+    "openvm-keccak256-circuit/tco",
+    "openvm-bigint-circuit/tco",
+    "openvm-algebra-circuit/tco",
+    "openvm-ecc-circuit/tco",
+    "openvm-pairing-circuit/tco"
 ]
 # for guest profiling:
 perf-metrics = ["openvm-circuit/perf-metrics", "openvm-transpiler/function-span"]
