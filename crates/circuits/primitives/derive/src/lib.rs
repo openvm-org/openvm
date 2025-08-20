@@ -46,9 +46,6 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
         impl #impl_generics core::borrow::Borrow<#name #type_generics> for [#type_generic] #where_clause {
             fn borrow(&self) -> &#name #type_generics {
                 debug_assert_eq!(self.len(), #name::#type_generics::width());
-                // SAFETY: The slice has the same size as the struct (checked by debug_assert).
-                // align_to is safe because we're reinterpreting a slice of primitives as a
-                // struct with the same memory layout. The alignment check ensures validity.
                 let (prefix, shorts, _suffix) = unsafe { self.align_to::<#name #type_generics>() };
                 debug_assert!(prefix.is_empty(), "Alignment should match");
                 debug_assert_eq!(shorts.len(), 1);
@@ -59,9 +56,6 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
         impl #impl_generics core::borrow::BorrowMut<#name #type_generics> for [#type_generic] #where_clause {
             fn borrow_mut(&mut self) -> &mut #name #type_generics {
                 debug_assert_eq!(self.len(), #name::#type_generics::width());
-                // SAFETY: The slice has the same size as the struct (checked by debug_assert).
-                // align_to_mut is safe because we're reinterpreting a mutable slice of primitives
-                // as a mutable struct with the same memory layout. The alignment check ensures validity.
                 let (prefix, shorts, _suffix) = unsafe { self.align_to_mut::<#name #type_generics>() };
                 debug_assert!(prefix.is_empty(), "Alignment should match");
                 debug_assert_eq!(shorts.len(), 1);
@@ -102,10 +96,6 @@ pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
                 use core::mem::{align_of, size_of_val};
                 debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
                 debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
-                // SAFETY: The cast is safe because:
-                // - The slice has at least size_of::<#name> bytes (checked by debug_assert)
-                // - The pointer is properly aligned for #name (checked by debug_assert)
-                // - The bytes represent a valid #name value
                 unsafe { &*(self.as_ptr() as *const #name #type_generics) }
             }
         }
@@ -118,10 +108,6 @@ pub fn aligned_bytes_borrow_derive(input: TokenStream) -> TokenStream {
                 use core::mem::{align_of, size_of_val};
                 debug_assert!(size_of_val(self) >= core::mem::size_of::<#name #type_generics>());
                 debug_assert_eq!(self.as_ptr() as usize % align_of::<#name #type_generics>(), 0);
-                // SAFETY: The cast is safe because:
-                // - The slice has at least size_of::<#name> bytes (checked by debug_assert)
-                // - The pointer is properly aligned for #name (checked by debug_assert)
-                // - The bytes represent a valid #name value and we have exclusive access
                 unsafe { &mut *(self.as_mut_ptr() as *mut #name #type_generics) }
             }
         }
