@@ -51,7 +51,7 @@ impl SetupCmd {
         let default_evm_halo2_verifier_path = default_evm_halo2_verifier_path();
         let default_asm_path = default_asm_path();
         if !self.evm {
-            if PathBuf::from(&default_agg_stark_pk_path).exists() {
+            if PathBuf::from(&default_agg_stark_pk_path).exists() && !self.force_agg_keygen {
                 println!("Aggregation stark proving key already exists");
                 return Ok(());
             }
