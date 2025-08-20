@@ -27,8 +27,8 @@ impl Drop for BasicMemory {
     fn drop(&mut self) {
         if self.size > 0 {
             // SAFETY:
-            // - self.ptr was allocated with self.layout
-            // - Pointer and layout are valid from creation
+            // - self.ptr is allocated via the global allocator
+            // - self.layout matches the original allocation layout
             unsafe {
                 dealloc(self.ptr.as_ptr(), self.layout);
             }
@@ -43,7 +43,6 @@ impl Clone for BasicMemory {
             let aligned_ptr = PAGE_SIZE as *mut u8;
             // SAFETY:
             // - aligned_ptr is PAGE_SIZE which is non-null and properly aligned
-            // - This is a dangling pointer used only for zero-size allocations
             let ptr = unsafe { NonNull::new_unchecked(aligned_ptr) };
             return Self {
                 ptr,
@@ -90,7 +89,6 @@ impl LinearMemory for BasicMemory {
             let aligned_ptr = PAGE_SIZE as *mut u8;
             // SAFETY:
             // - aligned_ptr is PAGE_SIZE which is non-null and properly aligned
-            // - This is a dangling pointer used only for zero-size allocations
             let ptr = unsafe { NonNull::new_unchecked(aligned_ptr) };
             let layout = Layout::from_size_align(0, PAGE_SIZE)
                 .expect("Failed to create layout with PAGE_SIZE alignment");
@@ -127,15 +125,12 @@ impl LinearMemory for BasicMemory {
     fn as_slice(&self) -> &[u8] {
         // SAFETY:
         // - self.ptr is valid for reads of self.size bytes
-        // - Memory is properly aligned and allocated
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.size) }
     }
 
     fn as_mut_slice(&mut self) -> &mut [u8] {
         // SAFETY:
         // - self.ptr is valid for reads and writes of self.size bytes
-        // - Memory is properly aligned and allocated
-        // - No other references to this memory exist
         unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.size) }
     }
 
@@ -255,7 +250,6 @@ impl LinearMemory for BasicMemory {
         // - Alignment check is done via assert above
         // - `T` is "plain old data" (POD), so conversion from underlying bytes is properly
         //   initialized
-        // - `self` will not be mutated while borrowed
         core::slice::from_raw_parts(data, len)
     }
 }

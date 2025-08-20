@@ -24,7 +24,7 @@ impl<T: Copy + Default, const PAGE_SIZE: usize> PagedVec<T, PAGE_SIZE> {
     #[inline(never)]
     fn create_zeroed_page() -> Box<[T; PAGE_SIZE]> {
         // SAFETY:
-        // - layout is valid (PAGE_SIZE is non-zero)
+        // - layout is valid since PAGE_SIZE is non-zero
         // - alloc_zeroed returns properly aligned memory for T
         // - Box::from_raw takes ownership of the allocated memory
         unsafe {
