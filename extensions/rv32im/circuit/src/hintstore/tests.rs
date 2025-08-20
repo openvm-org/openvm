@@ -1,7 +1,9 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    },
     Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -103,7 +105,8 @@ fn set_and_execute<RA: Arena>(
     }
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],

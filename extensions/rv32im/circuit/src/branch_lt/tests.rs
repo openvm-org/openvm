@@ -2,7 +2,7 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::{
     arch::testing::{
-        memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     utils::i32_to_f,
 };
@@ -105,7 +105,8 @@ fn set_and_execute(
     tester.write::<RV32_REGISTER_NUM_LIMBS>(1, rs2, b.map(F::from_canonical_u8));
 
     tester.execute_with_pc(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_isize(
             opcode.global_opcode(),
             rs1 as isize,

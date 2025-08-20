@@ -1,49 +1,32 @@
 use std::sync::Arc;
 
-#[cfg(feature = "metrics")]
-use openvm_circuit::metrics::VmMetrics;
-use openvm_circuit::{
-    arch::{
-        instructions::instruction::Instruction,
-        testing::{
-            execution::air::ExecutionDummyAir, program::air::ProgramDummyAir, TestChipHarness,
-            EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS,
-            READ_INSTRUCTION_BUS,
-        },
-        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
-        MemoryConfig, PreflightExecutor, Streams, VmStateMut,
-    },
-    system::{
-        memory::{
-            offline_checker::{MemoryBridge, MemoryBus},
-            MemoryAirInventory, SharedMemoryHelper,
-        },
-        poseidon2::air::Poseidon2PeripheryAir,
-        program::ProgramBus,
-        SystemPort,
-    },
-    utils::next_power_of_two_or_zero,
-};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
-        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-        SharedBitwiseOperationLookupChip,
+        cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir, BitwiseOperationLookupBus,
+        BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
     },
     range_tuple::{
-        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
-        SharedRangeTupleCheckerChip,
+        cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir, RangeTupleCheckerBus,
+        RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
     },
     var_range::{
-        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
-        VariableRangeCheckerChip,
+        cuda::VariableRangeCheckerChipGPU, SharedVariableRangeCheckerChip, VariableRangeCheckerAir,
+        VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_instructions::riscv::RV32_REGISTER_AS;
+use openvm_cuda_backend::{
+    data_transporter::assert_eq_host_and_device_matrix,
+    engine::GpuBabyBearPoseidon2Engine,
+    prover_backend::GpuBackend,
+    types::{F, SC},
+};
+use openvm_instructions::{program::PC_BITS, riscv::RV32_REGISTER_AS};
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubAir};
 use openvm_stark_backend::{
     config::Val,
     interaction::{LookupBus, PermutationCheckBus},
-    p3_field::{Field, FieldAlgebra},
+    p3_air::BaseAir,
+    p3_field::{FieldAlgebra, PrimeField32},
     prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
     utils::disable_debug_builder,
@@ -54,33 +37,37 @@ use openvm_stark_sdk::{
     config::{setup_tracing_with_log_level, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
 };
-use p3_air::BaseAir;
-use p3_field::PrimeField32;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use stark_backend_gpu::{
-    engine::GpuBabyBearPoseidon2Engine,
-    prover_backend::GpuBackend,
-    types::{F, SC},
-};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use tracing::Level;
 
+#[cfg(feature = "metrics")]
+use crate::metrics::VmMetrics;
 use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
-        var_range::VariableRangeCheckerChipGPU,
+    arch::{
+        instructions::instruction::Instruction,
+        testing::{
+            default_tracing_memory, default_var_range_checker_bus, dummy_memory_helper,
+            execution::{air::ExecutionDummyAir, DeviceExecutionTester},
+            memory::DeviceMemoryTester,
+            program::{air::ProgramDummyAir, DeviceProgramTester},
+            TestBuilder, TestChipHarness, EXECUTION_BUS, MEMORY_BUS, MEMORY_MERKLE_BUS,
+            POSEIDON2_DIRECT_BUS, READ_INSTRUCTION_BUS,
+        },
+        Arena, DenseRecordArena, ExecutionBridge, ExecutionBus, ExecutionState, MatrixRecordArena,
+        MemoryConfig, PreflightExecutor, Streams, VmStateMut,
     },
-    system::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
-    testing::{
-        execution::DeviceExecutionTester, memory::DeviceMemoryTester, program::DeviceProgramTester,
+    system::{
+        cuda::{poseidon2::Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+        memory::{
+            offline_checker::{MemoryBridge, MemoryBus},
+            MemoryAirInventory, SharedMemoryHelper,
+        },
+        poseidon2::air::Poseidon2PeripheryAir,
+        program::ProgramBus,
+        SystemPort,
     },
+    utils::next_power_of_two_or_zero,
 };
-
-pub mod cuda;
-pub mod execution;
-pub mod memory;
-pub mod program;
-mod utils;
-pub use utils::*;
 
 pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
     pub executor: Executor,
@@ -115,6 +102,86 @@ where
             dense_arena,
             matrix_arena,
         }
+    }
+}
+
+impl TestBuilder<F> for GpuChipTestBuilder {
+    fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
+    where
+        E: PreflightExecutor<F, RA>,
+        RA: Arena,
+    {
+        let initial_pc = self.rng.gen_range(0..(1 << PC_BITS));
+        self.execute_with_pc(executor, arena, instruction, initial_pc);
+    }
+
+    fn execute_with_pc<E, RA>(
+        &mut self,
+        executor: &mut E,
+        arena: &mut RA,
+        instruction: &Instruction<F>,
+        initial_pc: u32,
+    ) where
+        E: PreflightExecutor<F, RA>,
+        RA: Arena,
+    {
+        let initial_state = ExecutionState {
+            pc: initial_pc,
+            timestamp: self.memory.memory.timestamp(),
+        };
+        tracing::debug!("initial_timestamp={}", initial_state.timestamp);
+
+        let mut pc = initial_pc;
+        let state_mut = VmStateMut::new(
+            &mut pc,
+            &mut self.memory.memory,
+            &mut self.streams,
+            &mut self.rng,
+            &mut self.custom_pvs,
+            arena,
+            #[cfg(feature = "metrics")]
+            &mut self.metrics,
+        );
+
+        executor
+            .execute(state_mut, instruction)
+            .expect("Expected the execution not to fail");
+        let final_state = ExecutionState {
+            pc,
+            timestamp: self.memory.memory.timestamp(),
+        };
+
+        self.program.execute(instruction, &initial_state);
+        self.execution.execute(initial_state, final_state);
+    }
+
+    fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
+        self.read::<1>(address_space, pointer)[0]
+    }
+
+    fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
+        self.write(address_space, pointer, [value]);
+    }
+
+    fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
+        self.memory.read(address_space, pointer)
+    }
+
+    fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
+        self.memory.write(address_space, pointer, value);
+    }
+
+    fn write_usize<const N: usize>(
+        &mut self,
+        address_space: usize,
+        pointer: usize,
+        value: [usize; N],
+    ) {
+        self.write(address_space, pointer, value.map(F::from_canonical_usize));
+    }
+
+    fn execution_final_state(&self) -> ExecutionState<F> {
+        self.execution.0.records.last().unwrap().final_state
     }
 }
 
@@ -221,19 +288,7 @@ impl GpuChipTestBuilder {
         self
     }
 
-    fn next_elem_size_u32(&mut self) -> u32 {
-        self.rng.next_u32() % (1 << (F::bits() - 2))
-    }
-
-    pub fn execute<E, RA>(&mut self, executor: &mut E, arena: &mut RA, instruction: &Instruction<F>)
-    where
-        E: PreflightExecutor<F, RA>,
-    {
-        let initial_pc = self.next_elem_size_u32();
-        self.execute_with_pc(executor, arena, instruction, initial_pc);
-    }
-
-    pub fn execute_harness<E, A, C, RA>(
+    pub fn execute_harness<E, A, C, RA: Arena>(
         &mut self,
         harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
@@ -243,46 +298,7 @@ impl GpuChipTestBuilder {
         self.execute(&mut harness.executor, &mut harness.arena, instruction);
     }
 
-    pub fn execute_with_pc<E, RA>(
-        &mut self,
-        executor: &mut E,
-        arena: &mut RA,
-        instruction: &Instruction<F>,
-        initial_pc: u32,
-    ) where
-        E: PreflightExecutor<F, RA>,
-    {
-        let initial_state = ExecutionState {
-            pc: initial_pc,
-            timestamp: self.memory.memory.timestamp(),
-        };
-        tracing::debug!("initial_timestamp={}", initial_state.timestamp);
-
-        let mut pc = initial_pc;
-        let state_mut = VmStateMut::new(
-            &mut pc,
-            &mut self.memory.memory,
-            &mut self.streams,
-            &mut self.rng,
-            &mut self.custom_pvs,
-            arena,
-            #[cfg(feature = "metrics")]
-            &mut self.metrics,
-        );
-
-        executor
-            .execute(state_mut, instruction)
-            .expect("Expected the execution not to fail");
-        let final_state = ExecutionState {
-            pc,
-            timestamp: self.memory.memory.timestamp(),
-        };
-
-        self.program.execute(instruction, &initial_state);
-        self.execution.execute(initial_state, final_state);
-    }
-
-    pub fn execute_with_pc_harness<E, A, C, RA>(
+    pub fn execute_with_pc_harness<E, A, C, RA: Arena>(
         &mut self,
         harness: &mut TestChipHarness<F, E, A, C, RA>,
         instruction: &Instruction<F>,
@@ -296,31 +312,6 @@ impl GpuChipTestBuilder {
             instruction,
             initial_pc,
         );
-    }
-
-    pub fn read_cell(&mut self, address_space: usize, pointer: usize) -> F {
-        self.read::<1>(address_space, pointer)[0]
-    }
-
-    pub fn write_cell(&mut self, address_space: usize, pointer: usize, value: F) {
-        self.write(address_space, pointer, [value]);
-    }
-
-    pub fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N] {
-        self.memory.read(address_space, pointer)
-    }
-
-    pub fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]) {
-        self.memory.write(address_space, pointer, value);
-    }
-
-    pub fn write_usize<const N: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-        value: [usize; N],
-    ) {
-        self.write(address_space, pointer, value.map(F::from_canonical_usize));
     }
 
     pub fn write_heap<const NUM_LIMBS: usize>(
@@ -547,7 +538,7 @@ impl GpuChipTester {
     ) -> Self {
         #[cfg(feature = "touchemall")]
         {
-            use stark_backend_gpu::engine::check_trace_validity;
+            use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
@@ -577,11 +568,11 @@ impl GpuChipTester {
         }
         #[cfg(feature = "touchemall")]
         {
-            use stark_backend_gpu::engine::check_trace_validity;
+            use openvm_cuda_backend::engine::check_trace_validity;
 
             check_trace_validity(&proving_ctx, &air.name());
         }
-        assert_eq_cpu_and_gpu_matrix(
+        assert_eq_host_and_device_matrix(
             expected_trace.unwrap(),
             proving_ctx.common_main.as_ref().unwrap(),
         );

@@ -167,11 +167,12 @@ mod tests {
         system::memory::{offline_checker::MemoryBus, MemoryController},
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-    use openvm_cuda_backend::prelude::SC;
+    use openvm_cuda_backend::{data_transporter::assert_eq_host_and_device_matrix, prelude::SC};
     use openvm_stark_backend::{p3_field::FieldAlgebra, prover::hal::MatrixDimensions};
     use rand::{rngs::StdRng, Rng, SeedableRng};
 
     use super::*;
+    use crate::arch::testing::{GpuChipTestBuilder, TestBuilder};
 
     #[test]
     fn test_cuda_access_adapters_cpu_gpu_equivalence() {
@@ -261,7 +262,7 @@ mod tests {
                 "Exactly one of CPU and GPU traces is empty"
             );
             if cpu_trace.height() != 0 {
-                assert_eq_cpu_and_gpu_matrix(cpu_trace, gpu_trace);
+                assert_eq_host_and_device_matrix(cpu_trace, gpu_trace);
             }
         }
     }

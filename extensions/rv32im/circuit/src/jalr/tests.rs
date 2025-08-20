@@ -1,6 +1,8 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS};
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+};
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
@@ -99,7 +101,8 @@ fn set_and_execute(
 
     let initial_pc = initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS)));
     tester.execute_with_pc(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [

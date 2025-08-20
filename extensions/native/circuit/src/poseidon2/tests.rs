@@ -1,7 +1,9 @@
 use std::cmp::min;
 
 use openvm_circuit::{
-    arch::testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, VmChipTester},
+    arch::testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
+    },
     utils::air_test,
 };
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
@@ -246,7 +248,8 @@ fn set_and_execute<const SBOX_REGISTERS: usize>(
         .inverse()
         .as_canonical_u32() as usize;
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(
             VERIFY_BATCH.global_opcode(),
             [
@@ -460,7 +463,7 @@ fn tester_with_random_poseidon2_ops(num_ops: usize) -> VmChipTester<BabyBearBlak
             }
         }
 
-        tester.execute(&mut harness, &instruction);
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
 
         match opcode {
             COMP_POS2 => {

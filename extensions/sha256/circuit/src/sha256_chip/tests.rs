@@ -3,7 +3,10 @@ use std::{array, sync::Arc};
 use hex::FromHex;
 use openvm_circuit::{
     arch::{
-        testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
         Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
     },
     utils::get_random_message,
@@ -104,7 +107,8 @@ fn set_and_execute<RA: Arena>(
     }
 
     tester.execute(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 

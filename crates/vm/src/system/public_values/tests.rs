@@ -22,10 +22,12 @@ use openvm_stark_sdk::{
 };
 use rand::{rngs::StdRng, Rng};
 
+#[cfg(feature = "cuda")]
+use crate::system::cuda::public_values::PublicValuesChipGPU;
 use crate::{
     arch::{
-        testing::{memory::gen_pointer, TestChipHarness, VmChipTestBuilder},
-        MemoryConfig, SystemConfig, VmCoreAir,
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        Arena, MemoryConfig, PreflightExecutor, SystemConfig, VmCoreAir,
     },
     system::{
         native_adapter::{NativeAdapterAir, NativeAdapterExecutor},
@@ -36,9 +38,28 @@ use crate::{
         },
     },
 };
+#[cfg(feature = "cuda")]
+use crate::{
+    arch::{
+        testing::{GpuChipTestBuilder, GpuTestChipHarness, RANGE_CHECKER_BUS},
+        EmptyAdapterCoreLayout,
+    },
+    system::{
+        native_adapter::NativeAdapterRecord, public_values::PublicValuesRecord,
+        VariableRangeCheckerBus,
+    },
+};
 
 type F = BabyBear;
 type Harness = TestChipHarness<F, PublicValuesExecutor<F>, PublicValuesAir, PublicValuesChip<F>>;
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    PublicValuesExecutor<F>,
+    PublicValuesAir,
+    PublicValuesChipGPU,
+    PublicValuesChip<F>,
+>;
 
 impl<F: Field> PartitionedBaseAir<F> for PublicValuesCoreAir {}
 
@@ -75,13 +96,52 @@ fn create_test_chips(tester: &VmChipTestBuilder<F>, system_config: &SystemConfig
     Harness::with_capacity(executor, air, cpu_chip, num_custom_pvs)
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+#[cfg(feature = "cuda")]
+fn create_cuda_test_harness(
+    tester: &GpuChipTestBuilder,
+    mem_config: &MemoryConfig,
+    system_config: &SystemConfig,
+) -> GpuHarness {
+    let num_custom_pvs = system_config.num_public_values;
+    let max_degree = system_config.max_constraint_degree as u32 - 1;
+    let timestamp_max_bits = mem_config.timestamp_max_bits;
+
+    let air = PublicValuesAir::new(
+        NativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        PublicValuesCoreAir::new(num_custom_pvs, max_degree),
+    );
+
+    let executor = PublicValuesExecutor::new(NativeAdapterExecutor::<F, 2, 0>::default());
+
+    let cpu_chip = PublicValuesChip::new(
+        PublicValuesFiller::new(
+            NativeAdapterExecutor::<F, 2, 0>::default(),
+            num_custom_pvs,
+            max_degree,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = PublicValuesChipGPU::new(
+        tester.range_checker(),
+        num_custom_pvs,
+        max_degree,
+        timestamp_max_bits as u32,
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, num_custom_pvs)
+}
+
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     public_values: &mut Vec<F>,
     idx: u32,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let (b, e) = if rng.gen_bool(0.5) {
         let val = F::from_canonical_u32(rng.gen_range(0..F::ORDER_U32));
         public_values.push(val);
@@ -123,7 +183,7 @@ fn set_and_execute(
         g: F::ZERO,
     };
 
-    tester.execute(harness, &instruction);
+    tester.execute(executor, arena, &instruction);
 }
 
 #[test]
@@ -140,7 +200,8 @@ fn public_values_rand_test() {
     for idx in 0..system_config.num_public_values {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             &mut public_values,
             idx as u32,
@@ -263,4 +324,61 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
         .err(),
         Some(VerificationError::OodEvaluationMismatch)
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_public_values_tracegen() {
+    use itertools::Itertools;
+
+    let mut rng = create_seeded_rng();
+    let system_config = SystemConfig::default();
+    let mem_config = MemoryConfig::default();
+    let bus = VariableRangeCheckerBus::new(RANGE_CHECKER_BUS, mem_config.decomp);
+    let mut tester = GpuChipTestBuilder::volatile(mem_config.clone(), bus);
+    tester.custom_pvs = vec![None; system_config.num_public_values];
+
+    let mut harness = create_cuda_test_harness(&tester, &mem_config, &system_config);
+    let mut public_values = vec![];
+    for idx in 0..system_config.num_public_values {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            &mut public_values,
+            idx as u32,
+        );
+    }
+    let exec_pvs = tester
+        .custom_pvs
+        .iter()
+        .map(|&x| x.unwrap_or(F::ZERO))
+        .collect_vec();
+    assert_eq!(exec_pvs, public_values);
+
+    harness
+        .cpu_chip
+        .inner
+        .set_public_values(public_values.clone());
+    harness.gpu_chip.public_values = public_values;
+
+    type Record<'a> = (
+        &'a mut NativeAdapterRecord<F, 2, 0>,
+        &'a mut PublicValuesRecord<F>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, NativeAdapterExecutor<F, 2, 0>>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .expect("Verification failed");
 }

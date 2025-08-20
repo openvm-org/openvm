@@ -49,6 +49,7 @@ libc.workspace = true
 
 [dev-dependencies]
 test-log.workspace = true
+test-case.workspace = true
 
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
@@ -85,4 +86,9 @@ cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-builder",
+]
+touchemall = [
+    "cuda", 
+    "openvm-circuit-primitives/touchemall",
+    "openvm-cuda-backend/touchemall",
 ]

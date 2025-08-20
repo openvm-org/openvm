@@ -7,15 +7,19 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{distributions::Standard, prelude::Distribution, thread_rng, Rng};
+use test_case::test_case;
 
 use crate::{
-    arch::{testing::VmChipTestBuilder, MemoryConfig},
+    arch::{
+        testing::{TestBuilder, VmChipTestBuilder},
+        MemoryConfig,
+    },
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::TracingMemory},
 };
 
 type F = BabyBear;
 
-fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>, its: usize) {
+fn test_memory_write_by_tester(tester: &mut impl TestBuilder<F>, its: usize) {
     let mut rng = create_seeded_rng();
 
     // The point here is to have a lot of equal
@@ -60,30 +64,24 @@ fn test_memory_write_by_tester(mut tester: VmChipTestBuilder<F>, its: usize) {
             _ => unreachable!(),
         }
     }
+}
 
+#[test_case(1000)]
+#[test_case(0)]
+fn test_memory_write_volatile(its: usize) {
+    let mut tester = VmChipTestBuilder::<F>::volatile(MemoryConfig::default());
+    test_memory_write_by_tester(&mut tester, its);
     let tester = tester.build().finalize();
     tester.simple_test().expect("Verification failed");
 }
 
-#[test]
-fn test_memory_write_volatile() {
-    test_memory_write_by_tester(
-        VmChipTestBuilder::<F>::volatile(MemoryConfig::default()),
-        1000,
-    );
-    test_memory_write_by_tester(VmChipTestBuilder::<F>::volatile(MemoryConfig::default()), 0);
-}
-
-#[test]
-fn test_memory_write_persistent() {
-    test_memory_write_by_tester(
-        VmChipTestBuilder::<F>::persistent(MemoryConfig::default()),
-        1000,
-    );
-    test_memory_write_by_tester(
-        VmChipTestBuilder::<F>::persistent(MemoryConfig::default()),
-        0,
-    );
+#[test_case(1000)]
+#[test_case(0)]
+fn test_memory_write_persistent(its: usize) {
+    let mut tester = VmChipTestBuilder::<F>::persistent(MemoryConfig::default());
+    test_memory_write_by_tester(&mut tester, its);
+    let tester = tester.build().finalize();
+    tester.simple_test().expect("Verification failed");
 }
 
 fn test_no_adapter_records_for_singleton_accesses<T, const BLOCK_SIZE: usize>(address_space: u32)
@@ -119,4 +117,28 @@ fn test_no_adapter_records() {
     test_no_adapter_records_for_singleton_accesses::<u8, 4>(RV32_MEMORY_AS);
     test_no_adapter_records_for_singleton_accesses::<u8, 4>(PUBLIC_VALUES_AS);
     test_no_adapter_records_for_singleton_accesses::<F, 1>(NATIVE_AS);
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(1000)]
+#[test_case(0)]
+fn test_cuda_memory_write_volatile(its: usize) {
+    use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
+    let mut tester =
+        GpuChipTestBuilder::volatile(MemoryConfig::default(), default_var_range_checker_bus());
+    test_memory_write_by_tester(&mut tester, its);
+    let tester = tester.build().finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(1000)]
+#[test_case(0)]
+fn test_cuda_memory_write_persistent(its: usize) {
+    use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
+    let mut tester =
+        GpuChipTestBuilder::persistent(MemoryConfig::default(), default_var_range_checker_bus());
+    test_memory_write_by_tester(&mut tester, its);
+    let tester = tester.build().finalize();
+    tester.simple_test().expect("Verification failed");
 }

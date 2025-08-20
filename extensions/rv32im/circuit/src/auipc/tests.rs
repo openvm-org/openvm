@@ -1,7 +1,7 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit::arch::{
-    testing::{TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
     Arena, DenseRecordArena, EmptyAdapterCoreLayout, PreflightExecutor, VmAirWrapper,
     VmChipWrapper,
 };
@@ -80,7 +80,8 @@ fn set_and_execute<RA: Arena>(
     let a = rng.gen_range(0..32) << 2;
 
     tester.execute_with_pc(
-        harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &Instruction::from_usize(opcode.global_opcode(), [a, 0, imm, 1, 0]),
         initial_pc.unwrap_or(rng.gen_range(0..(1 << PC_BITS))),
     );

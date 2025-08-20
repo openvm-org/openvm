@@ -129,7 +129,10 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 #[cfg(test)]
 mod tests {
     use openvm_circuit::system::program::trace::VmCommittedExe;
-    use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prelude::F};
+    use openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix, engine::GpuBabyBearPoseidon2Engine,
+        prelude::F,
+    };
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
@@ -165,7 +168,7 @@ mod tests {
             VmCommittedExe::<BabyBearPoseidon2Config>::commit(cpu_exe, cpu_engine.config().pcs());
         let cpu_cached = cpu_committed_exe.get_committed_trace();
 
-        assert_eq_cpu_and_gpu_matrix(cpu_cached.trace, &gpu_cached.trace);
+        assert_eq_host_and_device_matrix(cpu_cached.trace, &gpu_cached.trace);
         assert_eq!(gpu_cached.commitment, cpu_cached.commitment);
     }
 
