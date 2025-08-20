@@ -86,18 +86,20 @@ pub struct Sha256VmRecordMut<'a> {
 /// slices.
 impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: Sha256VmRecordLayout) -> Sha256VmRecordMut<'a> {
-        // SAFETY:
-        // - `self` has sufficient length for the split (validated by caller's layout)
-        // - `size_of::<Sha256VmRecordHeader>()` is a valid split point
+        // SAFETY: Buffer split is safe because:
+        // - The caller ensures self.len() >= layout.size() before calling custom_borrow
+        // - size_of::<Sha256VmRecordHeader>() is a compile-time constant
+        // - The layout calculation in SizedRecord::size() guarantees sufficient space
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Sha256VmRecordHeader>()) };
 
         // Using `split_at_mut_unchecked` for perf reasons
         // input is a slice of `u8`'s of length `SHA256_BLOCK_CELLS * num_blocks`, so the alignment
         // is always satisfied
-        // SAFETY:
-        // - `rest` has sufficient length for the split (guaranteed by layout calculation)
-        // - Split point is `num_blocks * SHA256_BLOCK_CELLS` which is within bounds
+        // SAFETY: Input buffer split is safe because:
+        // - The layout size calculation includes num_blocks * SHA256_BLOCK_CELLS bytes after header
+        // - num_blocks is derived from the message length ensuring correct sizing
+        // - SHA256_BLOCK_CELLS is a compile-time constant (64 bytes per block)
         let (input, rest) = unsafe {
             rest.split_at_mut_unchecked((layout.metadata.num_blocks as usize) * SHA256_BLOCK_CELLS)
         };
@@ -105,10 +107,11 @@ impl<'a> CustomBorrow<'a, Sha256VmRecordMut<'a>, Sha256VmRecordLayout> for [u8] 
         // Using `align_to_mut` to make sure the returned slice is properly aligned to
         // `MemoryReadAuxRecord` Additionally, Rust's subslice operation (a few lines below)
         // will verify that the buffer has enough capacity
-        // SAFETY:
-        // - `rest` is a valid slice of bytes
-        // - `align_to_mut` ensures proper alignment for MemoryReadAuxRecord
-        // - Subsequent subslicing verifies capacity
+        // SAFETY: Alignment and conversion are safe because:
+        // - rest is a valid mutable slice from the previous split
+        // - align_to_mut guarantees the middle slice is properly aligned for MemoryReadAuxRecord
+        // - The subslice operation [..num_blocks * SHA256_NUM_READ_ROWS] validates sufficient capacity
+        // - Layout calculation ensures space for alignment padding plus required aux records
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         Sha256VmRecordMut {
             inner: header_buf.borrow_mut(),
@@ -272,9 +275,10 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                 sizes.push((0, num_blocks_so_far));
                 break;
             } else {
-                // SAFETY:
-                // - `trace` contains a valid Sha256VmRecordHeader at the beginning
-                // - `get_record_from_slice` correctly interprets the bytes as the header
+                // SAFETY: Record extraction is safe because:
+                // - trace points to the start of a valid record (aligned by previous iterations)
+                // - Sha256VmRecordHeader is repr(C) with fixed layout
+                // - get_record_from_slice performs proper pointer casting with unit layout
                 let record: &Sha256VmRecordHeader =
                     unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = ((record.len << 3) as usize + 1 + 64).div_ceil(SHA256_BLOCK_BITS);
@@ -297,10 +301,11 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                     slice.par_chunks_mut(SHA256VM_WIDTH).for_each(|row| {
                         // Need to get rid of the accidental garbage data that might overflow the
                         // F's prime field. Unfortunately, there is no good way around this
-                        // SAFETY:
-                        // - `row` is a valid slice with length SHA256VM_WIDTH
-                        // - Pointer cast to *mut u8 is valid for zeroing memory
-                        // - Size calculation SHA256VM_WIDTH * size_of::<F>() is correct
+                        // SAFETY: Memory zeroing is safe because:
+                        // - row is a valid mutable slice of F elements with length SHA256VM_WIDTH
+                        // - Casting F* to u8* preserves validity for write_bytes operation
+                        // - SHA256VM_WIDTH * size_of::<F>() correctly calculates total bytes to zero
+                        // - Zeroing prevents field overflow from uninitialized data
                         unsafe {
                             std::ptr::write_bytes(
                                 row.as_mut_ptr() as *mut u8,
@@ -315,10 +320,11 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                     return;
                 }
 
-                // SAFETY:
-                // - `slice` contains a valid record with the specified layout
-                // - Layout metadata matches the actual data in the slice
-                // - `get_record_from_slice` correctly interprets the bytes according to layout
+                // SAFETY: Record extraction with layout is safe because:
+                // - slice was sized according to SizedRecord::size(layout) ensuring sufficient space
+                // - Layout metadata (num_blocks) matches the actual record's block count
+                // - get_record_from_slice uses CustomBorrow trait to properly split the buffer
+                // - The record header, input data, and aux records are properly aligned
                 let record: Sha256VmRecordMut = unsafe {
                     get_record_from_slice(
                         slice,
@@ -362,10 +368,11 @@ impl<F: PrimeField32> TraceFiller<F> for Sha256VmFiller {
                     .for_each(|(block_idx, block_slice)| {
                         // Need to get rid of the accidental garbage data that might overflow the
                         // F's prime field. Unfortunately, there is no good way around this
-                        // SAFETY:
-                        // - `block_slice` is a valid slice with length SHA256_ROWS_PER_BLOCK * SHA256VM_WIDTH
-                        // - Pointer cast to *mut u8 is valid for zeroing memory
-                        // - Size calculation matches the actual slice size
+                        // SAFETY: Block memory zeroing is safe because:
+                        // - block_slice comes from par_chunks_exact_mut with exact size guarantee
+                        // - Length is SHA256_ROWS_PER_BLOCK * SHA256VM_WIDTH * size_of::<F>() bytes
+                        // - Zeroing entire blocks prevents field element overflow from garbage data
+                        // - The subsequent trace filling will overwrite with valid values
                         unsafe {
                             std::ptr::write_bytes(
                                 block_slice.as_mut_ptr() as *mut u8,

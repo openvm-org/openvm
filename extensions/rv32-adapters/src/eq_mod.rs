@@ -385,7 +385,8 @@ impl<
         Rv32IsEqualModAdapterCols::<F, NUM_READS, BLOCKS_PER_READ, BLOCK_SIZE>::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // SAFETY:
+        // SAFETY: get_record_from_slice is safe because adapter_row contains a valid
+        // Rv32IsEqualModAdapterRecord at the beginning, properly aligned and sized.
         let record: &Rv32IsEqualModAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,

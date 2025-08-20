@@ -466,7 +466,8 @@ impl<
     >::width();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
-        // SAFETY:
+        // SAFETY: get_record_from_slice is safe because adapter_row contains a valid
+        // Rv32VecHeapAdapterRecord at the beginning, properly aligned and sized.
         let record: &Rv32VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,

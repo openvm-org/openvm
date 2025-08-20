@@ -264,14 +264,15 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY:
-        // - row_slice has at least A::WIDTH elements (guaranteed by caller)
-        // - A::WIDTH is the correct split point between adapter and core rows
+        // SAFETY: row_slice is guaranteed by the caller to have at least
+        // AdapterFiller::WIDTH + BranchLessThanCoreCols::width() elements. A::WIDTH is the
+        // correct split point to separate adapter columns from core columns.
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
-        // SAFETY:
-        // - core_row contains a valid BranchLessThanCoreRecord representation
-        // - get_record_from_slice correctly interprets the bytes as BranchLessThanCoreRecord
+        // SAFETY: The core_row slice is guaranteed to contain a valid
+        // BranchLessThanCoreRecord serialized representation at this point, as written
+        // by the executor during trace generation. get_record_from_slice
+        // correctly interprets the bytes as BranchLessThanCoreRecord with proper alignment.
         let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 

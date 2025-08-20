@@ -270,7 +270,8 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
-        // SAFETY:
+        // SAFETY: get_slice returns a valid slice of bytes at the specified memory location.
+        // The conversion to a fixed-size array reference is safe as long as N bytes are available.
         let repr: &[u8; N] = unsafe {
             memory
                 .memory

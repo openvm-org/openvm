@@ -187,10 +187,16 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY:
+        // SAFETY: row_slice is guaranteed by the caller to have at least
+        // AdapterFiller::WIDTH + NativeLoadStoreCoreCols::width() elements. A::WIDTH is the
+        // correct split point to separate adapter columns from core columns.
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
+        // SAFETY: The core_row slice is guaranteed to contain a valid
+        // NativeLoadStoreCoreRecord serialized representation at this point, as written
+        // by the executor during trace generation. get_record_from_slice
+        // correctly interprets the bytes as NativeLoadStoreCoreRecord with proper alignment.
         let record: &NativeLoadStoreCoreRecord<F, NUM_CELLS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut NativeLoadStoreCoreCols<F, NUM_CELLS> = core_row.borrow_mut();

@@ -147,9 +147,9 @@ pub(crate) fn u256_mul(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
 ) -> [u8; INT256_NUM_LIMBS] {
-    // SAFETY:
+    // SAFETY: Transmuting [u8; 32] to [u32; 8] is safe because both types have the same size (32 bytes) and compatible alignment
     let rs1_u64: [u32; 8] = unsafe { std::mem::transmute(rs1) };
-    // SAFETY:
+    // SAFETY: Transmuting [u8; 32] to [u32; 8] is safe because both types have the same size (32 bytes) and compatible alignment
     let rs2_u64: [u32; 8] = unsafe { std::mem::transmute(rs2) };
     let mut rd = [0u32; 8];
     for i in 0..8 {
@@ -160,7 +160,7 @@ pub(crate) fn u256_mul(
             carry = res >> 32;
         }
     }
-    // SAFETY:
+    // SAFETY: Transmuting [u32; 8] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
     unsafe { std::mem::transmute(rd) }
 }
 
@@ -179,9 +179,9 @@ mod tests {
             let limbs_b: [u64; 4] = rng.gen();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
-            // SAFETY:
+            // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
             let a_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_a) };
-            // SAFETY:
+            // SAFETY: Transmuting [u64; 4] to [u8; 32] is safe because both types have the same size (32 bytes) and compatible alignment
             let b_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_b) };
             assert_eq!(U256::from_le_bytes(u256_mul(a_u8, b_u8)), a.wrapping_mul(b));
         }

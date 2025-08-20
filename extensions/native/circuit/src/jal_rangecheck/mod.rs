@@ -234,7 +234,8 @@ where
 
 impl<F: PrimeField32> TraceFiller<F> for JalRangeCheckFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
-        // SAFETY:
+        // SAFETY: get_record_from_slice is safe because row_slice contains a valid
+        // JalRangeCheckRecord<F> at the beginning, properly aligned and sized.
         let record: &mut JalRangeCheckRecord<F> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
         let cols: &mut JalRangeCheckCols<F> = row_slice.borrow_mut();
