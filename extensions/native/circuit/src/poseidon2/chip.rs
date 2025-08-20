@@ -108,8 +108,10 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize>
         &'a mut self,
         layout: NativePoseidon2RecordLayout,
     ) -> NativePoseidon2RecordMut<'a, F, SBOX_REGISTERS> {
-        // SAFETY: align_to_mut() returns aligned slices where the middle slice has
-        // proper alignment for NativePoseidon2Cols. The slice is guaranteed to be valid.
+        // SAFETY:
+        // - align_to_mut() ensures proper alignment for NativePoseidon2Cols<F, SBOX_REGISTERS>
+        // - Layout guarantees sufficient length for num_rows records
+        // - Slice bounds validated by taking only num_rows elements
         let arr = unsafe {
             self.align_to_mut::<NativePoseidon2Cols<F, SBOX_REGISTERS>>()
                 .1
