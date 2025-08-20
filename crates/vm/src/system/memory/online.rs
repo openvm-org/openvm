@@ -698,7 +698,7 @@ impl TracingMemory {
     /// # Safety
     /// The `address_space` must be known to be in bounds.
     #[inline(always)]
-    fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+    pub fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,

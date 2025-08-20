@@ -2,6 +2,7 @@ use core::ops::Deref;
 use std::{
     borrow::{Borrow, BorrowMut},
     mem::offset_of,
+    slice,
 };
 
 use itertools::{izip, zip_eq, Itertools};
@@ -746,7 +747,7 @@ where
             length: length as usize,
             is_init,
         };
-        let record = state.ctx.alloc(MultiRowLayout::new(metadata));
+        let mut record = state.ctx.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -795,95 +796,13 @@ where
         );
         record.common.is_init_ptr = g;
         record.header.is_init = is_init;
-
-        let hint_id_ptr = f.as_canonical_u32();
-        let [hint_id]: [F; 1] = memory_read_native(state.memory.data(), hint_id_ptr);
-        let hint_id = hint_id.as_canonical_u32() as usize;
         record.common.hint_id_ptr = f;
 
-        let length = length as usize;
-
-        if !is_init {
-            let hint_stream = &mut state.streams.hint_space[hint_id];
-            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
-                .iter_mut()
-                .rev()
-                .zip_eq(hint_stream.drain(0..length))
-                .enumerate()
-            {
-                let mut values = [hint_value];
-                // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
-                unsafe {
-                    state
-                        .memory
-                        .data
-                        .swap::<F, 1>(NATIVE_AS, a_ptr + i as u32, &mut values)
-                };
-                *prev_data = values[0];
-            }
+        let result = if length > 100 {
+            self.batch_compute_result(state.memory, state.streams, &mut record)
+        } else {
+            self.sequential_compute_result(state.memory, state.streams, &mut record)
         };
-
-        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
-        let a_slice: &[F] = unsafe {
-            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
-            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
-            // not mutate `state.memory.data`
-            { &*(state.memory as *const TracingMemory) }
-                .data()
-                .get_slice(NATIVE_AS, record.common.a_ptr, length)
-        };
-        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
-        let b_slice_flat: &[F] = unsafe {
-            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
-            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
-            // not mutate `state.memory.data`
-            { &*(state.memory as *const TracingMemory) }
-                .data()
-                .get_slice(NATIVE_AS, record.common.b_ptr, length * EXT_DEG)
-        };
-
-        let start_t = state.memory.timestamp();
-        let a_prev_ts = state
-            .memory
-            .batch_prev_access_times::<F, 1, DEFAULT_NATIVE_BLOCK_SIZE, _>(
-                NATIVE_AS,
-                a_ptr,
-                length,
-                |i| start_t + 2 * i as u32,
-            );
-        let b_prev_ts = state
-            .memory
-            .batch_prev_access_times::<F, EXT_DEG, DEFAULT_NATIVE_BLOCK_SIZE, _>(
-                NATIVE_AS,
-                b_ptr,
-                length,
-                |i| start_t + (2 * i + 1) as u32,
-            );
-        state.memory.increment_timestamp_by(2 * length as u32);
-
-        // The following is the computation of the partial RLCs, where each partial result depends
-        // on the former. This entire computation does not involve any guest state access.
-        let mut result = [F::ZERO; EXT_DEG];
-        // workload must be written to in reverse due to how the RLC is evaluated
-        for (workload_row, (a, a_prev_t, b, b_prev_t)) in record.workload.iter_mut().zip(
-            izip!(
-                a_slice.iter(),
-                a_prev_ts.into_iter(),
-                b_slice_flat.chunks_exact(EXT_DEG),
-                b_prev_ts.into_iter()
-            )
-            .rev(),
-        ) {
-            let b: &[F; EXT_DEG] = b.try_into().unwrap();
-            let mut b: [F; EXT_DEG] = *b;
-            b[0] -= *a;
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
-            workload_row.a = *a;
-            workload_row.a_aux.prev_timestamp = a_prev_t;
-            workload_row.b_aux.prev_timestamp = b_prev_t;
-            workload_row.result = result;
-        }
 
         let result_ptr = e.as_canonical_u32();
         tracing_write_native(
@@ -1116,5 +1035,226 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                     row_chunk[WL_WIDTH..OVERALL_WIDTH].fill(F::ZERO);
                 });
         });
+    }
+}
+
+impl FriReducedOpeningExecutor {
+    fn batch_compute_result<F: PrimeField32>(
+        &self,
+        memory: &mut TracingMemory,
+        streams: &mut Streams<F>,
+        record: &mut FriReducedOpeningRecordMut<'_, F>,
+    ) -> [F; EXT_DEG] {
+        let hint_id_ptr = record.common.hint_id_ptr.as_canonical_u32();
+        let [hint_id]: [F; 1] = memory_read_native(memory.data(), hint_id_ptr);
+        let hint_id = hint_id.as_canonical_u32() as usize;
+
+        let length = record.header.length as usize;
+        let is_init = record.header.is_init;
+        let a_ptr = record.common.a_ptr;
+        let b_ptr = record.common.b_ptr;
+        let alpha = record.common.alpha;
+
+        if !is_init {
+            let hint_stream = &mut streams.hint_space[hint_id];
+            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
+                .iter_mut()
+                .rev()
+                .zip_eq(hint_stream.drain(0..length))
+                .enumerate()
+            {
+                let mut values = [hint_value];
+                // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+                unsafe {
+                    memory
+                        .data
+                        .swap::<F, 1>(NATIVE_AS, a_ptr + i as u32, &mut values)
+                };
+                *prev_data = values[0];
+            }
+        };
+
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let a_slice: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(memory as *const TracingMemory) }.data().get_slice(
+                NATIVE_AS,
+                record.common.a_ptr,
+                length,
+            )
+        };
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let b_slice_flat: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(memory as *const TracingMemory) }.data().get_slice(
+                NATIVE_AS,
+                record.common.b_ptr,
+                length * EXT_DEG,
+            )
+        };
+
+        let start_t = memory.timestamp();
+        let a_prev_ts = memory.batch_prev_access_times::<F, 1, DEFAULT_NATIVE_BLOCK_SIZE, _>(
+            NATIVE_AS,
+            a_ptr,
+            length,
+            |i| start_t + 2 * i as u32,
+        );
+        let b_prev_ts = memory.batch_prev_access_times::<F, EXT_DEG, DEFAULT_NATIVE_BLOCK_SIZE, _>(
+            NATIVE_AS,
+            b_ptr,
+            length,
+            |i| start_t + (2 * i + 1) as u32,
+        );
+        memory.increment_timestamp_by(2 * length as u32);
+
+        // The following is the computation of the partial RLCs, where each partial result depends
+        // on the former. This entire computation does not involve any guest state access.
+        let mut result = [F::ZERO; EXT_DEG];
+        // workload must be written to in reverse due to how the RLC is evaluated
+        for (workload_row, (a, a_prev_t, b, b_prev_t)) in record.workload.iter_mut().zip(
+            izip!(
+                a_slice.iter(),
+                a_prev_ts.into_iter(),
+                b_slice_flat.chunks_exact(EXT_DEG),
+                b_prev_ts.into_iter()
+            )
+            .rev(),
+        ) {
+            let b: &[F; EXT_DEG] = b.try_into().unwrap();
+            let mut b: [F; EXT_DEG] = *b;
+            b[0] -= *a;
+            // result = result * alpha + (b - a)
+            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
+            workload_row.a = *a;
+            workload_row.a_aux.prev_timestamp = a_prev_t;
+            workload_row.b_aux.prev_timestamp = b_prev_t;
+            workload_row.result = result;
+        }
+        result
+    }
+    fn sequential_compute_result<F: PrimeField32>(
+        &self,
+        memory: &mut TracingMemory,
+        streams: &mut Streams<F>,
+        record: &mut FriReducedOpeningRecordMut<'_, F>,
+    ) -> [F; EXT_DEG] {
+        let hint_id_ptr = record.common.hint_id_ptr.as_canonical_u32();
+        let [hint_id]: [F; 1] = memory_read_native(memory.data(), hint_id_ptr);
+        let hint_id = hint_id.as_canonical_u32() as usize;
+
+        let length = record.header.length as usize;
+        let is_init = record.header.is_init;
+        let a_ptr = record.common.a_ptr;
+        let b_ptr = record.common.b_ptr;
+        let alpha = record.common.alpha;
+
+        if !is_init {
+            let hint_stream = &mut streams.hint_space[hint_id];
+            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
+                .iter_mut()
+                .rev()
+                .zip(hint_stream.drain(0..length))
+                .enumerate()
+            {
+                let mut values = [hint_value];
+                // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+                unsafe {
+                    memory
+                        .data
+                        .swap::<F, 1>(NATIVE_AS, a_ptr + i as u32, &mut values)
+                };
+                *prev_data = values[0];
+            }
+        };
+
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let a_slice: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(memory as *const TracingMemory) }
+                .data()
+                .get_slice(NATIVE_AS, a_ptr, length)
+        };
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let b_slice_flat: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(memory as *const TracingMemory) }.data().get_slice(
+                NATIVE_AS,
+                b_ptr,
+                length * EXT_DEG,
+            )
+        };
+        // We update the tracing metadata by going along contiguous guest memory: first we do all of
+        // `a`s and then all of `b`s. To do this, we manually manipulate the timestamp.
+        let start_t = memory.timestamp();
+        for (i, (workload_row, a)) in record
+            .workload
+            .iter_mut()
+            .rev()
+            .zip_eq(a_slice.iter())
+            .enumerate()
+        {
+            let prev_values: &[F; 1] = slice::from_ref(if !is_init {
+                &record.a_write_prev_data[length - 1 - i]
+            } else {
+                a
+            })
+            .try_into()
+            .unwrap();
+            let prev_t = memory.prev_access_time::<F, 1, DEFAULT_NATIVE_BLOCK_SIZE>(
+                NATIVE_AS as usize,
+                a_ptr as usize + i,
+                prev_values,
+            );
+            workload_row.a_aux.prev_timestamp = prev_t;
+            workload_row.a = *a;
+            memory.increment_timestamp_by(2);
+        }
+        // SAFETY: we reset timestamp to start timestamp + 1 to start interleaving the `b` accesses
+        // between the `a` accesses above.
+        memory.timestamp = start_t + 1;
+        for (i, (workload_row, b)) in record
+            .workload
+            .iter_mut()
+            .rev()
+            .zip(b_slice_flat.chunks_exact(EXT_DEG))
+            .enumerate()
+        {
+            let prev_t = memory.prev_access_time::<F, EXT_DEG, DEFAULT_NATIVE_BLOCK_SIZE>(
+                NATIVE_AS as usize,
+                b_ptr as usize + i * EXT_DEG,
+                b.try_into().unwrap(),
+            );
+            workload_row.b_aux.prev_timestamp = prev_t;
+            memory.increment_timestamp_by(2);
+        }
+        debug_assert_eq!(memory.timestamp, start_t + 1 + 2 * length as u32);
+        memory.timestamp = start_t + 2 * length as u32;
+
+        // The following is the computation of the partial RLCs, where each partial result depends
+        // on the former. This entire computation does not involve any guest state access.
+        let mut result = [F::ZERO; EXT_DEG];
+        // workload must be written to in reverse due to how the RLC is evaluated
+        for (workload_row, (a, b)) in record
+            .workload
+            .iter_mut()
+            .zip(izip!(a_slice.iter(), b_slice_flat.chunks_exact(EXT_DEG)).rev())
+        {
+            let b: &[F; EXT_DEG] = b.try_into().unwrap();
+            let mut b: [F; EXT_DEG] = *b;
+            b[0] -= *a;
+            // result = result * alpha + (b - a)
+            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
+            workload_row.result = result;
+        }
+        result
     }
 }
