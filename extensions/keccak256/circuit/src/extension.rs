@@ -9,8 +9,7 @@ use openvm_circuit::{
         VmExecutionExtension, VmProverExtension,
     },
     system::{
-        memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor,
-        SystemPort,
+        memory::SharedMemoryHelper, SystemBuilder, SystemChipInventory, SystemExecutor, SystemPort,
     },
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
@@ -83,7 +82,7 @@ where
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&SystemBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;

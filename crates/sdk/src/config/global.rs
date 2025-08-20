@@ -9,7 +9,7 @@ use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{instructions::NATIVE_AS, *},
     derive::VmConfig,
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    system::{SystemBuilder, SystemChipInventory, SystemExecutor},
 };
 use openvm_ecc_circuit::{
     EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor, P256_CONFIG,
@@ -363,7 +363,7 @@ where
     > {
         let config = config.to_inner();
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&SystemBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         if let Some(rv32i) = &config.rv32i {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32i, inventory)?;

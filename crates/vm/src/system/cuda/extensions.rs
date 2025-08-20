@@ -64,10 +64,7 @@ const POSEIDON2_INSERTION_IDX: usize = 1;
 /// **If** public values chip exists, then its executor index is 0.
 pub const PV_EXECUTOR_IDX: usize = 0;
 
-#[derive(Clone)]
-pub struct SystemGpuBuilder;
-
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemGpuBuilder {
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for SystemBuilder {
     type VmConfig = SystemConfig;
     type RecordArena = DenseRecordArena;
     type SystemChipInventory = SystemChipInventoryGPU;

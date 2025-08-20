@@ -519,9 +519,9 @@ where
 }
 
 #[derive(Clone)]
-pub struct SystemCpuBuilder;
+pub struct SystemBuilder;
 
-impl<SC, E> VmBuilder<E> for SystemCpuBuilder
+impl<SC, E> VmBuilder<E> for SystemBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,

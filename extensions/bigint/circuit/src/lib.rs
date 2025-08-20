@@ -4,7 +4,7 @@ use openvm_circuit::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
         VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper, VmProverExtension,
     },
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    system::{SystemBuilder, SystemChipInventory, SystemExecutor},
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
 use openvm_rv32_adapters::{
@@ -215,7 +215,7 @@ where
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&SystemCpuBuilder, &config.system, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&SystemBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;

@@ -13,7 +13,7 @@ use openvm_circuit::{
         PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
         VmCircuitConfig, VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
-    system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
+    system::{memory::CHUNK, program::trace::VmCommittedExe, SystemBuilder},
     utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
 };
 use openvm_instructions::{
@@ -207,7 +207,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     assert!(!config.continuation_enabled);
     let engine =
         BabyBearPoseidon2Engine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config)?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemBuilder, config)?;
 
     let instructions = vec![
         Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
