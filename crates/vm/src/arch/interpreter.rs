@@ -189,21 +189,19 @@ where
         }
     }
 
+    pub fn pc_out_of_bounds_err(&self, pc: u32) -> ExecutionError {
+        ExecutionError::PcOutOfBounds {
+            pc,
+            pc_base: self.pc_base,
+            program_len: self.pre_compute_insns.len(),
+        }
+    }
+
     #[cfg(feature = "tco")]
     #[inline(always)]
-    pub fn get_handler(&self, pc: u32) -> Result<Handler<F, Ctx>, ExecutionError> {
+    pub fn get_handler(&self, pc: u32) -> Option<Handler<F, Ctx>> {
         let pc_idx = get_pc_index(self.pc_base, pc);
-        if std::hint::unlikely(pc_idx >= self.handlers.len()) {
-            return Err(ExecutionError::PcOutOfBounds {
-                pc,
-                pc_base: self.pc_base,
-                program_len: self.handlers.len(),
-            });
-        }
-        // SAFETY:
-        // - we checked above that pc_idx is within bounds
-        let handler = unsafe { self.handlers.get_unchecked(pc_idx) };
-        Ok(*handler)
+        self.handlers.get(pc_idx).map(|x| *x)
     }
 }
 
@@ -302,15 +300,21 @@ where
         }
         #[cfg(feature = "tco")]
         unsafe {
-            let handler = self.get_handler(exec_state.pc)?;
-            let res = handler(self, &mut exec_state);
-            if let Err(err) = res {
-                match err {
-                    ExecutionError::ExecStateError => {}
-                    _ => {
-                        return Err(err);
-                    }
-                }
+            let handler = self
+                .get_handler(exec_state.pc)
+                .ok_or(ExecutionError::PcOutOfBounds {
+                    pc: exec_state.pc,
+                    pc_base: self.pc_base,
+                    program_len: self.handlers.len(),
+                })?;
+            handler(self, &mut exec_state);
+
+            if exec_state
+                .exit_code
+                .as_ref()
+                .is_ok_and(|exit_code| exit_code.is_some())
+            {
+                ExecutionCtx::on_terminate(&mut exec_state);
             }
         }
 
@@ -540,17 +544,16 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
     interpreter: &InterpretedInstance<F, CTX>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> Result<(), ExecutionError> {
+) {
     let pre_compute = interpreter.get_pre_compute(vm_state.pc);
     terminate_execute_e12_impl(pre_compute, vm_state);
-    Ok(())
 }
 #[cfg(feature = "tco")]
 unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     _: &InterpretedInstance<F, CTX>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> Result<(), ExecutionError> {
-    Err(ExecutionError::Unreachable(vm_state.pc))
+) {
+    vm_state.exit_code = Err(ExecutionError::Unreachable(vm_state.pc));
 }
 
 fn get_pre_compute_max_size<F, E: Executor<F>>(

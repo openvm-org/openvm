@@ -109,7 +109,7 @@ pub type ExecuteFunc<F, CTX> =
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> Result<(), ExecutionError>;
+);
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction

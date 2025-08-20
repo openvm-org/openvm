@@ -179,7 +179,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     state.instret += 1;
 }
 
-#[cfg_attr(feature = "tco", create_tco_handler)]
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],

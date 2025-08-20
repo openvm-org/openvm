@@ -1,5 +1,4 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
-#![cfg_attr(feature = "tco", feature(likely_unlikely))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 use openvm_circuit::{
     self,
