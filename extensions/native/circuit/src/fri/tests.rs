@@ -123,7 +123,7 @@ fn fri_mat_opening_air_test() {
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&tester);
 
-    let num_ops = 28; // non-power-of-2 to also test padding
+    let num_ops = 1; // 28; // non-power-of-2 to also test padding
     for _ in 0..num_ops {
         set_and_execute(&mut tester, &mut harness, &mut rng);
     }

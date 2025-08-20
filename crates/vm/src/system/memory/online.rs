@@ -1,4 +1,12 @@
-use std::{array::from_fn, fmt::Debug, num::NonZero};
+use std::{
+    array::from_fn,
+    fmt::Debug,
+    mem::MaybeUninit,
+    num::NonZero,
+    ptr::addr_of_mut,
+    slice::from_raw_parts,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use getset::Getters;
 use itertools::zip_eq;
@@ -35,6 +43,11 @@ pub use basic::*;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
 pub use paged_vec::PagedVec;
+
+use crate::{
+    arch::CustomBorrow,
+    system::memory::adapter::records::{size_by_layout, AccessRecordMut},
+};
 
 #[cfg(all(any(unix, windows), not(feature = "basic-memory")))]
 pub type MemoryBackend = memmap::MmapMemory;
@@ -183,6 +196,7 @@ impl<M: LinearMemory> AddressMap<M> {
     }
 
     /// Fill each address space memory with zeros. Does not change the config.
+    #[inline]
     pub fn fill_zero(&mut self) {
         for mem in &mut self.mem {
             mem.fill_zero();
@@ -191,6 +205,7 @@ impl<M: LinearMemory> AddressMap<M> {
 
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    #[inline(always)]
     pub unsafe fn get_f<F: PrimeField32>(&self, addr_space: u32, ptr: u32) -> F {
         let layout = &self.config.get_unchecked(addr_space as usize).layout;
         let start = ptr as usize * layout.size();
@@ -201,6 +216,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    #[inline(always)]
     pub unsafe fn get<T: Copy>(&self, (addr_space, ptr): Address) -> T {
         debug_assert_eq!(
             size_of::<T>(),
@@ -218,11 +234,8 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
-    pub unsafe fn get_slice<T: Copy + Debug>(
-        &self,
-        (addr_space, ptr): Address,
-        len: usize,
-    ) -> &[T] {
+    #[inline(always)]
+    pub unsafe fn get_slice<T: Copy>(&self, (addr_space, ptr): Address, len: usize) -> &[T] {
         debug_assert_eq!(
             size_of::<T>(),
             self.config[addr_space as usize].layout.size()
@@ -239,6 +252,7 @@ impl<M: LinearMemory> AddressMap<M> {
     ///
     /// # Safety
     /// - Assumes `addr_space` is within the configured memory and not out of bounds
+    #[inline(always)]
     pub unsafe fn get_u8_slice(&self, addr_space: u32, start: usize, len: usize) -> &[u8] {
         let mem = self.mem.get_unchecked(addr_space as usize);
         mem.get_aligned_slice(start, len)
@@ -251,6 +265,7 @@ impl<M: LinearMemory> AddressMap<M> {
     /// # Safety
     /// - `T` **must** be the correct type for a single memory cell for `addr_space`
     /// - The linear memory in `addr_space` is aligned to `T`.
+    #[inline(always)]
     pub unsafe fn copy_slice_nonoverlapping<T: Copy>(
         &mut self,
         (addr_space, ptr): Address,
@@ -366,10 +381,19 @@ impl GuestMemory {
             .swap((ptr as usize) * size_of::<T>(), values);
     }
 
+    /// Panics or segfaults if `ptr..ptr + len` is out of bounds
+    ///
+    /// # Safety
+    /// - `T` **must** be the correct type for a single memory cell for `addr_space`
+    /// - Assumes `addr_space` is within the configured memory and not out of bounds
     #[inline(always)]
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn get_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
+    pub unsafe fn get_slice<T: Copy>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
         self.memory.get_slice((addr_space, ptr), len)
+    }
+
+    #[inline(always)]
+    pub fn get_min_block_size(&self, addr_space: u32) -> usize {
+        self.memory.config[addr_space as usize].min_block_size
     }
 
     #[inline(always)]
@@ -416,10 +440,12 @@ impl AccessMetadata {
         }
     }
 
+    #[inline(always)]
     pub fn timestamp(&self) -> u32 {
         self.timestamp_and_log_block_size & Self::TIMESTAMP_MASK
     }
 
+    #[inline(always)]
     pub fn block_size(&self) -> u8 {
         let encoded = self.timestamp_and_log_block_size >> Self::LOG_BLOCK_SIZE_SHIFT;
         if encoded == 0 {
@@ -455,6 +481,22 @@ pub struct TracingMemory {
 const INITIAL_CELL_BUFFER: &[u8] = &[0u8; 8];
 // min_block_size never exceeds 8
 const INITIAL_TIMESTAMP_BUFFER: &[u32] = &[INITIAL_TIMESTAMP; 8];
+
+#[derive(Clone, Copy)]
+struct SplitData {
+    timestamp: u32,
+    block_size: u8,
+}
+
+#[derive(Clone, Copy)]
+struct AccessSplitRecord<const MAX_SEG: usize> {
+    start_ptr: u32,
+    // Caller could know `split_data` is used up when start_ptr moves out
+    // of range.
+    split_data: [SplitData; MAX_SEG],
+    /// Length of `split_data`. It is only safe to access `split_data[..len]`.
+    len: usize,
+}
 
 impl TracingMemory {
     pub fn new(
@@ -510,12 +552,12 @@ impl TracingMemory {
     /// Returns (block_start_pointer, block_metadata).
     #[inline(always)]
     fn get_block_metadata<const ALIGN: usize>(
-        &mut self,
+        &self,
         address_space: usize,
         pointer: usize,
     ) -> (u32, AccessMetadata) {
         let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let meta_page = unsafe { self.meta.get_unchecked(address_space) };
         let current_meta = meta_page.get(ptr_index);
 
         let (block_start_index, block_metadata) = if current_meta.offset_to_start == 0 {
@@ -530,21 +572,6 @@ impl TracingMemory {
         let block_start_pointer = (block_start_index * ALIGN) as u32;
 
         (block_start_pointer, block_metadata)
-    }
-
-    #[inline(always)]
-    fn get_timestamp<const ALIGN: usize>(&mut self, address_space: usize, pointer: usize) -> u32 {
-        let ptr_index = pointer / ALIGN;
-        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
-        let current_meta = meta_page.get(ptr_index);
-
-        if current_meta.offset_to_start == 0 {
-            current_meta.timestamp()
-        } else {
-            let offset = current_meta.offset_to_start;
-            let block_start_index = ptr_index - offset as usize;
-            meta_page.get(block_start_index).timestamp()
-        }
     }
 
     /// Updates the metadata with the given block.
@@ -569,6 +596,7 @@ impl TracingMemory {
         }
     }
 
+    #[inline(always)]
     pub(crate) fn add_split_record(&mut self, header: AccessRecordHeader) {
         if header.block_size == header.lowest_block_size {
             return;
@@ -590,13 +618,24 @@ impl TracingMemory {
     }
 
     /// `data_slice` is the underlying data of the record in raw host memory format.
+    #[inline(always)]
     pub(crate) fn add_merge_record(
         &mut self,
         header: AccessRecordHeader,
         data_slice: &[u8],
         prev_ts: &[u32],
     ) {
+        debug_assert_eq!(header.block_size % header.lowest_block_size, 0);
+        debug_assert_eq!(
+            prev_ts.len() as u32,
+            header.block_size / header.lowest_block_size
+        );
+        debug_assert_eq!(
+            data_slice.len() as u32,
+            header.block_size * header.type_size
+        );
         if header.block_size == header.lowest_block_size {
+            // no merge required
             return;
         }
 
@@ -607,55 +646,6 @@ impl TracingMemory {
         record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
         record_mut.data.copy_from_slice(data_slice);
         record_mut.timestamps.copy_from_slice(prev_ts);
-    }
-
-    /// Calculate splits and merges needed for a memory access.
-    /// Returns Some((splits, merge)) or None if no operations needed.
-    #[inline(always)]
-    #[allow(clippy::type_complexity)]
-    fn calculate_splits_and_merges<const BLOCK_SIZE: usize, const ALIGN: usize>(
-        &mut self,
-        address_space: usize,
-        pointer: usize,
-    ) -> Option<(Vec<(usize, usize)>, (usize, usize))> {
-        // Skip adapters if this is a repeated access to the same location with same size
-        let (start_ptr, block_meta) = self.get_block_metadata::<ALIGN>(address_space, pointer);
-        if block_meta.block_size() == BLOCK_SIZE as u8 && start_ptr == pointer as u32 {
-            return None;
-        }
-
-        // Split intersecting blocks to align bytes
-        let mut splits_buf = [(0usize, 0usize); MAX_SEGMENTS];
-        let mut splits_count = 0;
-        let mut current_ptr = pointer;
-        let end_ptr = pointer + BLOCK_SIZE;
-
-        while current_ptr < end_ptr {
-            let (start_ptr, block_metadata) =
-                self.get_block_metadata::<ALIGN>(address_space, current_ptr);
-
-            if block_metadata.block_size() == 0 {
-                current_ptr += ALIGN;
-                continue;
-            }
-
-            if block_metadata.block_size() > ALIGN as u8 {
-                // SAFETY: splits_count < MAX_SEGMENTS by construction since we iterate over
-                // at most BLOCK_SIZE/ALIGN segments and BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *splits_buf.get_unchecked_mut(splits_count) =
-                        (start_ptr as usize, block_metadata.block_size() as usize);
-                }
-                splits_count += 1;
-            }
-
-            // Skip to the next segment after this block ends
-            current_ptr = start_ptr as usize + block_metadata.block_size() as usize;
-        }
-
-        let merge = (pointer, BLOCK_SIZE);
-
-        Some((splits_buf[..splits_count].to_vec(), merge))
     }
 
     #[inline(always)]
@@ -690,8 +680,23 @@ impl TracingMemory {
     }
 
     /// Returns the timestamp of the previous access to `[pointer:BLOCK_SIZE]_{address_space}`.
+    /// This function also updates the access metadata such that the last access to `(address_space,
+    /// pointer)` is of block size `BLOCK_SIZE`. This is done by splitting previous accesses
+    /// that overlap with `[pointer:BLOCK_SIZE]_{address_space}` into accesses of size `ALIGN`
+    /// and then merging the blocks in `pointer..pointer + BLOCK_SIZE` into a single block.
     ///
-    /// Caller must ensure alignment (e.g. via `assert_alignment`) prior to calling this function.
+    /// # Assumptions
+    /// The constant generic `ALIGN` must be the minimum block size for the given `address_space`.
+    /// This is a constant for performance reasons.
+    ///
+    /// The constant generic `BLOCK_SIZE` must be a multiple of `ALIGN`.
+    ///
+    /// The `pointer` must be a multiple of `ALIGN`.
+    /// The caller must ensure alignment of `pointer` (e.g. via `assert_alignment`) prior to calling
+    /// this function.
+    ///
+    /// # Safety
+    /// The `address_space` must be known to be in bounds.
     #[inline(always)]
     fn prev_access_time<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
         &mut self,
@@ -699,86 +704,97 @@ impl TracingMemory {
         pointer: usize,
         prev_values: &[T; BLOCK_SIZE],
     ) -> u32 {
-        debug_assert_eq!(ALIGN, self.data.memory.config[address_space].min_block_size);
-        debug_assert_eq!(
+        debug_assert_eq!(ALIGN, self.data.get_min_block_size(address_space as u32));
+        self.data.debug_assert_cell_type::<T>(address_space as u32);
+        // Calculate what splits are needed for this memory access. We always merge after splits.
+        //
+        // IMPORTANT: this function is very perf sensitive, and we want to skip all split and merge
+        // operations if the previous block access exactly matches `(BLOCK_SIZE, pointer)`.
+        let ptr_index = pointer / ALIGN;
+        // SAFETY: assumes that `address_space` is valid
+        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space) };
+        let current_meta = meta_page.get_mut(ptr_index);
+        if current_meta.block_size() == BLOCK_SIZE as u8 && current_meta.offset_to_start == 0 {
+            // The fast branch where no split+merges are needed
+            let prev_t = current_meta.timestamp();
+            debug_assert!(
+                self.timestamp < (1 << 29),
+                "Timestamp must be less than 2^29"
+            );
+            // The log_block_size doesn't change, so only update timestamp
+            current_meta.timestamp_and_log_block_size &= !AccessMetadata::TIMESTAMP_MASK;
+            current_meta.timestamp_and_log_block_size |= self.timestamp;
+            return prev_t;
+        }
+
+        // Split intersecting blocks to align bytes
+        let mut prev_ts_buf: [MaybeUninit<u32>; MAX_SEGMENTS] =
+            [MaybeUninit::uninit(); MAX_SEGMENTS];
+        // split_idx is the index of the after-split small block of size ALIGN
+        let mut split_idx = 0;
+        let mut max_timestamp = INITIAL_TIMESTAMP;
+        let mut current_ptr = pointer;
+        let end_ptr = pointer + BLOCK_SIZE;
+        let mut push_ts = |ts: u32| {
             unsafe {
-                self.data
-                    .memory
-                    .config
-                    .get_unchecked(address_space)
-                    .layout
-                    .size()
-            },
-            size_of::<T>()
-        );
-        // Calculate what splits and merges are needed for this memory access
-        let result = if let Some((splits, (merge_ptr, merge_size))) =
-            self.calculate_splits_and_merges::<BLOCK_SIZE, ALIGN>(address_space, pointer)
-        {
-            // Process all splits first
-            for (split_ptr, split_size) in splits {
-                let (_, block_metadata) =
-                    self.get_block_metadata::<ALIGN>(address_space, split_ptr);
-                let timestamp = block_metadata.timestamp();
-                self.split_by_meta::<T, ALIGN>(
-                    split_ptr as u32,
-                    timestamp,
-                    split_size as u8,
-                    address_space,
-                );
+                let _ = *prev_ts_buf.get_unchecked_mut(split_idx).write(ts);
             }
+            split_idx += 1;
+        };
+        while current_ptr < end_ptr {
+            let (curr_start_ptr, curr_block_meta) =
+                self.get_block_metadata::<ALIGN>(address_space, current_ptr);
 
-            // Process merge
-            let mut prev_ts_buf = [0u32; MAX_SEGMENTS];
-
-            let mut max_timestamp = INITIAL_TIMESTAMP;
-
-            let mut ptr = merge_ptr;
-            let end_ptr = merge_ptr + merge_size;
-            let mut seg_idx = 0;
-            while ptr < end_ptr {
-                let (_, block_metadata) = self.get_block_metadata::<ALIGN>(address_space, ptr);
-
-                let timestamp = if block_metadata.block_size() > 0 {
-                    block_metadata.timestamp()
-                } else {
-                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, ptr);
-                    INITIAL_TIMESTAMP
-                };
-
-                // SAFETY: seg_idx < MAX_SEGMENTS since we iterate at most merge_size/ALIGN times
-                // and merge_size <= BLOCK_SIZE <= MAX_BLOCK_SIZE
-                unsafe {
-                    *prev_ts_buf.get_unchecked_mut(seg_idx) = timestamp;
+            let block_size = curr_block_meta.block_size();
+            // SAFETY: seg_idx < MAX_SEGMENTS since we iterate at most merge_size/ALIGN times
+            // and merge_size <= BLOCK_SIZE <= MAX_BLOCK_SIZE
+            if block_size == 0 {
+                let curr_start_ptr =
+                    self.handle_uninitialized_memory::<T, ALIGN>(address_space, current_ptr as u32);
+                let block_size = self.initial_block_size.max(ALIGN) as u32;
+                let curr_end_ptr = curr_start_ptr + block_size;
+                let num_ts = (curr_end_ptr.min(end_ptr as u32) - current_ptr as u32) / ALIGN as u32;
+                for _ in 0..num_ts {
+                    push_ts(INITIAL_TIMESTAMP);
+                }
+                current_ptr = curr_end_ptr as usize;
+            } else {
+                let timestamp = curr_block_meta.timestamp();
+                if block_size > ALIGN as u8 {
+                    self.split_by_meta::<T, ALIGN>(
+                        curr_start_ptr,
+                        timestamp,
+                        block_size,
+                        address_space,
+                    );
+                }
+                let curr_end_ptr = curr_start_ptr as usize + block_size as usize;
+                while current_ptr < curr_end_ptr && current_ptr < end_ptr {
+                    push_ts(timestamp);
+                    current_ptr += ALIGN;
                 }
                 max_timestamp = max_timestamp.max(timestamp);
-                ptr += ALIGN;
-                seg_idx += 1;
             }
-
-            // Create the merge record
-            self.add_merge_record(
-                AccessRecordHeader {
-                    timestamp_and_mask: max_timestamp,
-                    address_space: address_space as u32,
-                    pointer: merge_ptr as u32,
-                    block_size: merge_size as u32,
-                    lowest_block_size: ALIGN as u32,
-                    type_size: size_of::<T>() as u32,
-                },
-                // SAFETY: T is plain old data
-                unsafe { slice_as_bytes(prev_values) },
-                &prev_ts_buf[..seg_idx],
-            );
-
-            max_timestamp
-        } else {
-            self.get_timestamp::<ALIGN>(address_space, pointer)
-        };
+        }
+        let prev_ts_buf: [u32; MAX_SEGMENTS] = unsafe { std::mem::transmute(prev_ts_buf) };
+        // Create the merge record
+        self.add_merge_record(
+            AccessRecordHeader {
+                timestamp_and_mask: max_timestamp,
+                address_space: address_space as u32,
+                pointer: pointer as u32,
+                block_size: BLOCK_SIZE as u32,
+                lowest_block_size: ALIGN as u32,
+                type_size: size_of::<T>() as u32,
+            },
+            // SAFETY: T is plain old data
+            unsafe { slice_as_bytes(prev_values) },
+            &prev_ts_buf[..split_idx],
+        );
 
         // Update the metadata for this access
         self.set_meta_block::<BLOCK_SIZE, ALIGN>(address_space, pointer, self.timestamp);
-        result
+        max_timestamp
     }
 
     /// Handle uninitialized memory by creating appropriate split or merge records.
@@ -786,19 +802,18 @@ impl TracingMemory {
     fn handle_uninitialized_memory<T: Copy, const ALIGN: usize>(
         &mut self,
         address_space: usize,
-        pointer: usize,
-    ) {
+        pointer: u32,
+    ) -> u32 {
         if self.initial_block_size >= ALIGN {
             // Split the initial block into chunks
-            let segment_index = pointer / ALIGN;
-            let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
-            let start_ptr = (block_start * ALIGN) as u32;
+            let start_ptr = self.uninitialized_memory_chunk_start::<ALIGN>(pointer);
             self.split_by_meta::<T, ALIGN>(
                 start_ptr,
                 INITIAL_TIMESTAMP,
                 self.initial_block_size as u8,
                 address_space,
             );
+            start_ptr
         } else {
             // Create a merge record for single-byte initialization
             debug_assert_eq!(self.initial_block_size, 1);
@@ -806,7 +821,7 @@ impl TracingMemory {
                 AccessRecordHeader {
                     timestamp_and_mask: INITIAL_TIMESTAMP,
                     address_space: address_space as u32,
-                    pointer: pointer as u32,
+                    pointer,
                     block_size: ALIGN as u32,
                     lowest_block_size: self.initial_block_size as u32,
                     type_size: size_of::<T>() as u32,
@@ -814,7 +829,281 @@ impl TracingMemory {
                 &INITIAL_CELL_BUFFER[..ALIGN],
                 &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
             );
+            pointer
         }
+    }
+
+    #[inline(always)]
+    fn uninitialized_memory_chunk_start<const ALIGN: usize>(&self, pointer: u32) -> u32 {
+        if self.initial_block_size >= ALIGN {
+            // Split the initial block into chunks
+            let segment_index = pointer as usize / ALIGN;
+            let block_start = segment_index & !(self.initial_block_size / ALIGN - 1);
+            (block_start * ALIGN) as u32
+        } else {
+            debug_assert_eq!(self.initial_block_size, 1);
+            pointer
+        }
+    }
+
+    #[inline(always)]
+    fn compute_access_record<T: Copy, const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &self,
+        address_space: u32,
+        pointer: u32,
+    ) -> AccessSplitRecord<BLOCK_SIZE> {
+        debug_assert_eq!(ALIGN, self.data.get_min_block_size(address_space));
+        self.data.debug_assert_cell_type::<T>(address_space);
+        let mut ret = MaybeUninit::<AccessSplitRecord<BLOCK_SIZE>>::uninit();
+        let ret_ptr = ret.as_mut_ptr();
+        let mut max_timestamp = INITIAL_TIMESTAMP;
+        let mut current_ptr = pointer;
+        let end_ptr = pointer + BLOCK_SIZE as u32;
+        let mut seg_idx = 0;
+        while current_ptr < end_ptr {
+            let (mut curr_start_ptr, curr_block_meta) =
+                self.get_block_metadata::<ALIGN>(address_space as usize, current_ptr as usize);
+            let block_size = curr_block_meta.block_size();
+            if current_ptr == pointer {
+                unsafe {
+                    addr_of_mut!((*ret_ptr).start_ptr).write(curr_start_ptr);
+                }
+            }
+            if block_size == 0 {
+                curr_start_ptr = self.uninitialized_memory_chunk_start::<ALIGN>(pointer);
+                let actual_block_size = self.initial_block_size.max(ALIGN) as u32;
+                unsafe {
+                    addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(INITIAL_TIMESTAMP);
+                }
+                current_ptr = curr_start_ptr + actual_block_size;
+            } else {
+                let timestamp = curr_block_meta.timestamp();
+                unsafe {
+                    addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(timestamp);
+                }
+                max_timestamp = max_timestamp.max(timestamp);
+                current_ptr = curr_start_ptr + block_size as u32;
+            }
+            unsafe {
+                addr_of_mut!((*ret_ptr).split_data[seg_idx].block_size).write(block_size);
+            }
+            seg_idx += 1;
+        }
+        // SAFETY: we have written to start_ptr, split_data up to seg_idx, and now len
+        // - split_data[len..] is still uninit, and we guarantee we never read from it.
+        unsafe {
+            addr_of_mut!((*ret_ptr).len).write(seg_idx);
+            ret.assume_init()
+        }
+    }
+
+    /// Performs batch getting of the previous access times of a slice in guest memory in address
+    /// space `address_space` starting at `pointer` of length `access_timestamp.len()` elements of
+    /// type `T`.
+    ///
+    /// This function does not mutate the internal timestamp. It
+    /// takes in the `access_timestamp`s to update this slice's metadata to as a separate argument.
+    /// The `access_timestamp` is a closure that takes `i = 0..len` and outputs the new access
+    /// timestamp for the `i`th block.
+    ///
+    /// Returns a vector of length `len` with the previous access timestamps of
+    /// each block. Note that if access adapter split and merges were necessary, then the previous
+    /// access timestamp is the access timestamp after all split and merges were performed.
+    ///
+    /// Note that this function does not mutate `self.data`.
+    pub fn batch_prev_access_times<
+        T: Copy + Send + Sync,
+        const BLOCK_SIZE: usize,
+        const ALIGN: usize,
+        FN: (Fn(usize) -> u32) + Sync,
+    >(
+        &mut self,
+        address_space: u32,
+        pointer: u32,
+        len: usize,
+        // Access timestamp for each block. Also `access_timestamp.len()` indicates the number of
+        // accesses.
+        access_timestamp: FN,
+    ) -> Vec<u32> {
+        // Goal: read a batch of memory with the same `BLOCK_SIZE` at given the timestamps.
+        // High-level overview:
+        // The batch read splits memory into the following segments:
+        // | prev | block 1 | ... | block n | succ |
+        // `prev` and `succ` are split from the existing memory segments (which could be
+        // uninitialized). `block 1` to `block n` split the existing memory segments and
+        // merge `BLOCK_SIZE` cells into one segment.
+        //
+        // First, we need to know the related segments of each block. We could use the start pointer
+        // of each block to find the first overlapped segment, then find all the segments that
+        // overlap with the block. This operation is read-only so it's thread-safe.
+        //
+        // This function acquires a mutable reference to `access_adapter_records`, and then within
+        // this function we use an `AtomicU64` to update the access adapter records in parallel in a
+        // thread-safe manner.
+        //
+        // We want to insert the split access adapter record. Here we parallelize
+        // by blocks. Because 2 adjacent blocks could have at most 1 overlapped segment. We
+        // always let the left block to add the access adapter record for the overlapped
+        // segment.
+        //
+        // The next step is to update the access metadata. Each block is responsible for updating
+        // the access metadata in its own block. `prev`/`succ` are handled by `block 1`/`block n`.
+        //
+        // Finally, we need to add the merge access adapter records. Each block is responsible for
+        // adding its own merge access adapter record. Again, `access_adapter_records` is
+        // thread-safe so this is OK.
+        // Touch all related pages to avoid racing page allocation.
+        let meta_page = unsafe { self.meta.get_unchecked_mut(address_space as usize) };
+        let start = pointer.saturating_sub(MAX_BLOCK_SIZE as u32);
+        let batch_end = pointer + len as u32 * BLOCK_SIZE as u32;
+        let end = batch_end + MAX_BLOCK_SIZE as u32 - 1;
+        meta_page.par_touch(start as usize, end as usize);
+        let batch_processor = BatchReadProcessor::<T>::new(self, address_space);
+        let access_records: Vec<_> = (0..len)
+            .into_par_iter()
+            .map(|i| {
+                let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
+                let access_t = access_timestamp(i);
+                let (start_ptr, start_meta) = self
+                    .get_block_metadata::<ALIGN>(address_space as usize, block_start_ptr as usize);
+                if start_ptr == block_start_ptr && start_meta.block_size() == BLOCK_SIZE as u8 {
+                    let prev_t = start_meta.timestamp(); // no split or merges needed
+                    unsafe {
+                        batch_processor
+                            .set_meta_block::<BLOCK_SIZE, ALIGN>(start_ptr as usize, access_t);
+                    }
+                    return AccessSplitRecord {
+                        start_ptr,
+                        split_data: [SplitData {
+                            timestamp: prev_t,
+                            block_size: BLOCK_SIZE as u8,
+                        }; BLOCK_SIZE],
+                        len: 1,
+                    };
+                }
+                self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(address_space, block_start_ptr)
+            })
+            .collect();
+        access_records
+            .into_par_iter()
+            .enumerate()
+            .map(|(i, access_record)| {
+                let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
+                let AccessSplitRecord {
+                    start_ptr,
+                    split_data,
+                    len: num_segs,
+                } = access_record;
+                if start_ptr == block_start_ptr && split_data[0].block_size == BLOCK_SIZE as u8 {
+                    return split_data[0].timestamp;
+                }
+                let access_t = access_timestamp(i);
+                // Edge case: the first block is responsible for the first out-of-bound segment.
+                if i == 0 && start_ptr < pointer {
+                    unsafe {
+                        batch_processor.set_timestamp::<ALIGN>(
+                            start_ptr,
+                            pointer,
+                            split_data[0].timestamp,
+                        );
+                    }
+                }
+
+                let block_end_ptr = pointer + (i as u32 + 1) * BLOCK_SIZE as u32;
+                let mut curr_ptr = start_ptr;
+                let mut seg_idx = 0;
+
+                let mut prev_ts_buf = [INITIAL_TIMESTAMP; MAX_SEGMENTS];
+                let mut split_idx = 0;
+                let mut max_timestamp = INITIAL_TIMESTAMP;
+                let mut push_ts = |ts: u32| {
+                    prev_ts_buf[split_idx] = ts;
+                    split_idx += 1;
+                };
+                while curr_ptr < block_end_ptr {
+                    let SplitData {
+                        timestamp,
+                        mut block_size,
+                    } = split_data[seg_idx];
+                    if curr_ptr >= block_start_ptr || i == 0 {
+                        let mut add_split = true;
+                        if block_size == 0 {
+                            // In the merge case, all cells in the segment must be in the block.
+                            if self.initial_block_size < ALIGN {
+                                // Create a merge record for single-byte initialization
+                                debug_assert_eq!(self.initial_block_size, 1);
+                                batch_processor.add_merge_record(
+                                    AccessRecordHeader {
+                                        timestamp_and_mask: INITIAL_TIMESTAMP,
+                                        address_space,
+                                        pointer: curr_ptr,
+                                        block_size: ALIGN as u32,
+                                        lowest_block_size: self.initial_block_size as u32,
+                                        type_size: size_of::<T>() as u32,
+                                    },
+                                    &INITIAL_TIMESTAMP_BUFFER[..ALIGN],
+                                );
+                                block_size = ALIGN as u8;
+                                add_split = false;
+                                push_ts(INITIAL_TIMESTAMP);
+                            } else {
+                                block_size = self.initial_block_size as u8;
+                            }
+                        }
+                        if add_split {
+                            batch_processor.add_split_record(AccessRecordHeader {
+                                timestamp_and_mask: timestamp,
+                                address_space,
+                                pointer: curr_ptr,
+                                block_size: block_size as u32,
+                                lowest_block_size: ALIGN as u32,
+                                type_size: size_of::<T>() as u32,
+                            });
+                            let curr_end_ptr = curr_ptr + block_size as u32;
+                            let num_ts =
+                                (curr_end_ptr.min(block_end_ptr) - curr_ptr) / ALIGN as u32;
+                            for _ in 0..num_ts {
+                                push_ts(timestamp);
+                            }
+                            max_timestamp = max_timestamp.max(timestamp);
+                        }
+                        // No need to update the metadata of cells in the block because we will
+                        // merge them later.
+                    }
+                    curr_ptr += block_size as u32;
+                    seg_idx += 1;
+                }
+                debug_assert_eq!(seg_idx, num_segs);
+                // Create the merge record
+                unsafe {
+                    batch_processor.add_merge_record(
+                        AccessRecordHeader {
+                            timestamp_and_mask: max_timestamp,
+                            address_space,
+                            pointer: block_start_ptr,
+                            block_size: BLOCK_SIZE as u32,
+                            lowest_block_size: ALIGN as u32,
+                            type_size: size_of::<T>() as u32,
+                        },
+                        &prev_ts_buf[..split_idx],
+                    );
+                    batch_processor
+                        .set_meta_block::<BLOCK_SIZE, ALIGN>(block_start_ptr as usize, access_t);
+                }
+
+                // Edge case: the last block is responsible for the last out-of-bounds segment
+                if i + 1 == len && curr_ptr > block_end_ptr {
+                    unsafe {
+                        batch_processor.set_timestamp::<ALIGN>(
+                            block_end_ptr,
+                            curr_ptr,
+                            split_data[seg_idx - 1].timestamp,
+                        );
+                    }
+                }
+                max_timestamp
+            })
+            .collect()
     }
 
     /// Atomic read operation which increments the timestamp by 1.
@@ -989,7 +1278,7 @@ impl TracingMemory {
             assert!(
                 current_cnt == 0
                     || (current_address.address_space == addr_space
-                        && current_address.pointer + current_cnt as u32 == ptr),
+                    && current_address.pointer + current_cnt as u32 == ptr),
                 "The union of all touched blocks must consist of blocks with sizes divisible by `CHUNK`"
             );
             debug_assert!(block_size >= min_block_size as u8);
@@ -1077,6 +1366,7 @@ impl TracingMemory {
                             .iter()
                             .max()
                             .unwrap();
+
                         self.add_merge_record(
                             AccessRecordHeader {
                                 timestamp_and_mask: timestamp,
@@ -1115,5 +1405,132 @@ impl TracingMemory {
             .iter()
             .map(|&x| log2_strict_usize(x as usize) as u8)
             .collect()
+    }
+}
+
+struct BatchReadProcessor<T> {
+    access_adapter_arena: *mut DenseRecordArena,
+    position: AtomicUsize,
+    data_slice: *const T,
+    meta_page: *mut PagedVec<AccessMetadata, PAGE_SIZE>,
+}
+
+unsafe impl<T: Copy + Send + Sync> Send for BatchReadProcessor<T> {}
+unsafe impl<T: Copy + Send + Sync> Sync for BatchReadProcessor<T> {}
+
+impl<T: Copy + Send + Sync> BatchReadProcessor<T> {
+    pub fn new(tracing_memory: &mut TracingMemory, addr_space: u32) -> Self {
+        let start = tracing_memory
+            .access_adapter_records
+            .records_buffer
+            .position();
+        let access_adapter_arena =
+            &mut tracing_memory.access_adapter_records as *mut DenseRecordArena;
+        let data_slice = unsafe { tracing_memory.data.get_slice(addr_space, 0, 0).as_ptr() };
+        let meta_page = unsafe {
+            tracing_memory.meta.get_unchecked_mut(addr_space as usize)
+                as *mut PagedVec<AccessMetadata, PAGE_SIZE>
+        };
+        Self {
+            access_adapter_arena,
+            position: AtomicUsize::new(start as usize),
+            data_slice,
+            meta_page,
+        }
+    }
+
+    #[inline(always)]
+    fn allocate(&self, header: &AccessRecordHeader) -> AccessRecordMut {
+        let layout = AccessLayout::from_record_header(header);
+        let size = size_by_layout(&layout);
+        let start = self.position.fetch_add(size, Ordering::AcqRel);
+        let access_adapter_arena = unsafe { &mut *self.access_adapter_arena };
+        let bytes = &mut access_adapter_arena.records_buffer.get_mut()[start..(start + size)];
+        <[u8] as CustomBorrow<AccessRecordMut<'_>, AccessLayout>>::custom_borrow(bytes, layout)
+    }
+
+    fn add_split_record(&self, header: AccessRecordHeader) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+        let data_slice = unsafe {
+            from_raw_parts(
+                self.data_slice.add(header.pointer as usize) as *const u8,
+                header.block_size as usize * size_of::<T>(),
+            )
+        };
+
+        let record_mut = self.allocate(&header);
+        *record_mut.header = header;
+        record_mut.data.copy_from_slice(data_slice);
+        // we don't mind garbage values in prev_*
+    }
+
+    #[inline(always)]
+    fn add_merge_record(&self, header: AccessRecordHeader, prev_ts: &[u32]) {
+        if header.block_size == header.lowest_block_size {
+            return;
+        }
+        debug_assert_eq!(header.block_size % header.lowest_block_size, 0);
+        debug_assert_eq!(
+            prev_ts.len() as u32,
+            header.block_size / header.lowest_block_size
+        );
+        let data_slice = unsafe {
+            from_raw_parts(
+                self.data_slice.add(header.pointer as usize) as *const u8,
+                header.block_size as usize * size_of::<T>(),
+            )
+        };
+
+        let record_mut = self.allocate(&header);
+        *record_mut.header = header;
+        record_mut.header.timestamp_and_mask |= MERGE_AND_NOT_SPLIT_FLAG;
+        record_mut.data.copy_from_slice(data_slice);
+        record_mut.timestamps.copy_from_slice(prev_ts);
+    }
+
+    #[inline(always)]
+    unsafe fn set_timestamp<const MIN_BLOCK_SIZE: usize>(
+        &self,
+        start_ptr: u32,
+        end_ptr: u32,
+        timestamp: u32,
+    ) {
+        let begin = start_ptr / MIN_BLOCK_SIZE as u32;
+        let end = end_ptr / MIN_BLOCK_SIZE as u32;
+        let meta_page = unsafe { &mut *self.meta_page };
+        for i in begin..end {
+            meta_page.set(
+                i as usize,
+                AccessMetadata::new(timestamp, MIN_BLOCK_SIZE as u8, 0),
+            );
+        }
+    }
+
+    #[inline(always)]
+    unsafe fn set_meta_block<const BLOCK_SIZE: usize, const ALIGN: usize>(
+        &self,
+        pointer: usize,
+        timestamp: u32,
+    ) {
+        let ptr = pointer / ALIGN;
+        let meta_page = unsafe { &mut *self.meta_page };
+        meta_page.set(ptr, AccessMetadata::new(timestamp, BLOCK_SIZE as u8, 0));
+        // Store offsets for other positions in the block
+        for i in 1..(BLOCK_SIZE / ALIGN) {
+            meta_page.set(ptr + i, AccessMetadata::new(0, 0, i as u8));
+        }
+    }
+}
+
+impl<T> Drop for BatchReadProcessor<T> {
+    fn drop(&mut self) {
+        let access_adapter_arena = unsafe { &mut *self.access_adapter_arena };
+        // No one else is accessing when dropping.
+        let new_position = self.position.load(Ordering::Acquire);
+        access_adapter_arena
+            .records_buffer
+            .set_position(new_position as u64);
     }
 }

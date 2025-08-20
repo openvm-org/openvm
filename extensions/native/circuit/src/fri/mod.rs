@@ -4,7 +4,7 @@ use std::{
     mem::offset_of,
 };
 
-use itertools::zip_eq;
+use itertools::{izip, zip_eq, Itertools};
 use openvm_circuit::{
     arch::*,
     system::{
@@ -21,7 +21,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, NATIVE_AS,
+};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -773,7 +775,8 @@ where
             &mut record.common.a_ptr_aux.prev_timestamp,
         );
         record.common.a_ptr_ptr = a;
-        record.common.a_ptr = a_ptr.as_canonical_u32();
+        let a_ptr = a_ptr.as_canonical_u32();
+        record.common.a_ptr = a_ptr;
 
         let b_ptr_ptr = b.as_canonical_u32();
         let [b_ptr]: [F; 1] = tracing_read_native(
@@ -782,7 +785,8 @@ where
             &mut record.common.b_ptr_aux.prev_timestamp,
         );
         record.common.b_ptr_ptr = b;
-        record.common.b_ptr = b_ptr.as_canonical_u32();
+        let b_ptr = b_ptr.as_canonical_u32();
+        record.common.b_ptr = b_ptr;
 
         tracing_read_native::<F, 1>(
             state.memory,
@@ -799,57 +803,85 @@ where
 
         let length = length as usize;
 
-        let data = if !is_init {
-            let hint_steam = &mut state.streams.hint_space[hint_id];
-            hint_steam.drain(0..length).collect()
-        } else {
-            vec![]
+        if !is_init {
+            let hint_stream = &mut state.streams.hint_space[hint_id];
+            for (i, (prev_data, hint_value)) in record.a_write_prev_data[..length]
+                .iter_mut()
+                .rev()
+                .zip_eq(hint_stream.drain(0..length))
+                .enumerate()
+            {
+                let mut values = [hint_value];
+                // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+                unsafe {
+                    state
+                        .memory
+                        .data
+                        .swap::<F, 1>(NATIVE_AS, a_ptr + i as u32, &mut values)
+                };
+                *prev_data = values[0];
+            }
         };
 
-        let mut as_and_bs = Vec::with_capacity(length);
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..length {
-            let workload_row = &mut record.workload[length - i - 1];
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let a_slice: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(state.memory as *const TracingMemory) }
+                .data()
+                .get_slice(NATIVE_AS, record.common.a_ptr, length)
+        };
+        // SAFETY: NATIVE_AS is in bounds. Cell type is `F`.
+        let b_slice_flat: &[F] = unsafe {
+            // SAFETY: we cast from mutable borrow to immutable borrow to get around issues later,
+            // but we guarantee that the subsequent mutations with `batch_prev_access_times` will
+            // not mutate `state.memory.data`
+            { &*(state.memory as *const TracingMemory) }
+                .data()
+                .get_slice(NATIVE_AS, record.common.b_ptr, length * EXT_DEG)
+        };
 
-            let a_ptr_i = record.common.a_ptr + i as u32;
-            let [a]: [F; 1] = if !is_init {
-                let mut prev = [F::ZERO; 1];
-                tracing_write_native(
-                    state.memory,
-                    a_ptr_i,
-                    [data[i]],
-                    &mut workload_row.a_aux.prev_timestamp,
-                    &mut prev,
-                );
-                record.a_write_prev_data[length - i - 1] = prev[0];
-                [data[i]]
-            } else {
-                tracing_read_native(
-                    state.memory,
-                    a_ptr_i,
-                    &mut workload_row.a_aux.prev_timestamp,
-                )
-            };
-            let b_ptr_i = record.common.b_ptr + (EXT_DEG * i) as u32;
-            let b = tracing_read_native::<F, EXT_DEG>(
-                state.memory,
-                b_ptr_i,
-                &mut workload_row.b_aux.prev_timestamp,
+        let start_t = state.memory.timestamp();
+        let a_prev_ts = state
+            .memory
+            .batch_prev_access_times::<F, 1, DEFAULT_NATIVE_BLOCK_SIZE, _>(
+                NATIVE_AS,
+                a_ptr,
+                length,
+                |i| start_t + 2 * i as u32,
             );
+        let b_prev_ts = state
+            .memory
+            .batch_prev_access_times::<F, EXT_DEG, DEFAULT_NATIVE_BLOCK_SIZE, _>(
+                NATIVE_AS,
+                b_ptr,
+                length,
+                |i| start_t + (2 * i + 1) as u32,
+            );
+        state.memory.increment_timestamp_by(2 * length as u32);
 
-            as_and_bs.push((a, b));
-        }
-
+        // The following is the computation of the partial RLCs, where each partial result depends
+        // on the former. This entire computation does not involve any guest state access.
         let mut result = [F::ZERO; EXT_DEG];
-        for (i, (a, b)) in as_and_bs.into_iter().rev().enumerate() {
-            let workload_row = &mut record.workload[i];
-
+        // workload must be written to in reverse due to how the RLC is evaluated
+        for (workload_row, (a, a_prev_t, b, b_prev_t)) in record.workload.iter_mut().zip(
+            izip!(
+                a_slice.iter(),
+                a_prev_ts.into_iter(),
+                b_slice_flat.chunks_exact(EXT_DEG),
+                b_prev_ts.into_iter()
+            )
+            .rev(),
+        ) {
+            let b: &[F; EXT_DEG] = b.try_into().unwrap();
+            let mut b: [F; EXT_DEG] = *b;
+            b[0] -= *a;
             // result = result * alpha + (b - a)
-            result = FieldExtension::add(
-                FieldExtension::multiply(result, alpha),
-                FieldExtension::subtract(b, elem_to_ext(a)),
-            );
-            workload_row.a = a;
+            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
+            workload_row.a = *a;
+            workload_row.a_aux.prev_timestamp = a_prev_t;
+            workload_row.b_aux.prev_timestamp = b_prev_t;
             workload_row.result = result;
         }
 
