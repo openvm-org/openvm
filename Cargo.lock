@@ -5133,6 +5133,7 @@ dependencies = [
  "openvm-transpiler",
  "rand 0.8.5",
  "serde",
+ "test-case",
  "tracing",
  "tracing-subscriber 0.3.19",
 ]

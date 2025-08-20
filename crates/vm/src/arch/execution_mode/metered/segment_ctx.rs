@@ -40,7 +40,7 @@ impl Default for SegmentationLimits {
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
-    widths: Vec<usize>,
+    pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
     pub instret_last_segment_check: u64,
@@ -102,7 +102,7 @@ impl SegmentationCtx {
 
     /// Calculate the total cells used based on trace heights and widths
     #[inline(always)]
-    fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
+    pub fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
 
         // SAFETY: Length equality is asserted during initialization
@@ -117,7 +117,7 @@ impl SegmentationCtx {
 
     /// Calculate the total interactions based on trace heights and interaction counts
     #[inline(always)]
-    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
+    pub fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.interactions.len());
 
         // SAFETY: Length equality is asserted during initialization

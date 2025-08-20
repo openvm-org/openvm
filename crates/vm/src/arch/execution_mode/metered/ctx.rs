@@ -152,17 +152,21 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[allow(dead_code)]
-    pub fn print_heights(&self) {
-        println!("{:>10} {:<30}", "Height", "Air Name");
-        println!("{}", "-".repeat(42));
-        for (i, height) in self.trace_heights.iter().enumerate() {
-            let air_name = self
-                .segmentation_ctx
-                .air_names
-                .get(i)
-                .map(|s| s.as_str())
-                .unwrap_or("Unknown");
-            println!("{:>10} {:<30}", height, air_name);
+    pub fn print_trace_stats(&self) {
+        println!(
+            "| {:<90} | {:>10} | {:>10} |",
+            "Air Name", "Height", "Cells"
+        );
+        println!("|:{:-<90}:|{:->11}:|{:->11}:|", "", "", "");
+        for (height, air_name, width) in self
+            .trace_heights
+            .iter()
+            .zip(&self.segmentation_ctx.air_names)
+            .zip(&self.segmentation_ctx.widths)
+            .map(|((height, air_name), width)| (height, air_name.as_str(), width))
+        {
+            let cells = (*height as usize) * width;
+            println!("| {:<90} | {:>10} | {:>10} |", air_name, height, cells);
         }
     }
 }
