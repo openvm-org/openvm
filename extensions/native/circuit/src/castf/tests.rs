@@ -1,8 +1,12 @@
 use std::borrow::BorrowMut;
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
-    MemoryConfig,
+    Arena, MemoryConfig, PreflightExecutor,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -22,7 +26,10 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
+#[cfg(feature = "cuda")]
+use super::cuda::CastFChipGpu;
 use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFExecutor, LIMB_BITS};
 use crate::{
     adapters::{
@@ -32,6 +39,9 @@ use crate::{
     test_utils::write_native_array,
     utils::CASTF_MAX_BITS,
 };
+
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{default_var_range_checker_bus, dummy_range_checker};
 
 const MAX_INS_CAPACITY: usize = 128;
 const READ_SIZE: usize = 1;
@@ -53,19 +63,43 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+#[cfg(feature = "cuda")]
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<F, CastFExecutor, CastFAir, CastFChipGpu, CastFChip<F>> {
+    let range_bus = default_var_range_checker_bus();
+    let adapter_air = ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = CastFCoreAir::new(range_bus);
+    let air = CastFAir::new(adapter_air, core_air);
+
+    let adapter_step = ConvertAdapterExecutor::<1, 4>::new();
+    let executor = CastFExecutor::new(adapter_step);
+
+    let core_filler = CastFCoreFiller::new(ConvertAdapterFiller, dummy_range_checker(range_bus));
+
+    let cpu_chip = CastFChip::new(core_filler, tester.dummy_memory_helper());
+    let gpu_chip = CastFChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     b: Option<F>,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let b_val = b.unwrap_or(F::from_canonical_u32(rng.gen_range(0..1 << CASTF_MAX_BITS)));
     let b_ptr = write_native_array(tester, rng, Some([b_val])).1;
 
     let a = gen_pointer(rng, RV32_REGISTER_NUM_LIMBS);
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             CastfOpcode::CASTF.global_opcode(),
             [a, b_ptr, 0, RV32_MEMORY_AS as usize, AS::Native as usize],
@@ -76,6 +110,24 @@ fn set_and_execute(
     assert_eq!(result.map(|x| x.as_canonical_u32() as u8), expected);
 }
 
+fn rand_set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    b: Option<F>,
+    num_ops: usize,
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
+    let mut rng = create_seeded_rng();
+    for _ in 0..num_ops {
+        set_and_execute(tester, executor, arena, &mut rng, b);
+    }
+
+    set_and_execute(tester, executor, arena, &mut rng, Some(F::ZERO));
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// POSITIVE TESTS
 ///
@@ -83,21 +135,41 @@ fn set_and_execute(
 /// passes all constraints.
 ///////////////////////////////////////////////////////////////////////////////////////
 
-#[test]
-fn castf_rand_test() {
-    let mut rng = create_seeded_rng();
+#[test_case(100)]
+fn castf_rand_test(num_ops: usize) {
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut harness = create_test_chip(&tester);
-    let num_ops = 100;
-
-    for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, None);
-    }
-
-    set_and_execute(&mut tester, &mut harness, &mut rng, Some(F::ZERO));
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        None,
+        num_ops,
+    );
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(100)]
+fn test_cuda_castf_rand(num_ops: usize) {
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        None,
+        num_ops,
+    );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -120,7 +192,13 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
 
     let mut harness = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut harness, &mut rng, b);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        b,
+    );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
 
@@ -206,7 +284,13 @@ fn castf_overflow_in_val_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::volatile(MemoryConfig::default());
     let mut harness = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut harness, &mut rng, Some(F::NEG_ONE));
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        Some(F::NEG_ONE),
+    );
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////

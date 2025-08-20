@@ -4,8 +4,9 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
@@ -23,6 +24,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
+#[cfg(feature = "cuda")]
+use crate::field_extension::cuda::FieldExtensionChipGpu;
 use crate::{
     adapters::{
         NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,
@@ -34,6 +37,10 @@ use crate::{
     },
     test_utils::write_native_array,
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
@@ -53,22 +60,52 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+#[cfg(feature = "cuda")]
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<
+    F,
+    FieldExtensionExecutor,
+    FieldExtensionAir,
+    FieldExtensionChipGpu,
+    FieldExtensionChip<F>,
+> {
+    let adapter_air =
+        NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = FieldExtensionCoreAir::new();
+    let air = FieldExtensionAir::new(adapter_air, core_air);
+
+    let adapter_step = NativeVectorizedAdapterExecutor::new();
+    let executor = FieldExtensionExecutor::new(adapter_step);
+
+    let core_filler = FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller);
+
+    let cpu_chip = FieldExtensionChip::new(core_filler, tester.dummy_memory_helper());
+    let gpu_chip = FieldExtensionChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: FieldExtensionOpcode,
     y: Option<[F; EXT_DEG]>,
     z: Option<[F; EXT_DEG]>,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let (y_val, y_ptr) = write_native_array(tester, rng, y);
     let (z_val, z_ptr) = write_native_array(tester, rng, z);
 
     let x_ptr = gen_pointer(rng, EXT_DEG);
 
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -86,6 +123,22 @@ fn set_and_execute(
     assert_eq!(result, expected);
 }
 
+fn rand_set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    opcode: FieldExtensionOpcode,
+    num_ops: usize,
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
+    let mut rng = create_seeded_rng();
+    for _ in 0..num_ops {
+        set_and_execute(tester, executor, arena, &mut rng, opcode, None, None);
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////
 /// POSITIVE TESTS
 ///
@@ -98,16 +151,44 @@ fn set_and_execute(
 #[test_case(FieldExtensionOpcode::BBE4MUL, 100)]
 #[test_case(FieldExtensionOpcode::BBE4DIV, 100)]
 fn rand_field_extension_test(opcode: FieldExtensionOpcode, num_ops: usize) {
-    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&tester);
 
-    for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode, None, None);
-    }
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        opcode,
+        num_ops,
+    );
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(FieldExtensionOpcode::FE4ADD, 100)]
+#[test_case(FieldExtensionOpcode::FE4SUB, 100)]
+#[test_case(FieldExtensionOpcode::BBE4MUL, 100)]
+#[test_case(FieldExtensionOpcode::BBE4DIV, 100)]
+fn test_cuda_rand_field_extension_tracegen(opcode: FieldExtensionOpcode, num_ops: usize) {
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        opcode,
+        num_ops,
+    );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -136,7 +217,15 @@ fn run_negative_field_extension_test(
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&tester);
-    set_and_execute(&mut tester, &mut harness, &mut rng, opcode, y, z);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+        y,
+        z,
+    );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {

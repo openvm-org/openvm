@@ -1,6 +1,13 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
+};
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
@@ -26,6 +33,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
+#[cfg(feature = "cuda")]
+use super::cuda::NativeBranchEqChipGpu;
 use crate::{
     adapters::{BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller},
     branch_eq::{
@@ -58,16 +67,51 @@ fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
+#[cfg(feature = "cuda")]
+
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<
+    F,
+    NativeBranchEqExecutor,
+    NativeBranchEqAir,
+    NativeBranchEqChipGpu,
+    NativeBranchEqChip<F>,
+> {
+    let adapter_air =
+        BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
+    let air = NativeBranchEqAir::new(adapter_air, core_air);
+
+    let adapter_step = BranchNativeAdapterExecutor::new();
+    let executor = NativeBranchEqExecutor::new(
+        adapter_step,
+        NativeBranchEqualOpcode::CLASS_OFFSET,
+        DEFAULT_PC_STEP,
+    );
+
+    let core_filler = NativeBranchEqualFiller::new(BranchNativeAdapterFiller);
+
+    let cpu_chip = NativeBranchEqChip::new(core_filler, tester.dummy_memory_helper());
+    let gpu_chip = NativeBranchEqChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness,
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: NativeBranchEqualOpcode,
     a: Option<F>,
     b: Option<F>,
     imm: Option<i32>,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let a_val = a.unwrap_or(rng.gen());
     let b_val = b.unwrap_or(if rng.gen_bool(0.5) { a_val } else { rng.gen() });
     let imm = imm.unwrap_or(rng.gen_range((-ABS_MAX_IMM)..ABS_MAX_IMM));
@@ -76,8 +120,8 @@ fn set_and_execute(
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)) - imm.unsigned_abs());
 
     tester.execute_with_pc(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::new(
             opcode.global_opcode(),
             a,
@@ -92,15 +136,31 @@ fn set_and_execute(
     );
 
     let cmp_result = run_eq(opcode.0 == BranchEqualOpcode::BEQ, a_val, b_val).0;
-    let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
-    let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
+    let to_pc = tester.execution_final_state().pc.as_canonical_u32() as i32;
     let pc_inc = if cmp_result {
         imm
     } else {
         DEFAULT_PC_STEP as i32
     };
 
-    assert_eq!(to_pc, from_pc + pc_inc);
+    assert_eq!(to_pc, initial_pc as i32 + pc_inc);
+}
+
+fn rand_set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    opcode: BranchEqualOpcode,
+    num_ops: usize,
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
+    let opcode = NativeBranchEqualOpcode(opcode);
+    let mut rng = create_seeded_rng();
+    for _ in 0..num_ops {
+        set_and_execute(tester, executor, arena, &mut rng, opcode, None, None, None);
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -113,24 +173,40 @@ fn set_and_execute(
 #[test_case(BranchEqualOpcode::BEQ, 100)]
 #[test_case(BranchEqualOpcode::BNE, 100)]
 fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
-    let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip(&mut tester);
-    let opcode = NativeBranchEqualOpcode(opcode);
-    for _ in 0..num_ops {
-        set_and_execute(
-            &mut tester,
-            &mut harness,
-            &mut rng,
-            opcode,
-            None,
-            None,
-            None,
-        );
-    }
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        opcode,
+        num_ops,
+    );
 
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(BranchEqualOpcode::BEQ, 100)]
+#[test_case(BranchEqualOpcode::BNE, 100)]
+fn test_cuda_rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+    rand_set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        opcode,
+        num_ops,
+    );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -156,7 +232,8 @@ fn run_negative_branch_eq_test(
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         NativeBranchEqualOpcode(opcode),
         Some(a),
@@ -292,7 +369,8 @@ fn execute_roundtrip_sanity_test() {
     let y = F::from_canonical_u32(u32::from_le_bytes([19, 32, 180, 60]));
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         NativeBranchEqualOpcode(BranchEqualOpcode::BEQ),
         Some(x),
@@ -302,7 +380,8 @@ fn execute_roundtrip_sanity_test() {
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         NativeBranchEqualOpcode(BranchEqualOpcode::BNE),
         Some(x),

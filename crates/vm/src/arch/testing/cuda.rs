@@ -183,6 +183,10 @@ impl TestBuilder<F> for GpuChipTestBuilder {
     fn execution_final_state(&self) -> ExecutionState<F> {
         self.execution.0.records.last().unwrap().final_state
     }
+
+    fn streams_mut(&mut self) -> &mut Streams<F> {
+        &mut self.streams
+    }
 }
 
 pub struct GpuChipTestBuilder {

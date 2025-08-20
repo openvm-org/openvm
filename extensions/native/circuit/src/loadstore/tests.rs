@@ -1,11 +1,13 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{
     conversion::AS,
+    NativeLoadStore4Opcode,
     NativeLoadStoreOpcode::{self, *},
 };
 use openvm_stark_backend::{
@@ -22,6 +24,8 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
+#[cfg(feature = "cuda")]
+use crate::loadstore::cuda::NativeLoadStoreChipGpu;
 use crate::{
     adapters::{
         NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterExecutor,
@@ -33,6 +37,10 @@ use crate::{
     },
     test_utils::write_native_array,
 };
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
@@ -40,6 +48,14 @@ type Harness<const NUM_CELLS: usize> = TestChipHarness<
     F,
     NativeLoadStoreExecutor<NUM_CELLS>,
     NativeLoadStoreAir<NUM_CELLS>,
+    NativeLoadStoreChip<F, NUM_CELLS>,
+>;
+#[cfg(feature = "cuda")]
+type GpuHarness<const NUM_CELLS: usize> = GpuTestChipHarness<
+    F,
+    NativeLoadStoreExecutor<NUM_CELLS>,
+    NativeLoadStoreAir<NUM_CELLS>,
+    NativeLoadStoreChipGpu<NUM_CELLS>,
     NativeLoadStoreChip<F, NUM_CELLS>,
 >;
 
@@ -60,12 +76,37 @@ fn create_test_chip<const NUM_CELLS: usize>(tester: &VmChipTestBuilder<F>) -> Ha
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-fn set_and_execute<const NUM_CELLS: usize>(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness<NUM_CELLS>,
+#[cfg(feature = "cuda")]
+fn create_test_harness<const NUM_CELLS: usize>(
+    tester: &GpuChipTestBuilder,
+    offset: usize,
+) -> GpuHarness<NUM_CELLS> {
+    let adapter_air =
+        NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge());
+    let core_air = NativeLoadStoreCoreAir::new(offset);
+    let air = NativeLoadStoreAir::new(adapter_air, core_air);
+
+    let adapter_step = NativeLoadStoreAdapterExecutor::new(offset);
+    let executor = NativeLoadStoreExecutor::new(adapter_step, offset);
+
+    let core_filler = NativeLoadStoreCoreFiller::new(NativeLoadStoreAdapterFiller);
+    let cpu_chip = NativeLoadStoreChip::new(core_filler, tester.dummy_memory_helper());
+
+    let gpu_chip = NativeLoadStoreChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+fn set_and_execute<const NUM_CELLS: usize, E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: NativeLoadStoreOpcode,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let a = gen_pointer(rng, NUM_CELLS);
     let ([c_val], c) = write_native_array(tester, rng, None);
 
@@ -81,13 +122,13 @@ fn set_and_execute<const NUM_CELLS: usize>(
             tester.write(AS::Native as usize, a, data);
         }
         HINT_STOREW => {
-            tester.streams.hint_stream.extend(data);
+            tester.streams_mut().hint_stream.extend(data);
         }
     }
 
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [
@@ -123,7 +164,13 @@ fn rand_native_loadstore_test_1(opcode: NativeLoadStoreOpcode, num_ops: usize) {
     let mut harness = create_test_chip::<1>(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+        set_and_execute::<1, _, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
     }
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
@@ -138,10 +185,70 @@ fn rand_native_loadstore_test_4(opcode: NativeLoadStoreOpcode, num_ops: usize) {
     let mut harness = create_test_chip::<4>(&tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+        set_and_execute::<4, _, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
     }
     let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(NativeLoadStoreOpcode::LOADW, 100)]
+#[test_case(NativeLoadStoreOpcode::STOREW, 100)]
+#[test_case(NativeLoadStoreOpcode::HINT_STOREW, 100)]
+fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness::<1>(&tester, NativeLoadStoreOpcode::CLASS_OFFSET);
+
+    for _ in 0..num_ops {
+        set_and_execute::<1, _, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+        );
+    }
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(NativeLoadStoreOpcode::LOADW, 100)]
+#[test_case(NativeLoadStoreOpcode::STOREW, 100)]
+#[test_case(NativeLoadStoreOpcode::HINT_STOREW, 100)]
+fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStoreOpcode, num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness::<4>(&tester, NativeLoadStore4Opcode::CLASS_OFFSET);
+
+    for _ in 0..num_ops {
+        set_and_execute::<4, _, _>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+        );
+    }
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -170,7 +277,13 @@ fn run_negative_native_loadstore_test<const NUM_CELLS: usize>(
     let mut tester = VmChipTestBuilder::default_native();
     let mut harness = create_test_chip::<NUM_CELLS>(&tester);
 
-    set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+    set_and_execute::<NUM_CELLS, _, _>(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+    );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<F>| {
