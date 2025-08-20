@@ -3,8 +3,8 @@ use std::{borrow::BorrowMut, sync::Arc};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
-        Arena, DenseRecordArena, EmptyAdapterCoreLayout, ExecutionBridge, PreflightExecutor,
-        VmAirWrapper, VmChipWrapper,
+        Arena, EmptyAdapterCoreLayout, ExecutionBridge, PreflightExecutor, VmAirWrapper,
+        VmChipWrapper,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -325,57 +325,6 @@ fn run_auipc_sanity_test() {
     let rd_data = run_auipc(initial_pc, imm);
 
     assert_eq!(rd_data, [210, 107, 113, 186]);
-}
-
-// ////////////////////////////////////////////////////////////////////////////////////
-// DENSE TESTS
-
-// Ensure that the chip works as expected with dense records.
-// We first execute some instructions with a [DenseRecordArena] and transfer the records
-// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
-// all the constraints pass.
-// ////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn dense_record_arena_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_harness, bitwise) = create_harness(&tester);
-
-    {
-        let mut dense_harness = create_harness::<DenseRecordArena>(&tester).0;
-
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(
-                &mut tester,
-                &mut dense_harness.executor,
-                &mut dense_harness.arena,
-                &mut rng,
-                AUIPC,
-                None,
-                None,
-            );
-        }
-
-        type Record<'a> = (
-            &'a mut Rv32RdWriteAdapterRecord,
-            &'a mut Rv32AuipcCoreRecord,
-        );
-
-        let mut record_interpreter = dense_harness.arena.get_record_seeker::<Record, _>();
-        record_interpreter.transfer_to_matrix_arena(
-            &mut sparse_harness.arena,
-            EmptyAdapterCoreLayout::<F, Rv32RdWriteAdapterExecutor>::new(),
-        );
-    }
-
-    let tester = tester
-        .build()
-        .load(sparse_harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

@@ -192,7 +192,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.execution.0.last_from_pc()
     }
 
-    fn streams(&mut self) -> &mut Streams<F> {
+    fn streams_mut(&mut self) -> &mut Streams<F> {
         &mut self.streams
     }
 

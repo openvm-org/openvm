@@ -182,6 +182,80 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 }
 
+// Test special cases in addition to random cases (i.e. zero divisor with b > 0,
+// zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
+fn set_and_execute_special_cases<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    opcode: DivRemOpcode,
+) {
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([98, 188, 163, 127]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([98, 188, 163, 229]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 127]),
+        Some([0, 1, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 0]),
+        Some([0, 0, 0, 0]),
+    );
+    set_and_execute(
+        tester,
+        executor,
+        arena,
+        rng,
+        opcode,
+        Some([0, 0, 0, 128]),
+        Some([255, 255, 255, 255]),
+    );
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //
@@ -209,71 +283,12 @@ fn rand_divrem_test(opcode: DivRemOpcode, num_ops: usize) {
             None,
         );
     }
-
-    // Test special cases in addition to random cases (i.e. zero divisor with b > 0,
-    // zero divisor with b < 0, r = 0 (3 cases), and signed overflow).
-    set_and_execute(
+    set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
         opcode,
-        Some([98, 188, 163, 127]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([98, 188, 163, 229]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 128]),
-        Some([0, 1, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 127]),
-        Some([0, 1, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 128]),
-        Some([255, 255, 255, 255]),
     );
 
     let tester = tester
@@ -815,68 +830,12 @@ fn test_cuda_rand_divrem_tracegen(opcode: DivRemOpcode, num_ops: usize) {
             None,
         );
     }
-    set_and_execute(
+    set_and_execute_special_cases(
         &mut tester,
         &mut harness.executor,
         &mut harness.dense_arena,
         &mut rng,
         opcode,
-        Some([98, 188, 163, 127]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([98, 188, 163, 229]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 128]),
-        Some([0, 1, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 127]),
-        Some([0, 1, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 0]),
-        Some([0, 0, 0, 0]),
-    );
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.dense_arena,
-        &mut rng,
-        opcode,
-        Some([0, 0, 0, 128]),
-        Some([255, 255, 255, 255]),
     );
 
     type Record<'a> = (

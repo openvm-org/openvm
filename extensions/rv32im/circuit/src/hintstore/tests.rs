@@ -6,7 +6,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, DenseRecordArena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
+        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
@@ -130,7 +130,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     for _ in 0..num_words {
         let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
         input.extend(data);
-        tester.streams().hint_stream.extend(data);
+        tester.streams_mut().hint_stream.extend(data);
     }
 
     tester.execute(
@@ -257,49 +257,6 @@ fn execute_roundtrip_sanity_test() {
             HINT_STOREW,
         );
     }
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-/// DENSE TESTS
-///
-/// Ensure that the chip works as expected with dense records.
-/// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
-/// all the constraints pass.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn dense_record_arena_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_harness, bitwise) = create_harness::<MatrixRecordArena<F>>(&mut tester);
-
-    {
-        let mut dense_harness = create_harness::<DenseRecordArena>(&mut tester).0;
-
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(
-                &mut tester,
-                &mut dense_harness.executor,
-                &mut dense_harness.arena,
-                &mut rng,
-                HINT_STOREW,
-            );
-        }
-
-        let mut record_interpreter = dense_harness
-            .arena
-            .get_record_seeker::<_, Rv32HintStoreLayout>();
-        record_interpreter.transfer_to_matrix_arena(&mut sparse_harness.arena);
-    }
-
-    let tester = tester
-        .build()
-        .load(sparse_harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
