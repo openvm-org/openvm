@@ -158,6 +158,22 @@ pub trait MeteredExecutor<F> {
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
+
+    /// Returns a function pointer with tail call optimization. The handler function assumes that
+    /// the pre-compute buffer it receives is the populated `data`.
+    // NOTE: we could have used `metered_pre_compute` above to populate `data`, but the
+    // implementations were simpler to keep `metered_handler` entirely separate from
+    // `metered_pre_compute`.
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait;
 }
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of

@@ -235,6 +235,32 @@ where
         let pc_base = program.pc_base;
         let pc_start = exe.pc_start;
         let init_memory = exe.init_memory.clone();
+        #[cfg(feature = "tco")]
+        let handlers = program
+            .instructions_and_debug_infos
+            .iter()
+            .zip_eq(split_pre_compute_buf.iter_mut())
+            .enumerate()
+            .map(
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                    if let Some((inst, _)) = inst_opt {
+                        let pc = pc_base + pc_idx as u32 * DEFAULT_PC_STEP;
+                        if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
+                            Ok(terminate_execute_e12_tco_handler)
+                        } else {
+                            // unwrap because get_pre_compute_instructions would have errored
+                            // already on DisabledOperation
+                            let executor_idx = inventory.instruction_lookup[&inst.opcode] as usize;
+                            let executor = &inventory.executors[executor_idx];
+                            let air_idx = executor_idx_to_air_idx[executor_idx];
+                            executor.metered_handler(air_idx, pc, inst, pre_compute)
+                        }
+                    } else {
+                        Ok(unreachable_tco_handler)
+                    }
+                },
+            )
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             system_config: inventory.config().clone(),
@@ -246,7 +272,7 @@ where
             #[cfg(feature = "tco")]
             pre_compute_max_size,
             #[cfg(feature = "tco")]
-            handlers: vec![],
+            handlers,
         })
     }
 }

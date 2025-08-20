@@ -68,8 +68,8 @@ basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
 test-utils = ["openvm-stark-sdk"]
-# Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232) which will likely be stabilized in Rust 1.90
-# However `become` may still lead to compiler panics instead of runtime panics, so `tco` will remain a separate feature.
+# Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
+# However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = []
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]

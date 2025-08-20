@@ -331,6 +331,18 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         self.0.metered_pre_compute(chip_idx, pc, inst, data)
                     }
+                    #[cfg(feature = "tco")]
+                    fn metered_handler<Ctx>(
+                        &self,
+                        chip_idx: usize,
+                        pc: u32,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
+                        self.0.metered_handler(chip_idx, pc, inst, data)
+                    }
                 }
             }
                 .into()
@@ -364,7 +376,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, metered_pre_compute_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, metered_pre_compute_arms, metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
@@ -372,10 +384,13 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 let metered_pre_compute_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
                 };
+                let metered_handler_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
+                };
                 let where_predicate = syn::parse_quote! {
                     #field_ty: ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>
                 };
-                (pre_compute_size_arm, metered_pre_compute_arm, where_predicate)
+                (pre_compute_size_arm, metered_pre_compute_arm, metered_handler_arm, where_predicate)
             }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
@@ -405,6 +420,21 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         match self {
                             #(#metered_pre_compute_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "tco")]
+                    fn metered_handler<Ctx>(
+                        &self,
+                        chip_idx: usize,
+                        pc: u32,
+                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        data: &mut [u8],
+                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                    where
+                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
+                        match self {
+                            #(#metered_handler_arms,)*
                         }
                     }
                 }
