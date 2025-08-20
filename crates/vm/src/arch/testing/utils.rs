@@ -1,6 +1,3 @@
-use core::fmt::Debug;
-use std::sync::Arc;
-
 use openvm_circuit::{
     arch::testing::{BITWISE_OP_LOOKUP_BUS, RANGE_CHECKER_BUS},
     system::memory::SharedMemoryHelper,
@@ -14,13 +11,7 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_cuda_backend::{base::DeviceMatrix, data_transporter::transport_device_matrix_to_host};
-use openvm_stark_backend::{
-    p3_field::Field,
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
-    p3_util::log2_strict_usize,
-    prover::hal::MatrixDimensions,
-};
+use openvm_stark_backend::{p3_field::Field, p3_util::log2_strict_usize};
 
 use crate::{
     arch::MemoryConfig,
@@ -61,34 +52,4 @@ pub fn default_tracing_memory(mem_config: &MemoryConfig, init_block_size: usize)
     let max_access_adapter_n = log2_strict_usize(mem_config.max_access_adapter_n);
     let arena_size_bound = arena_size_bound(&vec![1 << 16; max_access_adapter_n]);
     TracingMemory::new(mem_config, init_block_size, arena_size_bound)
-}
-
-// Asserts that a RowMajorMatrix and a DeviceMatrix (a column-major matrix)
-// are equal
-pub fn assert_eq_cpu_and_gpu_matrix<T: Clone + Send + Sync + PartialEq + Debug>(
-    cpu: Arc<RowMajorMatrix<T>>,
-    gpu: &DeviceMatrix<T>,
-) {
-    assert_eq!(gpu.width(), cpu.width());
-    assert_eq!(gpu.height(), cpu.height());
-    let gpu = transport_device_matrix_to_host(gpu);
-    for r in 0..cpu.height() {
-        for c in 0..cpu.width() {
-            assert_eq!(
-                gpu.get(r, c),
-                cpu.get(r, c),
-                "Mismatch at row {} column {}",
-                r,
-                c
-            );
-        }
-    }
-}
-
-// Utility function to print out a DeviceMatrix as a RowMajorMatrix for easy
-// comparison during debugging
-pub fn print_gpu_matrix_as_row_major_matrix<T: Clone + Send + Sync + Debug>(
-    gpu_matrix: &DeviceMatrix<T>,
-) {
-    println!("{:?}", transport_device_matrix_to_host(gpu_matrix));
 }

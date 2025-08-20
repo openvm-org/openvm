@@ -188,6 +188,7 @@ mod tests {
     };
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
     use openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix,
         prelude::{F, SC},
         prover_backend::GpuBackend,
     };
@@ -201,7 +202,7 @@ mod tests {
     use rand::Rng;
 
     use super::{BoundaryChipGPU, VariableRangeCheckerChipGPU};
-    use crate::utils::cuda_utils::{assert_eq_cpu_and_gpu_matrix, default_var_range_checker_bus};
+    use crate::arch::testing::default_var_range_checker_bus;
 
     const MAX_ADDRESS_SPACE: u32 = 4;
     const LIMB_BITS: usize = 15;
@@ -256,6 +257,9 @@ mod tests {
         cpu_boundary.finalize(final_memory);
         let gpu_ctx: AirProvingContext<GpuBackend> = gpu_boundary.generate_proving_ctx(());
         let cpu_ctx: AirProvingContext<CpuBackend<SC>> = cpu_boundary.generate_proving_ctx(());
-        assert_eq_cpu_and_gpu_matrix(cpu_ctx.common_main.unwrap(), &gpu_ctx.common_main.unwrap());
+        assert_eq_host_and_device_matrix(
+            cpu_ctx.common_main.unwrap(),
+            &gpu_ctx.common_main.unwrap(),
+        );
     }
 }

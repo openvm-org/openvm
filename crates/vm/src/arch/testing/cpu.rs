@@ -501,18 +501,6 @@ where
         self
     }
 
-    // pub fn load_with_custom_trace<C: Chip<SC>>(
-    //     mut self,
-    //     chip: C,
-    //     trace: RowMajorMatrix<Val<SC>>,
-    // ) -> Self {
-    //     let air = chip.air();
-    //     let mut air_proof_input = chip.generate_air_proof_input();
-    //     air_proof_input.raw.common_main = Some(trace);
-    //     self.air_proof_inputs.push((air, air_proof_input));
-    //     self
-    // }
-
     pub fn load_and_prank_trace<E, A, C, P>(
         mut self,
         harness: TestChipHarness<Val<SC>, E, A, C, MatrixRecordArena<Val<SC>>>,

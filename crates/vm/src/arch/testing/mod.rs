@@ -1,12 +1,14 @@
+mod cpu;
 #[cfg(feature = "cuda")]
 mod cuda;
 pub mod execution;
 pub mod memory;
 pub mod program;
-mod test_builder;
+mod utils;
 
 use std::marker::PhantomData;
 
+pub use cpu::*;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 pub use execution::ExecutionTester;
@@ -15,7 +17,7 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::instruction::Instruction;
 use openvm_stark_backend::{interaction::BusIndex, p3_air::BaseAir};
 use p3_field::Field;
-pub use test_builder::*;
+pub use utils::*;
 
 use crate::arch::{Arena, ExecutionState, MatrixRecordArena, PreflightExecutor};
 

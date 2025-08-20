@@ -15,6 +15,7 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_cuda_backend::{
+    data_transporter::assert_eq_host_and_device_matrix,
     engine::GpuBabyBearPoseidon2Engine,
     prover_backend::GpuBackend,
     types::{F, SC},
@@ -45,6 +46,7 @@ use crate::{
     arch::{
         instructions::instruction::Instruction,
         testing::{
+            default_tracing_memory, default_var_range_checker_bus, dummy_memory_helper,
             execution::{air::ExecutionDummyAir, DeviceExecutionTester},
             memory::DeviceMemoryTester,
             program::{air::ProgramDummyAir, DeviceProgramTester},
@@ -64,13 +66,7 @@ use crate::{
         program::ProgramBus,
         SystemPort,
     },
-    utils::{
-        cuda_utils::{
-            assert_eq_cpu_and_gpu_matrix, default_tracing_memory, default_var_range_checker_bus,
-            dummy_memory_helper,
-        },
-        next_power_of_two_or_zero,
-    },
+    utils::next_power_of_two_or_zero,
 };
 
 pub struct GpuTestChipHarness<F, Executor, AIR, GpuChip, CpuChip> {
@@ -576,7 +572,7 @@ impl GpuChipTester {
 
             check_trace_validity(&proving_ctx, &air.name());
         }
-        assert_eq_cpu_and_gpu_matrix(
+        assert_eq_host_and_device_matrix(
             expected_trace.unwrap(),
             proving_ctx.common_main.as_ref().unwrap(),
         );

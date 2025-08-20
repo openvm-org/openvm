@@ -123,9 +123,7 @@ fn test_no_adapter_records() {
 #[test_case(1000)]
 #[test_case(0)]
 fn test_cuda_memory_write_volatile(its: usize) {
-    use crate::{
-        arch::testing::GpuChipTestBuilder, utils::cuda_utils::default_var_range_checker_bus,
-    };
+    use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
     let mut tester =
         GpuChipTestBuilder::volatile(MemoryConfig::default(), default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
@@ -137,9 +135,7 @@ fn test_cuda_memory_write_volatile(its: usize) {
 #[test_case(1000)]
 #[test_case(0)]
 fn test_cuda_memory_write_persistent(its: usize) {
-    use crate::{
-        arch::testing::GpuChipTestBuilder, utils::cuda_utils::default_var_range_checker_bus,
-    };
+    use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
     let mut tester =
         GpuChipTestBuilder::persistent(MemoryConfig::default(), default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
