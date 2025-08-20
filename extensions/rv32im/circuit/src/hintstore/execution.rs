@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
@@ -80,6 +83,25 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match local_opcode {
+            HINT_STOREW => execute_e1_tco_handler::<_, _, true>,
+            HINT_BUFFER => execute_e1_tco_handler::<_, _, false>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
@@ -154,6 +176,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     num_words
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

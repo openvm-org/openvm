@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -102,6 +96,38 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let is_imm = self.pre_compute_impl(pc, inst, data)?;
+        let opcode = inst.opcode;
+
+        let fn_ptr = match (
+            is_imm,
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+        ) {
+            (true, BaseAluOpcode::ADD) => execute_e1_tco_handler::<_, _, true, AddOp>,
+            (false, BaseAluOpcode::ADD) => execute_e1_tco_handler::<_, _, false, AddOp>,
+            (true, BaseAluOpcode::SUB) => execute_e1_tco_handler::<_, _, true, SubOp>,
+            (false, BaseAluOpcode::SUB) => execute_e1_tco_handler::<_, _, false, SubOp>,
+            (true, BaseAluOpcode::XOR) => execute_e1_tco_handler::<_, _, true, XorOp>,
+            (false, BaseAluOpcode::XOR) => execute_e1_tco_handler::<_, _, false, XorOp>,
+            (true, BaseAluOpcode::OR) => execute_e1_tco_handler::<_, _, true, OrOp>,
+            (false, BaseAluOpcode::OR) => execute_e1_tco_handler::<_, _, false, OrOp>,
+            (true, BaseAluOpcode::AND) => execute_e1_tco_handler::<_, _, true, AndOp>,
+            (false, BaseAluOpcode::AND) => execute_e1_tco_handler::<_, _, false, AndOp>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
@@ -174,6 +200,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,

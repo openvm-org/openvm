@@ -4,13 +4,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError, Executor,
-        MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::{online::GuestMemory, POINTER_MAX_BITS},
-};
+use openvm_circuit::{arch::*, system::memory::{online::GuestMemory, POINTER_MAX_BITS}};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -106,6 +100,27 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
+        let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match (is_loadb, enabled) {
+            (true, true) => execute_e1_tco_handler::<_, _, true, true>,
+            (true, false) => execute_e1_tco_handler::<_, _, true, false>,
+            (false, true) => execute_e1_tco_handler::<_, _, false, true>,
+            (false, false) => execute_e1_tco_handler::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
@@ -185,6 +200,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

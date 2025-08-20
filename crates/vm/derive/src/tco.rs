@@ -49,19 +49,25 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         ) -> Result<(), ::openvm_circuit::arch::ExecutionError>
         #where_clause
         {
-            let pre_compute = interpreter.get_pre_compute(exec_state.pc);
+            let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc);
             #execute_call;
 
             if std::hint::unlikely(exec_state.exit_code.is_err()) {
                 return Err(::openvm_circuit::arch::ExecutionError::ExecStateError);
             }
             if std::hint::unlikely(exec_state.exit_code.as_ref().unwrap().is_some()) {
+                #ctx_type::on_terminate(exec_state);
                 // terminate
                 return Ok(());
             }
+            if #ctx_type::should_suspend(exec_state) {
+                return Ok(());
+            }
             // exec_state.pc should have been updated by execute_impl at this point
-            let next_handler = interpreter.get_handler(exec_state.pc)?;
-            become next_handler(interpreter, exec_state)
+            let next_handler = interpreter.get_handler(exec_state.vm_state.pc)?;
+
+            // The `become` keyword has a bug that is not re-passing the `interpreter`, `exec_state` references properly. But llvm seems to almost always guarantee tail call elimination when the function signature is the same as the current function.
+            next_handler(interpreter, exec_state)
         }
     };
 

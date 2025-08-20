@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     fmt::Debug,
+    mem::size_of,
 };
 
 use openvm_circuit::{
@@ -124,6 +125,43 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, pre_compute)?;
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e1_tco_handler::<_, _, U8, LoadWOp, true>,
+            (LOADW, false, _) => execute_e1_tco_handler::<_, _, U8, LoadWOp, false>,
+            (LOADHU, true, _) => execute_e1_tco_handler::<_, _, U8, LoadHUOp, true>,
+            (LOADHU, false, _) => execute_e1_tco_handler::<_, _, U8, LoadHUOp, false>,
+            (LOADBU, true, _) => execute_e1_tco_handler::<_, _, U8, LoadBUOp, true>,
+            (LOADBU, false, _) => execute_e1_tco_handler::<_, _, U8, LoadBUOp, false>,
+            (STOREW, true, false) => execute_e1_tco_handler::<_, _, U8, StoreWOp, true>,
+            (STOREW, false, false) => execute_e1_tco_handler::<_, _, U8, StoreWOp, false>,
+            (STOREW, true, true) => execute_e1_tco_handler::<_, _, F, StoreWOp, true>,
+            (STOREW, false, true) => execute_e1_tco_handler::<_, _, F, StoreWOp, false>,
+            (STOREH, true, false) => execute_e1_tco_handler::<_, _, U8, StoreHOp, true>,
+            (STOREH, false, false) => execute_e1_tco_handler::<_, _, U8, StoreHOp, false>,
+            (STOREH, true, true) => execute_e1_tco_handler::<_, _, F, StoreHOp, true>,
+            (STOREH, false, true) => execute_e1_tco_handler::<_, _, F, StoreHOp, false>,
+            (STOREB, true, false) => execute_e1_tco_handler::<_, _, U8, StoreBOp, true>,
+            (STOREB, false, false) => execute_e1_tco_handler::<_, _, U8, StoreBOp, false>,
+            (STOREB, true, true) => execute_e1_tco_handler::<_, _, F, StoreBOp, true>,
+            (STOREB, false, true) => execute_e1_tco_handler::<_, _, F, StoreBOp, false>,
+            (_, _, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
@@ -226,6 +264,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

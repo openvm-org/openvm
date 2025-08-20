@@ -139,7 +139,7 @@ where
                             // unwrap because get_pre_compute_instructions would have errored
                             // already on DisabledOperation
                             let executor = inventory.get_executor(inst.opcode).unwrap();
-                            executor.handler(pc, inst, *pre_compute)
+                            executor.handler(pc, inst, pre_compute)
                         }
                     } else {
                         Ok(unreachable_tco_handler)
@@ -177,6 +177,9 @@ where
         //   instruction getting pre_compute_max_size bytes
         // - self.pre_compute_buf.ptr is non-null
         // - initialization of the contents of the slice is the responsibility of each Executor
+        debug_assert!(
+            (pc_idx + 1) * self.pre_compute_max_size <= self.pre_compute_buf.layout.size()
+        );
         unsafe {
             let ptr = self
                 .pre_compute_buf
@@ -190,7 +193,7 @@ where
     #[inline(always)]
     pub fn get_handler(&self, pc: u32) -> Result<Handler<F, Ctx>, ExecutionError> {
         let pc_idx = get_pc_index(self.pc_base, pc);
-        if std::hint::unlikely(pc_idx > self.handlers.len()) {
+        if std::hint::unlikely(pc_idx >= self.handlers.len()) {
             return Err(ExecutionError::PcOutOfBounds {
                 pc,
                 pc_base: self.pc_base,
@@ -287,13 +290,38 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
-        // Start execution
-        execute_with_metrics!(
-            "execute_e1",
-            self.pc_base,
-            &mut exec_state,
-            &self.pre_compute_insns
-        );
+
+        #[cfg(feature = "metrics")]
+        let start = std::time::Instant::now();
+        #[cfg(feature = "metrics")]
+        let start_instret = exec_state.instret;
+
+        #[cfg(not(feature = "tco"))]
+        unsafe {
+            execute_trampoline(self.pc_base, &mut exec_state, &self.pre_compute_insns);
+        }
+        #[cfg(feature = "tco")]
+        unsafe {
+            let handler = self.get_handler(exec_state.pc)?;
+            let res = handler(self, &mut exec_state);
+            if let Err(err) = res {
+                match err {
+                    ExecutionError::ExecStateError => {}
+                    _ => {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        #[cfg(feature = "metrics")]
+        {
+            let elapsed = start.elapsed();
+            let insns = exec_state.instret - start_instret;
+            tracing::info!("instructions_executed={insns}");
+            metrics::counter!("execute_e1_insns").absolute(insns);
+            metrics::gauge!("execute_e1_insn_mi/s").set(insns as f64 / elapsed.as_micros() as f64);
+        }
         if num_insns.is_some() {
             check_exit_code(exec_state.exit_code)?;
         } else {
@@ -410,15 +438,10 @@ fn split_pre_compute_buf<'a, F>(
 ) -> Vec<&'a mut [u8]> {
     let program_len = program.instructions_and_debug_infos.len();
     let buf_len = program_len * pre_compute_max_size;
-    let mut pre_compute_buf_ptr =
-        unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
-    let mut split_pre_compute_buf = Vec::with_capacity(program_len);
-    for _ in 0..program_len {
-        let (first, last) = pre_compute_buf_ptr.split_at_mut(pre_compute_max_size);
-        pre_compute_buf_ptr = last;
-        split_pre_compute_buf.push(first);
-    }
-    split_pre_compute_buf
+    let pre_compute_buf = unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
+    pre_compute_buf
+        .chunks_exact_mut(pre_compute_max_size)
+        .collect()
 }
 
 /// Executes using function pointers with the trampoline (loop) approach.

@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -94,6 +88,30 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
+        // `d` is always expected to be RV32_REGISTER_AS.
+        let fn_ptr = match (is_imm, shift_opcode) {
+            (true, ShiftOpcode::SLL) => execute_e1_tco_handler::<_, _, true, SllOp>,
+            (false, ShiftOpcode::SLL) => execute_e1_tco_handler::<_, _, false, SllOp>,
+            (true, ShiftOpcode::SRL) => execute_e1_tco_handler::<_, _, true, SrlOp>,
+            (false, ShiftOpcode::SRL) => execute_e1_tco_handler::<_, _, false, SrlOp>,
+            (true, ShiftOpcode::SRA) => execute_e1_tco_handler::<_, _, true, SraOp>,
+            (false, ShiftOpcode::SRA) => execute_e1_tco_handler::<_, _, false, SraOp>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
@@ -155,6 +173,7 @@ unsafe fn execute_e12_impl<
     state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -71,6 +65,27 @@ where
             (true, false) => execute_e1_impl::<_, _, true, false>,
             (false, true) => execute_e1_impl::<_, _, false, true>,
             (false, false) => execute_e1_impl::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut JalLuiPreCompute = data.borrow_mut();
+        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        let fn_ptr = match (is_jal, enabled) {
+            (true, true) => execute_e1_tco_handler::<_, _, true, true>,
+            (true, false) => execute_e1_tco_handler::<_, _, true, false>,
+            (false, true) => execute_e1_tco_handler::<_, _, false, true>,
+            (false, false) => execute_e1_tco_handler::<_, _, false, false>,
         };
         Ok(fn_ptr)
     }
@@ -138,6 +153,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,

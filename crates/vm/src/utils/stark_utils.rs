@@ -114,6 +114,8 @@ where
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx();
+    // TEMP: for testing
+    vm.interpreter(&exe)?.execute(input.clone(), None)?;
     let (segments, _) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx)?;
