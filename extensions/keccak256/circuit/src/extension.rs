@@ -30,6 +30,20 @@ use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::{
+        arch::DenseRecordArena,
+        system::cuda::{
+            extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+            SystemChipInventoryGPU,
+        },
+    },
+    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_rv32im_circuit::Rv32ImGpuProverExt,
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+};
+
 use crate::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
@@ -62,9 +76,9 @@ impl Default for Keccak256Rv32Config {
 impl InitFileGenerator for Keccak256Rv32Config {}
 
 #[derive(Clone)]
-pub struct Keccak256Rv32CpuBuilder;
+pub struct Keccak256Rv32Builder;
 
-impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
+impl<E, SC> VmBuilder<E> for Keccak256Rv32Builder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -90,6 +104,40 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256CpuProverExt,
+            &config.keccak,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32Builder {
+    type VmConfig = Keccak256Rv32Config;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Keccak256Rv32Config,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex =
+            VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Keccak256GpuProverExt,
             &config.keccak,
             inventory,
         )?;
@@ -160,10 +208,10 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
     }
 }
 
-pub struct Keccak256CpuProverExt;
+pub struct Keccak256ProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
+impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256ProverExt
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -198,6 +246,38 @@ where
         let keccak = KeccakVmChip::new(
             KeccakVmFiller::new(bitwise_lu, pointer_max_bits),
             mem_helper,
+        );
+        inventory.add_executor_chip(keccak);
+
+        Ok(())
+    }
+}
+
+// This implementation is specific to GpuBackend because the lookup chips
+// (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
+#[cfg(feature = "cuda")]
+impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
+    for Keccak256ProverExt
+{
+    fn extend_prover(
+        &self,
+        _: &Keccak256,
+        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
+    ) -> Result<(), ChipInventoryError> {
+        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let timestamp_max_bits = inventory.timestamp_max_bits();
+
+        let range_checker = get_inventory_range_checker(inventory);
+        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
+
+        // These calls to next_air are not strictly necessary to construct the chips, but provide a
+        // safeguard to ensure that chip construction matches the circuit definition
+        inventory.next_air::<KeccakVmAir>()?;
+        let keccak = Keccak256ChipGpu::new(
+            range_checker.clone(),
+            bitwise_lu.clone(),
+            pointer_max_bits as u32,
+            timestamp_max_bits as u32,
         );
         inventory.add_executor_chip(keccak);
 

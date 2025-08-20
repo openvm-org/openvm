@@ -8,8 +8,7 @@ use openvm_circuit::{
             BITWISE_OP_LOOKUP_BUS,
         },
         Arena, DenseRecordArena, PreflightExecutor,
-    },
-    utils::get_random_message,
+    }, system::memory::SharedMemoryHelper, utils::get_random_message
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -43,7 +42,30 @@ type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> = TestChipHarness<F, KeccakVmExecutor, KeccakVmAir, KeccakVmChip<F>, RA>;
 
-fn create_test_chips<RA: Arena>(
+fn create_harness_fields(
+    execution_bridge: ExecutionBridge,
+    memory_bridge: MemoryBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+    address_bits: usize,
+) -> (KeccakVmAir, KeccakVmExecutor, KeccakVmChip<F>) {
+    let air = KeccakVmAir::new(
+        execution_bridge,
+        memory_bridge,
+        bitwise_chip.bus(),
+        address_bits,
+        Rv32KeccakOpcode::CLASS_OFFSET,
+    );
+    let executor = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, address_bits);
+    let chip = KeccakVmChip::new(
+        KeccakVmFiller::new(bitwise_chip, address_bits),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+
+fn create_test_harness<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Harness<RA>,
@@ -57,18 +79,12 @@ fn create_test_chips<RA: Arena>(
         bitwise_bus,
     ));
 
-    let air = KeccakVmAir::new(
+    let (air, executor, chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        bitwise_chip.bus(),
-        tester.address_bits(),
-        Rv32KeccakOpcode::CLASS_OFFSET,
-    );
-
-    let executor = KeccakVmExecutor::new(Rv32KeccakOpcode::CLASS_OFFSET, tester.address_bits());
-    let chip = KeccakVmChip::new(
-        KeccakVmFiller::new(bitwise_chip.clone(), tester.address_bits()),
+        bitwise_chip.clone(),
         tester.memory_helper(),
+        tester.address_bits(),
     );
 
     let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
@@ -76,17 +92,16 @@ fn create_test_chips<RA: Arena>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute<RA: Arena>(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness<RA>,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv32KeccakOpcode,
     message: Option<&[u8]>,
     len: Option<usize>,
     expected_output: Option<[u8; 32]>,
-) where
-    KeccakVmExecutor: PreflightExecutor<F, RA>,
-{
+) {
     let len = len.unwrap_or(rng.gen_range(1..3000));
     let tmp = get_random_message(rng, len);
     let message: &[u8] = message.unwrap_or(&tmp);
@@ -113,8 +128,8 @@ fn set_and_execute<RA: Arena>(
     });
 
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(opcode.global_opcode(), [rd, rs1, rs2, 1, 2]),
     );
 
@@ -137,13 +152,14 @@ fn set_and_execute<RA: Arena>(
 fn rand_keccak256_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chips(&mut tester);
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             KECCAK256,
             None,
@@ -164,14 +180,15 @@ fn rand_keccak256_test() {
 fn keccak256_length_tests() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chips(&mut tester);
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     // Test special length edge cases:
     for len in [0, 135, 136, 137, 2000, 10000] {
         println!("Testing length: {}", len);
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             KECCAK256,
             None,
@@ -206,14 +223,15 @@ fn test_keccak256_positive_kat_vectors() {
 
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chips(&mut tester);
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     for (input, output) in test_vectors {
         let input = Vec::from_hex(input).unwrap();
         let output = Vec::from_hex(output).unwrap().try_into().unwrap();
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
             KECCAK256,
             Some(&input),
@@ -242,11 +260,12 @@ fn run_negative_keccak256_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chips(&mut tester);
+    let (mut harness, bitwise) = create_test_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut harness,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         KECCAK256,
         Some(input),
@@ -294,46 +313,79 @@ fn test_keccak256_negative() {
     run_negative_keccak256_test(&input, out, VerificationError::OodEvaluationMismatch);
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// DENSE TESTS
-///
-/// Ensure that the chip works as expected with dense records.
-/// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
-/// all the constraints pass.
-///////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, KeccakVmExecutor, KeccakVmAir, Keccak256ChipGpu, KeccakVmChip<F>>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    const GPU_MAX_INS_CAPACITY: usize = 1024;
+    // getting bus from tester since `gpu_chip` and `air` must use the same bus
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        bitwise_chip.clone(),
+        tester.memory_helper(),
+        tester.address_bits(),
+    );
+
+    let gpu_chip = Keccak256ChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
 #[test]
-fn dense_record_arena_test() {
+fn test_keccak256_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_harness, bitwise) = create_test_chips(&mut tester);
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    {
-        let mut dense_harness = create_test_chips::<DenseRecordArena>(&mut tester).0;
+    let mut harness = create_cuda_harness(&tester);
 
-        let num_ops: usize = 10;
-        for _ in 0..num_ops {
-            set_and_execute(
-                &mut tester,
-                &mut dense_harness,
-                &mut rng,
-                KECCAK256,
-                None,
-                None,
-                None,
-            );
-        }
-
-        let mut record_interpreter = dense_harness
-            .arena
-            .get_record_seeker::<_, KeccakVmRecordLayout>();
-        record_interpreter.transfer_to_matrix_arena(&mut sparse_harness.arena);
+    let num_ops: usize = 10;
+    for _ in 0..num_ops {
+        set_and_execute(&mut tester, &mut harness, &mut rng, KECCAK256, None, None);
     }
 
-    let tester = tester
+    // Test special length edge cases:
+    for len in [0, 135, 136, 137, 2000] {
+        println!("Testing length: {}", len);
+        set_and_execute(
+            &mut tester,
+            &mut harness,
+            &mut rng,
+            KECCAK256,
+            None,
+            Some(len),
+        );
+    }
+
+    harness
+        .dense_arena
+        .get_record_seeker::<KeccakVmRecordMut, _>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
         .build()
-        .load(sparse_harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
