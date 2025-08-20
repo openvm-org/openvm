@@ -267,7 +267,7 @@ where
         // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
         // BranchLessThanCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
-        self.adapter.fill_trace_row(mem_helper, adapter_row);
+
         // SAFETY: core_row contains a valid BranchLessThanCoreRecord written by the executor
         // during trace generation
         let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =

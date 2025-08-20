@@ -1753,7 +1753,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-openvm"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
@@ -4992,7 +4992,7 @@ checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openvm"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "bytemuck",
  "chrono",
@@ -5007,7 +5007,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5036,7 +5036,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-complex-macros"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-macros-common",
  "quote",
@@ -5045,7 +5045,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
@@ -5060,7 +5060,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-moduli-macros"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "num-bigint 0.4.6",
  "num-prime",
@@ -5071,7 +5071,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-tests"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "num-bigint 0.4.6",
@@ -5088,7 +5088,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-algebra-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-algebra-guest",
  "openvm-instructions",
@@ -5101,7 +5101,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-benchmarks-execute"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "bitcode",
  "clap",
@@ -5139,7 +5139,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-benchmarks-prove"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "clap",
  "derive_more 1.0.0",
@@ -5165,7 +5165,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-benchmarks-utils"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "bitcode",
  "cargo_metadata",
@@ -5187,7 +5187,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-bigint-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "alloy-primitives 1.2.1",
  "derive-new 0.6.0",
@@ -5210,7 +5210,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-bigint-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-platform",
  "strum_macros",
@@ -5218,7 +5218,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-bigint-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-bigint-guest",
  "openvm-instructions",
@@ -5232,7 +5232,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-build"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "cargo_metadata",
  "eyre",
@@ -5243,7 +5243,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "backtrace",
  "dashmap",
@@ -5280,7 +5280,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-circuit-derive"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "itertools 0.14.0",
  "proc-macro2",
@@ -5290,7 +5290,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-circuit-primitives"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "itertools 0.14.0",
@@ -5306,7 +5306,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-circuit-primitives-derive"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "itertools 0.14.0",
  "quote",
@@ -5315,7 +5315,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-continuations"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derivative",
  "openvm-circuit",
@@ -5338,7 +5338,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5367,7 +5367,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "ecdsa 0.16.9",
  "elliptic-curve 0.13.8",
@@ -5385,7 +5385,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-integration-tests"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "halo2curves-axiom",
@@ -5407,7 +5407,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-sw-macros"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-macros-common",
  "quote",
@@ -5416,7 +5416,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ecc-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-ecc-guest",
  "openvm-instructions",
@@ -5429,7 +5429,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-ff-derive"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "addchain",
  "eyre",
@@ -5452,7 +5452,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-instructions"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "backtrace",
  "bitcode",
@@ -5472,7 +5472,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-instructions-derive"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "quote",
@@ -5483,7 +5483,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-keccak256"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "openvm-circuit",
@@ -5500,7 +5500,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-keccak256-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5524,14 +5524,14 @@ dependencies = [
 
 [[package]]
 name = "openvm-keccak256-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
 name = "openvm-keccak256-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
@@ -5544,14 +5544,14 @@ dependencies = [
 
 [[package]]
 name = "openvm-macros-common"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "syn 2.0.104",
 ]
 
 [[package]]
 name = "openvm-mod-circuit-builder"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "halo2curves-axiom",
  "itertools 0.14.0",
@@ -5569,7 +5569,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-native-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5599,7 +5599,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-native-compiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "backtrace",
  "itertools 0.14.0",
@@ -5622,7 +5622,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-native-compiler-derive"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "quote",
  "syn 2.0.104",
@@ -5630,7 +5630,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-native-recursion"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -5660,7 +5660,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-native-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "openvm-transpiler",
@@ -5669,7 +5669,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "group 0.13.0",
@@ -5707,7 +5707,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5735,7 +5735,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "halo2curves-axiom",
  "hex-literal 0.4.1",
@@ -5756,7 +5756,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-pairing-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "openvm-pairing-guest",
@@ -5768,7 +5768,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-platform"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "critical-section",
  "embedded-alloc",
@@ -5779,7 +5779,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-poseidon2-air"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derivative",
  "lazy_static",
@@ -5795,7 +5795,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-prof"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "clap",
  "eyre",
@@ -5808,7 +5808,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32-adapters"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "itertools 0.14.0",
@@ -5824,7 +5824,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32im-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5847,7 +5847,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32im-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-custom-insn",
  "p3-field",
@@ -5856,7 +5856,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32im-integration-tests"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "openvm",
@@ -5875,7 +5875,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32im-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
@@ -5890,7 +5890,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sdk"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "alloy-sol-types",
  "bitcode",
@@ -5946,7 +5946,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha2"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "openvm-circuit",
@@ -5963,7 +5963,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha256-air"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-circuit",
  "openvm-circuit-primitives",
@@ -5975,7 +5975,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha256-circuit"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5997,14 +5997,14 @@ dependencies = [
 
 [[package]]
 name = "openvm-sha256-guest"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-platform",
 ]
 
 [[package]]
 name = "openvm-sha256-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",
@@ -6082,7 +6082,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-toolchain-tests"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "derive_more 1.0.0",
  "eyre",
@@ -6108,7 +6108,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-transpiler"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "elf",
  "eyre",
@@ -6122,7 +6122,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-verify-stark"
-version = "1.4.0-rc.4"
+version = "1.4.0-rc.5"
 dependencies = [
  "eyre",
  "openvm-circuit",
