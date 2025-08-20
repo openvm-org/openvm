@@ -497,7 +497,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32LoadStoreAdapterFiller {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         // SAFETY:
-        // - adapter_row contains a valid Rv32LoadStoreAdapterRecord representation
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         // - get_record_from_slice correctly interprets the bytes as Rv32LoadStoreAdapterRecord
         let record: &Rv32LoadStoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };

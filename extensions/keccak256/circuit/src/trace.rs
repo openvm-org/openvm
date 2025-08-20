@@ -270,6 +270,7 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                 // SAFETY:
                 // - caller ensures `trace` contains a valid record representation that was
                 //   previously written by the executor
+                // - header is the first element of the record
                 let record: &KeccakVmRecordHeader =
                     unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = num_keccak_f(record.len as usize);

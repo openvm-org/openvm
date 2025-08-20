@@ -313,15 +313,16 @@ pub struct Rv32HintStoreRecordMut<'a> {
 impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
         // SAFETY:
-        // - `self` has sufficient length for the split (validated by caller's layout)
-        // - `size_of::<Rv32HintStoreRecordHeader>()` is a valid split point
+        // - Caller guarantees through the layout that self has sufficient length for all splits
+        // - size_of::<Rv32HintStoreRecordHeader>() is guaranteed <= self.len() by layout
+        //   precondition
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
 
         // SAFETY:
-        // - `rest` is a valid slice of bytes
-        // - `align_to_mut` ensures proper alignment for Rv32HintStoreVar
-        // - Subsequent subslicing verifies capacity
+        // - rest contains bytes that will be interpreted as Rv32HintStoreVar records
+        // - align_to_mut ensures proper alignment for Rv32HintStoreVar type
+        // - The layout guarantees sufficient space for layout.metadata.num_words records
         let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
         Rv32HintStoreRecordMut {
             inner: header_buf.borrow_mut(),
@@ -486,8 +487,9 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
 
         while !trace.is_empty() {
             // SAFETY:
-            // - `trace` contains a valid Rv32HintStoreRecordHeader at the beginning
-            // - `get_record_from_slice` correctly interprets the bytes as the header
+            // - caller ensures `trace` contains a valid record representation that was previously
+            //   written by the executor
+            // - header is the first element of the record
             let record: &Rv32HintStoreRecordHeader =
                 unsafe { get_record_from_slice(&mut trace, ()) };
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
@@ -505,9 +507,11 @@ impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
                 // SAFETY:
-                // - `chunk` contains a valid record with the specified layout
-                // - Layout metadata matches the actual data in the chunk
-                // - `get_record_from_slice` correctly interprets the bytes according to layout
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - chunk contains a valid Rv32HintStoreRecordMut with the exact layout specified
+                // - get_record_from_slice will correctly split the buffer into header and variable
+                //   components based on this layout
                 let record: Rv32HintStoreRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,

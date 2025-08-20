@@ -221,7 +221,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32MultAdapterFiller {
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
-        // - adapter_row contains a valid Rv32MultAdapterRecord representation
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         // - get_record_from_slice correctly interprets the bytes as Rv32MultAdapterRecord
         let record: &Rv32MultAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32MultAdapterCols<F> = adapter_row.borrow_mut();

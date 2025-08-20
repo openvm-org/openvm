@@ -351,15 +351,12 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
-        // SAFETY: The caller guarantees that row_slice has at least A::WIDTH + core
-        // width elements. A::WIDTH is a compile-time constant representing the
-        // adapter column count, ensuring a valid split point.
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // ShiftCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-
-        // SAFETY: core_row points to memory containing a valid ShiftCoreRecord.
-        // The record was written by the execute function with the correct layout.
-        // get_record_from_slice reads the record without requiring a layout parameter.
+        // SAFETY: core_row contains a valid ShiftCoreRecord written by the executor
+        // during trace generation
         let record: &ShiftCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
