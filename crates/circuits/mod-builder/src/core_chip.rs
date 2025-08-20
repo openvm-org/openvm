@@ -225,12 +225,14 @@ impl<'a, F, A> CustomBorrow<'a, FieldExpressionCoreRecordMut<'a>, FieldExpressio
         &'a mut self,
         layout: FieldExpressionRecordLayout<F, A>,
     ) -> FieldExpressionCoreRecordMut<'a> {
-        // SAFETY: The layout guarantees that self has at least 1 + total_input_limbs
-        // elements. The first element is the opcode, followed by input limbs.
+        // SAFETY: The buffer length is the width of the trace which should be at least 1
         let (opcode_buf, input_limbs_buff) = unsafe { self.split_at_mut_unchecked(1) };
 
+        // SAFETY: opcode_buf has exactly 1 element from split_at_mut_unchecked(1)
+        let opcode_buf = unsafe { opcode_buf.get_unchecked_mut(0) };
+
         FieldExpressionCoreRecordMut {
-            opcode: &mut opcode_buf[0],
+            opcode: opcode_buf,
             input_limbs: &mut input_limbs_buff[..layout.metadata.total_input_limbs],
         }
     }
@@ -439,16 +441,13 @@ where
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // Get the core record from the row slice
-        // SAFETY: The caller guarantees that row_slice has at least A::WIDTH + core
-        // width elements. A::WIDTH is a compile-time constant representing the
-        // adapter column count, ensuring a valid split point.
+        // SAFETY: Caller guarantees that row_slice has width A::WIDTH + core width
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: core_row contains valid memory for a FieldExpressionCoreRecord with
-        // the specified layout. The record was written by the execute function and
-        // get_record_from_slice correctly interprets it according to the layout.
+        // SAFETY: The core_row slice is transmuted to FieldExpressionCoreRecordMut using
+        // the specified layout, which satisfies CustomBorrow requirements for safe access.
         let record: FieldExpressionCoreRecordMut =
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 

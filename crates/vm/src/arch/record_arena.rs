@@ -205,8 +205,7 @@ impl DenseRecordArena {
         );
         self.records_buffer.set_position(begin + count as u64);
         // SAFETY:
-        // - `begin` is within bounds (checked by debug_assert above)
-        // - `count` bytes are available from `begin` (checked by debug_assert)
+        // - `begin` is within bounds and caller must ensure `count` bytes are available
         // - The resulting slice is valid for the lifetime of self
         unsafe {
             std::slice::from_raw_parts_mut(
@@ -321,9 +320,7 @@ where
     // **SAFETY**: `offset` has to be a valid offset, pointing to the start of a record
     pub fn get_layout_at(offset: &mut usize, buffer: &[u8]) -> MultiRowLayout<M> {
         let buffer = &buffer[*offset..];
-        // SAFETY:
-        // - The buffer contains a valid serialized layout at this offset
-        // - extract_layout reads the expected number of bytes for the layout
+        // SAFETY: buffer points to the start of a valid record with proper layout information
         unsafe { buffer.extract_layout() }
     }
 
@@ -350,8 +347,8 @@ where
             let record: R = {
                 // SAFETY:
                 // - buff.as_mut_ptr() is valid for len bytes
-                // - We're creating a new slice with the same bounds
-                // - This reborrowing is needed to satisfy the borrow checker
+                // - len matches original buffer size
+                // - Bypasses borrow checker for multiple mutable accesses within loop
                 let buff = unsafe { &mut *slice_from_raw_parts_mut(buff.as_mut_ptr(), len) };
                 Self::get_record_at(&mut offset, buff)
             };
@@ -373,9 +370,7 @@ where
             let record_size = R::size(&layout);
             let record_alignment = R::alignment(&layout);
             let aligned_record_size = record_size.next_multiple_of(record_alignment);
-            // SAFETY:
-            // - offset < len (checked by while loop condition)
-            // - The resulting pointer is within the buffer bounds
+            // SAFETY: offset < len, pointer within buffer bounds
             let src_ptr = unsafe { self.buffer.as_ptr().add(offset) };
             let dst_ptr = arena
                 .alloc_buffer(layout.metadata.get_num_rows())
@@ -383,7 +378,6 @@ where
             // SAFETY:
             // - src_ptr points to valid memory with at least aligned_record_size bytes
             // - dst_ptr points to freshly allocated memory with sufficient size
-            // - The memory regions don't overlap (different allocations)
             unsafe { copy_nonoverlapping(src_ptr, dst_ptr, aligned_record_size) };
             offset += aligned_record_size;
         }
@@ -448,8 +442,8 @@ where
             let record: (A, C) = {
                 // SAFETY:
                 // - buff.as_mut_ptr() is valid for len bytes
-                // - We're creating a new slice with the same bounds
-                // - This reborrowing is needed to satisfy the borrow checker
+                // - len matches original buffer size
+                // - Bypasses borrow checker for multiple mutable accesses within loop
                 let buff = unsafe { &mut *slice_from_raw_parts_mut(buff.as_mut_ptr(), len) };
                 Self::get_record_at(&mut offset, buff, layout.clone())
             };

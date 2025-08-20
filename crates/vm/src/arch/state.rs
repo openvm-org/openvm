@@ -172,9 +172,9 @@ where
         addr_space: u32,
         ptr: u32,
     ) -> [T; BLOCK_SIZE] {
-        // SAFETY: The GuestMemory read operation validates that the address is
-        // within bounds and properly aligned for type T. The memory region is
-        // guaranteed to contain valid data for the requested address space.
+        // SAFETY:
+        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base field
+        // - T is the exact memory cell type for this address space, satisfying the type requirement
         unsafe { self.memory.read(addr_space, ptr) }
     }
 
@@ -185,17 +185,18 @@ where
         ptr: u32,
         data: &[T; BLOCK_SIZE],
     ) {
-        // SAFETY: The GuestMemory write operation validates that the address is
-        // within bounds and properly aligned for type T. The memory region is
-        // guaranteed to be writable for the requested address space.
+        // SAFETY:
+        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base field
+        // - T is the exact memory cell type for this address space, satisfying the type requirement
         unsafe { self.memory.write(addr_space, ptr, *data) }
     }
 
     #[inline(always)]
     pub fn host_read_slice<T: Copy + Debug>(&self, addr_space: u32, ptr: u32, len: usize) -> &[T] {
-        // SAFETY: The GuestMemory get_slice operation validates that the address
-        // range [ptr, ptr + len * size_of::<T>()) is within bounds. The returned
-        // slice is valid for the lifetime of the borrow.
+        // SAFETY:
+        // - T is stack-allocated repr(C) or repr(transparent), usually u8 or F where F is the base field
+        // - T is the exact memory cell type for this address space, satisfying the type requirement
+        // - panics if the slice is out of bounds
         unsafe { self.memory.get_slice(addr_space, ptr, len) }
     }
 }

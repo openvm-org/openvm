@@ -40,15 +40,9 @@ impl<F: PrimeField32> MemoryTester<F> {
         let t = memory.timestamp();
         // TODO: this could be improved if we added a TracingMemory::get_f function
         let (t_prev, data) = if addr_space <= 3 {
-            // SAFETY: The memory read is safe because we're reading from a valid
-            // address space (0-3) and the ptr is within the memory bounds. The type
-            // parameters ensure proper alignment and size for the read operation.
             let (t_prev, data) = unsafe { memory.read::<u8, N, 4>(addr_space as u32, ptr as u32) };
             (t_prev, data.map(F::from_canonical_u8))
         } else {
-            // SAFETY: The memory read is safe because we're reading from a valid
-            // address space (>3) and the ptr is within the memory bounds. Reading
-            // field elements directly with block size 1.
             unsafe { memory.read::<F, N, 1>(addr_space as u32, ptr as u32) }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(
@@ -70,9 +64,6 @@ impl<F: PrimeField32> MemoryTester<F> {
         let t = memory.timestamp();
         // TODO: this could be improved if we added a TracingMemory::write_f function
         let (t_prev, data_prev) = if addr_space <= 3 {
-            // SAFETY: The memory write is safe because we're writing to a valid
-            // address space (0-3) and the ptr is within the memory bounds. The field
-            // elements are safely converted to u8 using canonical representation.
             let (t_prev, data_prev) = unsafe {
                 memory.write::<u8, N, 4>(
                     addr_space as u32,
@@ -82,9 +73,6 @@ impl<F: PrimeField32> MemoryTester<F> {
             };
             (t_prev, data_prev.map(F::from_canonical_u8))
         } else {
-            // SAFETY: The memory write is safe because we're writing to a valid
-            // address space (>3) and the ptr is within the memory bounds. Writing
-            // field elements directly with block size 1.
             unsafe { memory.write::<F, N, 1>(addr_space as u32, ptr as u32, data) }
         };
         self.chip_for_block.get_mut(&N).unwrap().receive(

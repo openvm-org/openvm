@@ -16,9 +16,8 @@ pub mod types;
 impl MetricDb {
     pub fn new(metrics_file: impl AsRef<Path>) -> Result<Self> {
         let file = File::open(metrics_file)?;
-        // SAFETY: The file is opened read-only and Mmap::map creates a read-only
-        // memory mapping. The file remains open for the lifetime of the Mmap, and
-        // the OS ensures the mapped memory remains valid while the file is open.
+        // SAFETY: File is read-only mapped. File will not be modified by other
+        // processes during the mapping's lifetime.
         let mmap = unsafe { Mmap::map(&file)? };
         let metrics: MetricsFile = serde_json::from_slice(&mmap)?;
 
