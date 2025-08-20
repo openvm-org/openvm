@@ -193,6 +193,7 @@ impl VerifyCmd {
                 Sdk::verify_evm_halo2_proof(&evm_verifier, evm_proof)?;
             }
         }
+        println!("Proof verified successfully!");
         Ok(())
     }
 }
