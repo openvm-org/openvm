@@ -36,7 +36,7 @@ alloy-primitives = { version = "1.2.1" }
 default = ["parallel", "jemalloc", "tco"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-tco = ["openvm-circuit/tco"]
+tco = ["openvm-rv32im-circuit/tco"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
