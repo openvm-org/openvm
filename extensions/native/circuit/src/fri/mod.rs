@@ -1114,29 +1114,38 @@ impl FriReducedOpeningExecutor {
 
         // The following is the computation of the partial RLCs, where each partial result depends
         // on the former. This entire computation does not involve any guest state access.
-        let mut result = [F::ZERO; EXT_DEG];
-        // workload must be written to in reverse due to how the RLC is evaluated
-        for (workload_row, (a, a_prev_t, b, b_prev_t)) in record.workload.iter_mut().zip(
-            izip!(
-                a_slice.iter(),
-                a_prev_ts.into_iter(),
-                b_slice_flat.chunks_exact(EXT_DEG),
-                b_prev_ts.into_iter()
-            )
-            .rev(),
-        ) {
-            let b: &[F; EXT_DEG] = b.try_into().unwrap();
-            let mut b: [F; EXT_DEG] = *b;
-            b[0] -= *a;
-            // result = result * alpha + (b - a)
-            result = FieldExtension::add(FieldExtension::multiply(result, alpha), b);
+        for (workload_row, (a, a_prev_t, b_prev_t)) in record
+            .workload
+            .iter_mut()
+            .zip(izip!(a_slice.iter(), a_prev_ts.into_iter(), b_prev_ts.into_iter()).rev())
+        {
             workload_row.a = *a;
             workload_row.a_aux.prev_timestamp = a_prev_t;
             workload_row.b_aux.prev_timestamp = b_prev_t;
-            workload_row.result = result;
         }
-        result
+        // let mut result = [F::ZERO; EXT_DEG];
+        a_slice
+            .par_iter()
+            .zip(b_slice_flat.par_chunks_exact(EXT_DEG))
+            .enumerate()
+            .map(|(mut i, (a, b))| {
+                let b: &[F; EXT_DEG] = b.try_into().unwrap();
+                let mut b: [F; EXT_DEG] = *b;
+                b[0] -= *a;
+                let mut res = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                let mut alpha_pow = alpha;
+                while i > 0 {
+                    if i & 1 > 0 {
+                        res = FieldExtension::multiply(res, alpha_pow);
+                    }
+                    alpha_pow = FieldExtension::multiply(alpha_pow, alpha_pow);
+                    i >>= 1;
+                }
+                FieldExtension::multiply(alpha_pow, b)
+            })
+            .reduce(|| [F::ZERO; EXT_DEG], |a, b| FieldExtension::add(a, b))
     }
+
     fn sequential_compute_result<F: PrimeField32>(
         &self,
         memory: &mut TracingMemory,
