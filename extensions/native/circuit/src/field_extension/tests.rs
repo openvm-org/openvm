@@ -4,6 +4,10 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
@@ -37,10 +41,6 @@ use crate::{
     },
     test_utils::write_native_array,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;

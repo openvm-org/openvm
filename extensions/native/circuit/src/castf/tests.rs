@@ -4,6 +4,8 @@ use std::borrow::BorrowMut;
 use openvm_circuit::arch::testing::GpuChipTestBuilder;
 #[cfg(feature = "cuda")]
 use openvm_circuit::arch::testing::GpuTestChipHarness;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{default_var_range_checker_bus, dummy_range_checker};
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, MemoryConfig, PreflightExecutor,
@@ -39,9 +41,6 @@ use crate::{
     test_utils::write_native_array,
     utils::CASTF_MAX_BITS,
 };
-
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{default_var_range_checker_bus, dummy_range_checker};
 
 const MAX_INS_CAPACITY: usize = 128;
 const READ_SIZE: usize = 1;

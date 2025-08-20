@@ -1,6 +1,10 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuChipTestBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
@@ -30,10 +34,6 @@ use crate::{
     fri::{FriReducedOpeningFiller, WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
     write_native_array,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
