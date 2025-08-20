@@ -31,6 +31,7 @@ jobs:
           - { name: "native", path: "native", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "sha256", path: "sha256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "sha256", path: "sha256", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "bigint", path: "bigint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }

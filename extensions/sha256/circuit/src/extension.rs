@@ -24,7 +24,6 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-
 #[cfg(feature = "cuda")]
 use {
     openvm_circuit::{
@@ -35,6 +34,7 @@ use {
         },
     },
     openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_rv32im_circuit::Rv32ImGpuProverExt,
     openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
 };
 
@@ -204,21 +204,21 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Sha256Rv32GpuBuilder {
             circuit,
         )?;
         let inventory = &mut chip_complex.inventory;
-        // VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-        //     &Rv32ImGpuProverExt,
-        //     &config.rv32i,
-        //     inventory,
-        // )?;
-        // VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-        //     &Rv32ImGpuProverExt,
-        //     &config.rv32m,
-        //     inventory,
-        // )?;
-        // VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-        //     &Rv32ImGpuProverExt,
-        //     &config.io,
-        //     inventory,
-        // )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32i,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.rv32m,
+            inventory,
+        )?;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &Rv32ImGpuProverExt,
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
             &Sha256GpuProverExt,
             &config.sha256,

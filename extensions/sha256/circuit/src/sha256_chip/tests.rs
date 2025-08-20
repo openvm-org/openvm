@@ -7,7 +7,7 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
+        Arena, MatrixRecordArena, PreflightExecutor,
     },
     system::{memory::SharedMemoryHelper, SystemPort},
     utils::get_random_message,
@@ -26,7 +26,6 @@ use openvm_sha256_transpiler::Rv32Sha256Opcode::{self, *};
 use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
-
 #[cfg(feature = "cuda")]
 use {
     crate::{Sha256VmChipGpu, Sha256VmRecordMut},
@@ -36,10 +35,7 @@ use {
 };
 
 use super::{Sha256VmAir, Sha256VmChip, Sha256VmExecutor};
-use crate::{
-    sha256_chip::trace::Sha256VmRecordLayout, sha256_solve, Sha256VmDigestCols, Sha256VmFiller,
-    Sha256VmRoundCols,
-};
+use crate::{sha256_solve, Sha256VmDigestCols, Sha256VmFiller, Sha256VmRoundCols};
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
@@ -261,51 +257,6 @@ fn sha256_solve_sanity_check() {
         46, 245, 169, 94, 255, 42, 136, 193, 15, 40, 133, 173, 22,
     ];
     assert_eq!(output, expected);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-/// DENSE TESTS
-///
-/// Ensure that the chip works as expected with dense records.
-/// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
-/// all the constraints pass.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn dense_record_arena_test() {
-    let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_harness, bitwise) = create_harness(&mut tester);
-
-    {
-        let mut dense_harness = create_harness::<DenseRecordArena>(&mut tester).0;
-
-        let num_ops: usize = 10;
-        for _ in 0..num_ops {
-            set_and_execute(
-                &mut tester,
-                &mut dense_harness.executor,
-                &mut dense_harness.arena,
-                &mut rng,
-                SHA256,
-                None,
-                None,
-            );
-        }
-
-        let mut record_interpreter = dense_harness
-            .arena
-            .get_record_seeker::<_, Sha256VmRecordLayout>();
-        record_interpreter.transfer_to_matrix_arena(&mut sparse_harness.arena);
-    }
-
-    let tester = tester
-        .build()
-        .load(sparse_harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

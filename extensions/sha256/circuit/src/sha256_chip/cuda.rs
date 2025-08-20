@@ -2,13 +2,6 @@
 
 use std::{iter::repeat_n, sync::Arc};
 
-use crate::{
-    cuda_abi::sha256::{
-        sha256_fill_invalid_rows, sha256_first_pass_tracegen, sha256_hash_computation,
-        sha256_second_pass_dependencies,
-    },
-    Sha256VmMetadata, Sha256VmRecordMut, SHA256VM_WIDTH,
-};
 use derive_new::new;
 use openvm_circuit::{
     arch::{DenseRecordArena, MultiRowLayout, RecordSeeker},
@@ -25,6 +18,14 @@ use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha256_air::{get_sha256_num_blocks, SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+
+use crate::{
+    cuda_abi::sha256::{
+        sha256_fill_invalid_rows, sha256_first_pass_tracegen, sha256_hash_computation,
+        sha256_second_pass_dependencies,
+    },
+    Sha256VmMetadata, Sha256VmRecordMut, SHA256VM_WIDTH,
+};
 
 // ===== SHA256 GPU CHIP IMPLEMENTATION =====
 #[derive(new)]
