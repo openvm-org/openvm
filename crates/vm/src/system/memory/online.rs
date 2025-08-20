@@ -863,30 +863,29 @@ impl TracingMemory {
         while current_ptr < end_ptr {
             let (mut curr_start_ptr, curr_block_meta) =
                 self.get_block_metadata::<ALIGN>(address_space as usize, current_ptr as usize);
-            let mut block_size = curr_block_meta.block_size();
-            if block_size == 0 {
-                curr_start_ptr = self.uninitialized_memory_chunk_start::<ALIGN>(pointer);
-                block_size = self.initial_block_size.max(ALIGN) as u8;
-            }
+            let block_size = curr_block_meta.block_size();
             if current_ptr == pointer {
                 unsafe {
                     addr_of_mut!((*ret_ptr).start_ptr).write(curr_start_ptr);
                 }
             }
-            current_ptr = curr_start_ptr + block_size as u32;
-            unsafe {
-                addr_of_mut!((*ret_ptr).split_data[seg_idx].block_size).write(block_size);
-            }
             if block_size == 0 {
+                curr_start_ptr = self.uninitialized_memory_chunk_start::<ALIGN>(pointer);
+                let actual_block_size = self.initial_block_size.max(ALIGN) as u32;
                 unsafe {
                     addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(INITIAL_TIMESTAMP);
                 }
+                current_ptr = curr_start_ptr + actual_block_size;
             } else {
                 let timestamp = curr_block_meta.timestamp();
                 unsafe {
                     addr_of_mut!((*ret_ptr).split_data[seg_idx].timestamp).write(timestamp);
                 }
                 max_timestamp = max_timestamp.max(timestamp);
+                current_ptr = curr_start_ptr + block_size as u32;
+            }
+            unsafe {
+                addr_of_mut!((*ret_ptr).split_data[seg_idx].block_size).write(block_size);
             }
             seg_idx += 1;
         }
@@ -960,7 +959,7 @@ impl TracingMemory {
         let end = batch_end + MAX_BLOCK_SIZE as u32 - 1;
         meta_page.par_touch(start as usize, end as usize);
         let batch_processor = BatchReadProcessor::<T>::new(self, address_space);
-        (0..len)
+        let access_records: Vec<_> = (0..len)
             .into_par_iter()
             .map(|i| {
                 let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
@@ -973,14 +972,32 @@ impl TracingMemory {
                         batch_processor
                             .set_meta_block::<BLOCK_SIZE, ALIGN>(start_ptr as usize, access_t);
                     }
-                    return prev_t;
+                    return AccessSplitRecord {
+                        start_ptr,
+                        split_data: [SplitData {
+                            timestamp: prev_t,
+                            block_size: BLOCK_SIZE as u8,
+                        }; BLOCK_SIZE],
+                        len: 1,
+                    };
                 }
+                self.compute_access_record::<T, BLOCK_SIZE, ALIGN>(address_space, block_start_ptr)
+            })
+            .collect();
+        access_records
+            .into_par_iter()
+            .enumerate()
+            .map(|(i, access_record)| {
+                let block_start_ptr = pointer + i as u32 * BLOCK_SIZE as u32;
                 let AccessSplitRecord {
                     start_ptr,
                     split_data,
                     len: num_segs,
-                } = self
-                    .compute_access_record::<T, BLOCK_SIZE, ALIGN>(address_space, block_start_ptr);
+                } = access_record;
+                if start_ptr == block_start_ptr && split_data[0].block_size == BLOCK_SIZE as u8 {
+                    return split_data[0].timestamp;
+                }
+                let access_t = access_timestamp(i);
                 // Edge case: the first block is responsible for the first out-of-bound segment.
                 if i == 0 && start_ptr < pointer {
                     unsafe {
@@ -1029,7 +1046,6 @@ impl TracingMemory {
                                 block_size = ALIGN as u8;
                                 add_split = false;
                                 push_ts(INITIAL_TIMESTAMP);
-                                curr_ptr += block_size as u32;
                             } else {
                                 block_size = self.initial_block_size as u8;
                             }
@@ -1049,12 +1065,12 @@ impl TracingMemory {
                             for _ in 0..num_ts {
                                 push_ts(timestamp);
                             }
-                            curr_ptr += block_size as u32;
                             max_timestamp = max_timestamp.max(timestamp);
                         }
                         // No need to update the metadata of cells in the block because we will
                         // merge them later.
                     }
+                    curr_ptr += block_size as u32;
                     seg_idx += 1;
                 }
                 debug_assert_eq!(seg_idx, num_segs);
