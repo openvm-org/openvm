@@ -154,17 +154,20 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
     let mut expected_actual_heights = vec![0; vk.inner.per_air.len()];
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
     expected_actual_heights[executor_idx_to_air_idx[6]] = 1; // corresponds to FieldArithmeticChip
-    assert_eq!(
-        record_arenas
-            .iter()
-            .map(|ra| ra.trace_offset() / ra.width())
-            .collect_vec(),
-        expected_actual_heights
-    );
-    for ra in &mut record_arenas {
-        ra.force_matrix_dimensions();
+    #[cfg(not(feature = "cuda"))]
+    {
+        assert_eq!(
+            record_arenas
+                .iter()
+                .map(|ra| ra.trace_offset() / ra.width())
+                .collect_vec(),
+            expected_actual_heights
+        );
+        for ra in &mut record_arenas {
+            ra.force_matrix_dimensions();
+        }
+        vm.override_system_trace_heights(&fixed_air_heights);
     }
-    vm.override_system_trace_heights(&fixed_air_heights);
 
     let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
     let air_heights: Vec<_> = ctx

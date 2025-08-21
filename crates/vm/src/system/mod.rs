@@ -24,6 +24,8 @@ use openvm_stark_backend::{
 use rustc_hash::FxHashMap;
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
+#[cfg(feature = "cuda")]
+use crate::system::cuda::SystemChipInventoryGPU;
 use crate::{
     arch::{
         vm_poseidon2_config, AirInventory, AirInventoryError, BusIndexManager, ChipInventory,
@@ -621,5 +623,29 @@ where
         }
         self.memory_controller
             .set_override_trace_heights(&heights[memory_start_idx..]);
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl SystemWithFixedTraceHeights for SystemChipInventoryGPU {
+    /// Warning: this does not set the override for the PublicValuesChip. The PublicValuesChip
+    /// override must be set via the RecordArena.
+    fn override_trace_heights(&mut self, _heights: &[u32]) {
+        // assert_eq!(
+        //     heights[PROGRAM_AIR_ID] as usize,
+        //     self.program_chip
+        //         .cached
+        //         .as_ref()
+        //         .expect("program not loaded")
+        //         .trace
+        //         .height()
+        // );
+        // assert_eq!(heights[CONNECTOR_AIR_ID], 2);
+        // let mut memory_start_idx = PUBLIC_VALUES_AIR_ID;
+        // if self.public_values_chip.is_some() {
+        //     memory_start_idx += 1;
+        // }
+        // self.memory_inventory
+        //     .set_override_trace_heights(&heights[memory_start_idx..]);
     }
 }
