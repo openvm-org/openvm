@@ -2,15 +2,24 @@ use std::{
     array,
     borrow::{Borrow, BorrowMut},
     mem::size_of,
-    sync::{atomic::AtomicU32, Arc, Mutex},
+    sync::Arc,
 };
 
-use openvm_circuit::system::memory::{
-    offline_checker::{
-        MemoryBaseAuxCols, MemoryBridge, MemoryExtendedAuxRecord, MemoryReadAuxCols,
-        MemoryReadAuxRecord, MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+use openvm_circuit::{
+    arch::{
+        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionCtxTrait,
+        ExecutionError, Executor, MeteredExecutionCtxTrait, MeteredExecutor, MultiRowLayout,
+        MultiRowMetadata, PreflightExecutor, RecordArena, SizedRecord, StaticProgramError,
+        TraceFiller, VmChipWrapper, VmExecState, VmStateMut,
     },
-    MemoryAddress, MemoryAuxColsFactory,
+    system::memory::{
+        offline_checker::{
+            MemoryBaseAuxRecord, MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord,
+            MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
+        },
+        online::{GuestMemory, TracingMemory},
+        MemoryAddress, MemoryAuxColsFactory,
+    },
 };
 use openvm_circuit_primitives::{
     utils::{and, not, or, select},
@@ -18,19 +27,27 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV32_MEMORY_AS;
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    LocalOpcode,
+};
+use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
+use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::{
-    config::{StarkGenericConfig, Val},
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::{cpu::CpuBackend, types::AirProvingContext},
-    rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    Chip, ChipUsageGetter,
+    p3_maybe_rayon::prelude::*,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
-use crate::bus::MemcpyBus;
+use crate::{
+    bus::MemcpyBus, MemcpyLoopChip, A1_REGISTER_PTR, A2_REGISTER_PTR, A3_REGISTER_PTR,
+    A4_REGISTER_PTR,
+};
 
 // Import constants from lib.rs
 use crate::{MEMCPY_LOOP_LIMB_BITS, MEMCPY_LOOP_NUM_LIMBS};
@@ -190,7 +207,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // This actually receives when is_boundary = -1
         self.memcpy_bus
             .send(
-                local.timestamp,
+                local.timestamp
+                    + (local.is_boundary + AB::Expr::ONE) * AB::Expr::from_canonical_usize(4),
                 local.dest,
                 local.source,
                 len,
@@ -267,233 +285,568 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
     }
 }
 
+#[derive(derive_new::new, Clone, Copy)]
+pub struct MemcpyIterExecutor {}
+
+#[derive(Copy, Clone, Debug)]
+pub struct MemcpyIterMetadata {
+    num_rows: usize,
+}
+
+impl MultiRowMetadata for MemcpyIterMetadata {
+    #[inline(always)]
+    fn get_num_rows(&self) -> usize {
+        self.num_rows
+    }
+}
+
+pub type MemcpyIterLayout = MultiRowLayout<MemcpyIterMetadata>;
+
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct MemcpyIterRecord {
-    pub timestamp: u32,
+pub struct MemcpyIterRecordHeader {
+    pub shift: u8,
     pub dest: u32,
     pub source: u32,
     pub len: u32,
-    pub shift: u8,
-    pub memory_read_data: Vec<[u8; MEMCPY_LOOP_NUM_LIMBS]>,
-    pub read_aux: Vec<MemoryExtendedAuxRecord>,
-    pub write_aux: Vec<MemoryExtendedAuxRecord>,
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub register_aux: [MemoryBaseAuxRecord; 3],
 }
 
-pub struct MemcpyIterChip {
-    pub air: MemcpyIterAir,
-    pub records: Arc<Mutex<Vec<MemcpyIterRecord>>>,
-    pub num_rows: AtomicU32,
+// This is the part of the record that we keep `(len & !15) + (shift != 0)` times per instruction
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct MemcpyIterRecordVar {
+    pub data: [[u8; MEMCPY_LOOP_NUM_LIMBS]; 4],
+    pub read_aux: [MemoryReadAuxRecord; 4],
+    pub write_aux: [MemoryWriteBytesAuxRecord<4>; 4],
+}
+
+/// **SAFETY**: the order of the fields in `MemcpyLoopRecordMut` and `MemcpyLoopRecordVar`
+/// is important.
+#[derive(Debug)]
+pub struct MemcpyIterRecordMut<'a> {
+    pub inner: &'a mut MemcpyIterRecordHeader,
+    pub var: &'a mut [MemcpyIterRecordVar],
+}
+
+/// Custom borrowing that splits the buffer into a fixed `MemcpyLoopRecordHeader` header
+/// followed by a slice of `MemcpyLoopRecordVar`'s of length `num_words` provided at runtime.
+/// Uses `align_to_mut()` to make sure the slice is properly aligned to `MemcpyLoopRecordVar`.
+/// Has debug assertions to make sure the above works as expected.
+impl<'a> CustomBorrow<'a, MemcpyIterRecordMut<'a>, MemcpyIterLayout> for [u8] {
+    fn custom_borrow(&'a mut self, layout: MemcpyIterLayout) -> MemcpyIterRecordMut<'a> {
+        let (header_buf, rest) =
+            unsafe { self.split_at_mut_unchecked(size_of::<MemcpyIterRecordHeader>()) };
+
+        let (_, vars, _) = unsafe { rest.align_to_mut::<MemcpyIterRecordVar>() };
+        MemcpyIterRecordMut {
+            inner: header_buf.borrow_mut(),
+            var: &mut vars[..layout.metadata.num_rows],
+        }
+    }
+
+    unsafe fn extract_layout(&self) -> MemcpyIterLayout {
+        let header: &MemcpyIterRecordHeader = self.borrow();
+        MultiRowLayout::new(MemcpyIterMetadata {
+            num_rows: ((header.len - header.shift as u32) >> 4) as usize + 1,
+        })
+    }
+}
+
+impl SizedRecord<MemcpyIterLayout> for MemcpyIterRecordMut<'_> {
+    fn size(layout: &MemcpyIterLayout) -> usize {
+        let mut total_len = size_of::<MemcpyIterRecordHeader>();
+        // Align the pointer to the alignment of `Rv32HintStoreVar`
+        total_len = total_len.next_multiple_of(align_of::<MemcpyIterRecordVar>());
+        total_len += size_of::<MemcpyIterRecordVar>() * layout.metadata.num_rows;
+        total_len
+    }
+
+    fn alignment(_layout: &MemcpyIterLayout) -> usize {
+        align_of::<MemcpyIterRecordHeader>()
+    }
+}
+
+#[derive(derive_new::new)]
+pub struct MemcpyIterFiller {
     pub pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub memcpy_loop_chip: Arc<MemcpyLoopChip>,
 }
 
-impl MemcpyIterChip {
-    pub fn new(
-        memory_bridge: MemoryBridge,
-        range_bus: VariableRangeCheckerBus,
-        memcpy_bus: MemcpyBus,
-        pointer_max_bits: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        Self {
-            air: MemcpyIterAir::new(memory_bridge, range_bus, memcpy_bus, pointer_max_bits),
-            records: Arc::new(Mutex::new(Vec::new())),
-            num_rows: AtomicU32::new(0),
-            pointer_max_bits,
-            range_checker_chip,
-        }
+pub type MemcpyIterChip<F> = VmChipWrapper<F, MemcpyIterFiller>;
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MemcpyIterPreCompute {
+    c: u8,
+}
+
+impl<F, RA> PreflightExecutor<F, RA> for MemcpyIterExecutor
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, MultiRowLayout<MemcpyIterMetadata>, MemcpyIterRecordMut<'buf>>,
+{
+    fn get_opcode_name(&self, _: usize) -> String {
+        format!("{:?}", Rv32MemcpyOpcode::MEMCPY_LOOP)
     }
 
-    pub fn bus(&self) -> MemcpyBus {
-        self.air.memcpy_bus
-    }
-
-    pub fn clear(&self) {
-        self.records.lock().unwrap().clear();
-        self.num_rows.store(0, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    pub fn add_new_loop<F: PrimeField32>(
+    fn execute(
         &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        timestamp: u32,
-        dest: u32,
-        source: u32,
-        len: u32,
-        shift: u8,
-        memory_read_data: Vec<[u8; MEMCPY_LOOP_NUM_LIMBS]>,
-        read_aux: Vec<MemoryReadAuxRecord>,
-        write_aux: Vec<MemoryWriteBytesAuxRecord<MEMCPY_LOOP_NUM_LIMBS>>,
-    ) {
-        let mut len = len;
-        // Update number of rows
-        self.num_rows
-            .fetch_add(len / 16 + 1, std::sync::atomic::Ordering::Relaxed);
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let Instruction { opcode, c, .. } = instruction;
+        debug_assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
+        let shift = c.as_canonical_u32() as u8;
+        debug_assert!([0, 1, 2, 3].contains(&shift));
 
-        let word_to_u16 = |data: u32| [data & 0xffff, data >> 16];
-        let has_shift = (shift != 0) as usize;
-
-        // Range check len
-        loop {
-            let len_u16_limbs = word_to_u16(len);
-            if len > 15 {
-                self.range_checker_chip
-                    .add_count(len_u16_limbs[0], 2 * MEMCPY_LOOP_LIMB_BITS);
-                self.range_checker_chip.add_count(
-                    len_u16_limbs[1],
-                    self.pointer_max_bits - 2 * MEMCPY_LOOP_LIMB_BITS,
-                );
+        let mut dest = read_rv32_register(
+            state.memory.data(),
+            if shift == 0 {
+                A3_REGISTER_PTR
             } else {
-                self.range_checker_chip.add_count(len_u16_limbs[0], 4);
-                self.range_checker_chip.add_count(len_u16_limbs[1], 0);
-            }
-            if len < 16 {
-                break;
-            }
-            len -= 16;
-        }
+                A1_REGISTER_PTR
+            } as u32,
+        );
+        let mut source = read_rv32_register(
+            state.memory.data(),
+            if shift == 0 {
+                A4_REGISTER_PTR
+            } else {
+                A3_REGISTER_PTR
+            } as u32,
+        );
+        let mut len = read_rv32_register(state.memory.data(), A2_REGISTER_PTR as u32);
 
-        // Read data from memory
-        let mut row_read_aux = Vec::new();
-        read_aux.iter().enumerate().for_each(|(i, aux)| {
-            let mut aux_cols = MemoryBaseAuxCols::<F>::default();
-            let read_timestamp = timestamp
-                + if i == 0 {
-                    0
-                } else {
-                    (i + (i - has_shift) / 4 * 4) as u32
-                };
-            mem_helper.fill(aux.prev_timestamp, read_timestamp, &mut aux_cols);
-            row_read_aux.push(MemoryExtendedAuxRecord::from_aux_cols(aux_cols));
-        });
+        let record = state.ctx.alloc(MultiRowLayout::new(MemcpyIterMetadata {
+            num_rows: ((len - shift as u32) >> 4) as usize + 1,
+        }));
 
-        // Write data to memory
-        let mut row_write_aux = Vec::new();
-        write_aux.iter().enumerate().for_each(|(i, aux)| {
-            let mut aux_cols = MemoryBaseAuxCols::<F>::default();
-            mem_helper.fill(
-                aux.prev_timestamp,
-                (timestamp as usize + i + has_shift + (i / 4 + 1) * 4) as u32,
-                &mut aux_cols,
+        // Store the original values in the record
+        record.inner.shift = shift;
+        record.inner.from_pc = *state.pc;
+        record.inner.from_timestamp = state.memory.timestamp;
+
+        if shift != 0 {
+            source -= 12;
+            record.var[0].data[3] = tracing_read(
+                state.memory,
+                RV32_MEMORY_AS,
+                source - 4,
+                &mut record.var[0].read_aux[3].prev_timestamp,
             );
-            row_write_aux.push(MemoryExtendedAuxRecord::from_aux_cols(aux_cols));
-        });
-
-        // Create record
-        let row = MemcpyIterRecord {
-            timestamp,
-            dest,
-            source,
-            len,
-            shift,
-            memory_read_data,
-            read_aux: row_read_aux,
-            write_aux: row_write_aux,
         };
 
-        // Thread-safe push to rows vector
-        if let Ok(mut rows_guard) = self.records.lock() {
-            rows_guard.push(row);
-        }
-    }
-
-    /// Generates trace
-    pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let mut rows = F::zero_vec(
-            (self.num_rows.load(std::sync::atomic::Ordering::Relaxed) as usize)
-                * NUM_MEMCPY_ITER_COLS,
-        );
-        let mut current_row = 0;
-        let word_to_u16 = |data: u32| [data & 0xffff, data >> 16].map(F::from_canonical_u32);
-
-        for record in self.records.lock().unwrap().iter() {
-            let mut timestamp = record.timestamp;
-            let shift = [record.shift % 2, record.shift / 2].map(F::from_canonical_u8);
-            let has_shift = (record.shift != 0) as usize;
-            let mut prev_data = [F::ZERO; MEMCPY_LOOP_NUM_LIMBS];
-
-            for n in 0..(record.len / 16 + 1) as usize {
-                let row_start = current_row + n * NUM_MEMCPY_ITER_COLS;
-                let row = &mut rows[row_start..row_start + NUM_MEMCPY_ITER_COLS];
-                let cols: &mut MemcpyIterCols<F> = row.borrow_mut();
-                cols.timestamp = F::from_canonical_u32(timestamp);
-                cols.dest = F::from_canonical_u32(record.dest + (n << 2) as u32);
-                cols.source = F::from_canonical_u32(record.source + (n << 2) as u32);
-                cols.len = word_to_u16(record.len - (n << 2) as u32);
-                cols.shift = shift;
-                cols.is_valid = F::ONE;
-                cols.is_valid_not_start = F::ONE;
-                if n == 0 {
-                    cols.is_boundary = F::NEG_ONE;
-                    if has_shift != 0 {
-                        cols.data_4 = record.memory_read_data[0].map(F::from_canonical_u8);
-                        prev_data = cols.data_4;
-                        cols.read_aux[3].set_base(record.read_aux[0].to_aux_cols());
-                    }
-                } else {
-                    cols.is_boundary = if n as u32 == record.len / 16 {
-                        F::ONE
+        let mut idx = 1;
+        while len - shift as u32 > 15 {
+            let writes_data: [[u8; MEMCPY_LOOP_NUM_LIMBS]; 4] = array::from_fn(|i| {
+                record.var[idx].data[i] = tracing_read(
+                    state.memory,
+                    RV32_MEMORY_AS,
+                    source + 4 * i as u32,
+                    &mut record.var[idx].read_aux[i].prev_timestamp,
+                );
+                let write_data: [u8; MEMCPY_LOOP_NUM_LIMBS] = array::from_fn(|j| {
+                    if j < 4 - shift as usize {
+                        record.var[idx].data[i][j + shift as usize]
                     } else {
-                        F::ZERO
-                    };
-                    let mut data = [[F::ZERO; MEMCPY_LOOP_NUM_LIMBS]; 4];
-                    for i in 0..4 {
-                        data[i] = record.memory_read_data[(n - 1) * 4 + i + has_shift]
-                            .map(F::from_canonical_u8);
-                        cols.read_aux[i]
-                            .set_base(record.read_aux[(n - 1) * 4 + i + has_shift].to_aux_cols());
-                        cols.write_aux[i].set_base(record.write_aux[(n - 1) * 4 + i].to_aux_cols());
-                        let write_data: [F; MEMCPY_LOOP_NUM_LIMBS] = std::array::from_fn(|j| {
-                            if j < 4 - record.shift as usize {
-                                data[i][record.shift as usize + j]
-                            } else {
-                                prev_data[j - (4 - record.shift as usize)]
-                            }
-                        });
-                        cols.write_aux[i].set_prev_data(write_data);
-                        prev_data = data[i];
+                        record.var[idx - 1].data[i][j - (4 - shift as usize)]
                     }
-                    cols.data_1 = data[0];
-                    cols.data_2 = data[1];
-                    cols.data_3 = data[2];
-                    cols.data_4 = data[3];
-                }
-                if n == 0 {
-                    timestamp += (record.shift != 0) as u32;
-                } else {
-                    timestamp += 8;
-                }
-            }
-            current_row += (record.len / 16 + 1) as usize * NUM_MEMCPY_ITER_COLS;
+                });
+                write_data
+            });
+            writes_data.iter().enumerate().for_each(|(i, write_data)| {
+                tracing_write(
+                    state.memory,
+                    RV32_MEMORY_AS,
+                    dest + 4 * i as u32,
+                    *write_data,
+                    &mut record.var[idx].write_aux[i].prev_timestamp,
+                    &mut record.var[idx].write_aux[i].prev_data,
+                );
+            });
+            len -= 16;
+            source += 16;
+            dest += 16;
+            idx += 1;
         }
-        RowMajorMatrix::new(rows, NUM_MEMCPY_ITER_COLS)
+
+        // Handle the core loop
+        if shift != 0 {
+            source += 12;
+        }
+
+        let mut dest_data = [0; 4];
+        let mut source_data = [0; 4];
+        let mut len_data = [0; 4];
+
+        tracing_write(
+            state.memory,
+            RV32_REGISTER_AS,
+            if shift == 0 {
+                A3_REGISTER_PTR
+            } else {
+                A1_REGISTER_PTR
+            } as u32,
+            dest.to_le_bytes(),
+            &mut record.inner.register_aux[0].prev_timestamp,
+            &mut dest_data,
+        );
+
+        tracing_write(
+            state.memory,
+            RV32_REGISTER_AS,
+            if shift == 0 {
+                A4_REGISTER_PTR
+            } else {
+                A3_REGISTER_PTR
+            } as u32,
+            source.to_le_bytes(),
+            &mut record.inner.register_aux[1].prev_timestamp,
+            &mut source_data,
+        );
+
+        tracing_write(
+            state.memory,
+            RV32_REGISTER_AS,
+            A2_REGISTER_PTR as u32,
+            len.to_le_bytes(),
+            &mut record.inner.register_aux[2].prev_timestamp,
+            &mut len_data,
+        );
+
+        record.inner.dest = u32::from_le_bytes(dest_data);
+        record.inner.source = u32::from_le_bytes(source_data);
+        record.inner.len = u32::from_le_bytes(len_data);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+
+        Ok(())
     }
 }
 
-// We allow any `R` type so this can work with arbitrary record arenas.
-impl<R, SC: StarkGenericConfig> Chip<R, CpuBackend<SC>> for MemcpyIterChip
-where
-    Val<SC>: PrimeField32,
-{
-    /// Generates trace and resets the internal counters all to 0.
-    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
-        let trace = self.generate_trace::<Val<SC>>();
-        AirProvingContext::simple_no_pis(Arc::new(trace))
+impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) {
+        if rows_used == 0 {
+            return;
+        }
+
+        let width = trace.width;
+        debug_assert_eq!(width, NUM_MEMCPY_ITER_COLS);
+        let mut trace = &mut trace.values[..width * rows_used];
+        let mut sizes = Vec::with_capacity(rows_used >> 1);
+        let mut chunks = Vec::with_capacity(rows_used >> 1);
+
+        while !trace.is_empty() {
+            let record: &MemcpyIterRecordHeader = unsafe { get_record_from_slice(&mut trace, ()) };
+            let num_rows = ((record.len - record.shift as u32) >> 4) as usize + 1;
+            let (chunk, rest) = trace.split_at_mut(width * num_rows as usize);
+            sizes.push(num_rows);
+            chunks.push(chunk);
+            trace = rest;
+        }
+
+        chunks
+            .par_iter_mut()
+            .zip(sizes.par_iter())
+            .for_each(|(chunk, &num_rows)| {
+                let record: MemcpyIterRecordMut = unsafe {
+                    get_record_from_slice(
+                        chunk,
+                        MultiRowLayout::new(MemcpyIterMetadata { num_rows }),
+                    )
+                };
+
+                // 4 reads + 4 writes per iteration + (shift != 0) read for the loop header
+                let timestamp = record.inner.from_timestamp
+                    + ((num_rows - 1) << 3) as u32
+                    + (record.inner.shift != 0) as u32;
+                let mut timestamp_delta: u32 = 0;
+                let mut get_timestamp = |is_access: bool| {
+                    if is_access {
+                        timestamp_delta += 1;
+                    }
+                    timestamp - timestamp_delta
+                };
+
+                let mut dest = record.inner.dest + ((num_rows - 1) << 4) as u32;
+                let mut source = record.inner.source + ((num_rows - 1) << 4) as u32
+                    - 12 * (record.inner.shift != 0) as u32;
+                let mut len =
+                    record.inner.len - ((num_rows - 1) << 4) as u32 - record.inner.shift as u32;
+
+                // Fill memcpy loop record
+                self.memcpy_loop_chip.add_new_loop(
+                    mem_helper,
+                    record.inner.from_pc,
+                    record.inner.from_timestamp,
+                    record.inner.dest,
+                    record.inner.source,
+                    record.inner.len,
+                    record.inner.shift,
+                    record.inner.register_aux.clone(),
+                );
+
+                // We are going to fill row in the reverse order
+                chunk
+                    .rchunks_exact_mut(width)
+                    .zip(record.var.iter().enumerate().rev())
+                    .for_each(|(row, (idx, var))| {
+                        let cols: &mut MemcpyIterCols<F> = row.borrow_mut();
+
+                        let is_end = (idx == 0);
+                        let is_start = (idx == num_rows - 1);
+
+                        // Range check len
+                        let len_u16_limbs = [len & 0xffff, len >> 16];
+                        if is_end {
+                            self.range_checker_chip.add_count(len_u16_limbs[0], 4);
+                            self.range_checker_chip.add_count(len_u16_limbs[1], 0);
+                        } else {
+                            self.range_checker_chip
+                                .add_count(len_u16_limbs[0], 2 * MEMCPY_LOOP_LIMB_BITS);
+                            self.range_checker_chip.add_count(
+                                len_u16_limbs[1],
+                                self.pointer_max_bits - 2 * MEMCPY_LOOP_LIMB_BITS,
+                            );
+                        }
+
+                        // Fill memory read/write auxiliary columns
+                        if is_start {
+                            debug_assert_eq!(get_timestamp(false), record.inner.from_timestamp);
+
+                            cols.write_aux.iter_mut().rev().for_each(|aux_col| {
+                                mem_helper.fill_zero(aux_col.as_mut());
+                            });
+
+                            if record.inner.shift == 0 {
+                                mem_helper.fill_zero(cols.read_aux[3].as_mut());
+                            } else {
+                                mem_helper.fill(
+                                    var.read_aux[3].prev_timestamp,
+                                    timestamp,
+                                    cols.read_aux[3].as_mut(),
+                                );
+                            }
+                            cols.read_aux[..2].iter_mut().rev().for_each(|aux_col| {
+                                mem_helper.fill_zero(aux_col.as_mut());
+                            });
+                        } else {
+                            var.write_aux
+                                .iter()
+                                .rev()
+                                .zip(cols.write_aux.iter_mut().rev())
+                                .for_each(|(aux_record, aux_col)| {
+                                    mem_helper.fill(
+                                        aux_record.prev_timestamp,
+                                        get_timestamp(true),
+                                        aux_col.as_mut(),
+                                    );
+                                    aux_col.set_prev_data(
+                                        aux_record.prev_data.map(F::from_canonical_u8),
+                                    );
+                                });
+
+                            var.read_aux
+                                .iter()
+                                .rev()
+                                .zip(cols.read_aux.iter_mut().rev())
+                                .for_each(|(aux_record, aux_col)| {
+                                    mem_helper.fill(
+                                        aux_record.prev_timestamp,
+                                        get_timestamp(true),
+                                        aux_col.as_mut(),
+                                    );
+                                });
+                        }
+
+                        cols.data_4 = var.data[3].map(F::from_canonical_u8);
+                        cols.data_3 = var.data[2].map(F::from_canonical_u8);
+                        cols.data_2 = var.data[1].map(F::from_canonical_u8);
+                        cols.data_1 = var.data[0].map(F::from_canonical_u8);
+                        cols.is_boundary = F::from_canonical_u8(is_end as u8 - is_start as u8);
+                        cols.is_valid_not_start = F::from_canonical_u8(1 - is_start as u8);
+                        cols.is_valid = F::ONE;
+                        cols.shift = [record.inner.shift % 2, record.inner.shift / 2]
+                            .map(F::from_canonical_u8);
+                        cols.len = [len & 0xffff, len >> 16].map(F::from_canonical_u32);
+                        cols.source = F::from_canonical_u32(source);
+                        cols.dest = F::from_canonical_u32(dest);
+                        cols.timestamp = F::from_canonical_u32(get_timestamp(false));
+
+                        dest -= 16;
+                        source -= 16;
+                        len += 16;
+                    });
+            });
     }
 }
 
-impl ChipUsageGetter for MemcpyIterChip {
-    fn air_name(&self) -> String {
-        get_air_name(&self.air)
+impl<F: PrimeField32> Executor<F> for MemcpyIterExecutor {
+    fn pre_compute_size(&self) -> usize {
+        size_of::<MemcpyIterPreCompute>()
     }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.num_rows.load(std::sync::atomic::Ordering::Relaxed) as usize)
+
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut MemcpyIterPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_impl::<_, _>)
     }
-    fn current_trace_height(&self) -> usize {
-        self.num_rows.load(std::sync::atomic::Ordering::Relaxed) as usize
+}
+
+impl<F: PrimeField32> MeteredExecutor<F> for MemcpyIterExecutor {
+    fn metered_pre_compute_size(&self) -> usize {
+        size_of::<E2PreCompute<MemcpyIterPreCompute>>()
     }
-    fn trace_width(&self) -> usize {
-        NUM_MEMCPY_ITER_COLS
+
+    fn metered_pre_compute<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<MemcpyIterPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_impl::<_, _>)
+    }
+}
+
+#[inline(always)]
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    pre_compute: &MemcpyIterPreCompute,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) -> u32 {
+    let shift = pre_compute.c;
+    let mut height = 1;
+    let (dest, source) = if shift == 0 {
+        (
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A4_REGISTER_PTR as u32),
+        )
+    } else {
+        (
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A1_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
+        )
+    };
+    let len = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A2_REGISTER_PTR as u32);
+
+    let mut dest = u32::from_le_bytes(dest);
+    let mut source = u32::from_le_bytes(source);
+    let mut len = u32::from_le_bytes(len);
+
+    let mut prev_data = if shift == 0 {
+        [0; 4]
+    } else {
+        source -= 12;
+        vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
+    };
+
+    while len - shift as u32 > 15 {
+        for i in 0..4 {
+            let data = vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
+            let write_data: [u8; 4] = array::from_fn(|i| {
+                if i < 4 - shift as usize {
+                    data[i + shift as usize]
+                } else {
+                    prev_data[i - (4 - shift as usize)]
+                }
+            });
+            vm_state.vm_write(RV32_MEMORY_AS, dest + 4 * i, &write_data);
+            prev_data = data;
+        }
+        len -= 16;
+        source += 16;
+        dest += 16;
+        height += 1;
+    }
+
+    // Write the result back to memory
+    if shift == 0 {
+        vm_state.vm_write(
+            RV32_REGISTER_AS,
+            A3_REGISTER_PTR as u32,
+            &dest.to_le_bytes(),
+        );
+        vm_state.vm_write(
+            RV32_REGISTER_AS,
+            A4_REGISTER_PTR as u32,
+            &source.to_le_bytes(),
+        );
+    } else {
+        source += 12;
+        vm_state.vm_write(
+            RV32_REGISTER_AS,
+            A1_REGISTER_PTR as u32,
+            &dest.to_le_bytes(),
+        );
+        vm_state.vm_write(
+            RV32_REGISTER_AS,
+            A3_REGISTER_PTR as u32,
+            &source.to_le_bytes(),
+        );
+    };
+    vm_state.vm_write(RV32_REGISTER_AS, A2_REGISTER_PTR as u32, &len.to_le_bytes());
+
+    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+    vm_state.instret += 1;
+    height
+}
+
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &MemcpyIterPreCompute = pre_compute.borrow();
+    execute_e12_impl::<F, CTX>(pre_compute, vm_state);
+}
+
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+    pre_compute: &[u8],
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+) {
+    let pre_compute: &E2PreCompute<MemcpyIterPreCompute> = pre_compute.borrow();
+    let height = execute_e12_impl::<F, CTX>(&pre_compute.data, vm_state);
+    vm_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, height);
+}
+
+impl MemcpyIterExecutor {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut MemcpyIterPreCompute,
+    ) -> Result<(), StaticProgramError> {
+        let Instruction { opcode, c, .. } = inst;
+        let c_u32 = c.as_canonical_u32();
+        if ![0, 1, 2, 3].contains(&c_u32) {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
+        *data = MemcpyIterPreCompute { c: c_u32 as u8 };
+        assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
+        Ok(())
     }
 }
