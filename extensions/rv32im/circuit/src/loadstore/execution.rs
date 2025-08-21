@@ -209,6 +209,45 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match (local_opcode, enabled, is_native_store) {
+            (LOADW, true, _) => execute_e2_tco_handler::<_, _, U8, LoadWOp, true>,
+            (LOADW, false, _) => execute_e2_tco_handler::<_, _, U8, LoadWOp, false>,
+            (LOADHU, true, _) => execute_e2_tco_handler::<_, _, U8, LoadHUOp, true>,
+            (LOADHU, false, _) => execute_e2_tco_handler::<_, _, U8, LoadHUOp, false>,
+            (LOADBU, true, _) => execute_e2_tco_handler::<_, _, U8, LoadBUOp, true>,
+            (LOADBU, false, _) => execute_e2_tco_handler::<_, _, U8, LoadBUOp, false>,
+            (STOREW, true, false) => execute_e2_tco_handler::<_, _, U8, StoreWOp, true>,
+            (STOREW, false, false) => execute_e2_tco_handler::<_, _, U8, StoreWOp, false>,
+            (STOREW, true, true) => execute_e2_tco_handler::<_, _, F, StoreWOp, true>,
+            (STOREW, false, true) => execute_e2_tco_handler::<_, _, F, StoreWOp, false>,
+            (STOREH, true, false) => execute_e2_tco_handler::<_, _, U8, StoreHOp, true>,
+            (STOREH, false, false) => execute_e2_tco_handler::<_, _, U8, StoreHOp, false>,
+            (STOREH, true, true) => execute_e2_tco_handler::<_, _, F, StoreHOp, true>,
+            (STOREH, false, true) => execute_e2_tco_handler::<_, _, F, StoreHOp, false>,
+            (STOREB, true, false) => execute_e2_tco_handler::<_, _, U8, StoreBOp, true>,
+            (STOREB, false, false) => execute_e2_tco_handler::<_, _, U8, StoreBOp, false>,
+            (STOREB, true, true) => execute_e2_tco_handler::<_, _, F, StoreBOp, true>,
+            (STOREB, false, true) => execute_e2_tco_handler::<_, _, F, StoreBOp, false>,
+            (_, _, _) => unreachable!(),
+        };
+        Ok(fn_ptr)
+    }
 }
 
 #[inline(always)]
@@ -279,6 +318,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

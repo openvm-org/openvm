@@ -145,6 +145,29 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let fn_ptr = match (is_imm, is_sltu) {
+            (true, true) => execute_e2_tco_handler::<_, _, true, true>,
+            (true, false) => execute_e2_tco_handler::<_, _, true, false>,
+            (false, true) => execute_e2_tco_handler::<_, _, false, true>,
+            (false, false) => execute_e2_tco_handler::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 unsafe fn execute_e12_impl<
@@ -189,6 +212,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

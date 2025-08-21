@@ -156,6 +156,24 @@ where
 
         dispatch!(execute_e2_impl, a_is_imm, b_is_imm, is_bne)
     }
+
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut E2PreCompute<NativeBranchEqualPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let (a_is_imm, b_is_imm, is_bne) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        dispatch!(execute_e2_tco_handler, a_is_imm, b_is_imm, is_bne)
+    }
 }
 
 #[inline(always)]
@@ -202,6 +220,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

@@ -245,6 +245,40 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
             Ok(execute_verify_batch_e2_impl::<_, _, SBOX_REGISTERS>)
         }
     }
+
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let &Instruction { opcode, .. } = inst;
+
+        let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
+
+        if is_pos2 {
+            let pre_compute: &mut E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> =
+                data.borrow_mut();
+            pre_compute.chip_idx = chip_idx as u32;
+
+            self.pre_compute_pos2_impl(pc, inst, &mut pre_compute.data)?;
+            if opcode == PERM_POS2.global_opcode() {
+                Ok(execute_pos2_e2_tco_handler::<_, _, SBOX_REGISTERS, true>)
+            } else {
+                Ok(execute_pos2_e2_tco_handler::<_, _, SBOX_REGISTERS, false>)
+            }
+        } else {
+            let pre_compute: &mut E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
+                data.borrow_mut();
+            pre_compute.chip_idx = chip_idx as u32;
+
+            self.pre_compute_verify_batch_impl(pc, inst, &mut pre_compute.data)?;
+            Ok(execute_verify_batch_e2_tco_handler::<_, _, SBOX_REGISTERS>)
+        }
+    }
 }
 
 #[create_tco_handler]
@@ -261,6 +295,7 @@ unsafe fn execute_pos2_e1_impl<
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_pos2_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -292,6 +327,7 @@ unsafe fn execute_verify_batch_e1_impl<
     execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_verify_batch_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

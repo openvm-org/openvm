@@ -200,6 +200,25 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 
         dispatch!(execute_e2_impl, pre_compute_pure, is_setup)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<EcDoublePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let pre_compute_pure = &mut pre_compute.data;
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+
+        dispatch!(execute_e2_tco_handler, pre_compute_pure, is_setup)
+    }
 }
 
 unsafe fn execute_e12_impl<
@@ -288,6 +307,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

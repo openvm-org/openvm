@@ -134,6 +134,22 @@ where
         // `d` is always expected to be RV32_REGISTER_AS.
         dispatch!(execute_e2_impl, is_imm, shift_opcode)
     }
+
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        // `d` is always expected to be RV32_REGISTER_AS.
+        dispatch!(execute_e2_tco_handler, is_imm, shift_opcode)
+    }
 }
 
 unsafe fn execute_e12_impl<
@@ -176,6 +192,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

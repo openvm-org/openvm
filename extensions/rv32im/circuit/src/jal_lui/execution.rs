@@ -120,6 +120,29 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        let fn_ptr = match (is_jal, enabled) {
+            (true, true) => execute_e2_tco_handler::<_, _, true, true>,
+            (true, false) => execute_e2_tco_handler::<_, _, true, false>,
+            (false, true) => execute_e2_tco_handler::<_, _, false, true>,
+            (false, false) => execute_e2_tco_handler::<_, _, false, false>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 unsafe fn execute_e12_impl<
@@ -167,6 +190,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

@@ -173,6 +173,41 @@ where
         };
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    #[inline(always)]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        let opcode = inst.opcode;
+
+        let fn_ptr = match (
+            is_imm,
+            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+        ) {
+            (true, BaseAluOpcode::ADD) => execute_e2_tco_handler::<_, _, true, AddOp>,
+            (false, BaseAluOpcode::ADD) => execute_e2_tco_handler::<_, _, false, AddOp>,
+            (true, BaseAluOpcode::SUB) => execute_e2_tco_handler::<_, _, true, SubOp>,
+            (false, BaseAluOpcode::SUB) => execute_e2_tco_handler::<_, _, false, SubOp>,
+            (true, BaseAluOpcode::XOR) => execute_e2_tco_handler::<_, _, true, XorOp>,
+            (false, BaseAluOpcode::XOR) => execute_e2_tco_handler::<_, _, false, XorOp>,
+            (true, BaseAluOpcode::OR) => execute_e2_tco_handler::<_, _, true, OrOp>,
+            (false, BaseAluOpcode::OR) => execute_e2_tco_handler::<_, _, false, OrOp>,
+            (true, BaseAluOpcode::AND) => execute_e2_tco_handler::<_, _, true, AndOp>,
+            (false, BaseAluOpcode::AND) => execute_e2_tco_handler::<_, _, false, AndOp>,
+        };
+        Ok(fn_ptr)
+    }
 }
 
 #[inline(always)]
@@ -215,6 +250,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
