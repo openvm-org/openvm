@@ -336,6 +336,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         )
     }
 
+    #[cfg(feature = "tco")]
     fn metered_handler<Ctx>(
         &self,
         chip_idx: usize,

@@ -598,6 +598,7 @@ where
         dispatch!(execute_e2_impl, is_setup)
     }
 
+    #[cfg(feature = "tco")]
     fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,

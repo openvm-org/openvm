@@ -247,7 +247,6 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
     }
 
     #[cfg(feature = "tco")]
-    #[inline(always)]
     fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,

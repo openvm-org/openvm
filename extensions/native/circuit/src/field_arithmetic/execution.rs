@@ -199,7 +199,6 @@ where
     }
 
     #[cfg(feature = "tco")]
-    #[inline(always)]
     fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,

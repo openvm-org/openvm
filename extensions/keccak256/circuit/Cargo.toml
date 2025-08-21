@@ -34,7 +34,7 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
 
 [features]
-default = ["parallel", "jemalloc", "tco"]
+default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-rv32im-circuit/tco"]

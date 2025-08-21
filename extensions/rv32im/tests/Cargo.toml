@@ -23,6 +23,6 @@ serde = { workspace = true, features = ["alloc"] }
 strum.workspace = true
 
 [features]
-default = ["parallel", "tco"]
+default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-rv32im-circuit/tco"]

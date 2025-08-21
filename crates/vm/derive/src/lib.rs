@@ -9,6 +9,7 @@ use syn::{
     GenericParam, Ident, Meta, Token,
 };
 
+#[cfg(feature = "tco")]
 mod tco;
 
 #[proc_macro_derive(PreflightExecutor)]
@@ -772,7 +773,7 @@ fn parse_executor_type(
 ///
 /// Place this attribute above a function definition:
 /// ```
-/// #[create_tco_handler = "handler_name"]
+/// #[create_tco_handler]
 /// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
 ///     pre_compute: &[u8],
 ///     state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -793,5 +794,12 @@ fn parse_executor_type(
 /// check.
 #[proc_macro_attribute]
 pub fn create_tco_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    tco::tco_impl(item)
+    #[cfg(feature = "tco")]
+    {
+        tco::tco_impl(item)
+    }
+    #[cfg(not(feature = "tco"))]
+    {
+        item
+    }
 }

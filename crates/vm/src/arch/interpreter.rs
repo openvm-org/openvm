@@ -50,7 +50,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     pre_compute_max_size: usize,
     /// Handler function pointers for tail call optimization.
     #[cfg(feature = "tco")]
-    handlers: Vec<Handler<F, Ctx>>, // *const ()>,
+    handlers: Vec<Handler<F, Ctx>>,
 
     pc_base: u32,
     pc_start: u32,

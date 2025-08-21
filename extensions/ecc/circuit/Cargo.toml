@@ -7,11 +7,6 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
-[features]
-default = ["jemalloc", "tco"]
-tco = ["openvm-algebra-circuit/tco"]
-jemalloc = ["openvm-circuit/jemalloc"]
-
 [dependencies]
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
@@ -43,6 +38,10 @@ openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
+
+[features]
+default = []
+tco = ["openvm-algebra-circuit/tco"]
 
 [package.metadata.cargo-shear]
 ignored = ["rand"]

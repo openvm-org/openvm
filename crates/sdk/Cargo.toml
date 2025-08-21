@@ -61,7 +61,7 @@ rrs-lib.workspace = true
 num-bigint.workspace = true
 
 [features]
-default = ["parallel", "jemalloc", "tco"]
+default = ["parallel", "jemalloc"]
 evm-prove = [
     "openvm-continuations/static-verifier",
     "openvm-native-recursion/evm-prove",

@@ -33,7 +33,7 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 test-case.workspace = true
 
 [features]
-default = ["parallel", "jemalloc", "tco"]
+default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 tco = ["openvm-circuit/tco"]

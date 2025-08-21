@@ -67,6 +67,9 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             }
             let next_handler = next_handler.unwrap_unchecked();
 
+            // NOTE: `become` is a keyword that requires Rust Nightly.
+            // It is part of the explicit tail calls RFC: <https://github.com/rust-lang/rust/issues/112788>
+            // which is still incomplete.
             become next_handler(interpreter, exec_state)
         }
     };
