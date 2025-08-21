@@ -5,6 +5,10 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(not(feature = "cuda"))]
+use openvm_circuit::system::SystemCpuBuilder as SystemBuilder;
+#[cfg(feature = "cuda")]
+use openvm_circuit::system::SystemGpuBuilder as SystemBuilder;
 use openvm_circuit::{
     arch::{
         execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
@@ -13,7 +17,7 @@ use openvm_circuit::{
         PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
         VmCircuitConfig, VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
-    system::{memory::CHUNK, program::trace::VmCommittedExe, SystemCpuBuilder},
+    system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
 };
 #[cfg(feature = "cuda")]
@@ -213,7 +217,7 @@ fn test_vm_public_values() -> eyre::Result<()> {
     let config = test_system_config_without_continuations().with_public_values(num_public_values);
     assert!(!config.continuation_enabled);
     let engine = TestEngine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemCpuBuilder, config)?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, SystemBuilder, config)?;
 
     let instructions = vec![
         Instruction::from_usize(PUBLISH.global_opcode(), [0, 12, 2, 0, 0, 0]),
