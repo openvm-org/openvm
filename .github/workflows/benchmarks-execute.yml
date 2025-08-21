@@ -71,7 +71,7 @@ jobs:
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo $TOOLCHAIN codspeed run --features tco
+          run: cargo $TOOLCHAIN codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
 
   codspeed-instrumentation-benchmarks:
@@ -116,5 +116,5 @@ jobs:
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo $TOOLCHAIN codspeed run --features tco
+          run: cargo $TOOLCHAIN codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
