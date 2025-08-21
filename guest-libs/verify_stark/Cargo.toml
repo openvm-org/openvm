@@ -22,3 +22,9 @@ openvm-stark-sdk = { workspace = true }
 openvm-native-compiler.workspace = true
 openvm-verify-stark.workspace = true
 eyre.workspace = true
+
+[features]
+cuda = [
+    "openvm-sdk/cuda",
+    "openvm-circuit/cuda"
+]

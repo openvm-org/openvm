@@ -6,12 +6,17 @@ use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
     keygen::AggProvingKey,
-    Sdk, StdIn,
+    StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
 use openvm_verify_stark::host::{
     compute_hint_key_for_verify_openvm_stark, encode_proof_to_kv_store_value,
 };
+
+#[cfg(not(feature = "cuda"))]
+use openvm_sdk::Sdk;
+#[cfg(feature = "cuda")]
+use openvm_sdk_cuda::GpuSdk as Sdk;
 
 const LEAF_LOG_BLOWUP: usize = 2;
 const INTERNAL_LOG_BLOWUP: usize = 3;
