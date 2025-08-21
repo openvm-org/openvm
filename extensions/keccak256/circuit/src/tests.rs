@@ -36,7 +36,7 @@ use rand::{rngs::StdRng, Rng};
 use tiny_keccak::Hasher;
 #[cfg(feature = "cuda")]
 use {
-    crate::{Keccak256ChipGpu, Keccak256VmRecordMut},
+    crate::{trace::KeccakVmRecordMut, Keccak256ChipGpu},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
@@ -339,11 +339,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         bitwise_bus,
     ));
 
-    let (air, executor, chip) = create_harness_fields(
+    let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        bitwise_chip.clone(),
-        tester.memory_helper(),
+        dummy_bitwise_chip,
+        tester.dummy_memory_helper(),
         tester.address_bits(),
     );
 
@@ -368,7 +368,16 @@ fn test_keccak256_cuda_tracegen() {
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, KECCAK256, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            KECCAK256,
+            None,
+            None,
+            None,
+        );
     }
 
     // Test special length edge cases:
@@ -376,11 +385,13 @@ fn test_keccak256_cuda_tracegen() {
         println!("Testing length: {}", len);
         set_and_execute(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.dense_arena,
             &mut rng,
             KECCAK256,
             None,
             Some(len),
+            None,
         );
     }
 
