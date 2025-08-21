@@ -108,6 +108,7 @@ mod guest_tests {
             openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
             openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha256GpuProverExt,
+            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
         };
         #[cfg(not(feature = "cuda"))]
         use {
