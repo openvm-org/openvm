@@ -73,10 +73,12 @@ impl AccessAdapterCtx {
 pub struct MeteredCostCtx {
     pub widths: Vec<usize>,
     pub access_adapter_ctx: AccessAdapterCtx,
-    #[getset(set_with = "pub")]
-    pub max_execution_cost: u64,
-    // Cost is number of trace cells (height * width)
+    /// Cost is number of trace cells (height * width)
     pub cost: u64,
+    /// Maximum cost threshold that triggers VM suspension.
+    pub max_cost: u64,
+    /// Hard cost limit that triggers immediate panic.
+    pub cost_limit: u64,
 }
 
 impl MeteredCostCtx {
@@ -85,18 +87,24 @@ impl MeteredCostCtx {
         Self {
             widths,
             access_adapter_ctx,
-            max_execution_cost: DEFAULT_MAX_COST,
             cost: 0,
+            max_cost: DEFAULT_MAX_COST,
+            cost_limit: 2 * DEFAULT_MAX_COST,
         }
+    }
+
+    pub fn with_max_cost(mut self, max_cost: u64) -> Self {
+        self.max_cost = max_cost;
+        self.cost_limit = self.cost_limit.max(2 * max_cost);
+        self
     }
 
     #[cold]
     fn check_cost_limit(&self) {
-        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
+        if self.cost > self.cost_limit {
             panic!(
-                "Execution cost {} exceeded maximum allowed cost of {}",
-                self.cost,
-                2 * DEFAULT_MAX_COST
+                "Execution cost {} exceeded limit of {}",
+                self.cost, self.cost_limit
             );
         }
     }
@@ -130,7 +138,7 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     }
 
     fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        vm_state.ctx.cost > vm_state.ctx.max_execution_cost
+        vm_state.ctx.cost > vm_state.ctx.max_cost
     }
 }
 

@@ -991,7 +991,7 @@ fn test_vm_execute_metered_cost_halt() {
         .executor()
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
-    let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
+    let ctx2 = vm.build_metered_cost_ctx().with_max_cost(0);
     let output2 = instance2
         .execute_metered_cost(vec![], ctx2)
         .expect("Failed to execute");
