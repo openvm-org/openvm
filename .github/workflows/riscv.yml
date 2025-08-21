@@ -20,12 +20,12 @@ env:
   OPENVM_FAST_TEST: "1"
 
 jobs:
-  riscv-test-vectors:
+  riscv-test-vector:
     strategy:
       matrix:
         riscv:
           - { name: "rv32im", path: "rv32im", family: "c7g", image: "ubuntu24-full-x64" }
-          - { name: "rv32im", path: "rv32im", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "rv32im", path: "rv32im", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
