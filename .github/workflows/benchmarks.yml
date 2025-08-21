@@ -17,6 +17,7 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
+  merge_group:
   workflow_dispatch:
     inputs:
       flamegraphs:

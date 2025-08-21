@@ -17,6 +17,7 @@ on:
       - "extensions/**"
       - "Cargo.toml"
       - ".github/workflows/benchmarks-execute.yml"
+  merge_group:
   workflow_dispatch:
 
 concurrency:

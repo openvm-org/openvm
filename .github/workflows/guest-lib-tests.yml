@@ -15,7 +15,6 @@ on:
       - ".github/workflows/guest-lib-tests.yml"
       - "crates/sdk/guest/fib/**"
   merge_group:
-    types: [checks_requested]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
