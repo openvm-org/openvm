@@ -10,8 +10,6 @@ use openvm_circuit::arch::{
     EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-#[cfg(feature = "cuda")]
-use openvm_native_compiler::NativeLoadStore4Opcode;
 use openvm_native_compiler::{
     conversion::AS,
     NativeLoadStoreOpcode::{self, *},
@@ -242,9 +240,9 @@ fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(NativeLoadStore4Opcode::LOADW, 100)]
-#[test_case(NativeLoadStore4Opcode::STOREW, 100)]
-#[test_case(NativeLoadStore4Opcode::HINT_STOREW, 100)]
+#[test_case(NativeLoadStore4Opcode(NativeLoadStoreOpcode::LOADW), 100)]
+#[test_case(NativeLoadStore4Opcode(NativeLoadStoreOpcode::STOREW), 100)]
+#[test_case(NativeLoadStore4Opcode(NativeLoadStoreOpcode::HINT_STOREW), 100)]
 fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStore4Opcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default();
