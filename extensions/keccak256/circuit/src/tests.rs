@@ -331,7 +331,6 @@ type GpuHarness =
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
-    const GPU_MAX_INS_CAPACITY: usize = 1024;
     // getting bus from tester since `gpu_chip` and `air` must use the same bus
     let bitwise_bus = default_bitwise_lookup_bus();
     // creating a dummy chip for Cpu so we only count `add_count`s from GPU
