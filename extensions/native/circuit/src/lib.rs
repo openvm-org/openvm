@@ -39,8 +39,8 @@ mod poseidon2;
 #[cfg(feature = "cuda")]
 pub mod cuda_abi;
 
-mod extension;
-pub use extension::*;
+mod extensions;
+pub use extensions::*;
 
 mod utils;
 #[cfg(any(test, feature = "test-utils"))]

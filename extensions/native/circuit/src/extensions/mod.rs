@@ -63,6 +63,11 @@ use crate::{
     },
 };
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 // ============ VmExtension Implementations ============
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
