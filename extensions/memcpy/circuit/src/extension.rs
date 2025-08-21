@@ -12,6 +12,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_instructions::*;
+use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -22,8 +23,6 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
 use crate::*;
-
-use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
 
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

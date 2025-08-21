@@ -24,6 +24,8 @@ mod bn254 {
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
+    use openvm_memcpy_circuit::Memcpy;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
     };
@@ -36,7 +38,6 @@ mod bn254 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_stark_sdk::{
         config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };
@@ -59,6 +60,7 @@ mod bn254 {
             fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bn254]),
+            memcpy: Memcpy,
         }
     }
 
@@ -499,6 +501,7 @@ mod bls12_381 {
         AffinePoint,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
+    use openvm_memcpy_circuit::Memcpy;
     use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv32PairingBuilder, Rv32PairingConfig,
@@ -537,6 +540,7 @@ mod bls12_381 {
             fp2: Fp2Extension::new(primes_with_names),
             weierstrass: WeierstrassExtension::new(vec![]),
             pairing: PairingExtension::new(vec![PairingCurve::Bls12_381]),
+            memcpy: Memcpy,
         }
     }
 
