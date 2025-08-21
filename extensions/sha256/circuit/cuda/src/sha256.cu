@@ -1,7 +1,7 @@
 #include "columns.cuh"
 #include "constants.h"
 #include "launcher.cuh"
-#include "sha256inner.cuh"
+#include "tracegen.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include "trace_access.h"

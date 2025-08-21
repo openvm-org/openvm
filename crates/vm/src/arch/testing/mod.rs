@@ -98,4 +98,20 @@ pub trait TestBuilder<F> {
 
     fn execution_final_state(&self) -> ExecutionState<F>;
     fn streams_mut(&mut self) -> &mut Streams<F>;
+
+    fn get_default_register(&mut self, increment: usize) -> usize;
+    fn get_default_pointer(&mut self, increment: usize) -> usize;
+
+    fn write_heap_pointer_default(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+    ) -> (usize, usize);
+
+    fn write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) -> (usize, usize);
 }
