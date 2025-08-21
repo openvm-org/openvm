@@ -18,6 +18,7 @@ openvm-algebra-moduli-macros = { workspace = true }
 openvm-ecc-guest = { workspace = true }
 openvm-ecc-sw-macros = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+
 elliptic-curve = { workspace = true, features = ["hazmat", "sec1"] }
 ecdsa-core = { version = "0.16.9", package = "ecdsa", optional = true, default-features = false, features = [
     "der",
@@ -39,7 +40,6 @@ openvm-toolchain-tests.workspace = true
 
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-cuda-backend.workspace = true
 
 rand = { workspace = true }
 serde.workspace = true

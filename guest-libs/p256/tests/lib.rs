@@ -99,7 +99,6 @@ mod guest_tests {
                 SystemConfig, VmBuilder, VmChipComplex, VmProverExtension,
             },
             derive::VmConfig,
-            system::SystemChipInventory,
         };
         use openvm_ecc_circuit::{
             CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassConfigExecutor,
