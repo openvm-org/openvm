@@ -37,3 +37,9 @@ openvm-toolchain-tests = { workspace = true }
 
 eyre = { workspace = true }
 num-bigint = { workspace = true }
+
+[features]
+cuda = [
+    "openvm-circuit/cuda",
+    "openvm-algebra-circuit/cuda",
+]
