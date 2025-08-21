@@ -25,7 +25,7 @@ use openvm_poseidon2_air::Poseidon2Config;
 use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    p3_field::{Field, PrimeField32},
+    p3_field::{extension::BinomiallyExtendable, Field, PrimeField32},
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
@@ -57,7 +57,7 @@ pub enum NativeExecutor<F: Field> {
     VerifyBatch(NativePoseidon2Executor<F, 1>),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Native {
+impl<F: PrimeField32 + BinomiallyExtendable<EXT_DEG>> VmExecutionExtension<F> for Native {
     type Executor = NativeExecutor<F>;
 
     fn extend_execution(
@@ -234,7 +234,7 @@ where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    Val<SC>: PrimeField32 + BinomiallyExtendable<EXT_DEG>,
 {
     fn extend_prover(
         &self,
