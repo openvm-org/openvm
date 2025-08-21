@@ -8,14 +8,14 @@ use itertools::Itertools;
 #[cfg(feature = "cuda")]
 use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 #[cfg(not(feature = "cuda"))]
-use openvm_circuit::system::SystemCpuBuilder as SystemBuilder;
+use openvm_circuit::{arch::RowMajorMatrixArena, system::SystemCpuBuilder as SystemBuilder};
 use openvm_circuit::{
     arch::{
         execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
-        PreflightExecutionOutput, RowMajorMatrixArena, SingleSegmentVmProver, VirtualMachine,
-        VmCircuitConfig, VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
+        PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
+        VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
@@ -147,6 +147,9 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
     let mut preflight_interpreter = vm.preflight_interpreter(&committed_exe.exe)?;
     let PreflightExecutionOutput {
         system_records,
+        #[cfg(feature = "cuda")]
+        record_arenas,
+        #[cfg(not(feature = "cuda"))]
         mut record_arenas,
         ..
     } = vm.execute_preflight(&mut preflight_interpreter, state, None, &fixed_air_heights)?;
