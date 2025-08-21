@@ -38,6 +38,7 @@ jobs:
           - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "algebra", path: "algebra", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "ecc", path: "ecc", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false

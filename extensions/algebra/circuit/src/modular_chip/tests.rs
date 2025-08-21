@@ -24,7 +24,6 @@ use openvm_circuit_primitives::{
         SharedBitwiseOperationLookupChip,
     },
 };
-
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
