@@ -66,9 +66,10 @@ To get the VM byte representation of a serializable struct `data` (i.e. for use 
 
 ## Generating and Verifying Proofs
 
-There are two types of proofs that you can generate, with the sections below continuing from this point.
+OpenVM supports generating three types of proofs. The sections below describe how to generate and verify each type of proof.
 
 - [App Proof](#app-proof): Generates STARK proof(s) of the guest program
+- [STARK Proof](#stark-proof): Generates a STARK proof that can be posted on-chain
 - [EVM Proof](#evm-proof): Generates a halo2 proof that can be posted on-chain
 
 ## App Proof
@@ -91,11 +92,37 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
 ```
 
+## STARK Proof
+
+### Setup
+
+To generate a STARK proof, you first need to generate proving and verification keys for STARK aggregation using the following command:
+
+```bash
+cargo openvm setup
+```
+
+### STARK Proof Generation and Verification
+
+You can now run the aggregation keygen, proof, and verification functions for the STARK proof.
+
+```rust 
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:proof_generation]
+```
+
+Once the proof is generated, you can verify it using the SDK as follows:
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
+```
+
+
 ## EVM Proof
 
 ### Setup
 
-To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](/book/getting-started/install). get the appropriate KZG params by running the following command.
+To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](/book/getting-started/install)
+to generate proving and verification keys for EVM proving.
 
 ```bash
 cargo openvm setup --evm
