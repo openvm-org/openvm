@@ -13,6 +13,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -33,6 +34,8 @@ pub struct Rv32PairingConfig {
     pub weierstrass: WeierstrassExtension,
     #[extension(generics = true)]
     pub pairing: PairingExtension,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 impl Rv32PairingConfig {
@@ -55,6 +58,7 @@ impl Rv32PairingConfig {
                 curves.iter().map(|c| c.curve_config()).collect(),
             ),
             pairing: PairingExtension::new(curves),
+            memcpy: Memcpy,
         }
     }
 }
@@ -101,6 +105,11 @@ where
             inventory,
         )?;
         VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &MemcpyCpuProverExt,
+            &config.memcpy,
+            inventory,
+        )?;
         Ok(chip_complex)
     }
 }

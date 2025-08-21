@@ -48,7 +48,6 @@ use crate::{
     bus::MemcpyBus, MemcpyLoopChip, A1_REGISTER_PTR, A2_REGISTER_PTR, A3_REGISTER_PTR,
     A4_REGISTER_PTR,
 };
-
 // Import constants from lib.rs
 use crate::{MEMCPY_LOOP_LIMB_BITS, MEMCPY_LOOP_NUM_LIMBS};
 
@@ -177,7 +176,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         is_not_valid_when.assert_zero(local.is_boundary);
         is_not_valid_when.assert_zero(shift.clone());
 
-        // if is_valid_not_start = 1, then len = prev_len - 16, source = prev_source + 16, dest = prev_dest + 16
+        // if is_valid_not_start = 1, then len = prev_len - 16, source = prev_source + 16,
+        // and dest = prev_dest + 16
         let mut is_valid_not_start_when = builder.when(local.is_valid_not_start);
         is_valid_not_start_when
             .assert_eq(local.len[0], prev.len[0] - AB::Expr::from_canonical_u32(16));
@@ -190,7 +190,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
             .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero.clone());
-        // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp = prev_timestamp + 8
+        // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
         builder
             .when(
@@ -602,8 +602,8 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     .for_each(|(row, (idx, var))| {
                         let cols: &mut MemcpyIterCols<F> = row.borrow_mut();
 
-                        let is_end = (idx == 0);
-                        let is_start = (idx == num_rows - 1);
+                        let is_end = idx == 0;
+                        let is_start = idx == num_rows - 1;
 
                         // Range check len
                         let len_u16_limbs = [len & 0xffff, len >> 16];

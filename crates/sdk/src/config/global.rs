@@ -18,6 +18,8 @@ use openvm_ecc_circuit::{
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
+use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
 };
@@ -33,8 +35,6 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
-use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_backend::{

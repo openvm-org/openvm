@@ -23,6 +23,7 @@ openvm-stark-backend = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
+openvm-memcpy-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true }

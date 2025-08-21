@@ -1,11 +1,11 @@
 mod bus;
-mod core;
 mod extension;
 mod iteration;
+mod loops;
 
-pub use core::*;
 pub use extension::*;
 pub use iteration::*;
+pub use loops::*;
 
 // ==== Do not change these constants! ====
 pub const MEMCPY_LOOP_NUM_LIMBS: usize = 4;
