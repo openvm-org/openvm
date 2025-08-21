@@ -1,10 +1,11 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_sdk::{
-    config::{SdkVmConfig, SdkVmCpuBuilder},
-    StdIn,
-};
+#[cfg(not(feature = "cuda"))]
+use openvm_sdk::config::SdkVmCpuBuilder as SdkVmBuilder;
+#[cfg(feature = "cuda")]
+use openvm_sdk::config::SdkVmGpuBuilder as SdkVmBuilder;
+use openvm_sdk::{config::SdkVmConfig, StdIn};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn main() -> Result<()> {
@@ -16,6 +17,6 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> Result<()> {
         let file_data = include_bytes!("../../../guest/bincode/minecraft_savedata.bin");
         let stdin = StdIn::from_bytes(file_data);
-        args.bench_from_exe::<SdkVmCpuBuilder, _>("bincode", config, elf, stdin)
+        args.bench_from_exe::<SdkVmBuilder, _>("bincode", config, elf, stdin)
     })
 }

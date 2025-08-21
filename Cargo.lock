@@ -5233,6 +5233,7 @@ dependencies = [
  "openvm-benchmarks-utils",
  "openvm-circuit",
  "openvm-continuations",
+ "openvm-cuda-backend",
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",
