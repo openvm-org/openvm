@@ -16,6 +16,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::arch::DenseRecordArena,
+    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
+    openvm_circuit::system::cuda::SystemChipInventoryGPU,
+    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+};
 
 pub mod adapters;
 
@@ -28,17 +36,11 @@ mod jal_rangecheck;
 mod loadstore;
 mod poseidon2;
 
-pub use branch_eq::*;
-pub use castf::*;
-pub use field_arithmetic::*;
-pub use field_extension::*;
-pub use fri::*;
-pub use jal_rangecheck::*;
-pub use loadstore::*;
-pub use poseidon2::*;
+#[cfg(feature = "cuda")]
+pub mod cuda_abi;
 
-mod extension;
-pub use extension::*;
+mod extensions;
+pub use extensions::*;
 
 mod utils;
 #[cfg(any(test, feature = "test-utils"))]
@@ -97,6 +99,44 @@ where
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &NativeCpuProverExt,
+            &config.native,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone)]
+pub struct NativeGpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for NativeGpuBuilder {
+    type VmConfig = NativeConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &NativeGpuProverExt,
             &config.native,
             inventory,
         )?;

@@ -5,6 +5,9 @@ mod core;
 mod execution;
 pub use core::*;
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
 use crate::adapters::{
     BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller,
 };

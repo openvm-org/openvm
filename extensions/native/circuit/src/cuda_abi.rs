@@ -1,12 +1,10 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
-use stark_backend_gpu::{
-    cuda::{
-        d_buffer::{DeviceBuffer, DeviceBufferView},
-        error::CudaError,
-    },
-    prelude::F,
+use openvm_cuda_backend::prelude::F;
+use openvm_cuda_common::{
+    d_buffer::{DeviceBuffer, DeviceBufferView},
+    error::CudaError,
 };
 
 pub mod castf_cuda {
@@ -153,7 +151,7 @@ pub mod field_extension_cuda {
 
 pub mod fri_cuda {
     use super::*;
-    use crate::extensions::native::RowInfo;
+    use crate::fri::cuda::RowInfo;
 
     extern "C" {
         pub fn _fri_reduced_opening_tracegen(

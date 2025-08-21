@@ -12,7 +12,7 @@ pub mod test_utils {
     use openvm_circuit::{
         arch::{
             execution_mode::Segment,
-            testing::{memory::gen_pointer, TestBuilder, VmChipTestBuilder},
+            testing::{memory::gen_pointer, TestBuilder},
             MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
             VirtualMachineError, VmBuilder, VmState,
         },
@@ -39,7 +39,7 @@ pub mod test_utils {
     // If immediate, returns (value, AS::Immediate). Otherwise, writes to native memory and returns
     // (ptr, AS::Native). If is_imm is None, randomizes it.
     pub fn write_native_or_imm<F: PrimeField32>(
-        tester: &mut VmChipTestBuilder<F>,
+        tester: &mut impl TestBuilder<F>,
         rng: &mut StdRng,
         value: F,
         is_imm: Option<bool>,
@@ -57,7 +57,7 @@ pub mod test_utils {
     // Writes value to native memory and returns a pointer to the first element together with the
     // value If `value` is None, randomizes it.
     pub fn write_native_array<F: PrimeField32, const N: usize>(
-        tester: &mut VmChipTestBuilder<F>,
+        tester: &mut impl TestBuilder<F>,
         rng: &mut StdRng,
         value: Option<[F; N]>,
     ) -> ([F; N], usize)
