@@ -296,7 +296,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_sha256_tracegen() {
+fn test_cuda_sha256_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
@@ -331,7 +331,7 @@ fn test_sha256_tracegen() {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_sha256_known_vectors() {
+fn test_cuda_sha256_known_vectors() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
