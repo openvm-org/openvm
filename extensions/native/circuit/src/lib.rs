@@ -107,7 +107,7 @@ where
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct NativeGpuBuilder;
 
 #[cfg(feature = "cuda")]

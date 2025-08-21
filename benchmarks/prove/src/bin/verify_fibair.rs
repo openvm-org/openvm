@@ -21,7 +21,9 @@ use openvm_stark_sdk::{
 use tracing::info_span;
 #[cfg(feature = "cuda")]
 use {
-    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
+    openvm_cuda_backend::{
+        chip::cpu_proving_ctx_to_gpu, engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
+    },
     openvm_native_circuit::NativeGpuBuilder as NativeBuilder,
 };
 #[cfg(not(feature = "cuda"))]
@@ -52,6 +54,8 @@ fn main() -> Result<()> {
             vec![fib_chip.air()],
             vec![fib_chip.generate_proving_ctx(())],
         );
+        #[cfg(feature = "cuda")]
+        let fib_ctx = fib_ctx.into_iter().map(cpu_proving_ctx_to_gpu).collect();
         let vdata = engine.run_test(fib_air, fib_ctx).unwrap();
         // Unlike other apps, this "app" does not have continuations enabled.
         let app_fri_params =
