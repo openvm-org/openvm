@@ -242,10 +242,10 @@ fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
 }
 
 #[cfg(feature = "cuda")]
-#[test_case(NativeLoadStoreOpcode::LOADW, 100)]
-#[test_case(NativeLoadStoreOpcode::STOREW, 100)]
-#[test_case(NativeLoadStoreOpcode::HINT_STOREW, 100)]
-fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStoreOpcode, num_ops: usize) {
+#[test_case(NativeLoadStore4Opcode::LOADW, 100)]
+#[test_case(NativeLoadStore4Opcode::STOREW, 100)]
+#[test_case(NativeLoadStore4Opcode::HINT_STOREW, 100)]
+fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStore4Opcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = GpuChipTestBuilder::default();
     let mut harness = create_test_harness::<4>(&tester, NativeLoadStore4Opcode::CLASS_OFFSET);
