@@ -27,19 +27,19 @@ jobs:
       matrix:
         extension:
           - { name: "rv32im", path: "rv32im", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "rv32im", path: "rv32im", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "rv32im", path: "rv32im", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "native", path: "native", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "native", path: "native", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "native", path: "native", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "keccak256", path: "keccak256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "keccak256", path: "keccak256", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "sha256", path: "sha256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "sha256", path: "sha256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "sha256", path: "sha256", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "bigint", path: "bigint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "bigint", path: "bigint", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "bigint", path: "bigint", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "algebra", path: "algebra", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "algebra", path: "algebra", family: "g6.4xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "ecc", path: "ecc", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "ecc", path: "ecc", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
