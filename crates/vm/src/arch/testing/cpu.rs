@@ -165,6 +165,39 @@ where
     fn execution_final_state(&self) -> ExecutionState<F> {
         self.execution.records.last().unwrap().final_state
     }
+
+    fn get_default_register(&mut self, increment: usize) -> usize {
+        self.default_register += increment;
+        self.default_register - increment
+    }
+
+    fn get_default_pointer(&mut self, increment: usize) -> usize {
+        self.default_pointer += increment;
+        self.default_pointer - increment
+    }
+
+    fn write_heap_pointer_default(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
+        (register, pointer)
+    }
+
+    fn write_heap_default<const NUM_LIMBS: usize>(
+        &mut self,
+        reg_increment: usize,
+        pointer_increment: usize,
+        writes: Vec<[F; NUM_LIMBS]>,
+    ) -> (usize, usize) {
+        let register = self.get_default_register(reg_increment);
+        let pointer = self.get_default_pointer(pointer_increment);
+        self.write_heap(register, pointer, writes);
+        (register, pointer)
+    }
 }
 
 impl<F: PrimeField32> VmChipTestBuilder<F> {
@@ -258,39 +291,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_helper(&self) -> SharedMemoryHelper<F> {
         self.memory.controller.helper()
-    }
-
-    pub fn get_default_register(&mut self, increment: usize) -> usize {
-        self.default_register += increment;
-        self.default_register - increment
-    }
-
-    pub fn get_default_pointer(&mut self, increment: usize) -> usize {
-        self.default_pointer += increment;
-        self.default_pointer - increment
-    }
-
-    pub fn write_heap_pointer_default(
-        &mut self,
-        reg_increment: usize,
-        pointer_increment: usize,
-    ) -> (usize, usize) {
-        let register = self.get_default_register(reg_increment);
-        let pointer = self.get_default_pointer(pointer_increment);
-        self.write(1, register, pointer.to_le_bytes().map(F::from_canonical_u8));
-        (register, pointer)
-    }
-
-    pub fn write_heap_default<const NUM_LIMBS: usize>(
-        &mut self,
-        reg_increment: usize,
-        pointer_increment: usize,
-        writes: Vec<[F; NUM_LIMBS]>,
-    ) -> (usize, usize) {
-        let register = self.get_default_register(reg_increment);
-        let pointer = self.get_default_pointer(pointer_increment);
-        self.write_heap(register, pointer, writes);
-        (register, pointer)
     }
 }
 

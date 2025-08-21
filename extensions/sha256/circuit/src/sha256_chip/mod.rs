@@ -18,6 +18,11 @@ pub use air::*;
 pub use columns::*;
 pub use trace::*;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 mod tests;
 

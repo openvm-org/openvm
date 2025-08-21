@@ -7,32 +7,25 @@ use openvm_circuit::{
     arch::{DenseRecordArena, MultiRowLayout, RecordSeeker},
     utils::next_power_of_two_or_zero,
 };
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
+    var_range::cuda::VariableRangeCheckerChipGPU,
+};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha256_air::{get_sha256_num_blocks, SHA256_HASH_WORDS, SHA256_ROWS_PER_BLOCK};
-use openvm_sha256_circuit::{Sha256VmMetadata, Sha256VmRecordMut, SHA256VM_WIDTH};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
-    prover_backend::GpuBackend,
-};
 
 use crate::{
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
+    cuda_abi::sha256::{
+        sha256_fill_invalid_rows, sha256_first_pass_tracegen, sha256_hash_computation,
+        sha256_second_pass_dependencies,
     },
-    utils::get_empty_air_proving_ctx,
+    Sha256VmMetadata, Sha256VmRecordMut, SHA256VM_WIDTH,
 };
-
-pub mod cuda;
-mod extension;
-
-pub use cuda::sha256::*;
-pub use extension::*;
-
-#[cfg(test)]
-mod tests;
 
 // ===== SHA256 GPU CHIP IMPLEMENTATION =====
 #[derive(new)]
