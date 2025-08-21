@@ -3,4 +3,4 @@ queue_rules:
   - name: default
     conditions:
       # Require the consolidated status check to pass
-      - status-success=All Required Checks / check-all-workflows
+      - status-success=All Required Checks / wait-for-workflows
