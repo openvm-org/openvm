@@ -42,6 +42,16 @@ impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIM
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            MulHOpcode::MULH => Ok($execute_impl::<_, _, MulHOp>),
+            MulHOpcode::MULHSU => Ok($execute_impl::<_, _, MulHSuOp>),
+            MulHOpcode::MULHU => Ok($execute_impl::<_, _, MulHUOp>),
+        }
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -61,12 +71,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e1_impl::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e1_impl::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e1_impl::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -81,12 +86,7 @@ where
     {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e1_tco_handler::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e1_tco_handler::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e1_tco_handler::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -112,12 +112,7 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e2_impl::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e2_impl::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e2_impl::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -134,12 +129,7 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e2_tco_handler::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e2_tco_handler::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e2_tco_handler::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 

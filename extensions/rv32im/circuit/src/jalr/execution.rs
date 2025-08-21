@@ -44,6 +44,16 @@ impl<A> Rv32JalrExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $enabled:ident) => {
+        if $enabled {
+            Ok($execute_impl::<_, _, true>)
+        } else {
+            Ok($execute_impl::<_, _, false>)
+        }
+    };
+}
+
 impl<F, A> Executor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
@@ -61,12 +71,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = if enabled {
-            execute_e1_impl::<_, _, true>
-        } else {
-            execute_e1_impl::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -81,12 +86,7 @@ where
     {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = if enabled {
-            execute_e1_tco_handler::<_, _, true>
-        } else {
-            execute_e1_tco_handler::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, enabled)
     }
 }
 
@@ -111,12 +111,7 @@ where
         let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = if enabled {
-            execute_e2_impl::<_, _, true>
-        } else {
-            execute_e2_impl::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -133,12 +128,7 @@ where
         let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = if enabled {
-            execute_e2_tco_handler::<_, _, true>
-        } else {
-            execute_e2_tco_handler::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_tco_handler, enabled)
     }
 }
 

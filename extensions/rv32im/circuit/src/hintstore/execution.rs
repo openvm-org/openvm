@@ -60,6 +60,15 @@ impl Rv32HintStoreExecutor {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            HINT_STOREW => Ok($execute_impl::<_, _, true>),
+            HINT_BUFFER => Ok($execute_impl::<_, _, false>),
+        }
+    };
+}
+
 impl<F> Executor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
@@ -77,11 +86,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e1_impl::<_, _, true>,
-            HINT_BUFFER => execute_e1_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -96,11 +101,7 @@ where
     {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e1_tco_handler::<_, _, true>,
-            HINT_BUFFER => execute_e1_tco_handler::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -125,11 +126,7 @@ where
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e2_impl::<_, _, true>,
-            HINT_BUFFER => execute_e2_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -146,11 +143,7 @@ where
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e2_tco_handler::<_, _, true>,
-            HINT_BUFFER => execute_e2_tco_handler::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 

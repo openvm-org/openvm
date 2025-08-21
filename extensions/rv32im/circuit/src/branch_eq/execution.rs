@@ -53,6 +53,16 @@ impl<A, const NUM_LIMBS: usize> BranchEqualExecutor<A, NUM_LIMBS> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_bne:ident) => {
+        if $is_bne {
+            Ok($execute_impl::<_, _, true>)
+        } else {
+            Ok($execute_impl::<_, _, false>)
+        }
+    };
+}
+
 impl<F, A, const NUM_LIMBS: usize> Executor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
@@ -71,12 +81,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = if is_bne {
-            execute_e1_impl::<_, _, true>
-        } else {
-            execute_e1_impl::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_bne)
     }
 
     #[cfg(feature = "tco")]
@@ -91,12 +96,7 @@ where
     {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = if is_bne {
-            execute_e1_tco_handler::<_, _, true>
-        } else {
-            execute_e1_tco_handler::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, is_bne)
     }
 }
 
@@ -121,12 +121,7 @@ where
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = if is_bne {
-            execute_e2_impl::<_, _, true>
-        } else {
-            execute_e2_impl::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_bne)
     }
 
     #[cfg(feature = "tco")]
@@ -143,12 +138,7 @@ where
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = if is_bne {
-            execute_e2_tco_handler::<_, _, true>
-        } else {
-            execute_e2_tco_handler::<_, _, false>
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_tco_handler, is_bne)
     }
 }
 
