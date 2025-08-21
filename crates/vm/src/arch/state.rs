@@ -6,6 +6,7 @@ use std::{
 use getset::WithSetters;
 use openvm_instructions::exe::SparseMemoryImage;
 use rand::{rngs::StdRng, SeedableRng};
+use tracing::instrument;
 
 use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
@@ -54,6 +55,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
 }
 
 impl<F: Clone> VmState<F, GuestMemory> {
+    #[instrument(name = "VmState::initial", level = "debug", skip_all)]
     pub fn initial(
         system_config: &SystemConfig,
         init_memory: &SparseMemoryImage,
