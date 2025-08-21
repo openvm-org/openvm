@@ -31,7 +31,7 @@ pub struct Memcpy;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum MemcpyExecutor {
-    MemcpyLoop(MemcpyLoopExecutor),
+    MemcpyLoop(MemcpyIterExecutor),
 }
 
 impl<F> VmExecutionExtension<F> for Memcpy {
@@ -41,10 +41,10 @@ impl<F> VmExecutionExtension<F> for Memcpy {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, MemcpyExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let memcpy_loop = MemcpyLoopExecutor::new();
+        let memcpy_iter = MemcpyIterExecutor::new();
 
         inventory.add_executor(
-            memcpy_loop,
+            memcpy_iter,
             Rv32MemcpyOpcode::iter().map(|x| x.global_opcode()),
         )?;
 
@@ -110,23 +110,22 @@ where
             .unwrap()
             .memcpy_bus;
 
-        let memcpy_iter_chip = Arc::new(MemcpyIterChip::new(
-            inventory.airs().system().port().memory_bridge,
+        let memcpy_loop_chip = Arc::new(MemcpyLoopChip::new(
+            inventory.airs().system().port(),
             range_bus,
             memcpy_bus,
             pointer_max_bits,
             range_checker.clone(),
         ));
 
-        let memcpy_loop_chip = MemcpyLoopChip::new(
-            MemcpyLoopFiller::new(
+        let memcpy_iter_chip = MemcpyIterChip::new(
+            MemcpyIterFiller::new(
                 pointer_max_bits,
                 range_checker.clone(),
-                memcpy_iter_chip.clone(),
+                memcpy_loop_chip.clone(),
             ),
             mem_helper.clone(),
         );
-
         // Add MemcpyLoop chip
         inventory.next_air::<MemcpyLoopAir>()?;
         inventory.add_executor_chip(memcpy_loop_chip);
