@@ -5,3 +5,16 @@ images:
     owner: "405894839083"
     name: "arm64-rust-riscv-dev-32gb"
     ami: "ami-040a96edd406c9478"
+
+runners:
+  # runners for running tests
+  test-gpu-nvidia:
+    family: ["g6", "g6e", "g5", "g4dn"]
+    image: ubuntu24-gpu-x64
+    cpu: [4, 8, 16]
+    disk: default
+    spot: capacity-optimized
+    preinstall: |
+      nvidia-smi
+      nvidia-smi -L
+      nvcc --version
