@@ -1,10 +1,7 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
-use openvm_circuit::{
-    arch::{instructions::exe::VmExe, VmExecutor},
-    utils::air_test,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -60,6 +57,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 #[cfg(feature = "cuda")]
 #[test]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
+    use openvm_circuit::utils::air_test;
     use openvm_rv32im_circuit::Rv32ImGpuBuilder;
 
     let config = Rv32ImConfig::default();
