@@ -15,9 +15,12 @@ def run_cargo_command(
     kzg_params_dir,
     profile="release"
 ):
+    toolchain = "+1.86"
+    if "tco" in feature_flags:
+        toolchain = "+nightly-2025-08-19"
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", toolchain, "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
