@@ -74,12 +74,12 @@ jobs:
         echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
     
     - name: Download and install risc64-elf-gcc
-        working-directory: ${{ github.workspace }}
-        run: |
-          wget -O gcc.tar.xz "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2025.07.16/riscv64-elf-ubuntu-24.04-gcc-nightly-2025.07.16-nightly.tar.xz"
-          tar -xJf gcc.tar.xz
-          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
-          rm gcc.tar.xz
+      working-directory: ${{ github.workspace }}
+      run: |
+        wget -O gcc.tar.xz "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2025.07.16/riscv64-elf-ubuntu-24.04-gcc-nightly-2025.07.16-nightly.tar.xz"
+        tar -xJf gcc.tar.xz
+        echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
+        rm gcc.tar.xz
 
     - name: Run Makefile
       working-directory: crates/toolchain/tests/rv32im-test-vectors
