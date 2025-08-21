@@ -42,7 +42,7 @@ openvm-toolchain-tests.workspace = true
 
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-backend.workspace = true
 
 rand = { workspace = true }
 serde.workspace = true
@@ -62,7 +62,7 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-ecc-circuit/cuda",
     "openvm-sha256-circuit/cuda",
-    "dep:openvm-cuda-backend",
+    "openvm-cuda-backend",
 ]
 arithmetic = ["elliptic-curve/arithmetic"]
 bits = ["arithmetic", "elliptic-curve/bits"]
