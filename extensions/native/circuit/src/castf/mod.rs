@@ -6,6 +6,9 @@ mod core;
 mod execution;
 pub use core::*;
 
+#[cfg(feature = "cuda")]
+pub mod cuda;
+
 #[cfg(test)]
 mod tests;
 

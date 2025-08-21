@@ -158,12 +158,12 @@ where
         self.execution.last_from_pc()
     }
 
-    fn streams_mut(&mut self) -> &mut Streams<F> {
-        &mut self.streams
-    }
-
     fn execution_final_state(&self) -> ExecutionState<F> {
         self.execution.records.last().unwrap().final_state
+    }
+
+    fn streams_mut(&mut self) -> &mut Streams<F> {
+        &mut self.streams
     }
 
     fn get_default_register(&mut self, increment: usize) -> usize {

@@ -2,8 +2,6 @@ use alu_native_adapter::{AluNativeAdapterAir, AluNativeAdapterExecutor};
 use branch_native_adapter::{BranchNativeAdapterAir, BranchNativeAdapterExecutor};
 use convert_adapter::{ConvertAdapterAir, ConvertAdapterExecutor};
 use derive_more::derive::From;
-use fri::{FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor};
-use jal_rangecheck::{JalRangeCheckAir, JalRangeCheckExecutor};
 use loadstore_native_adapter::{NativeLoadStoreAdapterAir, NativeLoadStoreAdapterExecutor};
 use native_vectorized_adapter::{NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor};
 use openvm_circuit::{
@@ -34,11 +32,41 @@ use strum::IntoEnumIterator;
 
 use crate::{
     adapters::*,
-    air::{NativePoseidon2Air, VerifyBatchBus},
-    chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+    branch_eq::{
+        NativeBranchEqAir, NativeBranchEqChip, NativeBranchEqExecutor, NativeBranchEqualFiller,
+    },
+    castf::{CastFAir, CastFChip, CastFCoreAir, CastFCoreFiller, CastFExecutor},
+    field_arithmetic::{
+        FieldArithmeticAir, FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreFiller,
+        FieldArithmeticExecutor,
+    },
+    field_extension::{
+        FieldExtensionAir, FieldExtensionChip, FieldExtensionCoreAir, FieldExtensionCoreFiller,
+        FieldExtensionExecutor,
+    },
+    fri::{
+        FriReducedOpeningAir, FriReducedOpeningChip, FriReducedOpeningExecutor,
+        FriReducedOpeningFiller,
+    },
+    jal_rangecheck::{
+        JalRangeCheckAir, JalRangeCheckExecutor, JalRangeCheckFiller, NativeJalRangeCheckChip,
+    },
+    loadstore::{
+        NativeLoadStoreAir, NativeLoadStoreChip, NativeLoadStoreCoreAir, NativeLoadStoreCoreFiller,
+        NativeLoadStoreExecutor,
+    },
     phantom::*,
-    *,
+    poseidon2::{
+        air::{NativePoseidon2Air, VerifyBatchBus},
+        chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+        NativePoseidon2Chip,
+    },
 };
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 // ============ VmExtension Implementations ============
 
