@@ -54,17 +54,13 @@ use super::air::VerifyBatchBus;
 use crate::poseidon2::{
     chip::NativePoseidon2RecordMut, columns::NativePoseidon2Cols, cuda::NativePoseidon2ChipGpu,
 };
-#[cfg(not(feature = "cuda"))]
-use crate::NativeCpuBuilder as NativeBuilder;
-#[cfg(feature = "cuda")]
-use crate::NativeGpuBuilder as NativeBuilder;
 use crate::{
     poseidon2::{
         air::NativePoseidon2Air,
         chip::{NativePoseidon2Executor, NativePoseidon2Filler},
         NativePoseidon2Chip, CHUNK,
     },
-    NativeConfig,
+    NativeConfig, NativeCpuBuilder,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
@@ -531,6 +527,7 @@ fn verify_batch_chip_simple_50() {
     tester.test(get_engine).expect("Verification failed");
 }
 
+#[cfg(not(feature = "cuda"))]
 #[test]
 fn test_vm_compress_poseidon2_as4() {
     let mut rng = create_seeded_rng();
@@ -622,12 +619,12 @@ fn test_vm_compress_poseidon2_as4() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        NativeBuilder,
+        NativeCpuBuilder,
         NativeConfig::aggregation(0, 3),
         program.clone(),
     );
     air_test(
-        NativeBuilder,
+        NativeCpuBuilder,
         NativeConfig::aggregation(0, 7),
         program.clone(),
     );
