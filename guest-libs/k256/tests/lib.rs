@@ -7,7 +7,7 @@ mod guest_tests {
         utils::{air_test, test_system_config},
     };
     use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassCpuBuilder, SECP256K1_CONFIG,
+        CurveConfig, Rv32WeierstrassConfig, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
@@ -18,7 +18,12 @@ mod guest_tests {
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
-    use crate::guest_tests::ecdsa_config::EcdsaCpuBuilder;
+    #[cfg(not(feature = "cuda"))]
+    use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
+    #[cfg(feature = "cuda")]
+    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder};
+
+    crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
     type F = BabyBear;
 
@@ -43,7 +48,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -61,7 +66,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -82,7 +87,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -90,7 +95,7 @@ mod guest_tests {
     mod ecdsa_config {
         use openvm_circuit::{
             arch::{
-                AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena,
+                AirInventory, ChipInventoryError, InitFileGenerator,
                 SystemConfig, VmBuilder, VmChipComplex, VmProverExtension,
             },
             derive::VmConfig,
@@ -98,16 +103,29 @@ mod guest_tests {
         };
         use openvm_ecc_circuit::{
             CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassConfigExecutor,
-            Rv32WeierstrassCpuBuilder,
         };
-        use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
+        use openvm_sha256_circuit::{Sha256, Sha256Executor};
         use openvm_stark_backend::{
             config::{StarkGenericConfig, Val},
             engine::StarkEngine,
             p3_field::PrimeField32,
-            prover::cpu::{CpuBackend, CpuDevice},
         };
         use serde::{Deserialize, Serialize};
+
+        #[cfg(not(feature = "cuda"))]
+        use {
+            openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
+            openvm_sha256_circuit::Sha2CpuProverExt,
+            openvm_stark_backend::prover::cpu::{CpuBackend, CpuDevice},
+            openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
+        };
+        #[cfg(feature = "cuda")]
+        use {
+            openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+            openvm_sha256_circuit::Sha2GpuProverExt,
+            openvm_cuda_backend::{prover_backend::GpuBackend, engine::GpuBabyBearPoseidon2Engine},
+            openvm_circuit::{arch::DenseRecordArena, system::SystemChipInventoryGPU},
+        };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
@@ -137,9 +155,10 @@ mod guest_tests {
         }
 
         #[derive(Clone)]
-        pub struct EcdsaCpuBuilder;
+        pub struct EcdsaBuilder;
 
-        impl<E, SC> VmBuilder<E> for EcdsaCpuBuilder
+        #[cfg(not(feature = "cuda"))]
+        impl<E, SC> VmBuilder<E> for EcdsaBuilder
         where
             SC: StarkGenericConfig,
             E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -158,13 +177,47 @@ mod guest_tests {
                 ChipInventoryError,
             > {
                 let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-                    &Rv32WeierstrassCpuBuilder,
+                    &Rv32WeierstrassBuilder,
                     &config.weierstrass,
                     circuit,
                 )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<E, _, _>::extend_prover(
                     &Sha2CpuProverExt,
+                    &config.sha256,
+                    inventory,
+                )?;
+                Ok(chip_complex)
+            }
+        }
+
+        #[cfg(feature = "cuda")]
+        impl VmBuilder<GpuBabyBearPoseidon2Engine> for EcdsaBuilder {
+            type VmConfig = EcdsaConfig;
+            type SystemChipInventory = SystemChipInventoryGPU;
+            type RecordArena = DenseRecordArena;
+
+            fn create_chip_complex(
+                &self,
+                config: &EcdsaConfig,
+                circuit: AirInventory<BabyBearPoseidon2Config>,
+            ) -> Result<
+                VmChipComplex<
+                    BabyBearPoseidon2Config,
+                    Self::RecordArena,
+                    GpuBackend,
+                    Self::SystemChipInventory,
+                >,
+                ChipInventoryError,
+            > {
+                let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+                    &Rv32WeierstrassBuilder,
+                    &config.weierstrass,
+                    circuit,
+                )?;
+                let inventory = &mut chip_complex.inventory;
+                VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+                    &Sha2GpuProverExt,
                     &config.sha256,
                     inventory,
                 )?;
@@ -189,7 +242,7 @@ mod guest_tests {
                 .with_extension(ModularTranspilerExtension)
                 .with_extension(Sha256TranspilerExtension),
         )?;
-        air_test(EcdsaCpuBuilder, config, openvm_exe);
+        air_test(EcdsaBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -210,7 +263,7 @@ mod guest_tests {
                 .with_extension(EccTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(Rv32WeierstrassCpuBuilder, config, openvm_exe);
+        air_test(Rv32WeierstrassBuilder, config, openvm_exe);
         Ok(())
     }
 }

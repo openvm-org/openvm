@@ -57,7 +57,11 @@ std = [
     "once_cell?/std",
     "openvm-ecc-guest/std",
 ]
-
+cuda = [
+    "openvm-circuit/cuda",
+    "openvm-ecc-circuit/cuda",
+    "openvm-sha256-circuit/cuda",
+]
 arithmetic = ["elliptic-curve/arithmetic"]
 bits = ["arithmetic", "elliptic-curve/bits"]
 critical-section = ["once_cell/critical-section", "precomputed-tables"]

@@ -36,14 +36,14 @@ jobs:
           - { name: "ruint", path: "ruint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "verify_stark", path: "verify_stark", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "sha2", path: "sha2", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "keccak256", path: "keccak256", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          # - { name: "ff_derive", path: "ff_derive", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          # - { name: "k256", path: "k256", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          # - { name: "p256", path: "p256", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "ruint", path: "ruint", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          # - { name: "pairing", path: "pairing", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
-          # - { name: "verify_stark", path: "verify_stark", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "sha2", path: "sha2", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "keccak256", path: "keccak256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "ff_derive", path: "ff_derive", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "k256", path: "k256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "p256", path: "p256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "ruint", path: "ruint", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "pairing", path: "pairing", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "verify_stark", path: "verify_stark", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
@@ -80,7 +80,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Check CUDA status and set environment variables
-        if: contains(matrix.extension.family, 'g6')
+        if: contains(matrix.extension.image, 'gpu')
         run: |
           nvidia-smi
           nvidia-smi -L
