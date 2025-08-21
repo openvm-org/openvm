@@ -158,6 +158,25 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             where_clause
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
+
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
+            #[cfg(feature = "tco")]
+            let handler = quote! {
+                fn handler<Ctx>(
+                    &self,
+                    pc: u32,
+                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    data: &mut [u8],
+                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                where
+                    Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
+                    self.0.handler(pc, inst, data)
+                }
+            };
+            #[cfg(not(feature = "tco"))]
+            let handler = quote! {};
+
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::Executor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
@@ -176,17 +195,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         self.0.pre_compute(pc, inst, data)
                     }
 
-                    #[cfg(feature = "tco")]
-                    fn handler<Ctx>(
-                        &self,
-                        pc: u32,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
-                        self.0.handler(pc, inst, data)
-                    }
+                    #handler
                 }
             }
             .into()
@@ -220,7 +229,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, pre_compute_arms, handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
@@ -240,6 +249,26 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             for predicate in where_predicates {
                 where_clause.predicates.push(predicate);
             }
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
+            #[cfg(feature = "tco")]
+            let handler = quote! {
+                fn handler<Ctx>(
+                    &self,
+                    pc: u32,
+                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    data: &mut [u8],
+                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                where
+                    Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
+                    match self {
+                        #(#_handler_arms,)*
+                    }
+                }
+            };
+            #[cfg(not(feature = "tco"))]
+            let handler = quote! {};
+
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
@@ -266,19 +295,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    #[cfg(feature = "tco")]
-                    fn handler<Ctx>(
-                        &self,
-                        pc: u32,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
-                        match self {
-                            #(#handler_arms,)*
-                        }
-                    }
+                    #handler
                 }
             }
             .into()
@@ -314,6 +331,26 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             where_clause
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::MeteredExecutor<F> });
+
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
+            #[cfg(feature = "tco")]
+            let metered_handler = quote! {
+                fn metered_handler<Ctx>(
+                    &self,
+                    chip_idx: usize,
+                    pc: u32,
+                    inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    data: &mut [u8],
+                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                where
+                    Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
+                    self.0.metered_handler(chip_idx, pc, inst, data)
+                }
+            };
+            #[cfg(not(feature = "tco"))]
+            let metered_handler = quote! {};
+
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
@@ -332,18 +369,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                         self.0.metered_pre_compute(chip_idx, pc, inst, data)
                     }
-                    #[cfg(feature = "tco")]
-                    fn metered_handler<Ctx>(
-                        &self,
-                        chip_idx: usize,
-                        pc: u32,
-                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
-                        self.0.metered_handler(chip_idx, pc, inst, data)
-                    }
+                    #metered_handler
                 }
             }
                 .into()
@@ -377,7 +403,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
             // crate. Assume F is already generic of the field.
-            let (pre_compute_size_arms, metered_pre_compute_arms, metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+            let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
                     #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
@@ -399,6 +425,28 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             }
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
+            #[cfg(feature = "tco")]
+            let metered_handler = quote! {
+                fn metered_handler<Ctx>(
+                    &self,
+                    chip_idx: usize,
+                    pc: u32,
+                    instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    data: &mut [u8],
+                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                where
+                    Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait,
+                {
+                    match self {
+                        #(#_metered_handler_arms,)*
+                    }
+                }
+            };
+            #[cfg(not(feature = "tco"))]
+            let metered_handler = quote! {};
 
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
@@ -424,20 +472,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    #[cfg(feature = "tco")]
-                    fn metered_handler<Ctx>(
-                        &self,
-                        chip_idx: usize,
-                        pc: u32,
-                        instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
-                        data: &mut [u8],
-                    ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
-                    where
-                        Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
-                        match self {
-                            #(#metered_handler_arms,)*
-                        }
-                    }
+                    #metered_handler
                 }
             }
                 .into()
@@ -563,7 +598,12 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         .iter()
         .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("config")))
         .exactly_one()
-        .expect("Exactly one field must have the #[config] attribute");
+        .map_err(|_| {
+            syn::Error::new(
+                name.span(),
+                "Exactly one field must have the #[config] attribute",
+            )
+        })?;
     let (source_name, source_name_upper) =
         gen_name_with_uppercase_idents(source_field.ident.as_ref().unwrap());
 

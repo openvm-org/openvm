@@ -37,7 +37,6 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
 
     // Generate the TCO handler function
     let handler_fn = quote! {
-        #[cfg(feature = "tco")]
         #[inline(never)]
         unsafe fn #handler_name #handler_generics (
             interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
