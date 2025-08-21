@@ -34,7 +34,9 @@ use {
     openvm_circuit::{
         arch::DenseRecordArena,
         system::cuda::{
-            extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+            extensions::{
+                get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
+            },
             SystemChipInventoryGPU,
         },
     },
@@ -132,8 +134,6 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        use openvm_circuit::system::cuda::extensions::SystemGpuBuilder;
-
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
