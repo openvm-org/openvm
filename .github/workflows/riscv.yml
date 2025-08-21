@@ -20,7 +20,7 @@ env:
   OPENVM_FAST_TEST: "1"
 
 jobs:
-  riscv-test-vector:
+  riscv-test-vectors:
     strategy:
       matrix:
         riscv:
@@ -29,66 +29,66 @@ jobs:
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
-  runs-on:
-    - runs-on=${{ github.run_id }}
-    - family=${{ matrix.riscv.family }}
-    - image=${{ matrix.riscv.image }}
-    - tag=riscv-${{ matrix.riscv.name }}
-    - extras=s3-cache
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - family=${{ matrix.riscv.family }}
+      - image=${{ matrix.riscv.image }}
+      - tag=riscv-${{ matrix.riscv.name }}
+      - extras=s3-cache
 
-  steps:
-    - uses: runs-on/action@v1
-    - uses: actions/checkout@v4
-    - uses: dorny/paths-filter@v3
-      id: filter
-      with:
-        filters: |
-          - "crates/vm/**"
-          - "crates/toolchain/**"
-          - "Cargo.toml"
-          - ".github/workflows/riscv.yml"
-    - name: Skip if no changes
-      if: steps.filter.outputs.matched == 'false'
-      run: |
-        echo "No relevant changes, skipping tests."
-        exit 0
+    steps:
+      - uses: runs-on/action@v1
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            - "crates/vm/**"
+            - "crates/toolchain/**"
+            - "Cargo.toml"
+            - ".github/workflows/riscv.yml"
+      - name: Skip if no changes
+        if: steps.filter.outputs.matched == 'false'
+        run: |
+          echo "No relevant changes, skipping tests."
+          exit 0
 
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-      with:
-        cache-on-failure: true
-    - uses: taiki-e/install-action@nextest
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
 
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Check CUDA status and set environment variables
-      if: contains(matrix.riscv.family, 'g6')
-      run: |
-        nvidia-smi
-        nvidia-smi -L
-        nvcc --version
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.riscv.family, 'g6')
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
 
-        echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-        echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
-    
-    - name: Download and install risc64-elf-gcc
-      working-directory: ${{ github.workspace }}
-      run: |
-        wget -O gcc.tar.xz "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2025.07.16/riscv64-elf-ubuntu-24.04-gcc-nightly-2025.07.16-nightly.tar.xz"
-        tar -xJf gcc.tar.xz
-        echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
-        rm gcc.tar.xz
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+          echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
+      
+      - name: Download and install risc64-elf-gcc
+        working-directory: ${{ github.workspace }}
+        run: |
+          wget -O gcc.tar.xz "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2025.07.16/riscv64-elf-ubuntu-24.04-gcc-nightly-2025.07.16-nightly.tar.xz"
+          tar -xJf gcc.tar.xz
+          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
+          rm gcc.tar.xz
 
-    - name: Run Makefile
-      working-directory: crates/toolchain/tests/rv32im-test-vectors
-      run: |
-        export PATH=/opt/riscv/bin:$PATH
-        make
+      - name: Run Makefile
+        working-directory: crates/toolchain/tests/rv32im-test-vectors
+        run: |
+          export PATH=/opt/riscv/bin:$PATH
+          make
 
-    - name: Run RISC-V test vector tests
-      working-directory: crates/toolchain/tests
-      run: |
-        rustup component add rust-src --toolchain nightly-2025-02-14
-        cargo nextest run riscv-vector --cargo-profile=fast ${{ env.FEATURE_ARGS }}
+      - name: Run RISC-V test vector tests
+        working-directory: crates/toolchain/tests
+        run: |
+          rustup component add rust-src --toolchain nightly-2025-02-14
+          cargo nextest run riscv-vector --cargo-profile=fast ${{ env.FEATURE_ARGS }}
