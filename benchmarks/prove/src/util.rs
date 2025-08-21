@@ -25,7 +25,8 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
-
+use openvm_transpiler::elf::Elf;
+use tracing::info_span;
 #[cfg(feature = "cuda")]
 use {
     openvm_circuit::arch::DenseRecordArena as RA,
@@ -38,9 +39,6 @@ use {
     openvm_native_circuit::NativeCpuBuilder as DefaultNativeBuilder,
     openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
 };
-
-use openvm_transpiler::elf::Elf;
-use tracing::info_span;
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
