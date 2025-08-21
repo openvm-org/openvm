@@ -1,14 +1,13 @@
 #![allow(clippy::missing_safety_doc)]
 #![allow(clippy::too_many_arguments)]
 
+use openvm_cuda_backend::types::F;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use stark_backend_gpu::{
-    cuda::{d_buffer::DeviceBuffer, error::CudaError},
-    prelude::F,
-};
 
 pub mod is_eq_cuda {
     use super::*;
+
     extern "C" {
         fn _modular_is_equal_tracegen(
             d_trace: *mut F,

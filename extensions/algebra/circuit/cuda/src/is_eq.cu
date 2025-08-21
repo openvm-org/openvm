@@ -1,5 +1,5 @@
 #include "constants.h"
-#include "extensions/rv32_adapters/eq_mod.cuh"
+#include "eq_mod.cuh"
 #include "histogram.cuh"
 #include "is_equal.cuh"
 #include "launcher.cuh"

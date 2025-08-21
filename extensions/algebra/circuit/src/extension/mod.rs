@@ -20,10 +20,17 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
-    ModularExtensionExecutor,
-};
+mod modular_extension;
+pub use modular_extension::*;
+mod fp2_extension;
+pub use fp2_extension::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
+pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {

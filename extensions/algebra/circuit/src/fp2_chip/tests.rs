@@ -1,10 +1,14 @@
 use std::{str::FromStr, sync::Arc};
 
+use derive_new::new;
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_circuit::arch::testing::{
-    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{
+        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+    },
+    Arena, PreflightExecutor,
 };
 use openvm_circuit_primitives::{
     bigint::utils::secp256k1_coord_prime,
@@ -25,6 +29,7 @@ use openvm_pairing_guest::{bls12_381::BLS12_381_MODULUS, bn254::BN254_MODULUS};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+use test_case::test_case;
 
 use crate::fp2_chip::{
     get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
@@ -38,6 +43,33 @@ type Harness<const BLOCKS: usize, const BLOCK_SIZE: usize> = TestChipHarness<
     F,
     Fp2Executor<BLOCKS, BLOCK_SIZE>,
     Fp2Air<BLOCKS, BLOCK_SIZE>,
+    Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+>;
+
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
+    },
+    DenseRecordArena,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::prover_backend::GpuBackend;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::Chip;
+
+#[cfg(feature = "cuda")]
+use crate::fp2_chip::{addsub_cuda::Fp2AddSubChipGpu, muldiv_cuda::Fp2MulDivChipGpu};
+
+#[cfg(feature = "cuda")]
+type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<
+    F,
+    Fp2Executor<BLOCKS, BLOCK_SIZE>,
+    Fp2Air<BLOCKS, BLOCK_SIZE>,
+    T,
     Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
 >;
 
@@ -127,15 +159,110 @@ fn create_muldiv_test_chips<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness<BLOCKS, BLOCK_SIZE>,
+#[cfg(feature = "cuda")]
+fn create_addsub_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    tester: &GpuChipTestBuilder,
+    config: ExprBuilderConfig,
+    offset: usize,
+) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2AddSubChipGpu<BLOCKS, BLOCK_SIZE>> {
+    // getting bus from tester since `gpu_chip` and `air` must use the same bus
+    let range_bus = default_var_range_checker_bus();
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let air = get_fp2_addsub_air(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        config.clone(),
+        range_bus,
+        bitwise_bus,
+        tester.address_bits(),
+        offset,
+    );
+    let executor = get_fp2_addsub_step(config.clone(), range_bus, tester.address_bits(), offset);
+
+    let cpu_chip = get_fp2_addsub_chip(
+        config.clone(),
+        tester.dummy_memory_helper(),
+        dummy_range_checker_chip,
+        dummy_bitwise_chip,
+        tester.address_bits(),
+    );
+    let gpu_chip = Fp2AddSubChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        config,
+        offset,
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_muldiv_cuda_test_harness<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    tester: &GpuChipTestBuilder,
+    config: ExprBuilderConfig,
+    offset: usize,
+) -> GpuHarness<BLOCKS, BLOCK_SIZE, Fp2MulDivChipGpu<BLOCKS, BLOCK_SIZE>> {
+    // getting bus from tester since `gpu_chip` and `air` must use the same bus
+    let range_bus = default_var_range_checker_bus();
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let air = get_fp2_muldiv_air(
+        tester.execution_bridge(),
+        tester.memory_bridge(),
+        config.clone(),
+        range_bus,
+        bitwise_bus,
+        tester.address_bits(),
+        offset,
+    );
+    let executor = get_fp2_muldiv_step(config.clone(), range_bus, tester.address_bits(), offset);
+
+    let cpu_chip = get_fp2_muldiv_chip(
+        config.clone(),
+        tester.dummy_memory_helper(),
+        dummy_range_checker_chip,
+        dummy_bitwise_chip,
+        tester.address_bits(),
+    );
+    let gpu_chip = Fp2MulDivChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        config,
+        offset,
+        tester.address_bits() as u32,
+        tester.timestamp_max_bits() as u32,
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut Fp2Executor<BLOCKS, BLOCK_SIZE>,
+    arena: &mut RA,
     rng: &mut StdRng,
     modulus: &BigUint,
     is_setup: bool,
     is_addsub: bool,
     offset: usize,
-) {
+) where
+    RA: Arena,
+    Fp2Executor<BLOCKS, BLOCK_SIZE>: PreflightExecutor<F, RA>,
+{
     let (a_c0, a_c1, b_c0, b_c1, op_local) = if is_setup {
         (
             modulus.clone(),
@@ -250,38 +377,84 @@ fn set_and_execute_fp2<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_L
         ptr_as as isize,
         data_as as isize,
     );
-    tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    tester.execute(executor, arena, &instruction);
 }
 
+#[derive(new)]
+struct TestConfig<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize> {
+    pub modulus: BigUint,
+    pub is_addsub: bool,
+    pub num_ops: usize,
+}
+
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    true,
+    50,
+))]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    secp256k1_coord_prime(),
+    true,
+    50,
+))]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BN254_MODULUS.clone(),
+    true,
+    50,
+))]
+#[test_case(TestConfig::<6, 16, 48>::new(
+    BLS12_381_MODULUS.clone(),
+    true,
+    50,
+))]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    false,
+    50,
+))]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    secp256k1_coord_prime(),
+    false,
+    50,
+))]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BN254_MODULUS.clone(),
+    false,
+    50,
+))]
+#[test_case(TestConfig::<6, 16, 48>::new(
+    BLS12_381_MODULUS.clone(),
+    false,
+    50,
+))]
 fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_LIMBS: usize>(
-    modulus: BigUint,
-    num_ops: usize,
-    is_addsub: bool,
+    test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
     let config = ExprBuilderConfig {
-        modulus: modulus.clone(),
+        modulus: test_config.modulus.clone(),
         num_limbs: NUM_LIMBS,
         limb_bits: LIMB_BITS,
     };
 
     let offset = Fp2Opcode::CLASS_OFFSET;
 
-    let (mut harness, bitwise) = if is_addsub {
+    let (mut harness, bitwise) = if test_config.is_addsub {
         create_addsub_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
     } else {
         create_muldiv_test_chips::<BLOCKS, BLOCK_SIZE>(&mut tester, config, offset)
     };
 
-    for i in 0..num_ops {
-        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS>(
+    for i in 0..test_config.num_ops {
+        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, _>(
             &mut tester,
-            &mut harness,
+            &mut harness.executor,
+            &mut harness.arena,
             &mut rng,
-            &modulus,
+            &test_config.modulus,
             i == 0,
-            is_addsub,
+            test_config.is_addsub,
             offset,
         );
     }
@@ -295,50 +468,108 @@ fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_
         .unwrap();
 }
 
-#[test]
-fn test_fp2_addsub_2x32_small() {
-    run_test_with_config::<2, 32, 32>(
-        BigUint::from_str("357686312646216567629137").unwrap(),
-        50,
-        true,
-    );
-}
+#[cfg(feature = "cuda")]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    secp256k1_coord_prime(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BN254_MODULUS.clone(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<6, 16, 48>::new(
+    BLS12_381_MODULUS.clone(),
+    true,
+    50),
+    create_addsub_cuda_test_harness::<6, 16>
+)]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BigUint::from_str("357686312646216567629137").unwrap(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    secp256k1_coord_prime(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<2, 32, 32>::new(
+    BN254_MODULUS.clone(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<2, 32>
+)]
+#[test_case(TestConfig::<6, 16, 48>::new(
+    BLS12_381_MODULUS.clone(),
+    false,
+    50),
+    create_muldiv_cuda_test_harness::<6, 16>
+)]
+fn run_cuda_test_with_config<
+    const BLOCKS: usize,
+    const BLOCK_SIZE: usize,
+    const NUM_LIMBS: usize,
+    C: Chip<DenseRecordArena, GpuBackend>,
+>(
+    test_config: TestConfig<BLOCKS, BLOCK_SIZE, NUM_LIMBS>,
+    create_cuda_test_harness: impl Fn(
+        &GpuChipTestBuilder,
+        ExprBuilderConfig,
+        usize,
+    ) -> GpuHarness<BLOCKS, BLOCK_SIZE, C>,
+) {
+    use crate::AlgebraRecord;
 
-#[test]
-fn test_fp2_addsub_2x32_secp256k1() {
-    run_test_with_config::<2, 32, 32>(secp256k1_coord_prime(), 50, true);
-}
+    let mut rng = create_seeded_rng();
 
-#[test]
-fn test_fp2_addsub_2x32_bn254() {
-    run_test_with_config::<2, 32, 32>(BN254_MODULUS.clone(), 50, true);
-}
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-#[test]
-fn test_fp2_addsub_6x16() {
-    run_test_with_config::<6, 16, 48>(BLS12_381_MODULUS.clone(), 50, true);
-}
+    let offset = Fp2Opcode::CLASS_OFFSET;
+    let config = ExprBuilderConfig {
+        modulus: test_config.modulus.clone(),
+        num_limbs: NUM_LIMBS,
+        limb_bits: LIMB_BITS,
+    };
 
-#[test]
-fn test_fp2_muldiv_2x32_small() {
-    run_test_with_config::<2, 32, 32>(
-        BigUint::from_str("357686312646216567629137").unwrap(),
-        50,
-        false,
-    );
-}
+    let mut harness = create_cuda_test_harness(&tester, config, offset);
+    for i in 0..test_config.num_ops {
+        set_and_execute_fp2::<BLOCKS, BLOCK_SIZE, NUM_LIMBS, DenseRecordArena>(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            &test_config.modulus,
+            i == 0,
+            test_config.is_addsub,
+            offset,
+        );
+    }
 
-#[test]
-fn test_fp2_muldiv_2x32_secp256k1() {
-    run_test_with_config::<2, 32, 32>(secp256k1_coord_prime(), 50, false);
-}
+    harness
+        .dense_arena
+        .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            harness.executor.get_record_layout::<F>(),
+        );
 
-#[test]
-fn test_fp2_muldiv_2x32_bn254() {
-    run_test_with_config::<2, 32, 32>(BN254_MODULUS.clone(), 50, false);
-}
-
-#[test]
-fn test_fp2_muldiv_6x16() {
-    run_test_with_config::<6, 16, 48>(BLS12_381_MODULUS.clone(), 50, false);
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
