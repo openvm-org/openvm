@@ -91,4 +91,5 @@ touchemall = [
     "cuda", 
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
+    "openvm-cuda-common/touchemall",
 ]

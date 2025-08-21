@@ -4,9 +4,13 @@ pub use openvm_pairing_guest::{
 };
 
 mod config;
+#[cfg(feature = "cuda")]
+mod cuda;
 mod fp12;
 mod pairing_extension;
 
 pub use config::*;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 pub use fp12::*;
 pub use pairing_extension::*;
