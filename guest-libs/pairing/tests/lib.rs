@@ -14,18 +14,14 @@ mod bn254 {
     use openvm_circuit::utils::{
         air_test, air_test_impl, air_test_with_min_segments, test_system_config,
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension,
-    };
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
-    use openvm_pairing_circuit::{
-        PairingCurve, PairingExtension, Rv32PairingConfig,
-    };
+    use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
         bn254::{BN254_COMPLEX_STRUCT_NAME, BN254_MODULUS},
         halo2curves_shims::bn254::Bn254,
@@ -36,25 +32,22 @@ mod bn254 {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        config::FriParameters,
-        openvm_stark_backend::p3_field::FieldAlgebra,
-        p3_baby_bear::BabyBear,
+        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
-
+    #[cfg(feature = "cuda")]
+    use {
+        openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
+        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+        openvm_pairing_circuit::Rv32PairingGpuBuilder as Rv32PairingBuilder,
+    };
     #[cfg(not(feature = "cuda"))]
     use {
         openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
         openvm_pairing_circuit::Rv32PairingCpuBuilder as Rv32PairingBuilder,
         openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine,
-    };
-    #[cfg(feature = "cuda")]
-    use {
-        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-        openvm_pairing_circuit::Rv32PairingGpuBuilder as Rv32PairingBuilder,
-        openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
     };
 
     type F = BabyBear;
@@ -493,17 +486,13 @@ mod bls12_381 {
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension,
-    };
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, WeierstrassExtension};
     use openvm_ecc_guest::{
         algebra::{field::FieldExtension, IntMod},
         AffinePoint,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
-    use openvm_pairing_circuit::{
-        PairingCurve, PairingExtension, Rv32PairingConfig,
-    };
+    use openvm_pairing_circuit::{PairingCurve, PairingExtension, Rv32PairingConfig};
     use openvm_pairing_guest::{
         bls12_381::{
             BLS12_381_COMPLEX_STRUCT_NAME, BLS12_381_ECC_STRUCT_NAME, BLS12_381_MODULUS,
@@ -517,25 +506,22 @@ mod bls12_381 {
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        config::FriParameters,
-        openvm_stark_backend::p3_field::FieldAlgebra,
-        p3_baby_bear::BabyBear,
+        config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{build_example_program_at_path_with_features, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
-
+    #[cfg(feature = "cuda")]
+    use {
+        openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
+        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+        openvm_pairing_circuit::Rv32PairingGpuBuilder as Rv32PairingBuilder,
+    };
     #[cfg(not(feature = "cuda"))]
     use {
         openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
         openvm_pairing_circuit::Rv32PairingCpuBuilder as Rv32PairingBuilder,
         openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine,
-    };
-    #[cfg(feature = "cuda")]
-    use {
-        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-        openvm_pairing_circuit::Rv32PairingGpuBuilder as Rv32PairingBuilder,
-        openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
     };
 
     type F = BabyBear;

@@ -6,9 +6,11 @@ mod guest_tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, test_system_config},
     };
-    use openvm_ecc_circuit::{
-        CurveConfig, Rv32WeierstrassConfig, P256_CONFIG,
-    };
+    #[cfg(not(feature = "cuda"))]
+    use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
+    #[cfg(feature = "cuda")]
+    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder;
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -17,11 +19,6 @@ mod guest_tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
-    #[cfg(not(feature = "cuda"))]
-    use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder;
 
     use crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
@@ -95,8 +92,8 @@ mod guest_tests {
     mod ecdsa_config {
         use openvm_circuit::{
             arch::{
-                AirInventory, ChipInventoryError, InitFileGenerator,
-                SystemConfig, VmBuilder, VmChipComplex, VmProverExtension,
+                AirInventory, ChipInventoryError, InitFileGenerator, SystemConfig, VmBuilder,
+                VmChipComplex, VmProverExtension,
             },
             derive::VmConfig,
         };
@@ -110,20 +107,19 @@ mod guest_tests {
             p3_field::PrimeField32,
         };
         use serde::{Deserialize, Serialize};
-
+        #[cfg(feature = "cuda")]
+        use {
+            openvm_circuit::{arch::DenseRecordArena, system::SystemChipInventoryGPU},
+            openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+            openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+            openvm_sha256_circuit::Sha2GpuProverExt,
+        };
         #[cfg(not(feature = "cuda"))]
         use {
+            openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
             openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha2CpuProverExt,
             openvm_stark_backend::prover::cpu::{CpuBackend, CpuDevice},
-            openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
-        };
-        #[cfg(feature = "cuda")]
-        use {
-            openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-            openvm_sha256_circuit::Sha2GpuProverExt,
-            openvm_cuda_backend::{prover_backend::GpuBackend, engine::GpuBabyBearPoseidon2Engine},
-            openvm_circuit::{arch::DenseRecordArena, system::SystemChipInventoryGPU},
         };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -209,11 +205,12 @@ mod guest_tests {
                 >,
                 ChipInventoryError,
             > {
-                let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
-                    &Rv32WeierstrassBuilder,
-                    &config.weierstrass,
-                    circuit,
-                )?;
+                let mut chip_complex =
+                    VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+                        &Rv32WeierstrassBuilder,
+                        &config.weierstrass,
+                        circuit,
+                    )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
                     &Sha256GpuProverExt,
