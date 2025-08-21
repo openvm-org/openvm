@@ -43,9 +43,7 @@ use {
 };
 
 use super::{columns::KeccakVmCols, KeccakVmChip};
-use crate::{
-    trace::KeccakVmRecordLayout, utils::keccak256, KeccakVmAir, KeccakVmExecutor, KeccakVmFiller,
-};
+use crate::{utils::keccak256, KeccakVmAir, KeccakVmExecutor, KeccakVmFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
@@ -100,6 +98,7 @@ fn create_test_harness<RA: Arena>(
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
