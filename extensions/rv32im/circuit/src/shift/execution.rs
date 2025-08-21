@@ -59,6 +59,19 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> ShiftExecutor<A, NUM_LIM
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident) => {
+        match ($is_imm, $shift_opcode) {
+            (true, ShiftOpcode::SLL) => Ok($execute_impl::<_, _, true, SllOp>),
+            (false, ShiftOpcode::SLL) => Ok($execute_impl::<_, _, false, SllOp>),
+            (true, ShiftOpcode::SRL) => Ok($execute_impl::<_, _, true, SrlOp>),
+            (false, ShiftOpcode::SRL) => Ok($execute_impl::<_, _, false, SrlOp>),
+            (true, ShiftOpcode::SRA) => Ok($execute_impl::<_, _, true, SraOp>),
+            (false, ShiftOpcode::SRA) => Ok($execute_impl::<_, _, false, SraOp>),
+        }
+    };
+}
+
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -78,15 +91,7 @@ where
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        let fn_ptr = match (is_imm, shift_opcode) {
-            (true, ShiftOpcode::SLL) => execute_e1_impl::<_, _, true, SllOp>,
-            (false, ShiftOpcode::SLL) => execute_e1_impl::<_, _, false, SllOp>,
-            (true, ShiftOpcode::SRL) => execute_e1_impl::<_, _, true, SrlOp>,
-            (false, ShiftOpcode::SRL) => execute_e1_impl::<_, _, false, SrlOp>,
-            (true, ShiftOpcode::SRA) => execute_e1_impl::<_, _, true, SraOp>,
-            (false, ShiftOpcode::SRA) => execute_e1_impl::<_, _, false, SraOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_imm, shift_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -102,15 +107,7 @@ where
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        let fn_ptr = match (is_imm, shift_opcode) {
-            (true, ShiftOpcode::SLL) => execute_e1_tco_handler::<_, _, true, SllOp>,
-            (false, ShiftOpcode::SLL) => execute_e1_tco_handler::<_, _, false, SllOp>,
-            (true, ShiftOpcode::SRL) => execute_e1_tco_handler::<_, _, true, SrlOp>,
-            (false, ShiftOpcode::SRL) => execute_e1_tco_handler::<_, _, false, SrlOp>,
-            (true, ShiftOpcode::SRA) => execute_e1_tco_handler::<_, _, true, SraOp>,
-            (false, ShiftOpcode::SRA) => execute_e1_tco_handler::<_, _, false, SraOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, is_imm, shift_opcode)
     }
 }
 
@@ -135,15 +132,7 @@ where
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        let fn_ptr = match (is_imm, shift_opcode) {
-            (true, ShiftOpcode::SLL) => execute_e2_impl::<_, _, true, SllOp>,
-            (false, ShiftOpcode::SLL) => execute_e2_impl::<_, _, false, SllOp>,
-            (true, ShiftOpcode::SRL) => execute_e2_impl::<_, _, true, SrlOp>,
-            (false, ShiftOpcode::SRL) => execute_e2_impl::<_, _, false, SrlOp>,
-            (true, ShiftOpcode::SRA) => execute_e2_impl::<_, _, true, SraOp>,
-            (false, ShiftOpcode::SRA) => execute_e2_impl::<_, _, false, SraOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_imm, shift_opcode)
     }
 }
 

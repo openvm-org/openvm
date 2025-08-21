@@ -57,6 +57,18 @@ impl<A> FieldExtensionCoreExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $opcode:ident) => {
+        match $opcode {
+            0 => Ok($execute_impl::<_, _, 0>), // FE4ADD
+            1 => Ok($execute_impl::<_, _, 1>), // FE4SUB
+            2 => Ok($execute_impl::<_, _, 2>), // BBE4MUL
+            3 => Ok($execute_impl::<_, _, 3>), // BBE4DIV
+            _ => panic!("Invalid field extension opcode: {}", $opcode),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
@@ -75,15 +87,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match opcode {
-            0 => execute_e1_tco_handler::<_, _, 0>, // FE4ADD
-            1 => execute_e1_tco_handler::<_, _, 1>, // FE4SUB
-            2 => execute_e1_tco_handler::<_, _, 2>, // BBE4MUL
-            3 => execute_e1_tco_handler::<_, _, 3>, // BBE4DIV
-            _ => panic!("Invalid field extension opcode: {opcode}"),
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, opcode)
     }
 
     #[inline(always)]
@@ -102,15 +106,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match opcode {
-            0 => execute_e1_impl::<_, _, 0>, // FE4ADD
-            1 => execute_e1_impl::<_, _, 1>, // FE4SUB
-            2 => execute_e1_impl::<_, _, 2>, // BBE4MUL
-            3 => execute_e1_impl::<_, _, 3>, // BBE4DIV
-            _ => panic!("Invalid field extension opcode: {opcode}"),
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, opcode)
     }
 }
 
@@ -136,15 +132,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        let fn_ptr = match opcode {
-            0 => execute_e2_impl::<_, _, 0>, // FE4ADD
-            1 => execute_e2_impl::<_, _, 1>, // FE4SUB
-            2 => execute_e2_impl::<_, _, 2>, // BBE4MUL
-            3 => execute_e2_impl::<_, _, 3>, // BBE4DIV
-            _ => panic!("Invalid field extension opcode: {opcode}"),
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, opcode)
     }
 }
 

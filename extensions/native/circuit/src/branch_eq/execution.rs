@@ -75,6 +75,21 @@ impl<A> NativeBranchEqualExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $a_is_imm:ident, $b_is_imm:ident, $is_bne:ident) => {
+        match ($a_is_imm, $b_is_imm, $is_bne) {
+            (true, true, true) => Ok($execute_impl::<_, _, true, true, true>),
+            (true, true, false) => Ok($execute_impl::<_, _, true, true, false>),
+            (true, false, true) => Ok($execute_impl::<_, _, true, false, true>),
+            (true, false, false) => Ok($execute_impl::<_, _, true, false, false>),
+            (false, true, true) => Ok($execute_impl::<_, _, false, true, true>),
+            (false, true, false) => Ok($execute_impl::<_, _, false, true, false>),
+            (false, false, true) => Ok($execute_impl::<_, _, false, false, true>),
+            (false, false, false) => Ok($execute_impl::<_, _, false, false, false>),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
@@ -93,18 +108,7 @@ where
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match (a_is_imm, b_is_imm, is_bne) {
-            (true, true, true) => execute_e1_tco_handler::<_, _, true, true, true>,
-            (true, true, false) => execute_e1_tco_handler::<_, _, true, true, false>,
-            (true, false, true) => execute_e1_tco_handler::<_, _, true, false, true>,
-            (true, false, false) => execute_e1_tco_handler::<_, _, true, false, false>,
-            (false, true, true) => execute_e1_tco_handler::<_, _, false, true, true>,
-            (false, true, false) => execute_e1_tco_handler::<_, _, false, true, false>,
-            (false, false, true) => execute_e1_tco_handler::<_, _, false, false, true>,
-            (false, false, false) => execute_e1_tco_handler::<_, _, false, false, false>,
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, a_is_imm, b_is_imm, is_bne)
     }
 
     #[inline(always)]
@@ -123,18 +127,7 @@ where
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match (a_is_imm, b_is_imm, is_bne) {
-            (true, true, true) => execute_e1_impl::<_, _, true, true, true>,
-            (true, true, false) => execute_e1_impl::<_, _, true, true, false>,
-            (true, false, true) => execute_e1_impl::<_, _, true, false, true>,
-            (true, false, false) => execute_e1_impl::<_, _, true, false, false>,
-            (false, true, true) => execute_e1_impl::<_, _, false, true, true>,
-            (false, true, false) => execute_e1_impl::<_, _, false, true, false>,
-            (false, false, true) => execute_e1_impl::<_, _, false, false, true>,
-            (false, false, false) => execute_e1_impl::<_, _, false, false, false>,
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, a_is_imm, b_is_imm, is_bne)
     }
 }
 
@@ -161,18 +154,7 @@ where
         let (a_is_imm, b_is_imm, is_bne) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        let fn_ptr = match (a_is_imm, b_is_imm, is_bne) {
-            (true, true, true) => execute_e2_impl::<_, _, true, true, true>,
-            (true, true, false) => execute_e2_impl::<_, _, true, true, false>,
-            (true, false, true) => execute_e2_impl::<_, _, true, false, true>,
-            (true, false, false) => execute_e2_impl::<_, _, true, false, false>,
-            (false, true, true) => execute_e2_impl::<_, _, false, true, true>,
-            (false, true, false) => execute_e2_impl::<_, _, false, true, false>,
-            (false, false, true) => execute_e2_impl::<_, _, false, false, true>,
-            (false, false, false) => execute_e2_impl::<_, _, false, false, false>,
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, a_is_imm, b_is_imm, is_bne)
     }
 }
 

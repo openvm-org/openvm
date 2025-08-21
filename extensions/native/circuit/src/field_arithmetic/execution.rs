@@ -76,6 +76,61 @@ impl<A> FieldArithmeticCoreExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident, $a_is_imm:ident, $b_is_imm:ident) => {
+        match ($local_opcode, $a_is_imm, $b_is_imm) {
+            (FieldArithmeticOpcode::ADD, true, true) => {
+                Ok($execute_impl::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>)
+            }
+            (FieldArithmeticOpcode::ADD, true, false) => {
+                Ok($execute_impl::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>)
+            }
+            (FieldArithmeticOpcode::ADD, false, true) => {
+                Ok($execute_impl::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>)
+            }
+            (FieldArithmeticOpcode::ADD, false, false) => {
+                Ok($execute_impl::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>)
+            }
+            (FieldArithmeticOpcode::SUB, true, true) => {
+                Ok($execute_impl::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>)
+            }
+            (FieldArithmeticOpcode::SUB, true, false) => {
+                Ok($execute_impl::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>)
+            }
+            (FieldArithmeticOpcode::SUB, false, true) => {
+                Ok($execute_impl::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>)
+            }
+            (FieldArithmeticOpcode::SUB, false, false) => {
+                Ok($execute_impl::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>)
+            }
+            (FieldArithmeticOpcode::MUL, true, true) => {
+                Ok($execute_impl::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>)
+            }
+            (FieldArithmeticOpcode::MUL, true, false) => {
+                Ok($execute_impl::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>)
+            }
+            (FieldArithmeticOpcode::MUL, false, true) => {
+                Ok($execute_impl::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>)
+            }
+            (FieldArithmeticOpcode::MUL, false, false) => {
+                Ok($execute_impl::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>)
+            }
+            (FieldArithmeticOpcode::DIV, true, true) => {
+                Ok($execute_impl::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>)
+            }
+            (FieldArithmeticOpcode::DIV, true, false) => {
+                Ok($execute_impl::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>)
+            }
+            (FieldArithmeticOpcode::DIV, false, true) => {
+                Ok($execute_impl::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>)
+            }
+            (FieldArithmeticOpcode::DIV, false, false) => {
+                Ok($execute_impl::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>)
+            }
+        }
+    };
+}
+
 impl<F, A> Executor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
@@ -94,58 +149,7 @@ where
 
         let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
-            (FieldArithmeticOpcode::ADD, true, true) => {
-                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, true, false) => {
-                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, true) => {
-                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, false) => {
-                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, true) => {
-                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, false) => {
-                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, true) => {
-                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, false) => {
-                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, true) => {
-                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, false) => {
-                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, true) => {
-                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, false) => {
-                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, true) => {
-                execute_e1_tco_handler::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, false) => {
-                execute_e1_tco_handler::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, true) => {
-                execute_e1_tco_handler::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, false) => {
-                execute_e1_tco_handler::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, local_opcode, a_is_imm, b_is_imm)
     }
 
     #[inline(always)]
@@ -164,58 +168,7 @@ where
 
         let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
-            (FieldArithmeticOpcode::ADD, true, true) => {
-                execute_e1_impl::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, true, false) => {
-                execute_e1_impl::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, true) => {
-                execute_e1_impl::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, false) => {
-                execute_e1_impl::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, true) => {
-                execute_e1_impl::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, false) => {
-                execute_e1_impl::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, true) => {
-                execute_e1_impl::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, false) => {
-                execute_e1_impl::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, true) => {
-                execute_e1_impl::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, false) => {
-                execute_e1_impl::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, true) => {
-                execute_e1_impl::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, false) => {
-                execute_e1_impl::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, true) => {
-                execute_e1_impl::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, false) => {
-                execute_e1_impl::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, true) => {
-                execute_e1_impl::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, false) => {
-                execute_e1_impl::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode, a_is_imm, b_is_imm)
     }
 }
 
@@ -242,58 +195,7 @@ where
         let (a_is_imm, b_is_imm, local_opcode) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        let fn_ptr = match (local_opcode, a_is_imm, b_is_imm) {
-            (FieldArithmeticOpcode::ADD, true, true) => {
-                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, true, false) => {
-                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, true) => {
-                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::ADD, false, false) => {
-                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::ADD as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, true) => {
-                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, true, false) => {
-                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, true) => {
-                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::SUB, false, false) => {
-                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::SUB as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, true) => {
-                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, true, false) => {
-                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, true) => {
-                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::MUL, false, false) => {
-                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::MUL as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, true) => {
-                execute_e2_impl::<_, _, true, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, true, false) => {
-                execute_e2_impl::<_, _, true, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, true) => {
-                execute_e2_impl::<_, _, false, true, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-            (FieldArithmeticOpcode::DIV, false, false) => {
-                execute_e2_impl::<_, _, false, false, { FieldArithmeticOpcode::DIV as u8 }>
-            }
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode, a_is_imm, b_is_imm)
     }
 }
 

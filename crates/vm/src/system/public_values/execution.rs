@@ -60,6 +60,17 @@ where
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $b_is_imm:ident, $c_is_imm:ident) => {
+        match ($b_is_imm, $c_is_imm) {
+            (true, true) => Ok($execute_impl::<_, _, true, true>),
+            (true, false) => Ok($execute_impl::<_, _, true, false>),
+            (false, true) => Ok($execute_impl::<_, _, false, true>),
+            (false, false) => Ok($execute_impl::<_, _, false, false>),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
@@ -82,13 +93,7 @@ where
         let data: &mut PublicValuesPreCompute = data.borrow_mut();
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
 
-        let fn_ptr = match (b_is_imm, c_is_imm) {
-            (true, true) => execute_e1_impl::<_, _, true, true>,
-            (true, false) => execute_e1_impl::<_, _, true, false>,
-            (false, true) => execute_e1_impl::<_, _, false, true>,
-            (false, false) => execute_e1_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, b_is_imm, c_is_imm)
     }
 
     #[cfg(feature = "tco")]
@@ -104,13 +109,7 @@ where
         let data: &mut PublicValuesPreCompute = data.borrow_mut();
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
 
-        let fn_ptr = match (b_is_imm, c_is_imm) {
-            (true, true) => execute_e1_tco_handler::<_, _, true, true>,
-            (true, false) => execute_e1_tco_handler::<_, _, true, false>,
-            (false, true) => execute_e1_tco_handler::<_, _, false, true>,
-            (false, false) => execute_e1_tco_handler::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, b_is_imm, c_is_imm)
     }
 }
 
@@ -136,13 +135,7 @@ where
         data.chip_idx = chip_idx as u32;
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
 
-        let fn_ptr = match (b_is_imm, c_is_imm) {
-            (true, true) => execute_e2_impl::<_, _, true, true>,
-            (true, false) => execute_e2_impl::<_, _, true, false>,
-            (false, true) => execute_e2_impl::<_, _, false, true>,
-            (false, false) => execute_e2_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, b_is_imm, c_is_imm)
     }
 }
 

@@ -49,6 +49,17 @@ impl<A, const LIMB_BITS: usize> DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, L
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            DivRemOpcode::DIV => Ok($execute_impl::<_, _, DivOp>),
+            DivRemOpcode::DIVU => Ok($execute_impl::<_, _, DivuOp>),
+            DivRemOpcode::REM => Ok($execute_impl::<_, _, RemOp>),
+            DivRemOpcode::REMU => Ok($execute_impl::<_, _, RemuOp>),
+        }
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -68,13 +79,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut DivRemPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e1_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e1_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e1_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e1_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -89,13 +94,7 @@ where
     {
         let data: &mut DivRemPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e1_tco_handler::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e1_tco_handler::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e1_tco_handler::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e1_tco_handler::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -121,13 +120,7 @@ where
         let data: &mut E2PreCompute<DivRemPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e2_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e2_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e2_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e2_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
     }
 }
 
