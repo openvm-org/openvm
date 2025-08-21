@@ -263,9 +263,9 @@ impl VmBuilder<E> for Rv32ModularGpuBuilder {
 }
 
 #[derive(Clone)]
-pub struct Rv32ModularWithFp2CpuBuilder;
+pub struct Rv32ModularWithFp2GpuBuilder;
 
-impl VmBuilder<E> for Rv32ModularWithFp2CpuBuilder {
+impl VmBuilder<E> for Rv32ModularWithFp2GpuBuilder {
     type VmConfig = Rv32ModularWithFp2Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
