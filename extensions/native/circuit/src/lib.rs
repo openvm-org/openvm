@@ -1,12 +1,3 @@
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit::arch::DenseRecordArena,
-    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
-    openvm_circuit::system::cuda::SystemChipInventoryGPU,
-    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
-
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, MemoryConfig,
@@ -25,6 +16,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::arch::DenseRecordArena,
+    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
+    openvm_circuit::system::cuda::SystemChipInventoryGPU,
+    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+};
 
 pub mod adapters;
 
