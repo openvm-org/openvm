@@ -78,6 +78,9 @@ macro_rules! run {
         let start_instret = $exec_state.instret;
 
         info_span!($span).in_scope(|| -> Result<(), ExecutionError> {
+            // SAFETY:
+            // - it is the responsibility of each Executor to ensure that pre_compute_insts contains
+            //   valid function pointers and pre-computed data
             #[cfg(not(feature = "tco"))]
             unsafe {
                 tracing::debug!("execute_trampoline");
@@ -457,6 +460,9 @@ fn split_pre_compute_buf<'a, F>(
 ) -> Vec<&'a mut [u8]> {
     let program_len = program.instructions_and_debug_infos.len();
     let buf_len = program_len * pre_compute_max_size;
+    // SAFETY:
+    // - pre_compute_buf.ptr was allocated with exactly buf_len bytes
+    // - lifetime 'a ensures the returned slices don't outlive the AlignedBuf
     let pre_compute_buf = unsafe { std::slice::from_raw_parts_mut(pre_compute_buf.ptr, buf_len) };
     pre_compute_buf
         .chunks_exact_mut(pre_compute_max_size)
@@ -538,6 +544,7 @@ impl AlignedBuf {
 impl Drop for AlignedBuf {
     fn drop(&mut self) {
         if self.layout.size() != 0 {
+            // SAFETY: self.ptr was allocated with self.layout in AlignedBuf::uninit
             unsafe {
                 dealloc(self.ptr, self.layout);
             }

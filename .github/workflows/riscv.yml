@@ -10,6 +10,7 @@ on:
       - "crates/toolchain/**"
       - "Cargo.toml"
       - ".github/workflows/riscv.yml"
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

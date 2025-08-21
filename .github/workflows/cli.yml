@@ -15,6 +15,7 @@ on:
       - "examples/**"
       - "Cargo.toml"
       - ".github/workflows/cli.yml"
+  merge_group:
   workflow_dispatch:
     inputs:
       use_local_openvm:

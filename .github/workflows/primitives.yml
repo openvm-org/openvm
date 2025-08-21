@@ -12,6 +12,7 @@ on:
       - "crates/circuits/mod-builder/**"
       - "Cargo.toml"
       - ".github/workflows/primitives.yml"
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

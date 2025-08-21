@@ -383,6 +383,14 @@ pub(crate) mod phantom {
             _: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
+            // TODO: this check should be performed statically on the program before execution
+            assert!(
+                (c_upper as usize) < memory.memory.config.len(),
+                "c_upper out of bounds"
+            );
+            // SAFETY:
+            // - F is stack-allocated repr(C) or repr(transparent)
+            // - `c_upper` is a valid address space
             let [value] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
             println!("{value}");
             Ok(())
@@ -400,6 +408,14 @@ pub(crate) mod phantom {
             len: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
+            // TODO: this check should be performed statically on the program before execution
+            assert!(
+                (c_upper as usize) < memory.memory.config.len(),
+                "c_upper out of bounds"
+            );
+            // SAFETY:
+            // - F is stack-allocated repr(C) or repr(transparent)
+            // - `c_upper` is a valid address space
             let [val] = unsafe { memory.read::<F, 1>(c_upper as u32, a) };
             let mut val = val.as_canonical_u32();
 

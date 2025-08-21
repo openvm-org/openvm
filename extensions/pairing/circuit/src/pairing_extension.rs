@@ -270,6 +270,9 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
+        // SAFETY:
+        // - RV32_MEMORY_AS consists of `u8`s
+        // - RV32_MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory

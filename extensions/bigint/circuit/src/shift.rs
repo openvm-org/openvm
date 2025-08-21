@@ -14,7 +14,10 @@ use openvm_rv32im_circuit::ShiftExecutor;
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32Shift256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u64_array, u64_array_to_bytes},
+    Rv32Shift256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
@@ -192,8 +195,8 @@ struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd = [0u64; 4];
         // Only use the first 8 bits.
         let shift = (rs2_u64[0] & 0xff) as u32;
@@ -207,7 +210,7 @@ impl ShiftOp for SllOp {
                 carry = curr >> (u64::BITS - bit_offset);
             }
         }
-        unsafe { std::mem::transmute(rd) }
+        u64_array_to_bytes(rd)
     }
 }
 impl ShiftOp for SrlOp {
@@ -235,8 +238,8 @@ fn shift_right(
     rs2: [u8; INT256_NUM_LIMBS],
     init_value: u64,
 ) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
     let mut rd = [init_value; 4];
     let shift = (rs2_u64[0] & 0xff) as u32;
     let index_offset = (shift / u64::BITS) as usize;
@@ -253,7 +256,7 @@ fn shift_right(
             carry = curr << (u64::BITS - bit_offset);
         }
     }
-    unsafe { std::mem::transmute(rd) }
+    u64_array_to_bytes(rd)
 }
 
 #[cfg(test)]

@@ -635,6 +635,9 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         &'a mut self,
         layout: FriReducedOpeningLayout,
     ) -> FriReducedOpeningRecordMut<'a, F> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits and
+        //   constants are guaranteed <= self.len() by layout precondition
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningHeaderRecord>()) };
         let header: &mut FriReducedOpeningHeaderRecord = header_buf.borrow_mut();
@@ -642,6 +645,10 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         let workload_size =
             layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
 
+        // SAFETY:
+        // - layout guarantees rest has sufficient length for workload data
+        // - workload_size is calculated from layout.metadata.length
+        // - total buffer size was validated to contain header + workload + aligned aux records
         let (workload_buf, rest) = unsafe { rest.split_at_mut_unchecked(workload_size) };
         let a_prev_size = if layout.metadata.is_init {
             0
@@ -649,9 +656,21 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
             layout.metadata.length * size_of::<F>()
         };
 
+        // SAFETY:
+        // - The layout guarantees sufficient space for a_prev data when is_init is false
+        // - When is_init is true, a_prev_size is 0 and the split is trivial
+        // - The remaining buffer has space for common data
         let (a_prev_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(a_prev_size) };
 
+        // SAFETY:
+        // - a_prev_buf contains bytes that will be interpreted as field elements
+        // - align_to_mut ensures proper alignment for type F
+        // - The slice length is a multiple of size_of::<F>() by construction
         let (_, a_prev_records, _) = unsafe { a_prev_buf.align_to_mut::<F>() };
+        // SAFETY:
+        // - workload_buf contains exactly layout.metadata.length workload records worth of bytes
+        // - align_to_mut ensures proper alignment for the FriReducedOpeningWorkloadRowRecord<F>
+        //   type
         let (_, workload_records, _) =
             unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
 
@@ -884,6 +903,9 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
+            // SAFETY:
+            // - caller ensures `remaining_trace` contains a valid record representation that was
+            //   previously written by the executor
             let header: &FriReducedOpeningHeaderRecord =
                 unsafe { get_record_from_slice(&mut remaining_trace, ()) };
             let num_rows = header.length as usize + 2;
@@ -899,6 +921,12 @@ impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
                 length: num_rows - 2,
                 is_init,
             };
+            // SAFETY:
+            // - caller ensures `trace` contains a valid record representation that was previously
+            //   written by the executor
+            // - chunk contains a valid FriReducedOpeningRecord with the exact layout specified
+            // - get_record_from_slice will correctly split the buffer into header, workload, and
+            //   aux components based on this layout
             let record: FriReducedOpeningRecordMut<F> =
                 unsafe { get_record_from_slice(&mut chunk, MultiRowLayout::new(metadata)) };
 
