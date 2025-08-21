@@ -154,7 +154,9 @@ where
         let fn_ptr = match local_opcode {
             NativeLoadStoreOpcode::LOADW => execute_e2_loadw_tco_handler::<F, Ctx, NUM_CELLS>,
             NativeLoadStoreOpcode::STOREW => execute_e2_storew_tco_handler::<F, Ctx, NUM_CELLS>,
-            NativeLoadStoreOpcode::HINT_STOREW => execute_e2_hint_storew_tco_handler::<F, Ctx, NUM_CELLS>,
+            NativeLoadStoreOpcode::HINT_STOREW => {
+                execute_e2_hint_storew_tco_handler::<F, Ctx, NUM_CELLS>
+            }
         };
 
         Ok(fn_ptr)
