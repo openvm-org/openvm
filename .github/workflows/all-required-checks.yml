@@ -1,0 +1,33 @@
+name: All Required Checks
+
+on:
+  workflow_run:
+    workflows:
+      - "Lint Workspace"
+      - "Build Workspace"
+      - "VM STARK and Compiler Tests"
+      - "OpenVM CLI Tests"
+      - "Primitives Tests"
+      - "OpenVM SDK Tests"
+      - "OpenVM Benchmarks: Coordinate Runner & Reporting"
+      - "Execution benchmarks"
+      - "STARK Recursion Tests"
+      - "Extension Tests"
+      - "RISC-V Test Vectors"
+      - "Guest Library Tests"
+      - "Native Compiler Tests"
+      - "Build and Serve Crate Docs"
+    types: [completed]
+
+jobs:
+  check-all-workflows:
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all required workflows passed
+        run: |
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Workflow ${{ github.event.workflow_run.name }} failed with conclusion: ${{ github.event.workflow_run.conclusion }}"
+            exit 1
+          fi
+          echo "All required workflows completed successfully"
