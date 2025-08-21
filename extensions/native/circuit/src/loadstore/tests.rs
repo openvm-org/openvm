@@ -9,7 +9,7 @@ use openvm_circuit::arch::{
     testing::{GpuChipTestBuilder, GpuTestChipHarness},
     EmptyAdapterCoreLayout,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
 #[cfg(feature = "cuda")]
 use openvm_native_compiler::NativeLoadStore4Opcode;
 use openvm_native_compiler::{
@@ -108,6 +108,7 @@ fn set_and_execute<const NUM_CELLS: usize, E, RA>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: NativeLoadStoreOpcode,
+    global_opcode: VmOpcode,
 ) where
     E: PreflightExecutor<F, RA>,
     RA: Arena,
@@ -135,7 +136,7 @@ fn set_and_execute<const NUM_CELLS: usize, E, RA>(
         executor,
         arena,
         &Instruction::from_usize(
-            opcode.global_opcode(),
+            global_opcode,
             [
                 a,
                 b.as_canonical_u32() as usize,
@@ -175,6 +176,7 @@ fn rand_native_loadstore_test_1(opcode: NativeLoadStoreOpcode, num_ops: usize) {
             &mut harness.arena,
             &mut rng,
             opcode,
+            opcode.global_opcode(),
         );
     }
     let tester = tester.build().load(harness).finalize();
@@ -196,6 +198,7 @@ fn rand_native_loadstore_test_4(opcode: NativeLoadStoreOpcode, num_ops: usize) {
             &mut harness.arena,
             &mut rng,
             opcode,
+            opcode.global_opcode(),
         );
     }
     let tester = tester.build().load(harness).finalize();
@@ -218,6 +221,7 @@ fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
             &mut harness.dense_arena,
             &mut rng,
             opcode,
+            opcode.global_opcode(),
         );
     }
 
@@ -257,6 +261,7 @@ fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStore4Opcode, num_ops
             &mut harness.dense_arena,
             &mut rng,
             opcode.0,
+            opcode.global_opcode(),
         );
     }
 
@@ -312,6 +317,7 @@ fn run_negative_native_loadstore_test<const NUM_CELLS: usize>(
         &mut harness.arena,
         &mut rng,
         opcode,
+        opcode.global_opcode(),
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
