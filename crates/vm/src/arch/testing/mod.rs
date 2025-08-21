@@ -96,8 +96,6 @@ pub trait TestBuilder<F> {
     fn last_to_pc(&self) -> F;
     fn last_from_pc(&self) -> F;
 
-    fn streams_mut(&mut self) -> &mut Streams<F>;
-
     fn execution_final_state(&self) -> ExecutionState<F>;
     fn streams_mut(&mut self) -> &mut Streams<F>;
 }
