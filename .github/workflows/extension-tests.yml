@@ -37,7 +37,7 @@ jobs:
           - { name: "bigint", path: "bigint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "bigint", path: "bigint", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "algebra", path: "algebra", family: "g6.4xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "algebra", path: "algebra", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "ecc", path: "ecc", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
           - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }

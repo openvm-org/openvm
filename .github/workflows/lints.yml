@@ -91,7 +91,7 @@ jobs:
     name: Lint CUDA
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=g6.xlarge
+      - family=g4dn+g5+g6
       - image=ubuntu24-gpu-x64
       - extras=s3-cache
 

@@ -26,8 +26,8 @@ jobs:
     strategy:
       matrix:
         config:
-          - { family: "c7g.8xlarge", image: "ubuntu24-full-arm64" }
-          - { family: "g6.xlarge", image: "ubuntu24-gpu-x64" }
+          - { family: "c7g", image: "ubuntu24-full-arm64" }
+          - { family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
 
     runs-on:
       - runs-on=${{ github.run_id }}
@@ -45,13 +45,13 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Set CPU tests environment variables
-        if: matrix.config.family != 'g6.xlarge'
+        if: ${{ !contains(matrix.config.image, 'gpu') }}
         run: |
           echo "NEXTEST_ENV=" >> $GITHUB_ENV
           echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
 
       - name: Check CUDA status and set environment variables
-        if: matrix.config.family == 'g6.xlarge'
+        if: contains(matrix.config.image, 'gpu')
         run: |
           nvidia-smi
           nvidia-smi -L
@@ -71,13 +71,13 @@ jobs:
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }} 
 
       - name: Run tests for sha256-air
-        if: matrix.config.family != 'g6.xlarge'
+        if: ${{ !contains(matrix.config.image, 'gpu') }}
         working-directory: crates/circuits/sha256-air
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for mod-builder
-        if: matrix.config.family != 'g6.xlarge'
+        if: ${{ !contains(matrix.config.image, 'gpu') }}
         working-directory: crates/circuits/mod-builder
         run: |
           ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
