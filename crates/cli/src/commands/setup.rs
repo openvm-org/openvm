@@ -8,6 +8,7 @@ use aws_sdk_s3::Client;
 use clap::Parser;
 use eyre::{eyre, Result};
 use openvm_sdk::{
+    config::DEFAULT_HALO2_VERIFIER_K,
     fs::{
         read_object_from_file, write_evm_halo2_verifier_to_folder, write_object_to_file,
         EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
@@ -98,7 +99,7 @@ impl SetupCmd {
                 ));
             }
 
-            Self::download_params(10, 24).await?;
+            Self::download_params(10, DEFAULT_HALO2_VERIFIER_K as u32).await?;
             // halo2 keygen does not depend on the app config
             let sdk = Sdk::standard();
 
