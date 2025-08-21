@@ -2,8 +2,7 @@ name: "Execution benchmarks"
 
 on:
   push:
-    # TODO(ayush): remove after feat/new-execution is merged
-    branches: ["main", "feat/new-execution"]
+    branches: ["main"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -66,12 +65,12 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --profile maxperf
+        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features tco
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo $TOOLCHAIN codspeed run
+          run: cargo $TOOLCHAIN codspeed run --features tco
           token: ${{ secrets.CODSPEED_TOKEN }}
 
   codspeed-instrumentation-benchmarks:
@@ -111,10 +110,10 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build
+        run: cargo $TOOLCHAIN codspeed build --features tco
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo $TOOLCHAIN codspeed run
+          run: cargo $TOOLCHAIN codspeed run --features tco
           token: ${{ secrets.CODSPEED_TOKEN }}
