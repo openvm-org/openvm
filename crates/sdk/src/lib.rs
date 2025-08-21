@@ -153,6 +153,12 @@ where
 
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
+// #[cfg(feature = "cuda")]
+// use {config::SdkVmGpuBuilder, openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine};
+
+// #[cfg(feature = "cuda")]
+// pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder, NativeGpuBuilder>;
+
 impl Sdk {
     /// Creates SDK with a standard configuration that includes a set of default VM extensions
     /// loaded.
