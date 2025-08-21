@@ -1,4 +1,4 @@
-#include "../system/execution.cuh"
+#include "execution.cuh"
 #include "fp.h"
 #include "launcher.cuh"
 #include "trace_access.h"

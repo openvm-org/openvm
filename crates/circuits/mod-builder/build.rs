@@ -13,13 +13,13 @@ fn main() {
         .include("cuda/include")
         .include("../../../extensions/rv32-adapters/cuda/include")
         .include("../poseidon2-air/cuda/include")
-        .include("../../vm/cuda/src")
+        .include("../../vm/cuda/include")
         .watch("src/cuda_abi.rs")
         .watch("cuda")
         .watch("../primitives/cuda/include")
         .watch("../../../extensions/rv32-adapters/cuda/include")
         .watch("../poseidon2-air/cuda/include")
-        .watch("../../vm/cuda/src")
+        .watch("../../vm/cuda")
         .library_name("tracegen_mod_builder")
         .file("cuda/src/field_expression.cu");
 

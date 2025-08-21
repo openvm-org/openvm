@@ -13,7 +13,7 @@ fn main() {
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../rv32im/circuit/cuda/include")
             .include("../../rv32-adapters/cuda/include")
-            .include("../../../crates/vm/cuda/src")
+            .include("../../../crates/vm/cuda/include")
             .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
             .watch("../../rv32im/circuit/cuda")
