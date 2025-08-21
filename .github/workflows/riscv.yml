@@ -90,4 +90,4 @@ jobs:
         working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run riscv-vector --cargo-profile=fast ${{ env.FEATURE_ARGS }}
+          cargo nextest run riscv_vector --cargo-profile=fast --run-ignored all ${{ env.FEATURE_ARGS }}
