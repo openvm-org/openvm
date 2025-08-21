@@ -15,7 +15,7 @@ pub struct MemoryBaseAuxRecord {
 }
 
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MemoryExtendedAuxRecord {
     pub prev_timestamp: u32,
     pub timestamp_lt_aux: [u32; AUX_LEN],
