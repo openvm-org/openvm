@@ -5,17 +5,6 @@ mod tests {
     use eyre::Result;
     use num_bigint::BigUint;
     use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig, Rv32ModularWithFp2Config};
-    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::utils::{air_test, test_system_config};
-    use openvm_ecc_circuit::SECP256K1_CONFIG;
-    use openvm_instructions::exe::VmExe;
-    use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
-    };
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, NoInitFile};
-    use openvm_transpiler::{transpiler::Transpiler, FromElf};
-
     #[cfg(not(feature = "cuda"))]
     use openvm_algebra_circuit::{
         Rv32ModularCpuBuilder as Rv32ModularBuilder,
@@ -26,6 +15,16 @@ mod tests {
         Rv32ModularGpuBuilder as Rv32ModularBuilder,
         Rv32ModularWithFp2GpuBuilder as Rv32ModularWithFp2Builder,
     };
+    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use openvm_circuit::utils::{air_test, test_system_config};
+    use openvm_ecc_circuit::SECP256K1_CONFIG;
+    use openvm_instructions::exe::VmExe;
+    use openvm_rv32im_transpiler::{
+        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+    };
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+    use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir, NoInitFile};
+    use openvm_transpiler::{transpiler::Transpiler, FromElf};
 
     type F = BabyBear;
 
