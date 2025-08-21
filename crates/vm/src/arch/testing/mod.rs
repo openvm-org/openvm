@@ -69,6 +69,7 @@ pub trait TestBuilder<F> {
         arena: &mut RA,
         instruction: &Instruction<F>,
     );
+
     fn execute_with_pc<E: PreflightExecutor<F, RA>, RA: Arena>(
         &mut self,
         executor: &mut E,
@@ -76,16 +77,26 @@ pub trait TestBuilder<F> {
         instruction: &Instruction<F>,
         initial_pc: u32,
     );
+
     fn write_cell(&mut self, address_space: usize, pointer: usize, value: F);
     fn read_cell(&mut self, address_space: usize, pointer: usize) -> F;
+
     fn write<const N: usize>(&mut self, address_space: usize, pointer: usize, value: [F; N]);
     fn read<const N: usize>(&mut self, address_space: usize, pointer: usize) -> [F; N];
+
     fn write_usize<const N: usize>(
         &mut self,
         address_space: usize,
         pointer: usize,
         value: [usize; N],
     );
+
+    fn address_bits(&self) -> usize;
+
+    fn last_to_pc(&self) -> F;
+    fn last_from_pc(&self) -> F;
+
+    fn streams_mut(&mut self) -> &mut Streams<F>;
 
     fn execution_final_state(&self) -> ExecutionState<F>;
     fn streams_mut(&mut self) -> &mut Streams<F>;

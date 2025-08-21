@@ -146,6 +146,22 @@ where
         self.read::<1>(address_space, pointer)[0]
     }
 
+    fn address_bits(&self) -> usize {
+        self.memory.controller.memory_config().pointer_max_bits
+    }
+
+    fn last_to_pc(&self) -> F {
+        self.execution.last_to_pc()
+    }
+
+    fn last_from_pc(&self) -> F {
+        self.execution.last_from_pc()
+    }
+
+    fn streams_mut(&mut self) -> &mut Streams<F> {
+        &mut self.streams
+    }
+
     fn execution_final_state(&self) -> ExecutionState<F> {
         self.execution.records.last().unwrap().final_state
     }
@@ -246,10 +262,6 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
 
     pub fn memory_helper(&self) -> SharedMemoryHelper<F> {
         self.memory.controller.helper()
-    }
-
-    pub fn address_bits(&self) -> usize {
-        self.memory.controller.memory_config().pointer_max_bits
     }
 
     pub fn get_default_register(&mut self, increment: usize) -> usize {

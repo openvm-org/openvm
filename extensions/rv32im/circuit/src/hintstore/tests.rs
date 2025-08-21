@@ -1,10 +1,14 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::{
-    testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::{
+    arch::{
+        testing::{
+            memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
+            BITWISE_OP_LOOKUP_BUS,
+        },
+        Arena, ExecutionBridge, MatrixRecordArena, PreflightExecutor,
     },
-    Arena, DenseRecordArena, MatrixRecordArena, PreflightExecutor,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -26,16 +30,49 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng, RngCore};
+#[cfg(feature = "cuda")]
+use {
+    crate::{Rv32HintStoreChipGpu, Rv32HintStoreLayout},
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+};
 
 use super::{Rv32HintStoreAir, Rv32HintStoreChip, Rv32HintStoreCols, Rv32HintStoreExecutor};
-use crate::{test_utils::get_verification_error, Rv32HintStoreFiller, Rv32HintStoreLayout};
+use crate::{test_utils::get_verification_error, Rv32HintStoreFiller};
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 4096;
 type Harness<RA> =
     TestChipHarness<F, Rv32HintStoreExecutor, Rv32HintStoreAir, Rv32HintStoreChip<F>, RA>;
 
-fn create_test_chip<RA: Arena>(
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    memory_helper: SharedMemoryHelper<F>,
+    address_bits: usize,
+) -> (
+    Rv32HintStoreAir,
+    Rv32HintStoreExecutor,
+    Rv32HintStoreChip<F>,
+) {
+    let air = Rv32HintStoreAir::new(
+        execution_bridge,
+        memory_bridge,
+        bitwise_chip.bus(),
+        Rv32HintStoreOpcode::CLASS_OFFSET,
+        address_bits,
+    );
+    let executor = Rv32HintStoreExecutor::new(address_bits, Rv32HintStoreOpcode::CLASS_OFFSET);
+    let chip = Rv32HintStoreChip::<F>::new(
+        Rv32HintStoreFiller::new(address_bits, bitwise_chip),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness<RA: Arena>(
     tester: &mut VmChipTestBuilder<F>,
 ) -> (
     Harness<RA>,
@@ -49,33 +86,25 @@ fn create_test_chip<RA: Arena>(
         bitwise_bus,
     ));
 
-    let air = Rv32HintStoreAir::new(
-        tester.execution_bridge(),
+    let (air, executor, chip) = create_harness_fields(
         tester.memory_bridge(),
-        bitwise_chip.bus(),
-        Rv32HintStoreOpcode::CLASS_OFFSET,
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        tester.memory_helper(),
         tester.address_bits(),
     );
-    let executor =
-        Rv32HintStoreExecutor::new(tester.address_bits(), Rv32HintStoreOpcode::CLASS_OFFSET);
-    let chip = Rv32HintStoreChip::<F>::new(
-        Rv32HintStoreFiller::new(tester.address_bits(), bitwise_chip.clone()),
-        tester.memory_helper(),
-    );
-
     let harness = Harness::<RA>::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
     (harness, (bitwise_chip.air, bitwise_chip))
 }
 
-fn set_and_execute<RA: Arena>(
-    tester: &mut VmChipTestBuilder<F>,
-    harness: &mut Harness<RA>,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv32HintStoreOpcode,
-) where
-    Rv32HintStoreExecutor: PreflightExecutor<F, RA>,
-{
+) {
     let num_words = match opcode {
         HINT_STOREW => 1,
         HINT_BUFFER => rng.gen_range(1..28),
@@ -101,12 +130,12 @@ fn set_and_execute<RA: Arena>(
     for _ in 0..num_words {
         let data = rng.next_u32().to_le_bytes().map(F::from_canonical_u8);
         input.extend(data);
-        tester.streams.hint_stream.extend(data);
+        tester.streams_mut().hint_stream.extend(data);
     }
 
     tester.execute(
-        &mut harness.executor,
-        &mut harness.arena,
+        executor,
+        arena,
         &Instruction::from_usize(
             opcode.global_opcode(),
             [a, b, 0, RV32_REGISTER_AS as usize, RV32_MEMORY_AS as usize],
@@ -133,7 +162,7 @@ fn rand_hintstore_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
     let num_ops: usize = 100;
     for _ in 0..num_ops {
         let opcode = if rng.gen_bool(0.5) {
@@ -141,7 +170,13 @@ fn rand_hintstore_test() {
         } else {
             HINT_BUFFER
         };
-        set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
     }
 
     let tester = tester
@@ -167,9 +202,15 @@ fn run_negative_hintstore_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut harness, bitwise) = create_test_chip(&mut tester);
+    let (mut harness, bitwise) = create_harness(&mut tester);
 
-    set_and_execute(&mut tester, &mut harness, &mut rng, opcode);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+    );
 
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut trace_row = trace.row_slice(0).to_vec();
@@ -204,47 +245,94 @@ fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut harness, _) = create_test_chip::<MatrixRecordArena<F>>(&mut tester);
+    let (mut harness, _) = create_harness::<MatrixRecordArena<F>>(&mut tester);
 
     let num_ops: usize = 10;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut harness, &mut rng, HINT_STOREW);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            HINT_STOREW,
+        );
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
-/// DENSE TESTS
-///
-/// Ensure that the chip works as expected with dense records.
-/// We first execute some instructions with a [DenseRecordArena] and transfer the records
-/// to a [MatrixRecordArena]. After transferring we generate the trace and make sure that
-/// all the constraints pass.
-///////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
 
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32HintStoreExecutor,
+    Rv32HintStoreAir,
+    Rv32HintStoreChipGpu,
+    Rv32HintStoreChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    // getting bus from tester since `gpu_chip` and `air` must use the same bus
+    let bitwise_bus = default_bitwise_lookup_bus();
+    // creating a dummy chip for Cpu so we only count `add_count`s from GPU
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+        bitwise_bus,
+    ));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip.clone(),
+        tester.dummy_memory_helper(),
+        tester.address_bits(),
+    );
+    let gpu_chip = Rv32HintStoreChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
 #[test]
-fn dense_record_arena_test() {
+fn test_cuda_rand_hintstore_tracegen() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::default();
-    let (mut sparse_harness, bitwise) = create_test_chip::<MatrixRecordArena<F>>(&mut tester);
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
 
-    {
-        let mut dense_harness = create_test_chip::<DenseRecordArena>(&mut tester).0;
-
-        let num_ops: usize = 100;
-        for _ in 0..num_ops {
-            set_and_execute(&mut tester, &mut dense_harness, &mut rng, HINT_STOREW);
-        }
-
-        let mut record_interpreter = dense_harness
-            .arena
-            .get_record_seeker::<_, Rv32HintStoreLayout>();
-        record_interpreter.transfer_to_matrix_arena(&mut sparse_harness.arena);
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 50;
+    for _ in 0..num_ops {
+        let opcode = if rng.gen_bool(0.5) {
+            HINT_STOREW
+        } else {
+            HINT_BUFFER
+        };
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+        );
     }
 
-    let tester = tester
+    harness
+        .dense_arena
+        .get_record_seeker::<_, Rv32HintStoreLayout>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
         .build()
-        .load(sparse_harness)
-        .load_periphery(bitwise)
-        .finalize();
-    tester.simple_test().expect("Verification failed");
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

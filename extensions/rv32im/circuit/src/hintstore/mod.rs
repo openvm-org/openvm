@@ -38,6 +38,12 @@ use openvm_stark_backend::{
 use crate::adapters::{read_rv32_register, tracing_read, tracing_write};
 
 mod execution;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 mod tests;
 

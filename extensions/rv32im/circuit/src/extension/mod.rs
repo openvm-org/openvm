@@ -37,6 +37,11 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 // ============ Extension Struct Definitions ============
 
 /// RISC-V 32-bit Base (RV32I) Extension
