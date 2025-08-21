@@ -5846,6 +5846,7 @@ dependencies = [
  "openvm-algebra-moduli-macros",
  "openvm-algebra-transpiler",
  "openvm-circuit",
+ "openvm-cuda-backend",
  "openvm-custom-insn",
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
