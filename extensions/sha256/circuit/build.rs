@@ -12,7 +12,7 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/circuits/sha256-air/cuda/include")
-            .include("../../../crates/vm/cuda/src")
+            .include("../../../crates/vm/cuda/include")
             .watch("cuda")
             .watch("../../../crates/circuits/primitives/cuda")
             .watch("../../../crates/circuits/sha256-air/cuda")
