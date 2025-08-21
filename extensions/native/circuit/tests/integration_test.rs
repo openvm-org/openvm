@@ -5,10 +5,10 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 #[cfg(not(feature = "cuda"))]
 use openvm_circuit::system::SystemCpuBuilder as SystemBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::system::SystemGpuBuilder as SystemBuilder;
 use openvm_circuit::{
     arch::{
         execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
