@@ -29,6 +29,7 @@ jobs:
       matrix:
         crate:
           - { name: "sha2", path: "sha2", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "sha2", path: "sha2", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "keccak256", path: "keccak256", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "ff_derive", path: "ff_derive", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
