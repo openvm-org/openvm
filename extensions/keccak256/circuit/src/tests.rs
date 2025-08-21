@@ -7,9 +7,9 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, DenseRecordArena, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor,
     },
-    system::memory::SharedMemoryHelper,
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -34,6 +34,13 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use tiny_keccak::Hasher;
+#[cfg(feature = "cuda")]
+use {
+    crate::{Keccak256ChipGpu, Keccak256VmRecordMut},
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+};
 
 use super::{columns::KeccakVmCols, KeccakVmChip};
 use crate::{
@@ -353,7 +360,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
 
 #[cfg(feature = "cuda")]
 #[test]
-fn test_keccak256_tracegen() {
+fn test_keccak256_cuda_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
         GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
