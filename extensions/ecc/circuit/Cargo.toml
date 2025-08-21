@@ -42,9 +42,6 @@ openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
 
-[build-dependencies]
-openvm-cuda-builder = { workspace = true, optional = true }
-
 [package.metadata.cargo-shear]
 ignored = ["rand"]
 
@@ -53,7 +50,6 @@ default = []
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
-    "dep:openvm-cuda-builder",
     "dep:openvm-stark-sdk",
     "openvm-circuit-primitives/cuda",
     "openvm-mod-circuit-builder/cuda",

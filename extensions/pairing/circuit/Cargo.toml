@@ -25,7 +25,6 @@ openvm-algebra-circuit = { workspace = true }
 openvm-ecc-circuit = { workspace = true }
 openvm-pairing-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
-openvm-cuda-common = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 
 num-bigint = { workspace = true }
@@ -56,7 +55,6 @@ openvm-pairing-guest = { workspace = true, features = [
 [features]
 default = []
 cuda = [
-    "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",
     "openvm-circuit-primitives/cuda",
@@ -69,7 +67,6 @@ touchemall = [
     "openvm-circuit/touchemall",
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
-    "openvm-cuda-common/touchemall",
     "openvm-algebra-circuit/touchemall",
     "openvm-ecc-circuit/touchemall",
 ]
