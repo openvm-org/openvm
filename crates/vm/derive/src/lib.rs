@@ -563,7 +563,6 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         .iter()
         .filter(|f| f.attrs.iter().any(|attr| attr.path().is_ident("config")))
         .exactly_one()
-        .ok()
         .expect("Exactly one field must have the #[config] attribute");
     let (source_name, source_name_upper) =
         gen_name_with_uppercase_idents(source_field.ident.as_ref().unwrap());
