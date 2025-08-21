@@ -70,7 +70,7 @@ stark-debug = []
 test-utils = ["openvm-stark-sdk"]
 # Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
-tco = []
+tco = ["openvm-circuit-derive/tco"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
