@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         riscv:
-#          - { name: "rv32im", path: "rv32im", family: "c7g", image: "ubuntu24-full-x64" }
+          - { name: "rv32im", path: "rv32im", family: "c7g", image: "ubuntu24-full-x64" }
           - { name: "rv32im", path: "rv32im", family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
