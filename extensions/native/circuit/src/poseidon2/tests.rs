@@ -31,13 +31,33 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
     utils::create_seeded_rng,
 };
+
+#[cfg(feature = "cuda")]
+use openvm_circuit::{
+    arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    utils::next_power_of_two_or_zero,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend,
+    types::F as CudaF,
+};
+#[cfg(feature = "cuda")]
+use openvm_cuda_common::copy::MemCopyH2D;
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+
+#[cfg(feature = "cuda")]
+use crate::poseidon2::{columns::NativePoseidon2Cols, cuda::NativePoseidon2ChipGpu};
 use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
 use crate::{
     poseidon2::{
         air::NativePoseidon2Air,
-        chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+        chip::{NativePoseidon2Executor, NativePoseidon2Filler, NativePoseidon2RecordMut},
         NativePoseidon2Chip, CHUNK,
     },
     NativeConfig, NativeCpuBuilder,
@@ -607,4 +627,240 @@ fn test_vm_compress_poseidon2_as4() {
         NativeConfig::aggregation(0, 7),
         program.clone(),
     );
+}
+
+// CUDA-specific tests
+#[cfg(feature = "cuda")]
+mod cuda_tests {
+    use super::*;
+    use std::{array::from_fn, borrow::Borrow, mem::size_of, slice::from_raw_parts};
+    use test_case::test_case;
+
+    const MAX_INS_CAPACITY_GPU: usize = 128;
+    const SBOX_REGISTERS_GPU: usize = 1;
+
+    fn create_gpu_test_harness(
+        tester: &GpuChipTestBuilder,
+        config: Poseidon2Config<CudaF>,
+    ) -> GpuTestChipHarness<
+        CudaF,
+        NativePoseidon2Executor<CudaF, SBOX_REGISTERS_GPU>,
+        NativePoseidon2Air<CudaF, SBOX_REGISTERS_GPU>,
+        NativePoseidon2ChipGpu<SBOX_REGISTERS_GPU>,
+        NativePoseidon2Chip<CudaF, SBOX_REGISTERS_GPU>,
+    > {
+        let air = NativePoseidon2Air::new(
+            tester.execution_bridge(),
+            tester.memory_bridge(),
+            VerifyBatchBus::new(7),
+            config,
+        );
+        let executor = NativePoseidon2Executor::new(config);
+
+        let cpu_chip = NativePoseidon2Chip::new(
+            NativePoseidon2Filler::new(config),
+            tester.dummy_memory_helper(),
+        );
+
+        let gpu_chip =
+            NativePoseidon2ChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+        GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY_GPU)
+    }
+
+    #[test_case(Poseidon2Opcode::PERM_POS2)]
+    #[test_case(Poseidon2Opcode::COMP_POS2)]
+    fn test_cuda_poseidon2_chip_gpu(opcode: Poseidon2Opcode) {
+        let mut rng = create_seeded_rng();
+        let mut tester = GpuChipTestBuilder::default();
+
+        let mut harness = create_gpu_test_harness(&tester, Poseidon2Config::default());
+
+        for _ in 0..100 {
+            let instruction = Instruction {
+                opcode: opcode.global_opcode(),
+                a: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
+                b: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
+                c: CudaF::from_canonical_usize(gen_pointer(&mut rng, 1)),
+                d: CudaF::from_canonical_usize(4),
+                e: CudaF::from_canonical_usize(4),
+                f: CudaF::ZERO,
+                g: CudaF::ZERO,
+            };
+
+            let dst = gen_pointer(&mut rng, CHUNK) / 2;
+            let lhs = gen_pointer(&mut rng, CHUNK) / 2;
+            let rhs = gen_pointer(&mut rng, CHUNK) / 2;
+
+            let [a, b, c, d, e] = [
+                instruction.a,
+                instruction.b,
+                instruction.c,
+                instruction.d,
+                instruction.e,
+            ]
+            .map(|elem| elem.as_canonical_u32() as usize);
+
+            tester.write::<1>(d, a, [CudaF::from_canonical_usize(dst)]);
+            tester.write::<1>(d, b, [CudaF::from_canonical_usize(lhs)]);
+            if opcode == Poseidon2Opcode::COMP_POS2 {
+                tester.write::<1>(d, c, [CudaF::from_canonical_usize(rhs)]);
+            }
+
+            let data_left: [_; CHUNK] =
+                from_fn(|_| CudaF::from_canonical_usize(rng.gen_range(1..=100)));
+            let data_right: [_; CHUNK] =
+                from_fn(|_| CudaF::from_canonical_usize(rng.gen_range(1..=100)));
+            match opcode {
+                Poseidon2Opcode::COMP_POS2 => {
+                    tester.write::<CHUNK>(e, lhs, data_left);
+                    tester.write::<CHUNK>(e, rhs, data_right);
+                }
+                Poseidon2Opcode::PERM_POS2 => {
+                    tester.write::<CHUNK>(e, lhs, data_left);
+                    tester.write::<CHUNK>(e, lhs + CHUNK, data_right);
+                }
+            }
+
+            tester.execute(
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &instruction,
+            );
+        }
+
+        type Record<'a> = NativePoseidon2RecordMut<'a, CudaF, SBOX_REGISTERS_GPU>;
+        harness
+            .dense_arena
+            .get_record_seeker::<Record, _>()
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    }
+
+    #[test]
+    fn test_cuda_verify_batch() {
+        let mut rng = create_seeded_rng();
+        let mut tester = GpuChipTestBuilder::default();
+        const ADDRESS_SPACE: usize = AS::Native as usize;
+
+        let config = Poseidon2Config::default();
+        let hasher = Poseidon2SubChip::<CudaF, SBOX_REGISTERS_GPU>::new(config.constants);
+
+        let mut harness = create_gpu_test_harness(&tester, config);
+
+        let cases: [(Vec<Vec<usize>>, usize); 5] = [
+            (vec![vec![3], vec![], vec![9, 2, 1, 13, 4], vec![16]], 1),
+            (vec![vec![1, 1, 1], vec![3], vec![2]], 4),
+            (vec![vec![8], vec![7], vec![6]], 1),
+            (vec![vec![], vec![], vec![], vec![1]], 4),
+            (vec![vec![4], vec![3], vec![2]], 4),
+        ];
+
+        for (row_lengths, opened_element_size) in cases {
+            let instance =
+                random_instance(&mut rng, row_lengths, opened_element_size, |left, right| {
+                    let concatenated =
+                        std::array::from_fn(|i| if i < CHUNK { left[i] } else { right[i - CHUNK] });
+                    let permuted = hasher.permute(concatenated);
+                    (
+                        std::array::from_fn(|i| permuted[i]),
+                        std::array::from_fn(|i| permuted[i + CHUNK]),
+                    )
+                });
+
+            let VerifyBatchInstance {
+                dim,
+                opened,
+                proof,
+                sibling_is_on_right,
+                commit,
+            } = instance;
+
+            let dim_register = gen_pointer(&mut rng, 1);
+            let opened_register = gen_pointer(&mut rng, 1);
+            let opened_length_register = gen_pointer(&mut rng, 1);
+            let proof_id = gen_pointer(&mut rng, 1);
+            let index_register = gen_pointer(&mut rng, 1);
+            let commit_register = gen_pointer(&mut rng, 1);
+
+            let dim_base_pointer = gen_pointer(&mut rng, 1);
+            let opened_base_pointer = gen_pointer(&mut rng, 2);
+            let index_base_pointer = gen_pointer(&mut rng, 1);
+            let commit_pointer = gen_pointer(&mut rng, 1);
+
+            tester.write_usize(ADDRESS_SPACE, dim_register, [dim_base_pointer]);
+            tester.write_usize(ADDRESS_SPACE, opened_register, [opened_base_pointer]);
+            tester.write_usize(ADDRESS_SPACE, opened_length_register, [opened.len()]);
+            tester.write_usize(ADDRESS_SPACE, proof_id, [tester.streams.hint_space.len()]);
+            tester.write_usize(ADDRESS_SPACE, index_register, [index_base_pointer]);
+            tester.write_usize(ADDRESS_SPACE, commit_register, [commit_pointer]);
+
+            for (i, &dim_value) in dim.iter().enumerate() {
+                tester.write_usize(ADDRESS_SPACE, dim_base_pointer + i, [dim_value]);
+            }
+            for (i, opened_row) in opened.iter().enumerate() {
+                let row_pointer = gen_pointer(&mut rng, 1);
+                tester.write_usize(
+                    ADDRESS_SPACE,
+                    opened_base_pointer + (2 * i),
+                    [row_pointer, opened_row.len() / opened_element_size],
+                );
+                for (j, &opened_value) in opened_row.iter().enumerate() {
+                    tester.write(ADDRESS_SPACE, row_pointer + j, [opened_value]);
+                }
+            }
+
+            tester
+                .streams
+                .hint_space
+                .push(proof.iter().flatten().copied().collect());
+            for (i, &bit) in sibling_is_on_right.iter().enumerate() {
+                tester.write(
+                    ADDRESS_SPACE,
+                    index_base_pointer + i,
+                    [CudaF::from_bool(bit)],
+                );
+            }
+            tester.write(ADDRESS_SPACE, commit_pointer, commit);
+
+            let opened_element_size_inv = CudaF::from_canonical_usize(opened_element_size)
+                .inverse()
+                .as_canonical_u32() as usize;
+            tester.execute(
+                &mut harness.executor,
+                &mut harness.dense_arena,
+                &Instruction::from_usize(
+                    VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+                    [
+                        dim_register,
+                        opened_register,
+                        opened_length_register,
+                        proof_id,
+                        index_register,
+                        commit_register,
+                        opened_element_size_inv,
+                    ],
+                ),
+            );
+        }
+
+        type Record<'a> = NativePoseidon2RecordMut<'a, CudaF, SBOX_REGISTERS_GPU>;
+        harness
+            .dense_arena
+            .get_record_seeker::<Record, _>()
+            .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+        tester
+            .build()
+            .load_gpu_harness(harness)
+            .finalize()
+            .simple_test()
+            .unwrap();
+    }
 }
