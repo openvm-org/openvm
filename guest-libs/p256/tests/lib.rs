@@ -114,10 +114,11 @@ mod guest_tests {
             openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
             openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha2CpuProverExt,
-            openvm_stark_backend::{prover::cpu::{CpuBackend, CpuDevice},
+            openvm_stark_backend::{
                 config::{StarkGenericConfig, Val},
                 engine::StarkEngine,
                 p3_field::PrimeField32,
+                prover::cpu::{CpuBackend, CpuDevice},
             },
         };
 

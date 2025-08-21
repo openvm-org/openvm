@@ -65,7 +65,6 @@ bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
 cuda = [
     "dep:openvm-cuda-backend",
-    "openvm-circuit/cuda",
     "openvm-algebra-circuit/cuda",
     "openvm-pairing-circuit/cuda",
     "openvm-ecc-circuit/cuda",

@@ -37,7 +37,4 @@ num-bigint = { workspace = true }
 [features]
 # enabled when generating bitvec code utilizing the version of ff's bitvec
 bits = []
-cuda = [
-    "openvm-circuit/cuda",
-    "openvm-algebra-circuit/cuda",
-]
+cuda = ["openvm-algebra-circuit/cuda"]

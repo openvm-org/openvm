@@ -24,7 +24,4 @@ openvm-verify-stark.workspace = true
 eyre.workspace = true
 
 [features]
-cuda = [
-    "openvm-sdk/cuda",
-    "openvm-circuit/cuda"
-]
+cuda = ["openvm-sdk/cuda"]

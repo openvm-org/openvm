@@ -108,17 +108,18 @@ mod guest_tests {
             openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
             openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha256GpuProverExt,
-            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config
+            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
         };
         #[cfg(not(feature = "cuda"))]
         use {
             openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
             openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha2CpuProverExt,
-            openvm_stark_backend::{prover::cpu::{CpuBackend, CpuDevice},
+            openvm_stark_backend::{
                 config::{StarkGenericConfig, Val},
                 engine::StarkEngine,
                 p3_field::PrimeField32,
+                prover::cpu::{CpuBackend, CpuDevice},
             },
         };
 
