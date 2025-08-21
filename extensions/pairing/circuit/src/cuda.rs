@@ -1,17 +1,16 @@
-use openvm_circuit::arch::{
-    AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex, VmProverExtension,
-};
-use openvm_pairing_circuit::{PairingProverExt, Rv32PairingConfig};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-
-use crate::{
-    extensions::{
-        algebra::{AlgebraGpuProverExt, Rv32ModularGpuBuilder},
-        ecc::EccGpuProverExt,
+use openvm_algebra_circuit::{AlgebraGpuProverExt, Rv32ModularGpuBuilder};
+use openvm_circuit::{
+    arch::{
+        AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
+        VmProverExtension,
     },
-    system::SystemChipInventoryGPU,
+    system::cuda::SystemChipInventoryGPU,
 };
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+use openvm_ecc_circuit::EccGpuProverExt;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+
+use crate::{PairingProverExt, Rv32PairingConfig};
 
 #[derive(Clone)]
 pub struct Rv32PairingGpuBuilder;

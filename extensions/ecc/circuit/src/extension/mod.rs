@@ -17,6 +17,14 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "cuda")]
+mod cuda;
+mod weierstrass;
+
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+pub use weierstrass::*;
+
 use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
