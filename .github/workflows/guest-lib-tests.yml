@@ -35,6 +35,7 @@ jobs:
           - { name: "k256", path: "k256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "p256", path: "p256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "ruint", path: "ruint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "ruint", path: "ruint", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
           - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { name: "verify_stark", path: "verify_stark", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
       # Ensure tests run in parallel even if one fails

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use openvm_bigint_circuit::{Int256Rv32Config, Int256Rv32CpuBuilder};
+    use openvm_bigint_circuit::Int256Rv32Config;
     use openvm_bigint_transpiler::Int256TranspilerExtension;
     use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
@@ -11,6 +11,11 @@ mod tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+
+    #[cfg(not(feature = "cuda"))]
+    use openvm_bigint_circuit::Int256Rv32CpuBuilder as Int256Rv32Builder;
+    #[cfg(feature = "cuda")]
+    use openvm_bigint_circuit::Int256Rv32GpuBuilder as Int256Rv32Builder;
 
     type F = BabyBear;
 
@@ -30,7 +35,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Int256TranspilerExtension),
         )?;
-        air_test(Int256Rv32CpuBuilder, config, openvm_exe);
+        air_test(Int256Rv32Builder, config, openvm_exe);
         Ok(())
     }
 }

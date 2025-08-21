@@ -151,6 +151,7 @@ alloc = [
     "valuable?/alloc",
     "zeroize?/alloc",
 ]
+cuda = ["openvm-bigint-circuit/cuda"]
 
 # nightly-only features
 nightly = []
