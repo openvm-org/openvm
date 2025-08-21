@@ -19,11 +19,11 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "cuda")]
 mod cuda;
-mod weierstrass_extension;
+mod weierstrass;
 
 #[cfg(feature = "cuda")]
 pub use cuda::*;
-pub use weierstrass_extension::*;
+pub use weierstrass::*;
 
 use super::*;
 

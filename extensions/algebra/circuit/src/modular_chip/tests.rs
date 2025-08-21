@@ -41,17 +41,14 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-#[cfg(feature = "cuda")]
-use crate::modular_chip::{
-    addsub_cuda::ModularAddSubChipGpu, is_eq_cuda::ModularIsEqualChipGpu,
-    muldiv_cuda::ModularMulDivChipGpu,
-};
 use crate::modular_chip::{
     get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
     get_modular_muldiv_air, get_modular_muldiv_chip, get_modular_muldiv_step, ModularAir,
     ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
     ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
 };
+#[cfg(feature = "cuda")]
+use crate::modular_chip::{ModularAddSubChipGpu, ModularIsEqualChipGpu, ModularMulDivChipGpu};
 
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;

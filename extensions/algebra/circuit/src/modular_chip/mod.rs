@@ -17,19 +17,9 @@ mod muldiv;
 pub use muldiv::*;
 
 #[cfg(feature = "cuda")]
-mod addsub_cuda;
+mod cuda;
 #[cfg(feature = "cuda")]
-pub use addsub_cuda::*;
-
-#[cfg(feature = "cuda")]
-mod muldiv_cuda;
-#[cfg(feature = "cuda")]
-pub use muldiv_cuda::*;
-
-#[cfg(feature = "cuda")]
-mod is_eq_cuda;
-#[cfg(feature = "cuda")]
-pub use is_eq_cuda::*;
+pub use cuda::*;
 
 #[cfg(test)]
 mod tests;

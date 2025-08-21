@@ -6,18 +6,13 @@ use crate::FieldExprVecHeapExecutor;
 
 mod addsub;
 pub use addsub::*;
-#[cfg(feature = "cuda")]
-mod addsub_cuda;
-#[cfg(feature = "cuda")]
-pub use addsub_cuda::*;
-
-#[cfg(feature = "cuda")]
-mod muldiv_cuda;
-#[cfg(feature = "cuda")]
-pub use muldiv_cuda::*;
-
 mod muldiv;
 pub use muldiv::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 pub type Fp2Air<const BLOCKS: usize, const BLOCK_SIZE: usize> = VmAirWrapper<
     Rv32VecHeapAdapterAir<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,

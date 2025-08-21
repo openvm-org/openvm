@@ -20,10 +20,10 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 
-mod modular_extension;
-pub use modular_extension::*;
-mod fp2_extension;
-pub use fp2_extension::*;
+mod modular;
+pub use modular::*;
+mod fp2;
+pub use fp2::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;

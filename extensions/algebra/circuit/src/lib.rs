@@ -1,7 +1,11 @@
 use derive_more::derive::{Deref, DerefMut};
 use openvm_circuit_derive::PreflightExecutor;
+#[cfg(feature = "cuda")]
+use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
+#[cfg(feature = "cuda")]
+use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 
 pub mod fp2_chip;
 pub mod modular_chip;
@@ -22,11 +26,6 @@ pub struct FieldExprVecHeapExecutor<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(FieldExpressionExecutor<Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>>);
-
-#[cfg(feature = "cuda")]
-use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
-#[cfg(feature = "cuda")]
-use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 
 #[cfg(feature = "cuda")]
 pub(crate) type AlgebraRecord<
