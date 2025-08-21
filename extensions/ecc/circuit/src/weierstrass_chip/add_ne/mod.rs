@@ -22,7 +22,12 @@ use openvm_rv32_adapters::{
 
 use super::{WeierstrassAir, WeierstrassChip};
 
+#[cfg(feature = "cuda")]
+mod cuda;
 mod execution;
+
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 // Assumes that (x1, y1), (x2, y2) both lie on the curve and are not the identity point.
 // Further assumes that x1, x2 are not equal in the coordinate field.

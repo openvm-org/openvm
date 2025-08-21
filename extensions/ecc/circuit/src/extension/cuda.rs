@@ -1,24 +1,24 @@
-use openvm_circuit::arch::{
-    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
-    VmProverExtension,
+use openvm_algebra_circuit::Rv32ModularGpuBuilder;
+use openvm_circuit::{
+    arch::{
+        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
+        VmChipComplex, VmProverExtension,
+    },
+    system::cuda::{
+        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+        SystemChipInventoryGPU,
+    },
 };
-use openvm_ecc_circuit::{Rv32WeierstrassConfig, WeierstrassAir, WeierstrassExtension};
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
 use openvm_instructions::LocalOpcode;
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use strum::EnumCount;
 
 use crate::{
-    extensions::{
-        algebra::Rv32ModularGpuBuilder,
-        ecc::{WeierstrassAddNeChipGpu, WeierstrassDoubleChipGpu},
-    },
-    system::{
-        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
-        SystemChipInventoryGPU,
-    },
+    Rv32WeierstrassConfig, WeierstrassAddNeChipGpu, WeierstrassAir, WeierstrassDoubleChipGpu,
+    WeierstrassExtension,
 };
 
 #[derive(Clone)]

@@ -1,33 +1,30 @@
-use openvm_algebra_circuit::{
-    fp2_chip::Fp2Air,
-    modular_chip::{ModularAir, ModularIsEqualAir},
-    Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
-};
 use openvm_algebra_transpiler::{Fp2Opcode, Rv32ModularArithmeticOpcode};
-use openvm_circuit::arch::{
-    AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
-    VmProverExtension,
-};
-use openvm_instructions::LocalOpcode;
-use openvm_mod_circuit_builder::ExprBuilderConfig;
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_gpu::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-use strum::EnumCount;
-
-use crate::{
-    extensions::{
-        algebra::{
-            Fp2AddSubChipGpu, Fp2MulDivChipGpu, ModularAddSubChipGpu, ModularIsEqualChipGpu,
-            ModularMulDivChipGpu,
-        },
-        rv32im::Rv32ImGpuProverExt,
+use openvm_circuit::{
+    arch::{
+        AirInventory, ChipInventory, ChipInventoryError, DenseRecordArena, VmBuilder,
+        VmChipComplex, VmProverExtension,
     },
-    system::{
+    system::cuda::{
         extensions::{
             get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
         },
         SystemChipInventoryGPU,
     },
+};
+use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+use openvm_instructions::LocalOpcode;
+use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use strum::EnumCount;
+
+use crate::{
+    fp2_chip::{Fp2AddSubChipGpu, Fp2Air, Fp2MulDivChipGpu},
+    modular_chip::{
+        ModularAddSubChipGpu, ModularAir, ModularIsEqualAir, ModularIsEqualChipGpu,
+        ModularMulDivChipGpu,
+    },
+    Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
 };
 
 #[derive(Clone)]
