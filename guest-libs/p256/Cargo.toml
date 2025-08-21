@@ -54,7 +54,6 @@ cuda = [
     "openvm-circuit/cuda",
     "openvm-ecc-circuit/cuda",
     "openvm-sha256-circuit/cuda",
-    "openvm-cuda-backend",
 ]
 arithmetic = ["elliptic-curve/arithmetic"]
 bits = ["arithmetic", "elliptic-curve/bits"]
