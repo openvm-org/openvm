@@ -43,28 +43,17 @@ type F = BabyBear;
 type Harness =
     TestChipHarness<F, FieldArithmeticExecutor, FieldArithmeticAir, FieldArithmeticChip<F>>;
 
-fn create_harness_fields(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    FieldArithmeticExecutor,
-    FieldArithmeticAir,
-    FieldArithmeticChip<F>,
-) {
-    let executor = FieldArithmeticExecutor::new(AluNativeAdapterExecutor::new());
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let air = FieldArithmeticAir::new(
         AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FieldArithmeticCoreAir::new(),
     );
+    let executor = FieldArithmeticExecutor::new(AluNativeAdapterExecutor::new());
     let chip = FieldArithmeticChip::<F>::new(
         FieldArithmeticCoreFiller::new(AluNativeAdapterFiller),
         tester.memory_helper(),
     );
 
-    (executor, air, chip)
-}
-
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
-    let (executor, air, chip) = create_harness_fields(tester);
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
@@ -78,7 +67,16 @@ fn create_test_harness(
     FieldArithmeticChipGpu,
     FieldArithmeticChip<F>,
 > {
-    let (executor, air, cpu_chip) = create_harness_fields(tester);
+    let adapter_air = AluNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = FieldArithmeticCoreAir::new();
+    let air = FieldArithmeticAir::new(adapter_air, core_air);
+
+    let adapter_step = AluNativeAdapterExecutor::new();
+    let executor = FieldArithmeticExecutor::new(adapter_step);
+
+    let core_filler = FieldArithmeticCoreFiller::new(AluNativeAdapterFiller);
+
+    let cpu_chip = FieldArithmeticChip::new(core_filler, tester.dummy_memory_helper());
     let gpu_chip = FieldArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

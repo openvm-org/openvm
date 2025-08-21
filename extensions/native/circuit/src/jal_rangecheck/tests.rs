@@ -47,30 +47,18 @@ type F = BabyBear;
 type Harness =
     TestChipHarness<F, JalRangeCheckExecutor, JalRangeCheckAir, NativeJalRangeCheckChip<F>>;
 
-fn create_harness_fields(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    JalRangeCheckExecutor,
-    JalRangeCheckAir,
-    NativeJalRangeCheckChip<F>,
-) {
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker().clone();
-    let executor = JalRangeCheckExecutor::new();
     let air = JalRangeCheckAir::new(
         tester.execution_bridge(),
         tester.memory_bridge(),
         range_checker.bus(),
     );
+    let executor = JalRangeCheckExecutor::new();
     let chip = NativeJalRangeCheckChip::<F>::new(
         JalRangeCheckFiller::new(range_checker),
         tester.memory_helper(),
     );
-
-    (executor, air, chip)
-}
-
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
-    let (executor, air, chip) = create_harness_fields(tester);
 
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
@@ -85,7 +73,11 @@ fn create_test_harness(
     JalRangeCheckGpu,
     NativeJalRangeCheckChip<F>,
 > {
-    let (executor, air, cpu_chip) = create_harness_fields(tester);
+    let range_bus = default_var_range_checker_bus();
+    let air = JalRangeCheckAir::new(tester.execution_bridge(), tester.memory_bridge(), range_bus);
+    let executor = JalRangeCheckExecutor::new();
+    let filler = JalRangeCheckFiller::new(dummy_range_checker(range_bus));
+    let cpu_chip = NativeJalRangeCheckChip::<F>::new(filler, tester.dummy_memory_helper());
     let gpu_chip = JalRangeCheckGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

@@ -64,31 +64,19 @@ type GpuHarness<const NUM_CELLS: usize> = GpuTestChipHarness<
     NativeLoadStoreChip<F, NUM_CELLS>,
 >;
 
-fn create_harness_fields<const NUM_CELLS: usize>(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    NativeLoadStoreExecutor<NUM_CELLS>,
-    NativeLoadStoreAir<NUM_CELLS>,
-    NativeLoadStoreChip<F, NUM_CELLS>,
-) {
-    let executor = NativeLoadStoreExecutor::new(
-        NativeLoadStoreAdapterExecutor::new(NativeLoadStoreOpcode::CLASS_OFFSET),
-        NativeLoadStoreOpcode::CLASS_OFFSET,
-    );
+fn create_test_chip<const NUM_CELLS: usize>(tester: &VmChipTestBuilder<F>) -> Harness<NUM_CELLS> {
     let air = NativeLoadStoreAir::new(
         NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge()),
         NativeLoadStoreCoreAir::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = NativeLoadStoreExecutor::new(
+        NativeLoadStoreAdapterExecutor::new(NativeLoadStoreOpcode::CLASS_OFFSET),
+        NativeLoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = NativeLoadStoreChip::<F, NUM_CELLS>::new(
         NativeLoadStoreCoreFiller::new(NativeLoadStoreAdapterFiller),
         tester.memory_helper(),
     );
-
-    (executor, air, chip)
-}
-
-fn create_test_chip<const NUM_CELLS: usize>(tester: &VmChipTestBuilder<F>) -> Harness<NUM_CELLS> {
-    let (executor, air, chip) = create_harness_fields(tester);
 
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
@@ -98,7 +86,16 @@ fn create_test_harness<const NUM_CELLS: usize>(
     tester: &GpuChipTestBuilder,
     offset: usize,
 ) -> GpuHarness<NUM_CELLS> {
-    let (executor, air, cpu_chip) = create_harness_fields(tester);
+    let adapter_air =
+        NativeLoadStoreAdapterAir::new(tester.memory_bridge(), tester.execution_bridge());
+    let core_air = NativeLoadStoreCoreAir::new(offset);
+    let air = NativeLoadStoreAir::new(adapter_air, core_air);
+
+    let adapter_step = NativeLoadStoreAdapterExecutor::new(offset);
+    let executor = NativeLoadStoreExecutor::new(adapter_step, offset);
+
+    let core_filler = NativeLoadStoreCoreFiller::new(NativeLoadStoreAdapterFiller);
+    let cpu_chip = NativeLoadStoreChip::new(core_filler, tester.dummy_memory_helper());
 
     let gpu_chip = NativeLoadStoreChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 

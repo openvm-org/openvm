@@ -49,28 +49,16 @@ const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
 type Harness = TestChipHarness<F, FieldExtensionExecutor, FieldExtensionAir, FieldExtensionChip<F>>;
 
-fn create_harness_fields(
-    tester: &VmChipTestBuilder<F>,
-) -> (
-    FieldExtensionExecutor,
-    FieldExtensionAir,
-    FieldExtensionChip<F>,
-) {
-    let executor = FieldExtensionExecutor::new(NativeVectorizedAdapterExecutor::new());
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
     let air = FieldExtensionAir::new(
         NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         FieldExtensionCoreAir::new(),
     );
+    let executor = FieldExtensionExecutor::new(NativeVectorizedAdapterExecutor::new());
     let chip = FieldExtensionChip::<F>::new(
         FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller),
         tester.memory_helper(),
     );
-
-    (executor, air, chip)
-}
-
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
-    let (executor, air, chip) = create_harness_fields(tester);
 
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
@@ -85,7 +73,17 @@ fn create_test_harness(
     FieldExtensionChipGpu,
     FieldExtensionChip<F>,
 > {
-    let (executor, air, cpu_chip) = create_harness_fields(tester);
+    let adapter_air =
+        NativeVectorizedAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let core_air = FieldExtensionCoreAir::new();
+    let air = FieldExtensionAir::new(adapter_air, core_air);
+
+    let adapter_step = NativeVectorizedAdapterExecutor::new();
+    let executor = FieldExtensionExecutor::new(adapter_step);
+
+    let core_filler = FieldExtensionCoreFiller::new(NativeVectorizedAdapterFiller);
+
+    let cpu_chip = FieldExtensionChip::new(core_filler, tester.dummy_memory_helper());
     let gpu_chip = FieldExtensionChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
