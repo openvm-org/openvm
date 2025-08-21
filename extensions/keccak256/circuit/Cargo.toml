@@ -39,7 +39,7 @@ hex.workspace = true
 openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
-default = ["parallel", "jemalloc"]
+default = ["parallel", "jemalloc", "cuda"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 # performance features:

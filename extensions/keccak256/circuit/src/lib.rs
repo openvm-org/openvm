@@ -12,8 +12,6 @@ pub mod utils;
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
-mod cuda_abi;
-#[cfg(feature = "cuda")]
 pub use cuda::*;
 
 mod extension;

@@ -11,13 +11,17 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use openvm_keccak256_circuit::{
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use p3_keccak_air::NUM_ROUNDS;
+
+use crate::{
     columns::NUM_KECCAK_VM_COLS,
     trace::{KeccakVmMetadata, KeccakVmRecordMut},
     utils::num_keccak_f,
 };
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use p3_keccak_air::NUM_ROUNDS;
+
+mod cuda_abi;
+use cuda_abi::keccak256::*;
 
 #[derive(new)]
 pub struct Keccak256ChipGpu {

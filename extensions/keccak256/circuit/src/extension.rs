@@ -75,9 +75,9 @@ impl Default for Keccak256Rv32Config {
 impl InitFileGenerator for Keccak256Rv32Config {}
 
 #[derive(Clone)]
-pub struct Keccak256Rv32Builder;
+pub struct Keccak256Rv32CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Keccak256Rv32Builder
+impl<E, SC> VmBuilder<E> for Keccak256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -102,7 +102,7 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
-            &Keccak256ProverExt,
+            &Keccak256CpuProverExt,
             &config.keccak,
             inventory,
         )?;
@@ -111,7 +111,10 @@ where
 }
 
 #[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32Builder {
+pub struct Keccak256Rv32GpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32GpuBuilder {
     type VmConfig = Keccak256Rv32Config;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
@@ -129,6 +132,8 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Keccak256Rv32Builder {
         >,
         ChipInventoryError,
     > {
+        use openvm_circuit::system::cuda::extensions::SystemGpuBuilder;
+
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
@@ -222,10 +227,10 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Keccak256 {
     }
 }
 
-pub struct Keccak256ProverExt;
+pub struct Keccak256CpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256ProverExt
+impl<E, SC, RA> VmProverExtension<E, RA, Keccak256> for Keccak256CpuProverExt
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
@@ -267,11 +272,14 @@ where
     }
 }
 
+#[cfg(feature = "cuda")]
+pub struct Keccak256GpuProverExt;
+
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
 #[cfg(feature = "cuda")]
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Keccak256>
-    for Keccak256ProverExt
+    for Keccak256GpuProverExt
 {
     fn extend_prover(
         &self,

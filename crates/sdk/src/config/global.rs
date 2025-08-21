@@ -16,7 +16,7 @@ use openvm_ecc_circuit::{
     SECP256K1_CONFIG,
 };
 use openvm_ecc_transpiler::EccTranspilerExtension;
-use openvm_keccak256_circuit::{Keccak256, Keccak256Executor, Keccak256ProverExt};
+use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
 use openvm_native_circuit::{
     CastFExtension, CastFExtensionExecutor, Native, NativeCpuProverExt, NativeExecutor,
@@ -372,7 +372,7 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
-            VmProverExtension::<E, _, _>::extend_prover(&Keccak256ProverExt, keccak, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&Keccak256CpuProverExt, keccak, inventory)?;
         }
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, sha256, inventory)?;
