@@ -7,8 +7,8 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -22,8 +22,8 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -37,8 +37,8 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -52,8 +52,8 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -67,8 +67,8 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -82,8 +82,8 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,
@@ -100,8 +100,8 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "cpu_family": "c7g.16xlarge",
-          "gpu_family": "g6.2xlarge",
+          "cpu_runner": "{\"family\":\"c7g.16xlarge\",\"image\":\"ubuntu24-full-arm64\"}",
+          "gpu_runner": "{\"family\":\"g6.2xlarge\",\"image\":\"ubuntu24-gpu-x64\"}",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,

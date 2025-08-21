@@ -19,7 +19,6 @@ use openvm_stark_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip, engine::StarkFriEngine, openvm_stark_backend::Chip,
 };
 use tracing::info_span;
-
 #[cfg(feature = "cuda")]
 use {
     openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
