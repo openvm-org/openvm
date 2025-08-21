@@ -4,10 +4,10 @@ use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
 use openvm_circuit::arch::{
-    verify_single, Executor, MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig,
-    VmBuilder, VmConfig, VmExecutionConfig,
+    verify_single, Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmConfig,
+    VmExecutionConfig,
 };
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
+use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     config::{
@@ -21,18 +21,32 @@ use openvm_sdk::{
     GenericSdk, StdIn,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
+
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::arch::DenseRecordArena as RA,
+    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
+    openvm_native_circuit::NativeGpuBuilder as DefaultNativeBuilder,
+};
+#[cfg(not(feature = "cuda"))]
+use {
+    openvm_circuit::arch::MatrixRecordArena,
+    openvm_native_circuit::NativeCpuBuilder as DefaultNativeBuilder,
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
+};
+
 use openvm_transpiler::elf::Elf;
 use tracing::info_span;
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
+
+#[cfg(not(feature = "cuda"))]
+type RA = MatrixRecordArena<F>;
 
 #[derive(Parser, Debug)]
 #[command(allow_external_subcommands = true)]
@@ -173,15 +187,13 @@ impl BenchmarkCli {
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>
-            + Clone
-            + Default,
+        VB: VmBuilder<Poseidon2Engine, VmConfig = VC, RecordArena = RA> + Clone + Default,
         VC: VmExecutionConfig<F> + VmConfig<SC> + TranspilerConfig<F>,
         <VC as VmExecutionConfig<F>>::Executor:
-            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
+            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<BabyBearPoseidon2Engine, VB, NativeCpuBuilder>(
+        bench_from_exe::<Poseidon2Engine, VB, DefaultNativeBuilder>(
             bench_name,
             app_config,
             exe,

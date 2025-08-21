@@ -7,11 +7,16 @@ on:
         type: string
         required: true
         description: The name of the benchmark to run
-      instance_type:
+      family:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The family of runner to start ({m,c}7{a,g,i}.{2,4,8,12,16}xlarge for CPU, g6.{2,4,8}xlarge for GPU)
+        default: c7g.16xlarge
+      image:
+        type: string
+        required: false
+        description: The runner image (ubuntu24-{full,gpu}-{arm64,x64} for CPU, ubuntu24-gpu-x64 for GPU)
+        default: ubuntu24-full-arm64
       memory_allocator:
         type: string
         required: false
@@ -60,11 +65,16 @@ on:
         type: string
         required: true
         description: The id of the benchmark to run, must be unique within matrix
-      instance_type:
+      family:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The family of runner to start ({m,c}7{a,g,i}.{2,4,8,12,16}xlarge for CPU, g6.{2,4,8,12,16}xlarge for GPU)
+        default: c7g.16xlarge
+      image:
+        type: string
+        required: false
+        description: The runner image (ubuntu24-{full,gpu}-{arm64,x64} for CPU, ubuntu24-gpu-x64 for GPU)
+        default: ubuntu24-full-arm64
       memory_allocator:
         type: string
         required: false
@@ -119,9 +129,9 @@ jobs:
     name: Run benchmark on workflow ref/branch
     runs-on:
       - runs-on
-      - runner=${{ inputs.instance_type }}
+      - family=${{ inputs.family }}
+      - image=${{ inputs.image }}
       - run-id=${{ github.run_id }}
-      - family=m7
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
