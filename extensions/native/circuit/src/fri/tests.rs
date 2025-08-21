@@ -1,13 +1,14 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
@@ -30,7 +31,7 @@ use super::{
     FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
 };
 #[cfg(feature = "cuda")]
-use crate::fri::cuda::FriReducedOpeningChipGpu;
+use crate::fri::{cuda::FriReducedOpeningChipGpu, FriReducedOpeningRecordMut};
 use crate::{
     fri::{FriReducedOpeningFiller, WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
     write_native_array,
@@ -193,6 +194,11 @@ fn test_fri_tracegen(num_ops: usize) {
             &mut rng,
         );
     }
+
+    harness
+        .dense_arena
+        .get_record_seeker::<FriReducedOpeningRecordMut<F>, _>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()

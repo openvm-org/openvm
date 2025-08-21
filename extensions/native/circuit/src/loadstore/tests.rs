@@ -1,12 +1,13 @@
 use std::{array, borrow::BorrowMut};
 
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 #[cfg(feature = "cuda")]
@@ -30,7 +31,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use crate::loadstore::cuda::NativeLoadStoreChipGpu;
+use crate::{
+    adapters::NativeLoadStoreAdapterRecord,
+    loadstore::{cuda::NativeLoadStoreChipGpu, NativeLoadStoreCoreRecord},
+};
 use crate::{
     adapters::{
         NativeLoadStoreAdapterAir, NativeLoadStoreAdapterCols, NativeLoadStoreAdapterExecutor,
@@ -217,6 +221,18 @@ fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
         );
     }
 
+    type Record<'a, const N: usize> = (
+        &'a mut NativeLoadStoreAdapterRecord<F, N>,
+        &'a mut NativeLoadStoreCoreRecord<F, N>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_, NUM_CELLS>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<NUM_CELLS>>::new(),
+        );
+
     tester
         .build()
         .load_gpu_harness(harness)
@@ -243,6 +259,18 @@ fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
             opcode,
         );
     }
+
+    type Record<'a, const N: usize> = (
+        &'a mut NativeLoadStoreAdapterRecord<F, N>,
+        &'a mut NativeLoadStoreCoreRecord<F, N>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_, NUM_CELLS>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<NUM_CELLS>>::new(),
+        );
 
     tester
         .build()

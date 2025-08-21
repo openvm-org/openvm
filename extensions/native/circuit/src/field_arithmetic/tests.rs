@@ -1,12 +1,13 @@
 use std::borrow::BorrowMut;
 
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldArithmeticOpcode};
@@ -29,6 +30,8 @@ use super::cuda::FieldArithmeticChipGpu;
 use super::{
     FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticExecutor,
 };
+#[cfg(feature = "cuda")]
+use crate::{adapters::AluNativeAdapterRecord, field_arithmetic::FieldArithmeticRecord};
 use crate::{
     adapters::{AluNativeAdapterAir, AluNativeAdapterExecutor, AluNativeAdapterFiller},
     field_arithmetic::{run_field_arithmetic, FieldArithmeticAir, FieldArithmeticCoreFiller},
@@ -191,6 +194,17 @@ fn test_cuda_field_arithmetic_air_test(opcode: FieldArithmeticOpcode, num_ops: u
         opcode,
         num_ops,
     );
+    type Record<'a> = (
+        &'a mut AluNativeAdapterRecord<F>,
+        &'a mut FieldArithmeticRecord<F>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, AluNativeAdapterExecutor>::new(),
+        );
     tester
         .build()
         .load_gpu_harness(harness)

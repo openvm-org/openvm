@@ -1,11 +1,12 @@
 use std::borrow::BorrowMut;
 
 #[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{default_var_range_checker_bus, dummy_range_checker};
+use openvm_circuit::arch::{
+    testing::{
+        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+    EmptyAdapterCoreLayout,
+};
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, MemoryConfig, PreflightExecutor,
@@ -33,6 +34,8 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use super::cuda::CastFChipGpu;
 use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFExecutor, LIMB_BITS};
+#[cfg(feature = "cuda")]
+use crate::{adapters::ConvertAdapterRecord, castf::CastfCoreRecord};
 use crate::{
     adapters::{
         ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterExecutor, ConvertAdapterFiller,
@@ -162,6 +165,18 @@ fn test_cuda_castf_rand(num_ops: usize) {
         None,
         num_ops,
     );
+
+    type Record<'a> = (
+        &'a mut ConvertAdapterRecord<F, 1, 4>,
+        &'a mut CastFCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, ConvertAdapterExecutor<1, 4>>::new(),
+        );
 
     tester
         .build()

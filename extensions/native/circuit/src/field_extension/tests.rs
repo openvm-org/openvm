@@ -4,13 +4,14 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
+};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FieldExtensionOpcode};
@@ -30,6 +31,8 @@ use test_case::test_case;
 
 #[cfg(feature = "cuda")]
 use crate::field_extension::cuda::FieldExtensionChipGpu;
+#[cfg(feature = "cuda")]
+use crate::{adapters::NativeVectorizedAdapterRecord, field_extension::FieldExtensionRecord};
 use crate::{
     adapters::{
         NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,
@@ -182,6 +185,18 @@ fn test_cuda_rand_field_extension_tracegen(opcode: FieldExtensionOpcode, num_ops
         opcode,
         num_ops,
     );
+
+    type Record<'a> = (
+        &'a mut NativeVectorizedAdapterRecord<F, EXT_DEG>,
+        &'a mut FieldExtensionRecord<F>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, NativeVectorizedAdapterExecutor<EXT_DEG>>::new(),
+        );
 
     tester
         .build()

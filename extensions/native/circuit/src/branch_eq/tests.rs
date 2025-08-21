@@ -1,9 +1,10 @@
 use std::borrow::BorrowMut;
 
 #[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
+use openvm_circuit::arch::{
+    testing::{GpuChipTestBuilder, GpuTestChipHarness},
+    EmptyAdapterCoreLayout,
+};
 use openvm_circuit::arch::{
     testing::{TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
@@ -35,6 +36,8 @@ use test_case::test_case;
 
 #[cfg(feature = "cuda")]
 use super::cuda::NativeBranchEqChipGpu;
+#[cfg(feature = "cuda")]
+use crate::{adapters::BranchNativeAdapterRecord, branch_eq::NativeBranchEqualCoreRecord};
 use crate::{
     adapters::{BranchNativeAdapterAir, BranchNativeAdapterExecutor, BranchNativeAdapterFiller},
     branch_eq::{
@@ -199,6 +202,18 @@ fn test_cuda_rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize)
         opcode,
         num_ops,
     );
+
+    type Record<'a> = (
+        &'a mut BranchNativeAdapterRecord<F>,
+        &'a mut NativeBranchEqualCoreRecord<F>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, BranchNativeAdapterExecutor>::new(),
+        );
 
     tester
         .build()

@@ -1,11 +1,12 @@
 use std::borrow::BorrowMut;
 
 #[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuChipTestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::GpuTestChipHarness;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{default_var_range_checker_bus, dummy_range_checker};
+use openvm_circuit::arch::{
+    testing::{
+        default_var_range_checker_bus, dummy_range_checker, GpuChipTestBuilder, GpuTestChipHarness,
+    },
+    EmptyMultiRowLayout,
+};
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
@@ -35,7 +36,7 @@ use test_case::test_case;
 
 use super::{JalRangeCheckAir, JalRangeCheckExecutor};
 #[cfg(feature = "cuda")]
-use crate::jal_rangecheck::cuda::JalRangeCheckGpu;
+use crate::jal_rangecheck::{cuda::JalRangeCheckGpu, JalRangeCheckRecord};
 use crate::{
     jal_rangecheck::{JalRangeCheckCols, JalRangeCheckFiller, NativeJalRangeCheckChip},
     test_utils::write_native_array,
@@ -187,6 +188,12 @@ fn test_cuda_jal_rangecheck_tracegen(opcode: VmOpcode, num_ops: usize) {
             None,
         );
     }
+
+    type Record<'a> = &'a mut JalRangeCheckRecord<F>;
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, EmptyMultiRowLayout>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
 
     tester
         .build()
