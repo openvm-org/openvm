@@ -256,7 +256,7 @@ fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStore4Opcode, num_ops
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
-            opcode,
+            opcode.0,
         );
     }
 
