@@ -1,3 +1,12 @@
+#[cfg(feature = "cuda")]
+use {
+    openvm_circuit::arch::DenseRecordArena,
+    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
+    openvm_circuit::system::cuda::SystemChipInventoryGPU,
+    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
+};
+
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, MemoryConfig,
@@ -91,6 +100,44 @@ where
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &NativeCpuProverExt,
+            &config.native,
+            inventory,
+        )?;
+        Ok(chip_complex)
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[derive(Clone)]
+pub struct NativeGpuBuilder;
+
+#[cfg(feature = "cuda")]
+impl VmBuilder<GpuBabyBearPoseidon2Engine> for NativeGpuBuilder {
+    type VmConfig = NativeConfig;
+    type SystemChipInventory = SystemChipInventoryGPU;
+    type RecordArena = DenseRecordArena;
+
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        circuit: AirInventory<BabyBearPoseidon2Config>,
+    ) -> Result<
+        VmChipComplex<
+            BabyBearPoseidon2Config,
+            Self::RecordArena,
+            GpuBackend,
+            Self::SystemChipInventory,
+        >,
+        ChipInventoryError,
+    > {
+        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
+            &SystemGpuBuilder,
+            &config.system,
+            circuit,
+        )?;
+        let inventory = &mut chip_complex.inventory;
+        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
+            &NativeGpuProverExt,
             &config.native,
             inventory,
         )?;
