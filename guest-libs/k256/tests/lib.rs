@@ -101,25 +101,25 @@ mod guest_tests {
             CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassConfigExecutor,
         };
         use openvm_sha256_circuit::{Sha256, Sha256Executor};
-        use openvm_stark_backend::{
-            config::{StarkGenericConfig, Val},
-            engine::StarkEngine,
-            p3_field::PrimeField32,
-        };
         use serde::{Deserialize, Serialize};
         #[cfg(feature = "cuda")]
         use {
-            openvm_circuit::{arch::DenseRecordArena, system::SystemChipInventoryGPU},
+            openvm_circuit::{arch::DenseRecordArena, system::cuda::SystemChipInventoryGPU},
             openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
             openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-            openvm_sha256_circuit::Sha2GpuProverExt,
+            openvm_sha256_circuit::Sha256GpuProverExt,
+            openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config
         };
         #[cfg(not(feature = "cuda"))]
         use {
             openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
             openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha2CpuProverExt,
-            openvm_stark_backend::prover::cpu::{CpuBackend, CpuDevice},
+            openvm_stark_backend::{prover::cpu::{CpuBackend, CpuDevice},
+                config::{StarkGenericConfig, Val},
+                engine::StarkEngine,
+                p3_field::PrimeField32,
+            },
         };
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -213,7 +213,7 @@ mod guest_tests {
                     )?;
                 let inventory = &mut chip_complex.inventory;
                 VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-                    &Sha2GpuProverExt,
+                    &Sha256GpuProverExt,
                     &config.sha256,
                     inventory,
                 )?;
