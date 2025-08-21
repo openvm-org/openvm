@@ -2,5 +2,5 @@
 queue_rules:
   - name: default
     conditions:
-      # Require all status checks to pass
-      - status-success~=.*
+      # Require the consolidated status check to pass
+      - status-success=Required Checks / required-checks

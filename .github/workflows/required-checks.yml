@@ -1,0 +1,69 @@
+name: Required Checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  required-checks:
+    needs: [
+      # Core workflows
+      lints,
+      build,
+      vm,
+      cli,
+      primitives,
+      sdk,
+      recursion,
+      extension-tests,
+      riscv,
+      guest-lib-tests,
+      native-compiler
+    ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check all required jobs passed
+        run: echo '${{ toJSON(needs) }}' | jq -e 'to_entries | all(.value.result == "success")'
+
+  # Job definitions that this workflow depends on
+  lints:
+    uses: ./.github/workflows/lints.yml
+
+  build:
+    uses: ./.github/workflows/build.yml
+
+  vm:
+    uses: ./.github/workflows/vm.yml
+
+  cli:
+    uses: ./.github/workflows/cli.yml
+
+  primitives:
+    uses: ./.github/workflows/primitives.yml
+
+  sdk:
+    uses: ./.github/workflows/sdk.yml
+
+  recursion:
+    uses: ./.github/workflows/recursion.yml
+
+  extension-tests:
+    uses: ./.github/workflows/extension-tests.yml
+
+  riscv:
+    uses: ./.github/workflows/riscv.yml
+
+  guest-lib-tests:
+    uses: ./.github/workflows/guest-lib-tests.yml
+
+  native-compiler:
+    uses: ./.github/workflows/native-compiler.yml
