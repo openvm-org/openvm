@@ -23,9 +23,11 @@ The SDK provides lower-level control over the building and transpiling process.
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:transpilation]
 ```
 
-### Using `SdkVmConfig`
+### Customizing the VM Configuration
 
-The `SdkVmConfig` struct allows you to specify the extensions and system configuration your VM will use. To customize your own configuration, you can use the `SdkVmConfig::builder()` method and set the desired extensions and system configuration as in the example below.
+To use a custom VM configuration, you can construct your own `GenericSdk` object which includes the
+extensions and system configuration your VM will use. To do this, you can use the `SdkVmConfig::builder()`
+ method and set the desired extensions and system configuration as in the example below.
 
 ```rust
     let vm_config = SdkVmConfig::builder()
@@ -35,13 +37,14 @@ The `SdkVmConfig` struct allows you to specify the extensions and system configu
         .io(Default::default())
         .build()
         .optimize();
+    let sdk = Sdk::new(AppConfig::new(FriParameters::standard_fast(), vm_config))?;
 ```
 
-The following convenience methods are also available to construct a `SdkVmConfig` object:
+The following convenience methods are also available to construct a `GenericSdk` object:
 
-- `SdkVmConfig::riscv32()` returns a `SdkVmConfig` supporting the RV32IM extension.
-- `SdkVmConfig::standard()` returns a `SdkVmConfig` supporting all default OpenVM extensions, including RV32IM.
-- `SdkVmConfig::from_toml()` returns a `SdkVmConfig` from a custom OpenVM configuration specified in an `openvm.toml` file.
+- `Sdk::riscv32()` returns a `GenericSdk` supporting the RV32IM extension.
+- `Sdk::standard()` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
+- `Sdk::new(Sdk::from_toml(openvm.toml))` returns a `GenericSdk` from a custom OpenVM configuration specified in an `openvm.toml` file.
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
