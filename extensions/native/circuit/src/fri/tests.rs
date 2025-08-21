@@ -39,12 +39,24 @@ type F = BabyBear;
 type Harness =
     TestChipHarness<F, FriReducedOpeningExecutor, FriReducedOpeningAir, FriReducedOpeningChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+fn create_harness_fields(
+    tester: &VmChipTestBuilder<F>,
+) -> (
+    FriReducedOpeningExecutor,
+    FriReducedOpeningAir,
+    FriReducedOpeningChip<F>,
+) {
+    let executor = FriReducedOpeningExecutor::new();
     let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let step = FriReducedOpeningExecutor::new();
     let chip = FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.memory_helper());
 
-    Harness::with_capacity(step, air, chip, MAX_INS_CAPACITY)
+    (executor, air, chip)
+}
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let (executor, air, chip) = create_harness_fields(tester);
+
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[cfg(feature = "cuda")]
@@ -57,11 +69,7 @@ fn create_test_harness(
     FriReducedOpeningChipGpu,
     FriReducedOpeningChip<F>,
 > {
-    let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let executor = FriReducedOpeningExecutor;
-
-    let cpu_chip =
-        FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.dummy_memory_helper());
+    let (executor, air, cpu_chip) = create_harness_fields(tester);
     let gpu_chip =
         FriReducedOpeningChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 

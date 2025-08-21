@@ -23,8 +23,6 @@ openvm-native-compiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
-p3-field = { workspace = true }
-
 strum.workspace = true
 itertools.workspace = true
 derive-new.workspace = true

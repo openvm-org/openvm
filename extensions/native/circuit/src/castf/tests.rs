@@ -51,17 +51,22 @@ const WRITE_SIZE: usize = 4;
 type F = BabyBear;
 type Harness = TestChipHarness<F, CastFExecutor, CastFAir, CastFChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+fn create_harness_fields(tester: &VmChipTestBuilder<F>) -> (CastFExecutor, CastFAir, CastFChip<F>) {
     let range_checker = tester.range_checker().clone();
+    let executor = CastFExecutor::new(ConvertAdapterExecutor::<READ_SIZE, WRITE_SIZE>::new());
     let air = CastFAir::new(
         ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         CastFCoreAir::new(range_checker.bus()),
     );
-    let executor = CastFExecutor::new(ConvertAdapterExecutor::<READ_SIZE, WRITE_SIZE>::new());
     let chip = CastFChip::<F>::new(
         CastFCoreFiller::new(ConvertAdapterFiller, range_checker),
         tester.memory_helper(),
     );
+    (executor, air, chip)
+}
+
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let (executor, air, chip) = create_harness_fields(tester);
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
@@ -69,17 +74,7 @@ fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
 fn create_test_harness(
     tester: &GpuChipTestBuilder,
 ) -> GpuTestChipHarness<F, CastFExecutor, CastFAir, CastFChipGpu, CastFChip<F>> {
-    let range_bus = default_var_range_checker_bus();
-    let adapter_air = ConvertAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = CastFCoreAir::new(range_bus);
-    let air = CastFAir::new(adapter_air, core_air);
-
-    let adapter_step = ConvertAdapterExecutor::<1, 4>::new();
-    let executor = CastFExecutor::new(adapter_step);
-
-    let core_filler = CastFCoreFiller::new(ConvertAdapterFiller, dummy_range_checker(range_bus));
-
-    let cpu_chip = CastFChip::new(core_filler, tester.dummy_memory_helper());
+    let (executor, air, cpu_chip) = create_harness_fields(tester);
     let gpu_chip = CastFChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

@@ -52,21 +52,31 @@ const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
 type Harness = TestChipHarness<F, NativeBranchEqExecutor, NativeBranchEqAir, NativeBranchEqChip<F>>;
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
-    let air = NativeBranchEqAir::new(
-        BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-    );
+fn create_harness_fields(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    NativeBranchEqExecutor,
+    NativeBranchEqAir,
+    NativeBranchEqChip<F>,
+) {
     let executor = NativeBranchEqExecutor::new(
         BranchNativeAdapterExecutor,
         NativeBranchEqualOpcode::CLASS_OFFSET,
         DEFAULT_PC_STEP,
     );
+    let air = NativeBranchEqAir::new(
+        BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+    );
     let chip = NativeBranchEqChip::<F>::new(
         NativeBranchEqualFiller::new(BranchNativeAdapterFiller),
         tester.memory_helper(),
     );
+    (executor, air, chip)
+}
 
+fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Harness {
+    let (executor, air, chip) = create_harness_fields(tester);
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
@@ -80,21 +90,7 @@ fn create_test_harness(
     NativeBranchEqChipGpu,
     NativeBranchEqChip<F>,
 > {
-    let adapter_air =
-        BranchNativeAdapterAir::new(tester.execution_bridge(), tester.memory_bridge());
-    let core_air = BranchEqualCoreAir::new(NativeBranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP);
-    let air = NativeBranchEqAir::new(adapter_air, core_air);
-
-    let adapter_step = BranchNativeAdapterExecutor::new();
-    let executor = NativeBranchEqExecutor::new(
-        adapter_step,
-        NativeBranchEqualOpcode::CLASS_OFFSET,
-        DEFAULT_PC_STEP,
-    );
-
-    let core_filler = NativeBranchEqualFiller::new(BranchNativeAdapterFiller);
-
-    let cpu_chip = NativeBranchEqChip::new(core_filler, tester.dummy_memory_helper());
+    let (executor, air, cpu_chip) = create_harness_fields(tester);
     let gpu_chip = NativeBranchEqChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
