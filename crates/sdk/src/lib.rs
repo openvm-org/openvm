@@ -54,6 +54,11 @@ use openvm_transpiler::{
 };
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
+#[cfg(feature = "cuda")]
+use {
+    config::SdkVmGpuBuilder, openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine,
+    openvm_native_circuit::NativeGpuBuilder,
+};
 
 #[cfg(feature = "evm-prove")]
 use crate::{
@@ -153,11 +158,8 @@ where
 
 pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
-// #[cfg(feature = "cuda")]
-// use {config::SdkVmGpuBuilder, openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine};
-
-// #[cfg(feature = "cuda")]
-// pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder, NativeGpuBuilder>;
+#[cfg(feature = "cuda")]
+pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder, NativeGpuBuilder>;
 
 impl Sdk {
     /// Creates SDK with a standard configuration that includes a set of default VM extensions

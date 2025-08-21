@@ -45,12 +45,15 @@ use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "cuda")]
 use {
+    openvm_algebra_circuit::AlgebraGpuProverExt,
     openvm_bigint_circuit::Int256GpuProverExt,
     openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU},
     openvm_cuda_backend::{
         engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
     },
+    openvm_ecc_circuit::EccGpuProverExt,
     openvm_keccak256_circuit::Keccak256GpuProverExt,
+    openvm_native_circuit::NativeGpuProverExt,
     openvm_rv32im_circuit::Rv32ImGpuProverExt,
     openvm_sha256_circuit::Sha256GpuProverExt,
 };
@@ -398,7 +401,6 @@ where
         if let Some(castf) = &config.castf {
             VmProverExtension::<E, _, _>::extend_prover(&NativeCpuProverExt, castf, inventory)?;
         }
-
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, rv32m, inventory)?;
         }
@@ -453,31 +455,30 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
         if let Some(sha256) = &config.sha256 {
             VmProverExtension::<E, _, _>::extend_prover(&Sha256GpuProverExt, sha256, inventory)?;
         }
-        // if let Some(native) = &config.native {
-        //     VmProverExtension::<E, _, _>::extend_prover(&NativeGpuProverExt, native, inventory)?;
-        // }
-        // if let Some(castf) = &config.castf {
-        //     VmProverExtension::<E, _, _>::extend_prover(&NativeGpuProverExt, castf, inventory)?;
-        // }
-
+        if let Some(native) = &config.native {
+            VmProverExtension::<E, _, _>::extend_prover(&NativeGpuProverExt, native, inventory)?;
+        }
+        if let Some(castf) = &config.castf {
+            VmProverExtension::<E, _, _>::extend_prover(&NativeGpuProverExt, castf, inventory)?;
+        }
         if let Some(rv32m) = &config.rv32m {
             VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, rv32m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
         }
-        // if let Some(modular) = &config.modular {
-        //     VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, modular, inventory)?;
-        // }
-        // if let Some(fp2) = &config.fp2 {
-        //     VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, fp2, inventory)?;
-        // }
+        if let Some(modular) = &config.modular {
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, modular, inventory)?;
+        }
+        if let Some(fp2) = &config.fp2 {
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, fp2, inventory)?;
+        }
         if let Some(pairing) = &config.pairing {
             VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
-        // if let Some(ecc) = &config.ecc {
-        //     VmProverExtension::<E, _, _>::extend_prover(&EccGpuProverExt, ecc, inventory)?;
-        // }
+        if let Some(ecc) = &config.ecc {
+            VmProverExtension::<E, _, _>::extend_prover(&EccGpuProverExt, ecc, inventory)?;
+        }
         Ok(chip_complex)
     }
 }
