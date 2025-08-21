@@ -81,7 +81,6 @@ where
         size_of::<ShiftPreCompute>()
     }
 
-    #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
@@ -120,7 +119,6 @@ where
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
 
-    #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
@@ -136,7 +134,6 @@ where
     }
 
     #[cfg(feature = "tco")]
-    #[inline(always)]
     fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,

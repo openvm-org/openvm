@@ -34,6 +34,18 @@ struct BaseAluPreCompute {
     c: u8,
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            BaseAluOpcode::ADD => $execute_impl::<_, _, AddOp>,
+            BaseAluOpcode::SUB => $execute_impl::<_, _, SubOp>,
+            BaseAluOpcode::XOR => $execute_impl::<_, _, XorOp>,
+            BaseAluOpcode::OR => $execute_impl::<_, _, OrOp>,
+            BaseAluOpcode::AND => $execute_impl::<_, _, AndOp>,
+        })
+    };
+}
+
 impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BaseAluPreCompute>()
@@ -50,14 +62,8 @@ impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BaseAluOpcode::ADD => execute_e1_impl::<_, _, AddOp>,
-            BaseAluOpcode::SUB => execute_e1_impl::<_, _, SubOp>,
-            BaseAluOpcode::XOR => execute_e1_impl::<_, _, XorOp>,
-            BaseAluOpcode::OR => execute_e1_impl::<_, _, OrOp>,
-            BaseAluOpcode::AND => execute_e1_impl::<_, _, AndOp>,
-        };
-        Ok(fn_ptr)
+
+        dispatch!(execute_e1_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -72,14 +78,8 @@ impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BaseAluOpcode::ADD => execute_e1_tco_handler::<_, _, AddOp>,
-            BaseAluOpcode::SUB => execute_e1_tco_handler::<_, _, SubOp>,
-            BaseAluOpcode::XOR => execute_e1_tco_handler::<_, _, XorOp>,
-            BaseAluOpcode::OR => execute_e1_tco_handler::<_, _, OrOp>,
-            BaseAluOpcode::AND => execute_e1_tco_handler::<_, _, AndOp>,
-        };
-        Ok(fn_ptr)
+
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -101,14 +101,26 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32BaseAlu256Executor {
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            BaseAluOpcode::ADD => execute_e2_impl::<_, _, AddOp>,
-            BaseAluOpcode::SUB => execute_e2_impl::<_, _, SubOp>,
-            BaseAluOpcode::XOR => execute_e2_impl::<_, _, XorOp>,
-            BaseAluOpcode::OR => execute_e2_impl::<_, _, OrOp>,
-            BaseAluOpcode::AND => execute_e2_impl::<_, _, AndOp>,
-        };
-        Ok(fn_ptr)
+
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -137,6 +149,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

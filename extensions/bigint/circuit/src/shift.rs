@@ -32,6 +32,16 @@ struct ShiftPreCompute {
     c: u8,
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            ShiftOpcode::SLL => $execute_impl::<_, _, SllOp>,
+            ShiftOpcode::SRA => $execute_impl::<_, _, SraOp>,
+            ShiftOpcode::SRL => $execute_impl::<_, _, SrlOp>,
+        })
+    };
+}
+
 impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<ShiftPreCompute>()
@@ -48,12 +58,7 @@ impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
     {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            ShiftOpcode::SLL => execute_e1_impl::<_, _, SllOp>,
-            ShiftOpcode::SRA => execute_e1_impl::<_, _, SraOp>,
-            ShiftOpcode::SRL => execute_e1_impl::<_, _, SrlOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -68,12 +73,7 @@ impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
     {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            ShiftOpcode::SLL => execute_e1_tco_handler::<_, _, SllOp>,
-            ShiftOpcode::SRA => execute_e1_tco_handler::<_, _, SraOp>,
-            ShiftOpcode::SRL => execute_e1_tco_handler::<_, _, SrlOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -95,12 +95,24 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Shift256Executor {
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            ShiftOpcode::SLL => execute_e2_impl::<_, _, SllOp>,
-            ShiftOpcode::SRA => execute_e2_impl::<_, _, SraOp>,
-            ShiftOpcode::SRL => execute_e2_impl::<_, _, SrlOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -128,6 +140,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

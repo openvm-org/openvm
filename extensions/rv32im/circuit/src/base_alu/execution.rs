@@ -55,6 +55,28 @@ impl<A, const LIMB_BITS: usize> BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, 
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_imm:ident, $opcode:expr, $offset:expr) => {
+        Ok(
+            match (
+                $is_imm,
+                BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
+            ) {
+                (true, BaseAluOpcode::ADD) => $execute_impl::<_, _, true, AddOp>,
+                (false, BaseAluOpcode::ADD) => $execute_impl::<_, _, false, AddOp>,
+                (true, BaseAluOpcode::SUB) => $execute_impl::<_, _, true, SubOp>,
+                (false, BaseAluOpcode::SUB) => $execute_impl::<_, _, false, SubOp>,
+                (true, BaseAluOpcode::XOR) => $execute_impl::<_, _, true, XorOp>,
+                (false, BaseAluOpcode::XOR) => $execute_impl::<_, _, false, XorOp>,
+                (true, BaseAluOpcode::OR) => $execute_impl::<_, _, true, OrOp>,
+                (false, BaseAluOpcode::OR) => $execute_impl::<_, _, false, OrOp>,
+                (true, BaseAluOpcode::AND) => $execute_impl::<_, _, true, AndOp>,
+                (false, BaseAluOpcode::AND) => $execute_impl::<_, _, false, AndOp>,
+            },
+        )
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -65,7 +87,6 @@ where
         size_of::<BaseAluPreCompute>()
     }
 
-    #[inline(always)]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -77,24 +98,8 @@ where
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
-        let opcode = inst.opcode;
 
-        let fn_ptr = match (
-            is_imm,
-            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-        ) {
-            (true, BaseAluOpcode::ADD) => execute_e1_impl::<_, _, true, AddOp>,
-            (false, BaseAluOpcode::ADD) => execute_e1_impl::<_, _, false, AddOp>,
-            (true, BaseAluOpcode::SUB) => execute_e1_impl::<_, _, true, SubOp>,
-            (false, BaseAluOpcode::SUB) => execute_e1_impl::<_, _, false, SubOp>,
-            (true, BaseAluOpcode::XOR) => execute_e1_impl::<_, _, true, XorOp>,
-            (false, BaseAluOpcode::XOR) => execute_e1_impl::<_, _, false, XorOp>,
-            (true, BaseAluOpcode::OR) => execute_e1_impl::<_, _, true, OrOp>,
-            (false, BaseAluOpcode::OR) => execute_e1_impl::<_, _, false, OrOp>,
-            (true, BaseAluOpcode::AND) => execute_e1_impl::<_, _, true, AndOp>,
-            (false, BaseAluOpcode::AND) => execute_e1_impl::<_, _, false, AndOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -109,24 +114,8 @@ where
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
-        let opcode = inst.opcode;
 
-        let fn_ptr = match (
-            is_imm,
-            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-        ) {
-            (true, BaseAluOpcode::ADD) => execute_e1_tco_handler::<_, _, true, AddOp>,
-            (false, BaseAluOpcode::ADD) => execute_e1_tco_handler::<_, _, false, AddOp>,
-            (true, BaseAluOpcode::SUB) => execute_e1_tco_handler::<_, _, true, SubOp>,
-            (false, BaseAluOpcode::SUB) => execute_e1_tco_handler::<_, _, false, SubOp>,
-            (true, BaseAluOpcode::XOR) => execute_e1_tco_handler::<_, _, true, XorOp>,
-            (false, BaseAluOpcode::XOR) => execute_e1_tco_handler::<_, _, false, XorOp>,
-            (true, BaseAluOpcode::OR) => execute_e1_tco_handler::<_, _, true, OrOp>,
-            (false, BaseAluOpcode::OR) => execute_e1_tco_handler::<_, _, false, OrOp>,
-            (true, BaseAluOpcode::AND) => execute_e1_tco_handler::<_, _, true, AndOp>,
-            (false, BaseAluOpcode::AND) => execute_e1_tco_handler::<_, _, false, AndOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_tco_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
@@ -140,7 +129,6 @@ where
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
-    #[inline(always)]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -154,28 +142,11 @@ where
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let opcode = inst.opcode;
 
-        let fn_ptr = match (
-            is_imm,
-            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-        ) {
-            (true, BaseAluOpcode::ADD) => execute_e2_impl::<_, _, true, AddOp>,
-            (false, BaseAluOpcode::ADD) => execute_e2_impl::<_, _, false, AddOp>,
-            (true, BaseAluOpcode::SUB) => execute_e2_impl::<_, _, true, SubOp>,
-            (false, BaseAluOpcode::SUB) => execute_e2_impl::<_, _, false, SubOp>,
-            (true, BaseAluOpcode::XOR) => execute_e2_impl::<_, _, true, XorOp>,
-            (false, BaseAluOpcode::XOR) => execute_e2_impl::<_, _, false, XorOp>,
-            (true, BaseAluOpcode::OR) => execute_e2_impl::<_, _, true, OrOp>,
-            (false, BaseAluOpcode::OR) => execute_e2_impl::<_, _, false, OrOp>,
-            (true, BaseAluOpcode::AND) => execute_e2_impl::<_, _, true, AndOp>,
-            (false, BaseAluOpcode::AND) => execute_e2_impl::<_, _, false, AndOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
-    #[inline(always)]
     fn metered_handler<Ctx>(
         &self,
         chip_idx: usize,
@@ -189,24 +160,8 @@ where
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let opcode = inst.opcode;
 
-        let fn_ptr = match (
-            is_imm,
-            BaseAluOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-        ) {
-            (true, BaseAluOpcode::ADD) => execute_e2_tco_handler::<_, _, true, AddOp>,
-            (false, BaseAluOpcode::ADD) => execute_e2_tco_handler::<_, _, false, AddOp>,
-            (true, BaseAluOpcode::SUB) => execute_e2_tco_handler::<_, _, true, SubOp>,
-            (false, BaseAluOpcode::SUB) => execute_e2_tco_handler::<_, _, false, SubOp>,
-            (true, BaseAluOpcode::XOR) => execute_e2_tco_handler::<_, _, true, XorOp>,
-            (false, BaseAluOpcode::XOR) => execute_e2_tco_handler::<_, _, false, XorOp>,
-            (true, BaseAluOpcode::OR) => execute_e2_tco_handler::<_, _, true, OrOp>,
-            (false, BaseAluOpcode::OR) => execute_e2_tco_handler::<_, _, false, OrOp>,
-            (true, BaseAluOpcode::AND) => execute_e2_tco_handler::<_, _, true, AndOp>,
-            (false, BaseAluOpcode::AND) => execute_e2_tco_handler::<_, _, false, AndOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_tco_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
