@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         riscv:
-          - { name: "rv32im", path: "rv32im", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "rv32im", path: "rv32im", family: "c7g.16xlarge", image: "ubuntu24-full-x64" }
           - { name: "rv32im", path: "rv32im", family: "g6.2xlarge", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
@@ -84,7 +84,6 @@ jobs:
       - name: Run Makefile
         working-directory: crates/toolchain/tests/rv32im-test-vectors
         run: |
-          export PATH=/opt/riscv/bin:$PATH
           make
 
       - name: Run RISC-V test vector tests
