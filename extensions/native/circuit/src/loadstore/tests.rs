@@ -227,10 +227,10 @@ fn test_cuda_native_loadstore_1_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
     );
     harness
         .dense_arena
-        .get_record_seeker::<Record<'_, NUM_CELLS>, _>()
+        .get_record_seeker::<Record<'_, 1>, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<NUM_CELLS>>::new(),
+            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<1>>::new(),
         );
 
     tester
@@ -266,10 +266,10 @@ fn test_cuda_native_loadstore_4_tracegen(opcode: NativeLoadStoreOpcode, num_ops:
     );
     harness
         .dense_arena
-        .get_record_seeker::<Record<'_, NUM_CELLS>, _>()
+        .get_record_seeker::<Record<'_, 4>, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<NUM_CELLS>>::new(),
+            EmptyAdapterCoreLayout::<F, NativeLoadStoreAdapterExecutor<4>>::new(),
         );
 
     tester

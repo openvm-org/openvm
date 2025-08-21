@@ -51,14 +51,20 @@ use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
 #[cfg(feature = "cuda")]
-use crate::poseidon2::{columns::NativePoseidon2Cols, cuda::NativePoseidon2ChipGpu};
+use crate::poseidon2::{
+    chip::NativePoseidon2RecordMut, columns::NativePoseidon2Cols, cuda::NativePoseidon2ChipGpu,
+};
+#[cfg(not(feature = "cuda"))]
+use crate::NativeCpuBuilder as NativeBuilder;
+#[cfg(feature = "cuda")]
+use crate::NativeGpuBuilder as NativeBuilder;
 use crate::{
     poseidon2::{
         air::NativePoseidon2Air,
-        chip::{NativePoseidon2Executor, NativePoseidon2Filler, NativePoseidon2RecordMut},
+        chip::{NativePoseidon2Executor, NativePoseidon2Filler},
         NativePoseidon2Chip, CHUNK,
     },
-    NativeConfig, NativeCpuBuilder,
+    NativeConfig,
 };
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
@@ -616,12 +622,12 @@ fn test_vm_compress_poseidon2_as4() {
     let program = Program::from_instructions(&instructions);
 
     air_test(
-        NativeCpuBuilder,
+        NativeBuilder,
         NativeConfig::aggregation(0, 3),
         program.clone(),
     );
     air_test(
-        NativeCpuBuilder,
+        NativeBuilder,
         NativeConfig::aggregation(0, 7),
         program.clone(),
     );
@@ -836,7 +842,7 @@ mod cuda_tests {
                 &mut harness.executor,
                 &mut harness.dense_arena,
                 &Instruction::from_usize(
-                    VerifyBatchOpcode::VERIFY_BATCH.global_opcode(),
+                    VERIFY_BATCH.global_opcode(),
                     [
                         dim_register,
                         opened_register,

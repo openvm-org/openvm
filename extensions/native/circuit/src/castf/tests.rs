@@ -35,7 +35,7 @@ use test_case::test_case;
 use super::cuda::CastFChipGpu;
 use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFExecutor, LIMB_BITS};
 #[cfg(feature = "cuda")]
-use crate::{adapters::ConvertAdapterRecord, castf::CastfCoreRecord};
+use crate::{adapters::ConvertAdapterRecord, castf::CastFCoreRecord};
 use crate::{
     adapters::{
         ConvertAdapterAir, ConvertAdapterCols, ConvertAdapterExecutor, ConvertAdapterFiller,
