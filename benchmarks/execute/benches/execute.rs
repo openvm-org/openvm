@@ -193,7 +193,11 @@ where
             &config.keccak,
             inventory,
         )?;
-        VmProverExtension::<E, _, _>::extend_prover(&MemcpyCpuProverExt, &config.memcpy, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &MemcpyCpuProverExt,
+            &config.memcpy,
+            inventory,
+        )?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
