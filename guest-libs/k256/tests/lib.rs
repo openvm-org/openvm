@@ -21,9 +21,9 @@ mod guest_tests {
     #[cfg(not(feature = "cuda"))]
     use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
     #[cfg(feature = "cuda")]
-    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder};
+    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder;
 
-    crate::guest_tests::ecdsa_config::EcdsaBuilder;
+    use crate::guest_tests::ecdsa_config::EcdsaBuilder;
 
     type F = BabyBear;
 
