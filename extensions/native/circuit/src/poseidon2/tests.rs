@@ -1,29 +1,21 @@
 use std::cmp::min;
 
-use openvm_circuit::{
-    arch::testing::{
-        memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
-    },
-    utils::air_test,
+use openvm_circuit::arch::testing::{
+    memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
 };
 #[cfg(feature = "cuda")]
-use openvm_circuit::{
-    arch::testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    utils::next_power_of_two_or_zero,
-};
+use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
+#[cfg(not(feature = "cuda"))]
+use openvm_circuit::utils::air_test;
 #[cfg(feature = "cuda")]
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::{
-    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend,
-    types::F as CudaF,
-};
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::copy::MemCopyH2D;
-use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
+use openvm_cuda_backend::types::F as CudaF;
+use openvm_instructions::{instruction::Instruction, LocalOpcode};
+#[cfg(not(feature = "cuda"))]
+use openvm_instructions::{program::Program, SystemOpcode};
+#[cfg(not(feature = "cuda"))]
+use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_native_compiler::{
-    conversion::AS, FieldArithmeticOpcode, Poseidon2Opcode, Poseidon2Opcode::*,
-    VerifyBatchOpcode::VERIFY_BATCH,
+    conversion::AS, Poseidon2Opcode, Poseidon2Opcode::*, VerifyBatchOpcode::VERIFY_BATCH,
 };
 use openvm_poseidon2_air::{Poseidon2Config, Poseidon2SubChip};
 use openvm_stark_backend::{
@@ -36,8 +28,6 @@ use openvm_stark_backend::{
     utils::disable_debug_builder,
     verifier::VerificationError,
 };
-#[cfg(feature = "cuda")]
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 use openvm_stark_sdk::{
     config::{
         baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
@@ -50,18 +40,15 @@ use openvm_stark_sdk::{
 use rand::{rngs::StdRng, Rng};
 
 use super::air::VerifyBatchBus;
-#[cfg(feature = "cuda")]
 use crate::poseidon2::{
-    chip::NativePoseidon2RecordMut, columns::NativePoseidon2Cols, cuda::NativePoseidon2ChipGpu,
+    air::NativePoseidon2Air,
+    chip::{NativePoseidon2Executor, NativePoseidon2Filler},
+    NativePoseidon2Chip, CHUNK,
 };
-use crate::{
-    poseidon2::{
-        air::NativePoseidon2Air,
-        chip::{NativePoseidon2Executor, NativePoseidon2Filler},
-        NativePoseidon2Chip, CHUNK,
-    },
-    NativeConfig, NativeCpuBuilder,
-};
+#[cfg(feature = "cuda")]
+use crate::poseidon2::{chip::NativePoseidon2RecordMut, cuda::NativePoseidon2ChipGpu};
+#[cfg(not(feature = "cuda"))]
+use crate::{NativeConfig, NativeCpuBuilder};
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 const MAX_INS_CAPACITY: usize = 1 << 15;
@@ -633,7 +620,7 @@ fn test_vm_compress_poseidon2_as4() {
 // CUDA-specific tests
 #[cfg(feature = "cuda")]
 mod cuda_tests {
-    use std::{array::from_fn, borrow::Borrow, mem::size_of, slice::from_raw_parts};
+    use std::array::from_fn;
 
     use test_case::test_case;
 

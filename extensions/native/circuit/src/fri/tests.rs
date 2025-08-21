@@ -1,14 +1,11 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
 use openvm_circuit::arch::{
     testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
     Arena, PreflightExecutor,
-};
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::{
-    testing::{GpuChipTestBuilder, GpuTestChipHarness},
-    EmptyAdapterCoreLayout,
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
