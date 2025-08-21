@@ -3,19 +3,12 @@ use std::{str::FromStr, sync::Arc};
 use halo2curves_axiom::secp256r1;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Num, Zero};
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{
-    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-    GpuTestChipHarness,
-};
 use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
     Arena, MatrixRecordArena, PreflightExecutor,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256r1_coord_prime},
     bitwise_op_lookup::{
@@ -36,13 +29,20 @@ use openvm_pairing_guest::bls12_381::BLS12_381_MODULUS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::{EccRecord, WeierstrassAddNeChipGpu},
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
+    },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+};
 
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_step, get_ec_double_air, get_ec_double_chip,
     get_ec_double_step, EcDoubleExecutor, WeierstrassAir, WeierstrassChip,
 };
-#[cfg(feature = "cuda")]
-use crate::{EccRecord, WeierstrassAddNeChipGpu};
 
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;

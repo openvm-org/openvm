@@ -1,11 +1,12 @@
 use derive_more::derive::{Deref, DerefMut};
 use openvm_circuit_derive::PreflightExecutor;
-#[cfg(feature = "cuda")]
-use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
 use openvm_mod_circuit_builder::FieldExpressionExecutor;
 use openvm_rv32_adapters::Rv32VecHeapAdapterExecutor;
 #[cfg(feature = "cuda")]
-use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
+use {
+    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
+    openvm_rv32_adapters::Rv32VecHeapAdapterRecord,
+};
 
 pub mod fp2_chip;
 pub mod modular_chip;

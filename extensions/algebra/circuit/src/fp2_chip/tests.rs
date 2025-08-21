@@ -353,9 +353,6 @@ fn run_test_with_config<const BLOCKS: usize, const BLOCK_SIZE: usize, const NUM_
 
 #[cfg(feature = "cuda")]
 mod cuda_tests {
-    use super::*;
-
-    use test_case::test_case;
     use openvm_circuit::arch::{
         testing::{
             default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
@@ -366,7 +363,9 @@ mod cuda_tests {
     use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
     use openvm_cuda_backend::prover_backend::GpuBackend;
     use openvm_stark_backend::Chip;
+    use test_case::test_case;
 
+    use super::*;
     use crate::fp2_chip::{Fp2AddSubChipGpu, Fp2MulDivChipGpu};
 
     pub type GpuHarness<const BLOCKS: usize, const BLOCK_SIZE: usize, T> = GpuTestChipHarness<

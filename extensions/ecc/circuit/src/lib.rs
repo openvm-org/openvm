@@ -1,3 +1,9 @@
+#[cfg(feature = "cuda")]
+use {
+    openvm_mod_circuit_builder::FieldExpressionCoreRecordMut,
+    openvm_rv32_adapters::Rv32VecHeapAdapterRecord,
+};
+
 mod extension;
 mod weierstrass_chip;
 
@@ -5,11 +11,6 @@ pub use extension::*;
 pub use weierstrass_chip::*;
 
 pub struct EccCpuProverExt;
-
-#[cfg(feature = "cuda")]
-use openvm_mod_circuit_builder::FieldExpressionCoreRecordMut;
-#[cfg(feature = "cuda")]
-use openvm_rv32_adapters::Rv32VecHeapAdapterRecord;
 
 #[cfg(feature = "cuda")]
 pub(crate) type EccRecord<

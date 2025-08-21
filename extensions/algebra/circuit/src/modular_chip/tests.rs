@@ -3,11 +3,6 @@ use std::{borrow::BorrowMut, str::FromStr, sync::Arc};
 use num_bigint::BigUint;
 use num_traits::Zero;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{
-    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-    GpuTestChipHarness,
-};
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
     testing::{
@@ -15,8 +10,6 @@ use openvm_circuit::arch::{
     },
     Arena, PreflightExecutor,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
 use openvm_circuit_primitives::{
     bigint::utils::{secp256k1_coord_prime, secp256k1_scalar_prime},
     bitwise_op_lookup::{
@@ -40,6 +33,15 @@ use openvm_rv32im_circuit::adapters::RV32_REGISTER_NUM_LIMBS;
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::modular_chip::{ModularAddSubChipGpu, ModularIsEqualChipGpu, ModularMulDivChipGpu},
+    openvm_circuit::arch::testing::{
+        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+        GpuTestChipHarness,
+    },
+    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+};
 
 use crate::modular_chip::{
     get_modular_addsub_air, get_modular_addsub_chip, get_modular_addsub_step,
@@ -47,8 +49,6 @@ use crate::modular_chip::{
     ModularChip, ModularExecutor, ModularIsEqualAir, ModularIsEqualChip, ModularIsEqualCoreAir,
     ModularIsEqualCoreCols, ModularIsEqualFiller, VmModularIsEqualExecutor,
 };
-#[cfg(feature = "cuda")]
-use crate::modular_chip::{ModularAddSubChipGpu, ModularIsEqualChipGpu, ModularMulDivChipGpu};
 
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
