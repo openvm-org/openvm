@@ -1,4 +1,5 @@
 #pragma once
+
 #include "constants.h"
 #include "histogram.cuh"
 #include "trace_access.h"

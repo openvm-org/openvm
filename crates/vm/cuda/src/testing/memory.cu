@@ -1,4 +1,4 @@
-#include "../system/memory/address.cuh"
+#include "memory/address.cuh"
 #include "launcher.cuh"
 #include "trace_access.h"
 

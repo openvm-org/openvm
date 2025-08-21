@@ -9,6 +9,11 @@ pub mod execution;
 pub mod trace;
 pub mod utils;
 
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 mod extension;
 #[cfg(test)]
 mod tests;

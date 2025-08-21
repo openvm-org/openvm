@@ -2,37 +2,26 @@ use std::{iter::repeat_n, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::arch::{DenseRecordArena, MultiRowLayout, RecordSeeker};
-use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU, utils::next_power_of_two_or_zero,
+    var_range::cuda::VariableRangeCheckerChipGPU,
+};
+use openvm_cuda_backend::{
+    base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
+};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV32_CELL_BITS;
-use openvm_keccak256_circuit::{
+use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
+use p3_keccak_air::NUM_ROUNDS;
+
+use crate::{
     columns::NUM_KECCAK_VM_COLS,
     trace::{KeccakVmMetadata, KeccakVmRecordMut},
     utils::num_keccak_f,
 };
-use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
-use p3_keccak_air::NUM_ROUNDS;
-use stark_backend_gpu::{
-    base::DeviceMatrix,
-    cuda::{copy::MemCopyH2D, d_buffer::DeviceBuffer},
-    prelude::F,
-    prover_backend::GpuBackend,
-};
 
-use crate::{
-    get_empty_air_proving_ctx,
-    primitives::{
-        bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
-    },
-};
-
-pub mod cuda;
-use cuda::keccak256::*;
-
-mod extension;
-pub use extension::*;
-
-#[cfg(test)]
-mod test;
+mod cuda_abi;
+use cuda_abi::keccak256::*;
 
 #[derive(new)]
 pub struct Keccak256ChipGpu {
