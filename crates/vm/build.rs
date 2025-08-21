@@ -12,27 +12,22 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../circuits/primitives/cuda/include")
             .include("../circuits/poseidon2-air/cuda/include")
-            .include("cuda/include/system")
-            .watch("cuda/src/system")
-            .library_name("tracegen_gpu_system")
-            .files_from_glob("cuda/src/system/**/*.cu");
-
+            .include("cuda/include/system");
         builder.emit_link_directives();
-        builder.build();
+
+        builder
+            .clone()
+            .library_name("tracegen_gpu_system")
+            .files_from_glob("cuda/src/system/**/*.cu")
+            .build();
 
         #[cfg(any(test, feature = "test-utils"))]
         {
-            let builder = CudaBuilder::new()
-                .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
-                .include("../circuits/primitives/cuda/include")
-                .include("../circuits/poseidon2-air/cuda/include")
-                .include("cuda/include/system")
-                .watch("cuda/src/testing")
+            builder
+                .clone()
                 .library_name("tracegen_gpu_testing")
-                .files_from_glob("cuda/src/testing/**/*.cu");
-
-            builder.emit_link_directives();
-            builder.build();
+                .files_from_glob("cuda/src/testing/**/*.cu")
+                .build();
         }
     }
 }
