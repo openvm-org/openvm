@@ -48,6 +48,8 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         )
         #where_clause
         {
+            use ::openvm_circuit::arch::ExecutionError;
+
             let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc);
             #execute_call;
 
@@ -61,7 +63,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             // exec_state.pc should have been updated by execute_impl at this point
             let next_handler = interpreter.get_handler(exec_state.vm_state.pc);
             if next_handler.is_none() {
-                exec_state.exit_code = Err(interpreter.pc_out_of_bounds_err(exec_state.vm_state.pc));
+                exec_state.exit_code = Err(ExecutionError::PcOutOfBounds (exec_state.vm_state.pc));
                 return;
             }
             let next_handler = next_handler.unwrap_unchecked();

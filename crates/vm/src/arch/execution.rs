@@ -28,12 +28,8 @@ use crate::{
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]
     Fail { pc: u32, msg: &'static str },
-    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
-    PcOutOfBounds {
-        pc: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
+    #[error("pc {0} out of bounds")]
+    PcOutOfBounds(u32),
     #[error("unreachable instruction at pc {0}")]
     Unreachable(u32),
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
