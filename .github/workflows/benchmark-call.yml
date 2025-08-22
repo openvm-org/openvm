@@ -192,6 +192,11 @@ jobs:
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
           find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/ -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/cuda-backend -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/cuda-builder -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/cuda-common -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/stark-backend -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/stark-sdk -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
 
       # Metric name is unique within a run (matrix)
       # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
