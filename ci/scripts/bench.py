@@ -52,7 +52,12 @@ def run_cargo_command(
     env["OUTPUT_PATH"] = output_path
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
-    env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    
+    # TODO[stephenh]
+    if "cuda" in feature_flags:
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native -Ctarget-feature=-avx2,-avx512f,-neon"
+    else:
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native"
     env["RUST_BACKTRACE"] = "1"
 
     # Run the subprocess with the updated environment
