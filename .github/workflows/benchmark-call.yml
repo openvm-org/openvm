@@ -125,11 +125,11 @@ jobs:
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
@@ -208,12 +208,6 @@ jobs:
           MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
           OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
           echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
-
-          rustc -Vv
-          cargo -V
-          rustup target list --installed
-          rustc --print cfg
-          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
