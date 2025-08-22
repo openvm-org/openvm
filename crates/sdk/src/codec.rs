@@ -298,7 +298,7 @@ impl Encode for [F; DIGEST_SIZE] {
 }
 
 /// Encodes length of slice and then each element
-pub(crate) fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
+pub fn encode_slice<T: Encode, W: Write>(slice: &[T], writer: &mut W) -> Result<()> {
     slice.len().encode(writer)?;
     for elt in slice {
         elt.encode(writer)?;
