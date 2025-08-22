@@ -74,6 +74,7 @@ jobs:
       - name: Check CUDA status and set environment variables
         if: contains(matrix.platform.runner, 'gpu')
         run: |
+          nvcc --version
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
           echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
           echo "CIRCUIT_TEST_FILTER=cuda" >> $GITHUB_ENV
@@ -85,7 +86,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
-          $CIRCUIT_TEST_ENV cargo nextest run $CIRCUIT_TEST_FILTER --cargo-profile=fast $FEATURE_ARGS $TEST_THREADS --no-tests=pass
+          ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} --cargo-profile=fast ${{ env.FEATURE_ARGS }} $TEST_THREADS --no-tests=pass
 
         # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
