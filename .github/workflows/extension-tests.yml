@@ -35,14 +35,15 @@ jobs:
           - { name: "ecc", path: "ecc" }
           - { name: "pairing", path: "pairing" }
         platform:
-          - { runner: "test-64cpu-arm64" }
-          # - { runner: "test-gpu-nvidia" }
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}
       - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
       - tag=extension-${{ matrix.extension.name }}-${{ matrix.platform.runner }}
       - extras=s3-cache
 
@@ -82,7 +83,7 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/circuit
         run: |
           TEST_THREADS="--test-threads=32"
-          if [[ "${{ matrix.extension.name }}" != "algebra" || ${{ matrix.platform.runner }} != "test-gpu-nvidia" ]]; then
+          if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
           ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} --cargo-profile=fast ${{ env.FEATURE_ARGS }} $TEST_THREADS --no-tests=pass
@@ -103,8 +104,4 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          if [[ "${{ matrix.extension.name }}" == "algebra" && ${{ matrix.platform.runner }} == "test-gpu-nvidia" ]]; then
-            echo "TODO[stephenh]: Re-enable this once algebra issue is resolved"
-          else
-            cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-          fi
+          cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
