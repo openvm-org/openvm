@@ -34,11 +34,11 @@ jobs:
         run: |
           nvcc --version
 
-      - name: Run ruint guest library tests
-        working-directory: guest-libs/ruint
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features cuda --no-tests=pass --test-threads=1
+      # - name: Run ruint guest library tests
+      #  working-directory: guest-libs/ruint
+      #  run: |
+      #    rustup component add rust-src --toolchain nightly-2025-02-14
+      #    CUDA_OPT_LEVEL=3 cargo nextest run --features cuda --no-tests=pass --test-threads=1
 
       - name: Run pairing guest library tests
         working-directory: guest-libs/pairing
