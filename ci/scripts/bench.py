@@ -17,7 +17,7 @@ def run_cargo_command(
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "RUST_BACKTRACE=1", "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
@@ -53,6 +53,7 @@ def run_cargo_command(
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    env["RUST_BACKTRACE"] = "1"
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)
