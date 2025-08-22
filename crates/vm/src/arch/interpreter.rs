@@ -1,3 +1,5 @@
+#[cfg(feature = "tco")]
+use std::marker::PhantomData;
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
@@ -59,6 +61,8 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     pc_start: u32,
 
     init_memory: SparseMemoryImage,
+    #[cfg(feature = "tco")]
+    phantom: PhantomData<&'a ()>,
 }
 
 #[cfg_attr(feature = "tco", allow(dead_code))]
@@ -192,6 +196,8 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
+            #[cfg(feature = "tco")]
+            phantom: PhantomData,
         })
     }
 
@@ -297,6 +303,8 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
+            #[cfg(feature = "tco")]
+            phantom: PhantomData,
         })
     }
 }
