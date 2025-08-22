@@ -98,9 +98,17 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<()> {
-        let mut prover = sdk.evm_prover(exe)?.with_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        let _proof = prover.prove_evm(stdin)?;
+        #[cfg(not(feature = "evm"))]
+        let _proof = sdk
+            .prover(exe)?
+            .with_program_name("kitchen_sink")
+            .prove(stdin)?;
+        #[cfg(feature = "evm")]
+        let _proof = sdk
+            .evm_prover(exe)?
+            .with_program_name("kitchen_sink")
+            .prove_evm(stdin)?;
         Ok(())
     })
 }

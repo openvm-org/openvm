@@ -60,11 +60,7 @@ ignored = ["derive_more", "rand"]
 [[bin]]
 name = "fib_e2e"
 path = "src/bin/fib_e2e.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
 
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
