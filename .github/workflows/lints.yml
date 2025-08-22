@@ -91,7 +91,7 @@ jobs:
     name: Lint CUDA
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=g6.xlarge
+      - family=g6+g5+g6e+g4dn
       - image=ubuntu24-gpu-x64
       - extras=s3-cache
 
@@ -109,7 +109,7 @@ jobs:
           nvidia-smi
           nvidia-smi -L
           nvcc --version
-          
+
       - name: Run fmt
         working-directory: crates
         run: |
