@@ -140,9 +140,9 @@ jobs:
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives
         run: |
-          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall
 
       - name: Run tests for poseidon2-air
         working-directory: crates/circuits/poseidon2-air
         run: |
-          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall
