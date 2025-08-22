@@ -70,9 +70,6 @@ pub enum ExecutionError {
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
     Static(#[from] StaticProgramError),
-    // Placeholder error type for tco
-    #[error("error in VmExecState")]
-    ExecStateError,
 }
 
 /// Errors in the program that can be statically analyzed before runtime.
