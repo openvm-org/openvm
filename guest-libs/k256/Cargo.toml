@@ -57,7 +57,6 @@ std = [
     "once_cell?/std",
     "openvm-ecc-guest/std",
 ]
-
 arithmetic = ["elliptic-curve/arithmetic"]
 bits = ["arithmetic", "elliptic-curve/bits"]
 critical-section = ["once_cell/critical-section", "precomputed-tables"]
@@ -74,6 +73,13 @@ schnorr = ["arithmetic", "signature"]
 serde = ["ecdsa-core/serde", "elliptic-curve/serde"]
 sha256 = []
 test-vectors = []
+
+# Internal feature for testing only.
+cuda = [
+    "openvm-circuit/cuda",
+    "openvm-ecc-circuit/cuda",
+    "openvm-sha256-circuit/cuda",
+]
 
 [package.metadata.cargo-shear]
 ignored = [

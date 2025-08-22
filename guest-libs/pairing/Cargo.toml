@@ -63,5 +63,12 @@ halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
 
+# Internal feature for testing only.
+cuda = [
+    "openvm-algebra-circuit/cuda",
+    "openvm-pairing-circuit/cuda",
+    "openvm-ecc-circuit/cuda",
+]
+
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn"]

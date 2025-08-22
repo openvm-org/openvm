@@ -36,14 +36,17 @@ jobs:
           - { name: "ruint", path: "ruint" }
           - { name: "pairing", path: "pairing" }
           - { name: "verify_stark", path: "verify_stark" }
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - tag=crate-${{ matrix.crate.name }}
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}
+      - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
+      - tag=guest-lib-${{ matrix.crate.name }}-${{ matrix.platform.runner }}
       - extras=s3-cache
 
     steps:
@@ -71,12 +74,18 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.platform.runner, 'gpu')
+        run: |
+          nvcc --version
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          FEATURE_ARGS=""
+          PAIRING_FEATURE_ARGS=""
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            FEATURE_ARGS="--features=bn254,bls12_381"
+            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

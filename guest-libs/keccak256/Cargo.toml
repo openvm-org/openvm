@@ -25,3 +25,7 @@ eyre = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 tiny-keccak = { workspace = true }
+
+[features]
+# Internal feature for testing only.
+cuda = ["openvm-keccak256-circuit/cuda"]

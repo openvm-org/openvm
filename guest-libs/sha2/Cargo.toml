@@ -25,3 +25,7 @@ eyre = { workspace = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 sha2 = { workspace = true }
+
+[features]
+# Internal feature for testing only.
+cuda = ["openvm-sha256-circuit/cuda"]

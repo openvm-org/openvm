@@ -186,5 +186,8 @@ subtle = ["dep:subtle"]
 valuable = ["dep:valuable"]
 zeroize = ["dep:zeroize"]
 
+# Internal feature for testing only.
+cuda = ["openvm-bigint-circuit/cuda"]
+
 [package.metadata.cargo-shear]
 ignored = ["criterion", "hex"]
