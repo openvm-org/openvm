@@ -1,8 +1,8 @@
 use std::result::Result;
 
 use openvm_algebra_circuit::{
-    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, Rv32ModularConfig,
-    Rv32ModularConfigExecutor, Rv32ModularCpuBuilder,
+    AlgebraProverExt, Fp2Extension, Fp2ExtensionExecutor, Rv32ModularConfig,
+    Rv32ModularConfigExecutor, Rv32ModularBuilder,
 };
 use openvm_circuit::{
     arch::{
@@ -92,9 +92,9 @@ where
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,
             &config.weierstrass,

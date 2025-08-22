@@ -35,7 +35,7 @@ use crate::{
         get_fp2_addsub_air, get_fp2_addsub_chip, get_fp2_addsub_step, get_fp2_muldiv_air,
         get_fp2_muldiv_chip, get_fp2_muldiv_step, Fp2Air, Fp2Executor,
     },
-    AlgebraCpuProverExt, ModularExtension,
+    AlgebraProverExt, ModularExtension,
 };
 
 #[serde_as]
@@ -265,7 +265,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Fp2Extension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraCpuProverExt
+impl<E, SC, RA> VmProverExtension<E, RA, Fp2Extension> for AlgebraProverExt
 where
     SC: StarkGenericConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,

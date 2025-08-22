@@ -25,12 +25,25 @@ pub use modular::*;
 mod fp2;
 pub use fp2::*;
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub(crate) use cuda::*;
+        pub use cuda::{
+            AlgebraGpuProverExt as AlgebraProverExt,
+            Rv32ModularGpuBuilder as Rv32ModularBuilder,
+            Rv32ModularWithFp2GpuBuilder as Rv32ModularWithFp2Builder,
+        };
+    } else {
+        pub use {
+            AlgebraCpuProverExt as AlgebraProverExt,
+            Rv32ModularCpuBuilder as Rv32ModularBuilder,
+            Rv32ModularWithFp2CpuBuilder as Rv32ModularWithFp2Builder,
+        };
+    }
+}
 
-pub struct AlgebraCpuProverExt;
+pub(crate) struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {
@@ -99,7 +112,7 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 }
 
 #[derive(Clone)]
-pub struct Rv32ModularCpuBuilder;
+pub(crate) struct Rv32ModularCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32ModularCpuBuilder
 where
@@ -135,7 +148,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct Rv32ModularWithFp2CpuBuilder;
+pub(crate) struct Rv32ModularWithFp2CpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where

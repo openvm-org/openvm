@@ -4,17 +4,7 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig, Rv32ModularWithFp2Config};
-    #[cfg(not(feature = "cuda"))]
-    use openvm_algebra_circuit::{
-        Rv32ModularCpuBuilder as Rv32ModularBuilder,
-        Rv32ModularWithFp2CpuBuilder as Rv32ModularWithFp2Builder,
-    };
-    #[cfg(feature = "cuda")]
-    use openvm_algebra_circuit::{
-        Rv32ModularGpuBuilder as Rv32ModularBuilder,
-        Rv32ModularWithFp2GpuBuilder as Rv32ModularWithFp2Builder,
-    };
+    use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig, Rv32ModularWithFp2Config, Rv32ModularBuilder, Rv32ModularWithFp2Builder};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
