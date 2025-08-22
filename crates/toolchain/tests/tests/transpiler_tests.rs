@@ -17,7 +17,13 @@ use openvm_circuit::{
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
-use openvm_rv32im_circuit::*;
+#[cfg(not(feature = "cuda"))]
+use openvm_rv32im_circuit::Rv32ImCpuBuilder as Rv32ImBuilder;
+#[cfg(feature = "cuda")]
+use openvm_rv32im_circuit::Rv32ImGpuBuilder as Rv32ImBuilder;
+use openvm_rv32im_circuit::{
+    Rv32I, Rv32IExecutor, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+};
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
@@ -156,6 +162,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(Rv32ImCpuBuilder, config, openvm_exe);
+    air_test(Rv32ImBuilder, config, openvm_exe);
     Ok(())
 }
