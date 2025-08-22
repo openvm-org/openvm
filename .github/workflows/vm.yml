@@ -25,7 +25,7 @@ jobs:
     strategy:
       matrix:
         config:
-          - { family: "c7g", image: "ubuntu24-full-arm64" }
+          - { family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
           - { family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
 
     runs-on:
