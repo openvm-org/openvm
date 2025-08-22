@@ -52,7 +52,12 @@ def run_cargo_command(
     env["OUTPUT_PATH"] = output_path
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
-    env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+
+    # TODO[stephenh]: Currently won't build with avx2, disabling this for now to get benchmarks up
+    if "cuda" in feature_flags:
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native -Ctarget-feature=-avx2"
+    else:
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)

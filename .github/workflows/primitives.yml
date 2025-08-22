@@ -26,8 +26,8 @@ jobs:
     strategy:
       matrix:
         platform:
-          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
+          - { runner: "test-64cpu-arm64" }
+          - { runner: "test-gpu-nvidia" }
 
     runs-on:
       - runs-on=${{ github.run_id }}

@@ -10,8 +10,8 @@ on:
       runner:
         type: string
         required: false
-        description: Runner config as JSON, use {"family":"g6.2xlarge","image":"ubuntu24-gpu-x64"} for GPU
-        default: '{"family":"c7g.16xlarge","image":"ubuntu24-full-arm64"}'
+        description: Runner config as JSON, use bench-gpu-nvidia for GPU
+        default: test-64cpu-arm64
       memory_allocator:
         type: string
         required: false
@@ -63,8 +63,8 @@ on:
       runner:
         type: string
         required: false
-        description: Runner config as JSON, use {"family":"g6.2xlarge","image":"ubuntu24-gpu-x64"} for GPU
-        default: '{"family":"c7g.16xlarge","image":"ubuntu24-full-arm64"}'
+        description: Runner config as JSON, use bench-gpu-nvidia for GPU
+        default: test-64cpu-arm64
       memory_allocator:
         type: string
         required: false
@@ -119,8 +119,7 @@ jobs:
     name: Run benchmark on workflow ref/branch
     runs-on:
       - runs-on
-      - ${{ format('family={0}', fromJSON(inputs.runner).family) }}
-      - ${{ format('image={0}', fromJSON(inputs.runner).image) }}
+      - runner=${{ inputs.runner }}
       - run-id=${{ github.run_id }}
       - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache

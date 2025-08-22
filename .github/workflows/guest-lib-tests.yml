@@ -37,15 +37,14 @@ jobs:
           - { name: "pairing", path: "pairing" }
           - { name: "verify_stark", path: "verify_stark" }
         platform:
-          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
+          - { runner: "test-64cpu-arm64" }
+          - { runner: "test-gpu-nvidia" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}
       - runner=${{ matrix.platform.runner }}
-      - image=${{ matrix.platform.image }}
       - tag=guest-lib-${{ matrix.crate.name }}-${{ matrix.platform.runner }}
       - extras=s3-cache
 
