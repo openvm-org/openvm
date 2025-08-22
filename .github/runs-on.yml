@@ -17,4 +17,3 @@ runners:
     preinstall: |
       nvidia-smi
       nvidia-smi -L
-      nvcc --version
