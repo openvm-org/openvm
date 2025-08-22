@@ -7,7 +7,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -21,7 +21,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -35,7 +35,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -49,7 +49,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -63,7 +63,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1
@@ -77,7 +77,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,
@@ -94,7 +94,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "64cpu-linux-arm64",
+          "instance_type": "g6e.2xlarge",
           "memory_allocator": "jemalloc",
           "app_log_blowup": 1,
           "leaf_log_blowup": 1,

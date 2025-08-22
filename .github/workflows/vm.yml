@@ -8,7 +8,6 @@ on:
     paths:
       - "crates/circuits/**"
       - "crates/vm/**"
-      - "extensions/native/**"
       - "Cargo.toml"
       - ".github/workflows/vm.yml"
 
@@ -22,10 +21,16 @@ env:
 
 jobs:
   tests:
+    strategy:
+      matrix:
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
+
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
+      - runs-on=${{ github.run_id }}-vm-tests-${{ github.run_attempt }}-${{ strategy.job-index }}
+      - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
       - extras=s3-cache
 
     steps:
@@ -37,12 +42,24 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Set CPU tests environment variables
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
+        run: |
+          echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
+
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.platform.runner, 'gpu')
+        run: |
+          nvcc --version
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall" >> $GITHUB_ENV
+
       - name: Run vm crate tests
         working-directory: crates/vm
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run vm crate tests with basic memory
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/vm
         run: |
           cargo nextest run --cargo-profile=fast --features parallel,basic-memory

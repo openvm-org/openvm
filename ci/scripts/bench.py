@@ -52,7 +52,9 @@ def run_cargo_command(
     env["OUTPUT_PATH"] = output_path
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
-    env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    # TODO: currently some nvidia machines seem not compatible with plonky3 settings when target-cpu=native
+    if "cuda" not in feature_flags:
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)

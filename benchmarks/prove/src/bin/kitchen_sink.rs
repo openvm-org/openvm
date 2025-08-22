@@ -5,14 +5,22 @@ use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_sdk::{
     config::SdkVmConfig,
     prover::vm::{new_local_prover, types::VmProvingKey},
-    Sdk, StdIn, F, SC,
+    StdIn, F, SC,
 };
-use openvm_stark_sdk::{
-    bench::run_with_metric_collection, config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
+use openvm_stark_sdk::bench::run_with_metric_collection;
+#[cfg(feature = "cuda")]
+use {
+    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
+    openvm_native_circuit::NativeGpuBuilder as NativeBuilder, openvm_sdk::GpuSdk as Sdk,
+};
+#[cfg(not(feature = "cuda"))]
+use {
+    openvm_native_circuit::NativeCpuBuilder as NativeBuilder, openvm_sdk::Sdk,
+    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
 };
 
 fn verify_native_max_trace_heights(
@@ -24,8 +32,8 @@ fn verify_native_max_trace_heights(
     let app_proof = sdk.app_prover(app_exe)?.prove(StdIn::default())?;
     let leaf_inputs =
         LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
-    let mut leaf_prover = new_local_prover::<BabyBearPoseidon2Engine, _>(
-        NativeCpuBuilder,
+    let mut leaf_prover = new_local_prover::<Poseidon2Engine, _>(
+        NativeBuilder,
         &leaf_vm_pk,
         sdk.app_pk().leaf_committed_exe.exe.clone(),
     )?;
@@ -90,9 +98,17 @@ fn main() -> Result<()> {
     )?;
 
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<()> {
-        let mut prover = sdk.evm_prover(exe)?.with_program_name("kitchen_sink");
         let stdin = StdIn::default();
-        let _proof = prover.prove_evm(stdin)?;
+        #[cfg(not(feature = "evm"))]
+        let _proof = sdk
+            .prover(exe)?
+            .with_program_name("kitchen_sink")
+            .prove(stdin)?;
+        #[cfg(feature = "evm")]
+        let _proof = sdk
+            .evm_prover(exe)?
+            .with_program_name("kitchen_sink")
+            .prove_evm(stdin)?;
         Ok(())
     })
 }

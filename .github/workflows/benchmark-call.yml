@@ -10,8 +10,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        default: g6.2xlarge
       memory_allocator:
         type: string
         required: false
@@ -63,8 +63,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        default: g6.2xlarge
       memory_allocator:
         type: string
         required: false
@@ -107,7 +107,7 @@ on:
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "metrics,parallel,nightly-features"
+  FEATURE_FLAGS: "metrics,parallel"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -118,11 +118,10 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      - runs-on
-      - runner=${{ inputs.instance_type }}
-      - run-id=${{ github.run_id }}
-      - family=m7
-      - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - runs-on=${{ github.run_id }}
+      - family=${{ github.event.inputs.instance_type || inputs.instance_type }}
+      - image=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(github.event.inputs.instance_type || inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}
+      - tag=bench-${{ github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
       - uses: runs-on/action@v1
@@ -146,9 +145,15 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
-      - name: "Feature flags: memory allocator"
+      - name: "Feature flags: memory allocator + e2e"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
+          if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
+            echo "FEATURE_FLAGS=${FEATURE_FLAGS},nightly-features" >> $GITHUB_ENV
+            if [[ "${{ inputs.e2e_bench }}" == "true" ]]; then
+              echo "FEATURE_FLAGS=${FEATURE_FLAGS},evm" >> $GITHUB_ENV
+            fi
+          fi
           echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
