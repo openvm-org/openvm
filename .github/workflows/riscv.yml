@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/circuits/primitives/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
+      - "extensions/rv32im/circuit/**"
+      - "extensions/rv32im/transpiler/**"
+      - "extensions/rv32im/guest/**"
       - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
@@ -20,36 +24,66 @@ env:
   OPENVM_FAST_TEST: "1"
 
 jobs:
-  tests:
+  riscv-test-vector:
+    strategy:
+      matrix:
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "arm64-rust-riscv-dev-32gb" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
+
     runs-on:
       - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=arm64-rust-riscv-dev-32gb # for riscv-gnu-toolchain
+      - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
+      - tag=riscv-${{ matrix.platform.runner }}
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2025-02-14
+      - uses: runs-on/action@v2
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
-
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
+
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.platform.runner, 'gpu')
+        run: |
+          nvcc --version
+
+          echo "FEATURE_ARGS=--features=cuda,touchemall" >> $GITHUB_ENV
+          echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
+
+      - name: Download and install risc64-elf-gcc
+        if: contains(matrix.platform.image, 'x64')
+        working-directory: ${{ github.workspace }}
+        run: |
+          # Download pre-built binary for x86
+          wget -O gcc.tar.xz "https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2025.07.16/riscv64-elf-ubuntu-24.04-gcc-nightly-2025.07.16-nightly.tar.xz"
+          tar -xJf gcc.tar.xz
+          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
+          rm gcc.tar.xz
+      - name: Download and install risc64-elf-gcc
+        if: matrix.platform.image == 'arm64-rust-riscv-dev-32gb'
+        run: | # custom image has riscv-gnu-toolchain binary pre-built
+          echo "/opt/riscv/bin" >> $GITHUB_PATH
 
       - name: Run Makefile
         working-directory: crates/toolchain/tests/rv32im-test-vectors
         run: |
-          export PATH=/opt/riscv/bin:$PATH
           make
 
+        # Run execution tests on CPU, full prover tests on GPU
       - name: Run RISC-V test vector tests
         working-directory: crates/toolchain/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast --run-ignored only -- test_rv32im_riscv_vector_runtime
+          if [[ ${{ matrix.platform.runner }} == *"gpu"* ]]; then
+            TEST_NAME=test_rv32im_riscv_vector_prove
+          else
+            TEST_NAME=test_rv32im_riscv_vector_runtime
+          fi
+          ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
