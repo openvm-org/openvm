@@ -191,6 +191,8 @@ jobs:
           echo "working_dir=$WORKING_DIR" >> $GITHUB_OUTPUT
           echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
 
+          find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/ -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
+
       # Metric name is unique within a run (matrix)
       # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
       - name: Set metric name
