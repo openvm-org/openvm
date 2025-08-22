@@ -86,4 +86,4 @@ jobs:
           else
             TEST_NAME=test_rv32im_riscv_vector_runtime
           fi
-          ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run --cargo-profile=fast --run-ignored only -- $TEST_NAME ${{ env.FEATURE_ARGS }}
+          ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only -- $TEST_NAME
