@@ -135,7 +135,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Check CUDA status and set environment variables
-        if: contains(matrix.config.family, 'gpu')
+        if: contains(matrix.config.image, 'gpu')
         run: |
           nvcc --version
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
