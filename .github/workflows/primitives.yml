@@ -12,6 +12,13 @@ on:
       - "crates/circuits/mod-builder/**"
       - "Cargo.toml"
       - ".github/workflows/primitives.yml"
+  workflow_dispatch:
+    inputs:
+      runner:
+        type: string
+        required: false
+        description: Runner config as JSON, use {"family":"g6.2xlarge","image":"ubuntu24-gpu-x64"} for GPU
+        default: '{"family":"g6.2xlarge","image":"ubuntu24-gpu-x64"}'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -23,61 +30,30 @@ env:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        config:
-          - { family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { family: "g4dn+g5+g6", image: "ubuntu24-gpu-x64" }
-
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=${{ matrix.config.family }}
-      - image=${{ matrix.config.image }}
+      - runner=test-gpu-nvidia
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Set CPU tests environment variables
-        if: ${{ !contains(matrix.config.image, 'gpu') }}
-        run: |
-          echo "NEXTEST_ENV=" >> $GITHUB_ENV
-          echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
-
       - name: Check CUDA status and set environment variables
-        if: contains(matrix.config.image, 'gpu')
         run: |
-          nvidia-smi
-          nvidia-smi -L
           nvcc --version
-
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
-          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall" >> $GITHUB_ENV
 
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives
         run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }} 
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
 
       - name: Run tests for poseidon2-air
         working-directory: crates/circuits/poseidon2-air
         run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }} 
-
-      - name: Run tests for sha256-air
-        if: ${{ !contains(matrix.config.image, 'gpu') }}
-        working-directory: crates/circuits/sha256-air
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
-
-      - name: Run tests for mod-builder
-        if: ${{ !contains(matrix.config.image, 'gpu') }}
-        working-directory: crates/circuits/mod-builder
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.NEXTEST_ARGS }}
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
