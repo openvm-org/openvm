@@ -37,7 +37,9 @@ extensions and system configuration your VM will use. To do this, you can use th
         .io(Default::default())
         .build()
         .optimize();
-    let sdk = Sdk::new(AppConfig::new(FriParameters::standard_fast(), vm_config))?;
+    let sdk = Sdk::new(
+        AppConfig::new(FriParameters::standard_fast(), vm_config)
+    )?;
 ```
 
 The following convenience methods are also available to construct a `GenericSdk` object:
