@@ -26,34 +26,30 @@ jobs:
     strategy:
       matrix:
         extension:
-          - { name: "rv32im", path: "rv32im", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "rv32im", path: "rv32im", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "native", path: "native", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "native", path: "native", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "keccak256", path: "keccak256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "sha256", path: "sha256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "sha256", path: "sha256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "bigint", path: "bigint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "bigint", path: "bigint", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "algebra", path: "algebra", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "algebra", path: "algebra", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "ecc", path: "ecc", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "ecc", path: "ecc", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
+          - { name: "rv32im", path: "rv32im" }
+          - { name: "native", path: "native" }
+          - { name: "keccak256", path: "keccak256" }
+          - { name: "sha256", path: "sha256" }
+          - { name: "bigint", path: "bigint" }
+          - { name: "algebra", path: "algebra" }
+          - { name: "ecc", path: "ecc" }
+          - { name: "pairing", path: "pairing" }
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=${{ matrix.extension.family }}
-      - image=${{ matrix.extension.image }}
+      - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
       - tag=extension-${{ matrix.extension.name }}
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -76,12 +72,8 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Check CUDA status and set environment variables
-        if: contains(matrix.extension.image, 'gpu')
+        if: contains(matrix.platform.runner, 'gpu')
         run: |
-          nvidia-smi
-          nvidia-smi -L
-          nvcc --version
-
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
           echo "CIRCUIT_TEST_ENV=CUDA_OPT_LEVEL=1" >> $GITHUB_ENV
           echo "CIRCUIT_TEST_FILTER=cuda" >> $GITHUB_ENV
@@ -93,10 +85,11 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
-          ${{ env.CIRCUIT_TEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} --cargo-profile=fast ${{ env.FEATURE_ARGS }} $TEST_THREADS --no-tests=pass
+          $CIRCUIT_TEST_ENV cargo nextest run $CIRCUIT_TEST_FILTER --cargo-profile=fast $FEATURE_ARGS $TEST_THREADS --no-tests=pass
 
+        # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
-        if: ${{ !contains(matrix.extension.image, 'gpu') && hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != '' }}
+        if: ${{ !contains(matrix.platform.runner, 'gpu') && hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != '' }}
         working-directory: extensions/${{ matrix.extension.path }}/guest
         run: |
           GUEST_FEATURE_ARGS=""
