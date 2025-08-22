@@ -22,7 +22,6 @@ openvm-algebra-complex-macros = { workspace = true }
 openvm-custom-insn = { workspace = true }
 openvm-rv32im-guest = { workspace = true }
 openvm-pairing-guest = { workspace = true }
-openvm-cuda-backend = { workspace = true, optional = true }
 
 # Used for `halo2curves` feature
 halo2curves-axiom = { workspace = true, optional = true }
@@ -63,8 +62,9 @@ halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 # only enable for the curves you use as it affects the init! macro
 bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
+
+# Internal feature for testing only.
 cuda = [
-    "dep:openvm-cuda-backend",
     "openvm-algebra-circuit/cuda",
     "openvm-pairing-circuit/cuda",
     "openvm-ecc-circuit/cuda",

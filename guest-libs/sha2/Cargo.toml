@@ -27,4 +27,5 @@ eyre = { workspace = true }
 sha2 = { workspace = true }
 
 [features]
+# Internal feature for testing only.
 cuda = ["openvm-sha256-circuit/cuda"]

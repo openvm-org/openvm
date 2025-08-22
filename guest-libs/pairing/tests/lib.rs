@@ -39,7 +39,7 @@ mod bn254 {
     use rand::SeedableRng;
     #[cfg(feature = "cuda")]
     use {
-        openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
+        openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
         openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
         openvm_pairing_circuit::Rv32PairingGpuBuilder as Rv32PairingBuilder,
     };

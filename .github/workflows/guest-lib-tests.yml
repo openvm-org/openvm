@@ -28,29 +28,24 @@ jobs:
     strategy:
       matrix:
         crate:
-          - { name: "sha2", path: "sha2", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "keccak256", path: "keccak256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "ff_derive", path: "ff_derive", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "k256", path: "k256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "p256", path: "p256", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "ruint", path: "ruint", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "pairing", path: "pairing", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "verify_stark", path: "verify_stark", family: "c7g.16xlarge", image: "ubuntu24-full-arm64" }
-          - { name: "sha2", path: "sha2", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "keccak256", path: "keccak256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "ff_derive", path: "ff_derive", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "k256", path: "k256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "p256", path: "p256", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "ruint", path: "ruint", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "pairing", path: "pairing", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
-          - { name: "verify_stark", path: "verify_stark", family: "g4dn.2xlarge", image: "ubuntu24-gpu-x64" }
+          - { name: "sha2", path: "sha2" }
+          - { name: "keccak256", path: "keccak256" }
+          - { name: "ff_derive", path: "ff_derive" }
+          - { name: "k256", path: "k256" }
+          - { name: "p256", path: "p256" }
+          - { name: "ruint", path: "ruint" }
+          - { name: "pairing", path: "pairing" }
+          - { name: "verify_stark", path: "verify_stark" }
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=${{ matrix.crate.family }}
-      - image=${{ matrix.crate.image }}
+      - runner=${{ matrix.platform.runner }}
+      - image=${{ matrix.platform.image }}
       - tag=crate-${{ matrix.crate.name }}
       - extras=s3-cache
 
@@ -80,10 +75,8 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Check CUDA status and set environment variables
-        if: contains(matrix.extension.image, 'gpu')
+        if: contains(matrix.platform.runner, 'gpu')
         run: |
-          nvidia-smi
-          nvidia-smi -L
           nvcc --version
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
 

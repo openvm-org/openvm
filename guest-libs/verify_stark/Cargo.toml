@@ -24,4 +24,5 @@ openvm-verify-stark.workspace = true
 eyre.workspace = true
 
 [features]
+# Internal feature for testing only.
 cuda = ["openvm-sdk/cuda"]

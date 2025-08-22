@@ -27,4 +27,5 @@ eyre = { workspace = true }
 tiny-keccak = { workspace = true }
 
 [features]
+# Internal feature for testing only.
 cuda = ["openvm-keccak256-circuit/cuda"]

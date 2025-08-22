@@ -104,8 +104,13 @@ mod guest_tests {
         use serde::{Deserialize, Serialize};
         #[cfg(feature = "cuda")]
         use {
-            openvm_circuit::{arch::DenseRecordArena, system::cuda::SystemChipInventoryGPU},
-            openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
+            openvm_circuit::{
+                arch::DenseRecordArena,
+                openvm_cuda_backend::{
+                    engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend,
+                },
+                system::cuda::SystemChipInventoryGPU,
+            },
             openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha256GpuProverExt,
             openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,

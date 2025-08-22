@@ -12,12 +12,15 @@ p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 
 openvm-poseidon2-air = { workspace = true }
-openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
+
+openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -36,8 +39,6 @@ derivative.workspace = true
 static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
-openvm-cuda-common = { workspace = true, optional = true }
-openvm-cuda-backend = { workspace = true, optional = true }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
