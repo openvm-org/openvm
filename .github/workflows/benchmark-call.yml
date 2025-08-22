@@ -10,16 +10,8 @@ on:
         default: "fibonacci"
 
 env:
-  # S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
-  # S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  # FEATURE_FLAGS: "metrics,parallel,nightly-features"
-  # INPUT_ARGS: ""
-  # CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
-
-# permissions:
-#   contents: write
 
 jobs:
   build:
