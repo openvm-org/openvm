@@ -219,7 +219,7 @@ jobs:
           cargo -V
           rustup target list --installed
           rustc --print cfg
-          cargo tree -e features
+          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda
           export JEMALLOC_SYS_WITH_MALLOC_CONF="retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true"
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
 
