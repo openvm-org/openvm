@@ -9,9 +9,9 @@ images:
 runners:
   # runners for running tests
   test-gpu-nvidia:
-    family: ["g6", "g6e", "g5", "g4dn"]
+    family: ["g6", "g5", "g6e"]
     image: ubuntu24-gpu-x64
-    cpu: [4, 8, 16]
+    cpu: [4, 8, 16, 32]
     disk: default
     spot: capacity-optimized
     preinstall: |
