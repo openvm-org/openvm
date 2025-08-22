@@ -201,13 +201,12 @@ struct BigUintGpu {
 
     __device__ BigUintGpu rem(const BigUintGpu &divisor) const {
         uint32_t mask = get_limb_mask(limb_bits);
-        auto remainder = *this;
-
         BigUintGpu zero(limb_bits);
+
         if (divisor == zero)
             return zero;
         if (*this < divisor)
-            return remainder;
+            return *this;
 
         int msb_pos = -1;
         for (int limb = num_limbs - 1; limb >= 0; limb--) {
@@ -220,8 +219,7 @@ struct BigUintGpu {
             }
         }
 
-        if (msb_pos == -1)
-            return remainder;
+        assert(msb_pos != -1);
 
         BigUintGpu temp_rem(limb_bits);
         temp_rem.num_limbs = 1;
@@ -246,12 +244,11 @@ struct BigUintGpu {
             temp_rem.normalize();
 
             if (temp_rem >= divisor) {
-                temp_rem = temp_rem - divisor;
+                temp_rem -= divisor;
             }
         }
 
-        remainder = temp_rem;
-        return remainder;
+        return temp_rem;
     }
 
     __device__ void divrem(
