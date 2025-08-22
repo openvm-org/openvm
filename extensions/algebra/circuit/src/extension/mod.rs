@@ -43,7 +43,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub(crate) struct AlgebraCpuProverExt;
+pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularConfig {
@@ -112,7 +112,7 @@ impl InitFileGenerator for Rv32ModularWithFp2Config {
 }
 
 #[derive(Clone)]
-pub(crate) struct Rv32ModularCpuBuilder;
+pub struct Rv32ModularCpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32ModularCpuBuilder
 where
@@ -148,7 +148,7 @@ where
 }
 
 #[derive(Clone)]
-pub(crate) struct Rv32ModularWithFp2CpuBuilder;
+pub struct Rv32ModularWithFp2CpuBuilder;
 
 impl<E, SC> VmBuilder<E> for Rv32ModularWithFp2CpuBuilder
 where
