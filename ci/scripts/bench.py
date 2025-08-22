@@ -17,7 +17,7 @@ def run_cargo_command(
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--", "--verbose"
+        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
@@ -55,7 +55,7 @@ def run_cargo_command(
     
     # TODO[stephenh]
     if "cuda" in feature_flags:
-        env["RUSTFLAGS"] = "-Ctarget-cpu=native -Ctarget-feature=-avx2,-avx512f,-neon"
+        env["RUSTFLAGS"] = "-Ctarget-cpu=native -Ctarget-feature=-avx2,-avx512f"
     else:
         env["RUSTFLAGS"] = "-Ctarget-cpu=native"
     env["RUST_BACKTRACE"] = "1"
