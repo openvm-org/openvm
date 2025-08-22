@@ -1,0 +1,11 @@
+[package]
+name = "openvm-keccak-bomb-program"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm = { workspace = true, features = ["std"] }
+openvm-keccak256.workspace = true
+
+[features]
+default = []
