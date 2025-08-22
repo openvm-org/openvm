@@ -42,7 +42,6 @@ cfg_if::cfg_if! {
         };
     }
 }
-
 pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
