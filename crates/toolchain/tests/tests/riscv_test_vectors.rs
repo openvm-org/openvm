@@ -54,11 +54,14 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 }
 
 // Running Prove tests only when CUDA is enabled because it is slow on CPU
-#[cfg(feature = "cuda")]
 #[test]
+#[ignore = "long prover tests"]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
     use openvm_circuit::utils::air_test;
-    use openvm_rv32im_circuit::Rv32ImGpuBuilder;
+    #[cfg(not(feature = "cuda"))]
+    use openvm_rv32im_circuit::Rv32ImCpuBuilder as Rv32ImBuilder;
+    #[cfg(feature = "cuda")]
+    use openvm_rv32im_circuit::Rv32ImGpuBuilder as Rv32ImBuilder;
 
     let config = Rv32ImConfig::default();
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
@@ -82,7 +85,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(Rv32ImGpuBuilder, config.clone(), exe);
+                air_test(Rv32ImBuilder, config.clone(), exe);
             });
 
             match result {
