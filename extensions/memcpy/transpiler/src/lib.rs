@@ -46,10 +46,12 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
         }
 
         // Convert to OpenVM instruction format
-        let instruction = from_u_type(
+        let mut instruction = from_u_type(
             Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode().as_usize(),
             &dec_insn,
         );
+        instruction.a = F::ZERO;
+        instruction.d = F::ZERO;
 
         Some(TranspilerOutput::one_to_one(instruction))
     }

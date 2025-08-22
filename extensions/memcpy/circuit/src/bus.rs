@@ -29,10 +29,10 @@ impl MemcpyBus {
         timestamp: impl Into<T>,
         dest: impl Into<T>,
         source: impl Into<T>,
-        n: impl Into<T>,
+        len: impl Into<T>,
         shift: impl Into<T>,
     ) -> MemcpyBusInteraction<T> {
-        self.push(true, timestamp, dest, source, n, shift)
+        self.push(true, timestamp, dest, source, len, shift)
     }
 
     pub fn receive<T: Clone>(
@@ -40,10 +40,10 @@ impl MemcpyBus {
         timestamp: impl Into<T>,
         dest: impl Into<T>,
         source: impl Into<T>,
-        n: impl Into<T>,
+        len: impl Into<T>,
         shift: impl Into<T>,
     ) -> MemcpyBusInteraction<T> {
-        self.push(false, timestamp, dest, source, n, shift)
+        self.push(false, timestamp, dest, source, len, shift)
     }
 
     fn push<T: Clone>(
@@ -52,7 +52,7 @@ impl MemcpyBus {
         timestamp: impl Into<T>,
         dest: impl Into<T>,
         source: impl Into<T>,
-        n: impl Into<T>,
+        len: impl Into<T>,
         shift: impl Into<T>,
     ) -> MemcpyBusInteraction<T> {
         MemcpyBusInteraction {
@@ -61,7 +61,7 @@ impl MemcpyBus {
             timestamp: timestamp.into(),
             dest: dest.into(),
             source: source.into(),
-            n: n.into(),
+            len: len.into(),
             shift: shift.into(),
         }
     }
@@ -74,7 +74,7 @@ pub struct MemcpyBusInteraction<T> {
     pub timestamp: T,
     pub dest: T,
     pub source: T,
-    pub n: T,
+    pub len: T,
     pub shift: T,
 }
 
@@ -87,7 +87,7 @@ impl<T: FieldAlgebra> MemcpyBusInteraction<T> {
             .chain(iter::once(self.timestamp))
             .chain(iter::once(self.dest))
             .chain(iter::once(self.source))
-            .chain(iter::once(self.n))
+            .chain(iter::once(self.len))
             .chain(iter::once(self.shift));
 
         if self.is_send {

@@ -16,6 +16,7 @@ use openvm_circuit::{
         },
         SystemPort,
     },
+    utils::next_power_of_two_or_zero,
 };
 use openvm_circuit_primitives::{
     utils::{not, or, select},
@@ -23,7 +24,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::riscv::RV32_MEMORY_AS;
+use openvm_instructions::riscv::RV32_REGISTER_AS;
 use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -71,6 +72,7 @@ pub struct MemcpyLoopAir {
     pub range_bus: VariableRangeCheckerBus,
     pub memcpy_bus: MemcpyBus,
     pub pointer_max_bits: usize,
+    pub offset: usize,
 }
 
 impl<F: Field> BaseAir<F> for MemcpyLoopAir {
@@ -92,12 +94,12 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         let mut timestamp_pp = || {
             timestamp_delta += 1;
             local.to_timestamp
-                - AB::Expr::from_canonical_u32(MEMCPY_LOOP_NUM_WRITES + timestamp_delta - 1)
+                - AB::Expr::from_canonical_u32(MEMCPY_LOOP_NUM_WRITES - (timestamp_delta - 1))
         };
 
         let from_le_bytes = |data: [AB::Var; 4]| {
-            data.iter().fold(AB::Expr::ZERO, |acc, x| {
-                acc * AB::Expr::from_canonical_u32(256) + *x
+            data.iter().rev().fold(AB::Expr::ZERO, |acc, x| {
+                acc * AB::Expr::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS) + *x
             })
         };
 
@@ -108,8 +110,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             ]
         };
 
-        let shift = local.shift[1] * AB::Expr::from_canonical_u32(2) + local.shift[0];
+        let shift = local.shift[1] * AB::Expr::TWO + local.shift[0];
         let is_shift_non_zero = or::<AB::Expr>(local.shift[0], local.shift[1]);
+        let is_shift_zero = not::<AB::Expr>(is_shift_non_zero.clone());
         let dest = from_le_bytes(local.dest);
         let source = from_le_bytes(local.source);
         let len = from_le_bytes(local.len);
@@ -118,52 +121,52 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         let to_len = local.to_len;
 
         builder.assert_bool(local.is_valid);
-        for i in 0..2 {
-            builder.assert_bool(local.shift[i]);
-        }
+        local.shift.iter().for_each(|x| builder.assert_bool(*x));
         builder.assert_bool(local.source_minus_twelve_carry);
         builder.assert_bool(local.to_source_minus_twelve_carry);
 
-        let mut shift_zero_when = builder.when(not::<AB::Expr>(is_shift_non_zero.clone()));
+        let mut shift_zero_when = builder.when(is_shift_zero.clone());
         shift_zero_when.assert_zero(local.source_minus_twelve_carry);
         shift_zero_when.assert_zero(local.to_source_minus_twelve_carry);
 
         // Write source and destination to registers
         let write_data = [
-            (local.dest, local.to_dest, A1_REGISTER_PTR, A3_REGISTER_PTR),
+            (local.dest, local.to_dest, A3_REGISTER_PTR, A1_REGISTER_PTR),
             (
                 local.source,
                 local.to_source,
-                A2_REGISTER_PTR,
                 A4_REGISTER_PTR,
+                A3_REGISTER_PTR,
             ),
         ];
 
-        write_data
-            .iter()
-            .enumerate()
-            .for_each(|(idx, (dest, to_dest, ptr, zero_shift_ptr))| {
+        write_data.iter().enumerate().for_each(
+            |(idx, (prev_data, new_data, zero_shift_ptr, non_zero_shift_ptr))| {
                 let write_ptr = select::<AB::Expr>(
-                    is_shift_non_zero.clone(),
-                    AB::Expr::from_canonical_usize(*ptr),
+                    is_shift_zero.clone(),
                     AB::Expr::from_canonical_usize(*zero_shift_ptr),
+                    AB::Expr::from_canonical_usize(*non_zero_shift_ptr),
                 );
 
                 self.memory_bridge
                     .write(
-                        MemoryAddress::new(AB::Expr::from_canonical_u32(RV32_MEMORY_AS), write_ptr),
-                        *to_dest,
+                        MemoryAddress::new(
+                            AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
+                            write_ptr,
+                        ),
+                        *new_data,
                         timestamp_pp(),
-                        &MemoryWriteAuxCols::from_base(local.write_aux[idx], *dest),
+                        &MemoryWriteAuxCols::from_base(local.write_aux[idx], *prev_data),
                     )
                     .eval(builder, local.is_valid);
-            });
+            },
+        );
 
         // Write length to a2 register
         self.memory_bridge
             .write(
                 MemoryAddress::new(
-                    AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
+                    AB::Expr::from_canonical_u32(RV32_REGISTER_AS),
                     AB::Expr::from_canonical_usize(A2_REGISTER_PTR),
                 ),
                 [
@@ -178,7 +181,6 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             .eval(builder, local.is_valid);
 
         // Generate 16-bit limbs for range checking
-        let len_u16_limbs = u8_word_to_u16(local.len);
         let dest_u16_limbs = u8_word_to_u16(local.dest);
         let to_dest_u16_limbs = u8_word_to_u16(local.to_dest);
         let source_u16_limbs = [
@@ -202,26 +204,20 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
                 - local.to_source_minus_twelve_carry,
         ];
 
-        // Range check addresses and n
+        // Range check addresses
         let range_check_data = [
-            (len_u16_limbs, false),
-            (dest_u16_limbs, true),
-            (source_u16_limbs, true),
-            (to_dest_u16_limbs, true),
-            (to_source_u16_limbs, true),
+            dest_u16_limbs,
+            source_u16_limbs,
+            to_dest_u16_limbs,
+            to_source_u16_limbs,
         ];
 
-        range_check_data.iter().for_each(|(data, is_address)| {
-            let (data_0, num_bits) = if *is_address {
-                (
+        range_check_data.iter().for_each(|data| {
+            self.range_bus
+                .range_check(
                     data[0].clone() * AB::F::from_canonical_u32(4).inverse(),
                     MEMCPY_LOOP_LIMB_BITS * 2 - 2,
                 )
-            } else {
-                (data[0].clone(), MEMCPY_LOOP_LIMB_BITS * 2)
-            };
-            self.range_bus
-                .range_check(data_0, num_bits)
                 .eval(builder, local.is_valid);
             self.range_bus
                 .range_check(
@@ -253,20 +249,24 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             )
             .eval(builder, local.is_valid);
 
-        // Make sure the request and response match
-        builder.assert_eq(
-            local.to_timestamp
-                - (local.from_state.timestamp + AB::Expr::from_canonical_u32(timestamp_delta)),
-            AB::Expr::TWO * (len.clone() - to_len) + is_shift_non_zero.clone(),
+        // Make sure the request and response match, this should work because the
+        // from_timestamp and len are valid and to_len is in [0, 16 + shift)
+        builder.when(local.is_valid).assert_eq(
+            AB::Expr::TWO * (local.to_timestamp - local.from_state.timestamp),
+            (len.clone() - to_len)
+                + AB::Expr::TWO
+                    * (is_shift_non_zero.clone() + AB::Expr::from_canonical_u32(timestamp_delta)),
         );
 
         // Execution bus + program bus
         self.execution_bridge
             .execute_and_increment_pc(
-                AB::Expr::from_canonical_usize(Rv32MemcpyOpcode::MEMCPY_LOOP as usize),
-                [shift.clone()],
+                AB::Expr::from_canonical_usize(
+                    Rv32MemcpyOpcode::MEMCPY_LOOP as usize + self.offset,
+                ),
+                [AB::Expr::ZERO, AB::Expr::ZERO, shift.clone()],
                 local.from_state,
-                local.to_timestamp,
+                local.to_timestamp - local.from_state.timestamp,
             )
             .eval(builder, local.is_valid);
     }
@@ -296,6 +296,7 @@ impl MemcpyLoopChip {
         system_port: SystemPort,
         range_bus: VariableRangeCheckerBus,
         memcpy_bus: MemcpyBus,
+        offset: usize,
         pointer_max_bits: usize,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
@@ -306,6 +307,7 @@ impl MemcpyLoopChip {
                 range_bus,
                 memcpy_bus,
                 pointer_max_bits,
+                offset,
             ),
             records: Arc::new(Mutex::new(Vec::new())),
             pointer_max_bits,
@@ -350,23 +352,23 @@ impl MemcpyLoopChip {
         let to_dest = dest + num_copies;
         let to_source = source + num_copies;
 
-        let word_to_u16 = |data: u32| [data & 0xffff, data >> 16];
+        let word_to_u16 = |data: u32| [data & 0x0ffff, data >> 16];
+        debug_assert!(source >= 12 * (shift != 0) as u32);
+        debug_assert!(to_source >= 12 * (shift != 0) as u32);
+        debug_assert!(dest % 4 == 0);
+        debug_assert!(to_dest % 4 == 0);
+        debug_assert!(source % 4 == 0);
+        debug_assert!(to_source % 4 == 0);
         let range_check_data = [
-            (word_to_u16(len), false),
-            (word_to_u16(dest), true),
-            (word_to_u16(source - 12 * (shift != 0) as u32), true),
-            (word_to_u16(to_dest), true),
-            (word_to_u16(to_source - 12 * (shift != 0) as u32), true),
+            word_to_u16(dest),
+            word_to_u16(source - 12 * (shift != 0) as u32),
+            word_to_u16(to_dest),
+            word_to_u16(to_source - 12 * (shift != 0) as u32),
         ];
 
-        range_check_data.iter().for_each(|(data, is_address)| {
-            if *is_address {
-                self.range_checker_chip
-                    .add_count(data[0] >> 2, 2 * MEMCPY_LOOP_LIMB_BITS - 2)
-            } else {
-                self.range_checker_chip
-                    .add_count(data[0], 2 * MEMCPY_LOOP_LIMB_BITS)
-            };
+        range_check_data.iter().for_each(|data| {
+            self.range_checker_chip
+                .add_count(data[0] >> 2, 2 * MEMCPY_LOOP_LIMB_BITS - 2);
             self.range_checker_chip
                 .add_count(data[1], self.pointer_max_bits - 2 * MEMCPY_LOOP_LIMB_BITS);
         });
@@ -390,7 +392,8 @@ impl MemcpyLoopChip {
 
     /// Generates trace
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
-        let mut rows = F::zero_vec(self.records.lock().unwrap().len() * NUM_MEMCPY_LOOP_COLS);
+        let height = next_power_of_two_or_zero(self.records.lock().unwrap().len());
+        let mut rows = F::zero_vec(height * NUM_MEMCPY_LOOP_COLS);
 
         for (i, record) in self.records.lock().unwrap().iter().enumerate() {
             let row = &mut rows[i * NUM_MEMCPY_LOOP_COLS..(i + 1) * NUM_MEMCPY_LOOP_COLS];
@@ -405,10 +408,7 @@ impl MemcpyLoopChip {
             cols.dest = record.dest.to_le_bytes().map(F::from_canonical_u8);
             cols.source = record.source.to_le_bytes().map(F::from_canonical_u8);
             cols.len = record.len.to_le_bytes().map(F::from_canonical_u8);
-            cols.shift = [
-                F::from_canonical_u8(shift % 2),
-                F::from_canonical_u8(shift / 2),
-            ];
+            cols.shift = [shift & 1, shift >> 1].map(F::from_canonical_u8);
             cols.is_valid = F::ONE;
             // We have MEMCPY_LOOP_NUM_WRITES writes in the loop, (num_copies / 4) writes
             // and (num_copies / 4 + shift != 0) reads in iterations
@@ -423,9 +423,15 @@ impl MemcpyLoopChip {
                 .map(F::from_canonical_u8);
             cols.to_source = to_source.to_le_bytes().map(F::from_canonical_u8);
             cols.to_len = F::from_canonical_u32(record.len - num_copies);
-            cols.write_aux = record.write_aux.clone().map(|aux| aux.to_aux_cols());
-            cols.source_minus_twelve_carry = F::from_bool((record.source & 0x0ff) < 12);
-            cols.to_source_minus_twelve_carry = F::from_bool((to_source & 0x0ff) < 12);
+            record
+                .write_aux
+                .iter()
+                .zip(cols.write_aux.iter_mut())
+                .for_each(|(record_aux, col_aux)| {
+                    record_aux.to_aux_cols(col_aux);
+                });
+            cols.source_minus_twelve_carry = F::from_bool((record.source & 0x0ffff) < 12);
+            cols.to_source_minus_twelve_carry = F::from_bool((to_source & 0x0ffff) < 12);
         }
         RowMajorMatrix::new(rows, NUM_MEMCPY_LOOP_COLS)
     }
