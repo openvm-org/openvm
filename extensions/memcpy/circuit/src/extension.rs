@@ -40,7 +40,7 @@ impl<F> VmExecutionExtension<F> for Memcpy {
         &self,
         inventory: &mut ExecutorInventoryBuilder<F, MemcpyExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
-        let memcpy_iter = MemcpyIterExecutor::new();
+        let memcpy_iter = MemcpyIterExecutor::new(Rv32MemcpyOpcode::CLASS_OFFSET);
 
         inventory.add_executor(
             memcpy_iter,
@@ -71,6 +71,7 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for Memcpy {
             range_bus,
             memcpy_bus,
             pointer_max_bits,
+            Rv32MemcpyOpcode::CLASS_OFFSET,
         );
         inventory.add_air(memcpy_loop);
 
@@ -113,6 +114,7 @@ where
             inventory.airs().system().port(),
             range_bus,
             memcpy_bus,
+            Rv32MemcpyOpcode::CLASS_OFFSET,
             pointer_max_bits,
             range_checker.clone(),
         ));
@@ -127,11 +129,11 @@ where
         );
         // Add MemcpyLoop chip
         inventory.next_air::<MemcpyLoopAir>()?;
-        inventory.add_executor_chip(memcpy_loop_chip);
+        inventory.add_periphery_chip(memcpy_loop_chip);
 
         // Add MemcpyIter chip
         inventory.next_air::<MemcpyIterAir>()?;
-        inventory.add_periphery_chip(memcpy_iter_chip);
+        inventory.add_executor_chip(memcpy_iter_chip);
 
         Ok(())
     }
