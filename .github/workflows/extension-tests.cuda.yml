@@ -94,7 +94,7 @@ jobs:
               # Run circuit tests
               if [ -d "extensions/$ext/circuit" ]; then
                 pushd extensions/$ext/circuit
-                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
                 popd
               fi
 
@@ -102,7 +102,7 @@ jobs:
               if [ -d "extensions/$ext/tests" ]; then
                 pushd extensions/$ext/tests
                 rustup component add rust-src --toolchain nightly-2025-02-14
-                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
                 popd
               fi
               echo "::endgroup::"
