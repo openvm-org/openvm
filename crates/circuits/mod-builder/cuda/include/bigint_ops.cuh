@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 
 using namespace mod_builder;
 
@@ -200,6 +199,61 @@ struct BigUintGpu {
         return result;
     }
 
+    __device__ BigUintGpu rem(const BigUintGpu &divisor) const {
+        uint32_t mask = get_limb_mask(limb_bits);
+        auto remainder = *this;
+
+        BigUintGpu zero(limb_bits);
+        if (divisor == zero)
+            return zero;
+        if (*this < divisor)
+            return remainder;
+
+        int msb_pos = -1;
+        for (int limb = num_limbs - 1; limb >= 0; limb--) {
+            uint32_t v = limbs[limb] & mask;
+            if (v != 0) {
+                int leading = __clz(v);
+                int bit_index = 31 - leading;
+                msb_pos = limb * limb_bits + bit_index;
+                break;
+            }
+        }
+
+        if (msb_pos == -1)
+            return remainder;
+
+        BigUintGpu temp_rem(limb_bits);
+        temp_rem.num_limbs = 1;
+
+        for (int bit_pos = msb_pos; bit_pos >= 0; bit_pos--) {
+            uint32_t carry = 0;
+            for (uint32_t i = 0; i < temp_rem.num_limbs; i++) {
+                uint64_t shifted = ((uint64_t)temp_rem.limbs[i] << 1) | carry;
+                temp_rem.limbs[i] = shifted & mask;
+                carry = shifted >> limb_bits;
+            }
+            if (carry > 0 && temp_rem.num_limbs < MAX_LIMBS) {
+                temp_rem.limbs[temp_rem.num_limbs] = carry;
+                temp_rem.num_limbs++;
+            }
+
+            uint32_t limb_idx = bit_pos / limb_bits;
+            uint32_t bit_idx = bit_pos % limb_bits;
+            uint32_t bit = (limbs[limb_idx] >> bit_idx) & 1;
+            temp_rem.limbs[0] = (temp_rem.limbs[0] & ~1U) | bit;
+
+            temp_rem.normalize();
+
+            if (temp_rem >= divisor) {
+                temp_rem = temp_rem - divisor;
+            }
+        }
+
+        remainder = temp_rem;
+        return remainder;
+    }
+
     __device__ void divrem(
         BigUintGpu &quotient,
         BigUintGpu &remainder,
@@ -321,9 +375,7 @@ struct BigUintGpu {
             result -= r2;
         }
 
-        BigUintGpu temp_quotient;
-        divrem(temp_quotient, result, modulus);
-
+        result = result % modulus;
         return result;
     }
 
@@ -484,6 +536,7 @@ struct BigUintGpu {
     __device__ BigUintGpu operator+(const BigUintGpu &other) const { return add(other); }
     __device__ BigUintGpu operator-(const BigUintGpu &other) const { return sub(other); }
     __device__ BigUintGpu operator*(const BigUintGpu &other) const { return mul(other); }
+    __device__ BigUintGpu operator%(const BigUintGpu &other) const { return rem(other); }
     __device__ BigUintGpu &operator+=(const BigUintGpu &other) {
         add_in_place(other);
         return *this;
