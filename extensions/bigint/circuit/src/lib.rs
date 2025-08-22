@@ -1,10 +1,10 @@
 use openvm_circuit::{
     self,
     arch::{
-        AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
-        VmAirWrapper, VmBuilder, VmChipComplex, VmChipWrapper, VmProverExtension,
+        InitFileGenerator, SystemConfig,
+        VmAirWrapper, VmChipWrapper,
     },
-    system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
+    system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
 use openvm_rv32_adapters::{
@@ -16,7 +16,7 @@ use openvm_rv32im_circuit::{
     BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
     LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
-    MultiplicationExecutor, MultiplicationFiller, Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io,
+    MultiplicationExecutor, MultiplicationFiller, Rv32I, Rv32IExecutor, Rv32Io,
     Rv32IoExecutor, Rv32M, Rv32MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
 };
 

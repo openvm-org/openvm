@@ -7,6 +7,7 @@ use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::Gp
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 
+use super::*;
 
 pub struct Int256GpuProverExt;
 
@@ -117,12 +118,12 @@ impl VmBuilder<E> for Int256Rv32GpuBuilder {
     fn create_chip_complex(
         &self,
         config: &Int256Rv32Config,
-        circuit: AirInventory<E::SC>,
+        circuit: AirInventory<<E as StarkEngine>::SC>,
     ) -> Result<
         VmChipComplex<
-            E::SC,
+            <E as StarkEngine>::SC,
             Self::RecordArena,
-            E::PB,
+            <E as StarkEngine>::PB,
             Self::SystemChipInventory,
         >,
         ChipInventoryError,

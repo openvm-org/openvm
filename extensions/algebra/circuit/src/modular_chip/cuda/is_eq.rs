@@ -15,10 +15,8 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_rv32_adapters::{Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterRecord};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::{
-    cuda_abi::is_eq_cuda::tracegen as modular_is_equal_tracegen,
-    modular_chip::{ModularIsEqualCoreCols, ModularIsEqualRecord},
-};
+use crate::modular_chip::{ModularIsEqualCoreCols, ModularIsEqualRecord};
+use super::cuda_abi::is_eq_cuda::tracegen as modular_is_equal_tracegen;
 
 #[derive(new)]
 pub struct ModularIsEqualChipGpu<

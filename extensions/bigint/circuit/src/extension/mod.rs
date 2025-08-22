@@ -7,11 +7,9 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, RowMajorMatrixArena, VmCircuitExtension,
-        VmExecutionExtension, VmProverExtension,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension
     },
-    system::{memory::SharedMemoryHelper, SystemPort},
+    system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_circuit_primitives::{
@@ -25,6 +23,7 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -34,11 +33,13 @@ use openvm_stark_backend::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::*;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
-        pub use cuda::*;
-        pub use cuda::{
+        pub use self::cuda::*;
+        pub use self::cuda::{
             Int256GpuProverExt as Int256ProverExt,
             Int256Rv32GpuBuilder as Int256Rv32Builder,
         };
@@ -49,8 +50,6 @@ cfg_if::cfg_if! {
         };
     }
 }
-
-use crate::*;
 
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
