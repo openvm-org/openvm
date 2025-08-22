@@ -39,12 +39,14 @@ jobs:
           - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
+      # For GPU platform, run jobs sequentially due to capacity constraints
+      max-parallel: ${{ matrix.platform.runner == 'test-gpu-nvidia' && 1 || 8 }}
 
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=${{ matrix.platform.runner }}
       - image=${{ matrix.platform.image }}
-      - tag=extension-${{ matrix.extension.name }}
+      - tag=${{ matrix.platform.runner == 'test-gpu-nvidia' && 'gpu-sequential' || format('extension-{0}', matrix.extension.name) }}
       - extras=s3-cache
 
     steps:
