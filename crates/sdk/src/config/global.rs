@@ -1,6 +1,6 @@
 use bon::Builder;
 use openvm_algebra_circuit::{
-    AlgebraProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
+    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
     ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
@@ -45,7 +45,7 @@ use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "cuda")]
 use {
-    openvm_algebra_circuit::AlgebraProverExt,
+    openvm_algebra_circuit::AlgebraGpuProverExt,
     openvm_bigint_circuit::Int256GpuProverExt,
     openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU},
     openvm_cuda_backend::{
@@ -408,10 +408,10 @@ where
             VmProverExtension::<E, _, _>::extend_prover(&Int256CpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
             VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
@@ -468,10 +468,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
             VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;

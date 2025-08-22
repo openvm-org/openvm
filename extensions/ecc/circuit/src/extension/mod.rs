@@ -1,6 +1,6 @@
 use std::result::Result;
 
-use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularConfigExecutor, Rv32ModularBuilder};
+use openvm_algebra_circuit::{Rv32ModularConfig, Rv32ModularConfigExecutor, Rv32ModularCpuBuilder};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
@@ -17,15 +17,27 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "cuda")]
-mod cuda;
 mod weierstrass;
-
-#[cfg(feature = "cuda")]
-pub use cuda::*;
 pub use weierstrass::*;
 
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use cuda::*;
+        pub use cuda::{
+            EccGpuProverExt as EccProverExt,
+            Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+        };
+    } else {
+        pub use self::{
+            EccCpuProverExt as EccProverExt,
+            Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
+        };
+    }
+}
+
 use super::*;
+pub struct EccCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {
@@ -80,7 +92,7 @@ where
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularBuilder, &config.modular, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularCpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,
