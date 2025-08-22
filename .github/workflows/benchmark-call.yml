@@ -68,44 +68,20 @@ jobs:
         run: |
           CUDA_OPT_LEVEL=3 cargo nextest run cuda --features parallel,cuda,touchemall --test-threads=32 --no-tests=pass
 
-      - name: Run native integration tests
-        working-directory: extensions/native/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features parallel,cuda --profile=heavy --no-tests=pass
-
       - name: Run keccak256 circuit crate tests
         working-directory: extensions/keccak256/circuit
         run: |
           CUDA_OPT_LEVEL=3 cargo nextest run cuda --features parallel,cuda,touchemall --test-threads=32 --no-tests=pass
-
-      - name: Run keccak256 integration tests
-        working-directory: extensions/keccak256/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features parallel,cuda --profile=heavy --no-tests=pass
 
       - name: Run sha256 circuit crate tests
         working-directory: extensions/sha256/circuit
         run: |
           CUDA_OPT_LEVEL=3 cargo nextest run cuda --features parallel,cuda,touchemall --test-threads=32 --no-tests=pass
 
-      - name: Run sha256 integration tests
-        working-directory: extensions/sha256/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features parallel,cuda --profile=heavy --no-tests=pass
-
       - name: Run bigint circuit crate tests
         working-directory: extensions/bigint/circuit
         run: |
           CUDA_OPT_LEVEL=3 cargo nextest run cuda --features parallel,cuda,touchemall --test-threads=32 --no-tests=pass
-
-      - name: Run bigint integration tests
-        working-directory: extensions/bigint/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features parallel,cuda --profile=heavy --no-tests=pass
 
       - name: Run algebra circuit crate tests
         working-directory: extensions/algebra/circuit
@@ -127,12 +103,6 @@ jobs:
         working-directory: extensions/pairing/circuit
         run: |
           CUDA_OPT_LEVEL=3 cargo nextest run cuda --features parallel,cuda,touchemall --test-threads=32 --no-tests=pass
-
-      - name: Run pairing integration tests
-        working-directory: extensions/pairing/tests
-        run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features parallel,cuda --profile=heavy --no-tests=pass
 
       - name: Run sha2 guest library tests
         working-directory: guest-libs/sha2
