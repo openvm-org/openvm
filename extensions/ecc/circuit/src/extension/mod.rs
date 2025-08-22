@@ -35,8 +35,6 @@ cfg_if::cfg_if! {
         };
     }
 }
-
-use super::*;
 pub struct EccCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]

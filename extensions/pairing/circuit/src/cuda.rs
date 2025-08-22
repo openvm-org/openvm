@@ -1,4 +1,4 @@
-use openvm_algebra_circuit::{AlgebraProverExt, Rv32ModularBuilder};
+use openvm_algebra_circuit::{AlgebraGpuProverExt, Rv32ModularGpuBuilder};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
@@ -36,9 +36,9 @@ impl VmBuilder<E> for Rv32PairingGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularBuilder, &config.modular, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularGpuBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, &config.fp2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccGpuProverExt,
             &config.weierstrass,
