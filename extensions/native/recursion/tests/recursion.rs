@@ -1,24 +1,30 @@
 use itertools::Itertools;
 use openvm_circuit::arch::{
-    instructions::program::Program, MatrixRecordArena, PreflightExecutionOutput, VmBuilder,
-    VmCircuitConfig,
+    instructions::program::Program, PreflightExecutionOutput, PreflightExecutor, VmBuilder,
+    VmCircuitConfig, VmExecutionConfig,
 };
+#[cfg(feature = "cuda")]
+use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestEngine;
 use openvm_native_circuit::{
-    execute_program_with_config, test_native_config, NativeConfig, NativeCpuBuilder,
+    execute_program_with_config, test_native_config, NativeBuilder, NativeConfig,
 };
 use openvm_native_compiler::{asm::AsmBuilder, ir::Felt};
 use openvm_native_recursion::testing_utils::inner::run_recursive_test;
 use openvm_stark_backend::{
-    config::{Domain, StarkGenericConfig},
+    config::{Com, Domain, StarkGenericConfig},
     p3_commit::PolynomialSpace,
     p3_field::{extension::BinomialExtensionField, FieldAlgebra},
-    prover::cpu::{CpuBackend, CpuDevice},
-};
-use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
+    prover::{
+        cpu::{CpuBackend, PcsData},
+        hal::{DeviceDataTransporter, ProverBackend},
+        types::{AirProvingContext, CommittedTraceData},
     },
+};
+#[cfg(not(feature = "cuda"))]
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestEngine;
+
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
     utils::ProofInputForTest,
@@ -58,19 +64,22 @@ pub(crate) fn fibonacci_program_test_proof_input<SC, E>(
 ) -> ProofInputForTest<E::SC>
 where
     SC: StarkGenericConfig,
-    E: StarkFriEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkFriEngine<SC = SC>,
     Domain<SC>: PolynomialSpace<Val = BabyBear>,
-    NativeCpuBuilder:
-        VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig>,
+    <NativeConfig as VmExecutionConfig<BabyBear>>::Executor:
+        PreflightExecutor<BabyBear, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+    E::PB: ProverBackend<PcsData = PcsData<SC>, Commitment = Com<SC>>,
 {
     let fib_program = fibonacci_program(a, b, n);
     let mut config = test_native_config();
+    let engine = E::new(FriParameters::new_for_testing(3));
     config.as_mut().num_public_values = 3;
 
     let (output, mut vm) = execute_program_with_config::<E, _>(
         fib_program.clone(),
         vec![],
-        NativeCpuBuilder,
+        NativeBuilder {},
         config.clone(),
     )
     .unwrap();
@@ -89,7 +98,30 @@ where
     let (used_airs, per_air): (Vec<_>, Vec<_>) = ctx
         .per_air
         .into_iter()
-        .map(|(air_id, air_ctx)| (airs[air_id].clone(), air_ctx))
+        .map(|(air_id, air_ctx)| {
+            let AirProvingContext {
+                cached_mains,
+                common_main,
+                public_values,
+            } = air_ctx;
+            let cached_mains = cached_mains
+                .into_iter()
+                .map(|com| CommittedTraceData {
+                    commitment: com.commitment,
+                    trace: engine
+                        .device()
+                        .transport_matrix_from_device_to_host(&com.trace),
+                    data: com.data,
+                })
+                .collect();
+            let out_ctx = AirProvingContext::<CpuBackend<SC>> {
+                cached_mains,
+                common_main: common_main
+                    .map(|m| engine.device().transport_matrix_from_device_to_host(&m)),
+                public_values,
+            };
+            (airs[air_id].clone(), out_ctx)
+        })
         .unzip();
     ProofInputForTest {
         airs: used_airs,
@@ -99,10 +131,8 @@ where
 
 #[test]
 fn test_fibonacci_program_verify() {
-    let fib_program_stark = fibonacci_program_test_proof_input::<
-        BabyBearPoseidon2Config,
-        BabyBearPoseidon2Engine,
-    >(0, 1, 32);
+    let fib_program_stark =
+        fibonacci_program_test_proof_input::<BabyBearPoseidon2Config, TestEngine>(0, 1, 32);
     run_recursive_test(fib_program_stark, FriParameters::new_for_testing(3));
 }
 

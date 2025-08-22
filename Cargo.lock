@@ -5799,6 +5799,7 @@ dependencies = [
  "metrics",
  "once_cell",
  "openvm-circuit",
+ "openvm-cuda-backend",
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-compiler-derive",

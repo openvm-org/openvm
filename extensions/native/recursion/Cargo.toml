@@ -14,6 +14,8 @@ openvm-native-compiler-derive = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true }
 
+openvm-cuda-backend = { workspace = true, optional = true }
+
 p3-dft = { workspace = true }
 p3-fri = { workspace = true }
 p3-symmetric = { workspace = true }
@@ -58,3 +60,4 @@ parallel = ["openvm-stark-backend/parallel"]
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 nightly-features = ["openvm-circuit/nightly-features"]
+cuda = ["openvm-circuit/cuda", "openvm-native-circuit/cuda", "dep:openvm-cuda-backend"]

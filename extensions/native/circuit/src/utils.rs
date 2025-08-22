@@ -13,8 +13,8 @@ pub mod test_utils {
         arch::{
             execution_mode::Segment,
             testing::{memory::gen_pointer, TestBuilder},
-            MatrixRecordArena, PreflightExecutionOutput, Streams, VirtualMachine,
-            VirtualMachineError, VmBuilder, VmState,
+            PreflightExecutionOutput, PreflightExecutor, Streams, VirtualMachine,
+            VirtualMachineError, VmBuilder, VmExecutionConfig, VmState,
         },
         utils::test_system_config_without_continuations,
     };
@@ -80,7 +80,7 @@ pub mod test_utils {
         config: VB::VmConfig,
     ) -> Result<
         (
-            PreflightExecutionOutput<BabyBear, MatrixRecordArena<BabyBear>>,
+            PreflightExecutionOutput<BabyBear, <VB as VmBuilder<E>>::RecordArena>,
             VirtualMachine<E, VB>,
         ),
         VirtualMachineError,
@@ -88,7 +88,9 @@ pub mod test_utils {
     where
         E: StarkFriEngine,
         Domain<E::SC>: PolynomialSpace<Val = BabyBear>,
-        VB: VmBuilder<E, VmConfig = NativeConfig, RecordArena = MatrixRecordArena<BabyBear>>,
+        VB: VmBuilder<E, VmConfig = NativeConfig>,
+        <VB::VmConfig as VmExecutionConfig<BabyBear>>::Executor:
+            PreflightExecutor<BabyBear, VB::RecordArena>,
     {
         setup_tracing();
         assert!(!config.as_ref().continuation_enabled);
