@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 using namespace mod_builder;
 
@@ -320,9 +321,8 @@ struct BigUintGpu {
             result -= r2;
         }
 
-        while (result >= modulus) {
-            result -= modulus;
-        }
+        BigUintGpu temp_quotient;
+        divrem(temp_quotient, result, modulus);
 
         return result;
     }
