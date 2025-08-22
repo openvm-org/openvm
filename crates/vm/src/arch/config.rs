@@ -117,8 +117,8 @@ pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
 pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only requires
 /// alignment of 2 because the instructions are implemented by doing an access of block size 4.
-const DEFAULT_U8_BLOCK_SIZE: usize = 4;
-const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
+pub const DEFAULT_U8_BLOCK_SIZE: usize = 4;
+pub const DEFAULT_NATIVE_BLOCK_SIZE: usize = 1;
 
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
