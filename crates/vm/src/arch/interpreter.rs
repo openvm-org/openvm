@@ -48,6 +48,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     /// `pc_index = pc / DEFAULT_PC_STEP`.
     /// SAFETY: The first `pc_base / DEFAULT_PC_STEP` entries will be unreachable. We do this to
     /// avoid needing to subtract `pc_base` during runtime.
+    #[cfg(not(feature = "tco"))]
     pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
     #[cfg(feature = "tco")]
     pre_compute_max_size: usize,
@@ -148,6 +149,7 @@ where
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        #[cfg_attr(feature = "tco", allow(unused_variables))]
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
@@ -182,6 +184,7 @@ where
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
+            #[cfg(not(feature = "tco"))]
             pre_compute_insns,
             pc_start,
             init_memory,
@@ -247,6 +250,7 @@ where
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        #[cfg_attr(feature = "tco", allow(unused_variables))]
         let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
@@ -285,6 +289,7 @@ where
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
+            #[cfg(not(feature = "tco"))]
             pre_compute_insns,
             pc_start,
             init_memory,
