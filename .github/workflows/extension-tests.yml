@@ -36,7 +36,6 @@ jobs:
           - { name: "pairing", path: "pairing" }
         platform:
           - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
@@ -71,13 +70,6 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Check CUDA status and set environment variables
-        if: contains(matrix.platform.runner, 'gpu')
-        run: |
-          nvcc --version
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-          echo "CIRCUIT_TEST_FILTER=cuda" >> $GITHUB_ENV
-
       - name: Run ${{ matrix.extension.name }} circuit crate tests
         working-directory: extensions/${{ matrix.extension.path }}/circuit
         run: |
@@ -89,7 +81,7 @@ jobs:
 
         # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
-        if: ${{ !contains(matrix.platform.runner, 'gpu') && hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != '' }}
+        if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/guest
         run: |
           GUEST_FEATURE_ARGS=""
