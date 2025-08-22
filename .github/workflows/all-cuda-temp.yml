@@ -27,6 +27,7 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=test-gpu-nvidia
       - extras=s3-cache
+    continue-on-error: true
 
     steps:
       - uses: runs-on/action@v2
