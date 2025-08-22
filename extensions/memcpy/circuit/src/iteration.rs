@@ -111,15 +111,17 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let is_shift_two = and::<AB::Expr>(not::<AB::Expr>(local.shift[0]), local.shift[1]);
         let is_shift_three = and::<AB::Expr>(local.shift[0], local.shift[1]);
 
-        // TODO:since if is_valid = 0, then is_boundary = 0, we can reduce the degree of the following expressions by removing the is_valid term
         let is_end =
             (local.is_boundary + AB::Expr::ONE) * local.is_boundary * (AB::F::TWO).inverse();
         let is_not_start = (local.is_boundary + AB::Expr::ONE)
             * (AB::Expr::TWO - local.is_boundary)
             * (AB::F::TWO).inverse();
+        let prev_is_not_end = not::<AB::Expr>(
+            (prev.is_boundary + AB::Expr::ONE) * prev.is_boundary * (AB::F::TWO).inverse(),
+        );
 
         let len = local.len[0]
-            + local.len[1] * AB::F::from_canonical_u32(1 << (2 * MEMCPY_LOOP_LIMB_BITS));
+            + local.len[1] * AB::Expr::from_canonical_u32(1 << (2 * MEMCPY_LOOP_LIMB_BITS));
 
         // write_data =
         //  (local.data_1[shift..4], prev.data_4[0..shift]),
@@ -136,7 +138,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let write_data = write_data_pairs
             .iter()
             .map(|(prev_data, next_data)| {
-                array::from_fn(|i| {
+                array::from_fn::<_, MEMCPY_LOOP_NUM_LIMBS, _>(|i| {
                     is_shift_zero.clone() * (next_data[i])
                         + is_shift_one.clone()
                             * (if i < 3 {
@@ -161,35 +163,44 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .collect::<Vec<_>>();
 
         builder.assert_bool(local.is_valid);
-        for i in 0..2 {
-            builder.assert_bool(local.shift[i]);
-        }
+        local.shift.iter().for_each(|x| builder.assert_bool(*x));
         builder.assert_bool(local.is_valid_not_start);
         // is_boundary is either -1, 0 or 1
         builder.assert_tern(local.is_boundary + AB::Expr::ONE);
 
         // is_valid_not_start = is_valid and is_not_start:
-        builder.assert_eq(local.is_valid_not_start, local.is_valid * is_not_start);
+        builder.assert_eq(
+            local.is_valid_not_start,
+            and::<AB::Expr>(local.is_valid, is_not_start),
+        );
 
-        // if is_valid = 0, then is_boundary = 0, shift = 0
+        // if !is_valid, then is_boundary = 0, shift = 0 (we will use this assumption later)
         let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
         is_not_valid_when.assert_zero(local.is_boundary);
         is_not_valid_when.assert_zero(shift.clone());
 
-        // if is_valid_not_start = 1, then len = prev_len - 16, source = prev_source + 16,
-        // and dest = prev_dest + 16
+        // if is_valid_not_start, then len = prev_len - 16, source = prev_source + 16,
+        // and dest = prev_dest + 16, shift = prev_shift
         let mut is_valid_not_start_when = builder.when(local.is_valid_not_start);
         is_valid_not_start_when
             .assert_eq(local.len[0], prev.len[0] - AB::Expr::from_canonical_u32(16));
         is_valid_not_start_when
             .assert_eq(local.source, prev.source + AB::Expr::from_canonical_u32(16));
         is_valid_not_start_when.assert_eq(local.dest, prev.dest + AB::Expr::from_canonical_u32(16));
+        is_valid_not_start_when.assert_eq(local.shift[0], prev.shift[0]);
+        is_valid_not_start_when.assert_eq(local.shift[1], prev.shift[1]);
+
+        // make sure if previous row is valid and not end, then local.is_valid = 1
+        builder
+            .when(prev_is_not_end - not::<AB::Expr>(prev.is_valid))
+            .assert_one(local.is_valid);
 
         // if prev.is_valid_start, then timestamp = prev_timestamp + is_shift_non_zero
         // since is_shift_non_zero degree is 2, we need to keep the degree of the condition to 1
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
             .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero.clone());
+
         // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
         builder
@@ -239,7 +250,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                     .read(
                         MemoryAddress::new(
                             AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
-                            local.source + AB::Expr::from_canonical_usize(idx * 4),
+                            local.source - AB::Expr::from_canonical_usize(16 - idx * 4),
                         ),
                         *data,
                         timestamp_pp(),
@@ -254,7 +265,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                 .write(
                     MemoryAddress::new(
                         AB::Expr::from_canonical_u32(RV32_MEMORY_AS),
-                        local.dest + AB::Expr::from_canonical_usize(idx * 4),
+                        local.dest - AB::Expr::from_canonical_usize(16 - idx * 4),
                     ),
                     data.clone(),
                     timestamp_pp(),
@@ -286,7 +297,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 }
 
 #[derive(derive_new::new, Clone, Copy)]
-pub struct MemcpyIterExecutor {}
+pub struct MemcpyIterExecutor {
+    pub offset: usize,
+}
 
 #[derive(Copy, Clone, Debug)]
 pub struct MemcpyIterMetadata {
@@ -378,12 +391,6 @@ pub struct MemcpyIterFiller {
 
 pub type MemcpyIterChip<F> = VmChipWrapper<F, MemcpyIterFiller>;
 
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct MemcpyIterPreCompute {
-    c: u8,
-}
-
 impl<F, RA> PreflightExecutor<F, RA> for MemcpyIterExecutor
 where
     F: PrimeField32,
@@ -452,6 +459,8 @@ where
                 let write_data: [u8; MEMCPY_LOOP_NUM_LIMBS] = array::from_fn(|j| {
                     if j < 4 - shift as usize {
                         record.var[idx].data[i][j + shift as usize]
+                    } else if i > 0 {
+                        record.var[idx].data[i - 1][j - (4 - shift as usize)]
                     } else {
                         record.var[idx - 1].data[i][j - (4 - shift as usize)]
                     }
@@ -565,6 +574,18 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     )
                 };
 
+                // Fill memcpy loop record
+                self.memcpy_loop_chip.add_new_loop(
+                    mem_helper,
+                    record.inner.from_pc,
+                    record.inner.from_timestamp,
+                    record.inner.dest,
+                    record.inner.source,
+                    record.inner.len,
+                    record.inner.shift,
+                    record.inner.register_aux.clone(),
+                );
+
                 // 4 reads + 4 writes per iteration + (shift != 0) read for the loop header
                 let timestamp = record.inner.from_timestamp
                     + ((num_rows - 1) << 3) as u32
@@ -583,18 +604,6 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                 let mut len =
                     record.inner.len - ((num_rows - 1) << 4) as u32 - record.inner.shift as u32;
 
-                // Fill memcpy loop record
-                self.memcpy_loop_chip.add_new_loop(
-                    mem_helper,
-                    record.inner.from_pc,
-                    record.inner.from_timestamp,
-                    record.inner.dest,
-                    record.inner.source,
-                    record.inner.len,
-                    record.inner.shift,
-                    record.inner.register_aux.clone(),
-                );
-
                 // We are going to fill row in the reverse order
                 chunk
                     .rchunks_exact_mut(width)
@@ -602,8 +611,8 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     .for_each(|(row, (idx, var))| {
                         let cols: &mut MemcpyIterCols<F> = row.borrow_mut();
 
-                        let is_end = idx == 0;
-                        let is_start = idx == num_rows - 1;
+                        let is_start = idx == 0;
+                        let is_end = idx == num_rows - 1;
 
                         // Range check len
                         let len_u16_limbs = [len & 0xffff, len >> 16];
@@ -621,8 +630,6 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
 
                         // Fill memory read/write auxiliary columns
                         if is_start {
-                            debug_assert_eq!(get_timestamp(false), record.inner.from_timestamp);
-
                             cols.write_aux.iter_mut().rev().for_each(|aux_col| {
                                 mem_helper.fill_zero(aux_col.as_mut());
                             });
@@ -632,18 +639,20 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                             } else {
                                 mem_helper.fill(
                                     var.read_aux[3].prev_timestamp,
-                                    timestamp,
+                                    get_timestamp(true),
                                     cols.read_aux[3].as_mut(),
                                 );
                             }
                             cols.read_aux[..2].iter_mut().rev().for_each(|aux_col| {
                                 mem_helper.fill_zero(aux_col.as_mut());
                             });
+
+                            debug_assert_eq!(get_timestamp(false), record.inner.from_timestamp);
                         } else {
                             var.write_aux
                                 .iter()
+                                .zip(cols.write_aux.iter_mut())
                                 .rev()
-                                .zip(cols.write_aux.iter_mut().rev())
                                 .for_each(|(aux_record, aux_col)| {
                                     mem_helper.fill(
                                         aux_record.prev_timestamp,
@@ -657,8 +666,8 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
 
                             var.read_aux
                                 .iter()
+                                .zip(cols.read_aux.iter_mut())
                                 .rev()
-                                .zip(cols.read_aux.iter_mut().rev())
                                 .for_each(|(aux_record, aux_col)| {
                                     mem_helper.fill(
                                         aux_record.prev_timestamp,
@@ -672,10 +681,16 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         cols.data_3 = var.data[2].map(F::from_canonical_u8);
                         cols.data_2 = var.data[1].map(F::from_canonical_u8);
                         cols.data_1 = var.data[0].map(F::from_canonical_u8);
-                        cols.is_boundary = F::from_canonical_u8(is_end as u8 - is_start as u8);
+                        cols.is_boundary = if is_end {
+                            F::ONE
+                        } else if is_start {
+                            F::NEG_ONE
+                        } else {
+                            F::ZERO
+                        };
                         cols.is_valid_not_start = F::from_canonical_u8(1 - is_start as u8);
                         cols.is_valid = F::ONE;
-                        cols.shift = [record.inner.shift % 2, record.inner.shift / 2]
+                        cols.shift = [record.inner.shift & 1, record.inner.shift >> 1]
                             .map(F::from_canonical_u8);
                         cols.len = [len & 0xffff, len >> 16].map(F::from_canonical_u32);
                         cols.source = F::from_canonical_u32(source);
@@ -688,6 +703,12 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     });
             });
     }
+}
+
+#[derive(AlignedBytesBorrow, Clone)]
+#[repr(C)]
+struct MemcpyIterPreCompute {
+    c: u8,
 }
 
 impl<F: PrimeField32> Executor<F> for MemcpyIterExecutor {

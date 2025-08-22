@@ -32,13 +32,10 @@ impl MemoryExtendedAuxRecord {
         }
     }
 
-    pub fn to_aux_cols<F: PrimeField32>(&self) -> MemoryBaseAuxCols<F> {
-        MemoryBaseAuxCols {
-            prev_timestamp: F::from_canonical_u32(self.prev_timestamp),
-            timestamp_lt_aux: LessThanAuxCols {
-                lower_decomp: self.timestamp_lt_aux.map(|x| F::from_canonical_u32(x)),
-            },
-        }
+    pub fn to_aux_cols<F: PrimeField32>(&self, aux_cols: &mut MemoryBaseAuxCols<F>) {
+        aux_cols.prev_timestamp = F::from_canonical_u32(self.prev_timestamp);
+        aux_cols.timestamp_lt_aux.lower_decomp =
+            self.timestamp_lt_aux.map(|x| F::from_canonical_u32(x));
     }
 }
 
