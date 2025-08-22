@@ -209,17 +209,19 @@ jobs:
           OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
           echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
 
+          rustc -Vv
+          cargo -V
+          rustup target list --installed
+          rustc --print cfg
+          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda > why.txt
+          diff help.txt why.txt
+
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
       ##########################################################################
       - name: Run benchmark
         working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
         run: |
-          rustc -Vv
-          cargo -V
-          rustup target list --installed
-          rustc --print cfg
-          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda
           export JEMALLOC_SYS_WITH_MALLOC_CONF="retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true"
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
 
