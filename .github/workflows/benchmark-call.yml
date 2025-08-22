@@ -107,7 +107,7 @@ on:
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "metrics,parallel,nightly-features"
+  FEATURE_FLAGS: "metrics,parallel"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -118,11 +118,10 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      - runs-on
-      - run-id=${{ github.run_id }}
-      - family=${{ inputs.instance_type }}
-      - image=${{ startsWith(inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}
-      - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - runs-on=${{ github.run_id }}
+      - family=${{ github.event.inputs.instance_type || inputs.instance_type }}
+      - image=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(github.event.inputs.instance_type || inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}
+      - tag=bench-${{ github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
       - uses: runs-on/action@v1
@@ -149,6 +148,9 @@ jobs:
       - name: "Feature flags: memory allocator"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
+          if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
+            "FEATURE_FLAGS=${FEATURE_FLAGS},nightly-features" >> $GITHUB_ENV
+          fi
           echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
         if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')

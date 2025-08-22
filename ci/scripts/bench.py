@@ -17,7 +17,7 @@ def run_cargo_command(
 ):
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "RUST_BACKTRACE=1", "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
@@ -52,11 +52,8 @@ def run_cargo_command(
     env["OUTPUT_PATH"] = output_path
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
-
-    # TODO[stephenh]: Currently won't build with avx2, disabling this for now to get benchmarks up
-    if "cuda" in feature_flags:
-        env["RUSTFLAGS"] = "-Ctarget-cpu=native -Ctarget-feature=-avx2"
-    else:
+    # TODO: currently some nvidia machines seem not compatible with plonky3 settings when target-cpu=native
+    if "cuda" not in feature_flags:
         env["RUSTFLAGS"] = "-Ctarget-cpu=native"
 
     # Run the subprocess with the updated environment
