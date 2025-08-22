@@ -213,8 +213,7 @@ jobs:
           cargo -V
           rustup target list --installed
           rustc --print cfg
-          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda > why.txt
-          diff help.txt why.txt
+          cargo tree -e features --features metrics,parallel,jemalloc,metrics,parallel,nightly-features,cuda
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
