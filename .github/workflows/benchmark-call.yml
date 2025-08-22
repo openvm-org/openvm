@@ -201,6 +201,21 @@ jobs:
           find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/stark-backend -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
           find /home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates/stark-sdk -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum
 
+          git clone https://github.com/openvm-org/stark-backend.git stark-backend-5eac9a6
+          cd stark-backend-5eac9a6
+          git checkout 5eac9a6
+          cd ..
+          LOCAL_DIR="/home/runner/.cargo/git/checkouts/stark-backend-708f1155344bec0c/5eac9a6/crates"
+          UPSTREAM_DIR="stark-backend-5eac9a6/crates"
+          echo "LOCAL_DIR=$LOCAL_DIR"
+          echo "UPSTREAM_DIR=$UPSTREAM_DIR"
+
+          # sanity checks
+          test -d "$LOCAL_DIR" || { echo "Missing local dir: $LOCAL_DIR"; exit 1; }
+          test -d "$UPSTREAM_DIR" || { echo "Missing upstream dir: $UPSTREAM_DIR"; exit 1; }
+          diff -qr "$LOCAL_DIR" "$UPSTREAM_DIR" | sort
+          diff -ruN "$LOCAL_DIR" "$UPSTREAM_DIR" | less
+
       # Metric name is unique within a run (matrix)
       # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
       - name: Set metric name
