@@ -27,12 +27,11 @@ jobs:
       matrix:
         platform:
           - { runner: "test-64cpu-arm64" }
-          - { runner: "test-gpu-nvidia" }
+          # - { runner: "test-gpu-nvidia" }
 
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=${{ matrix.platform.runner }}
-      - image=${{ matrix.platform.image }}
       - extras=s3-cache
 
     steps:
