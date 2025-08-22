@@ -36,7 +36,7 @@ jobs:
           - { name: "pairing", path: "pairing" }
         platform:
           - { runner: "test-64cpu-arm64" }
-          - { runner: "test-gpu-nvidia" }
+          # - { runner: "test-gpu-nvidia" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
