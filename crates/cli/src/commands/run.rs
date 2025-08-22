@@ -1,15 +1,31 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
-use openvm_sdk::{fs::read_object_from_file, Sdk, F};
+use itertools::Itertools;
+use openvm_circuit::{
+    arch::{instructions::exe::VmExe, VirtualMachine, OPENVM_DEFAULT_INIT_FILE_NAME},
+    system::memory::merkle::public_values::extract_public_values,
+};
+use openvm_sdk::{config::SdkVmCpuBuilder, fs::read_object_from_file, Sdk, F};
+use openvm_stark_backend::prover::hal::MatrixDimensions;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine;
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
     input::{read_to_stdin, Input},
     util::{get_manifest_path_and_dir, get_single_target_name, read_config_toml_or_default},
 };
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ExecutionMode {
+    /// Pure execution (default)
+    Pure,
+    /// Execute with cost metering (execute_metered_cost)
+    Meter,
+    /// Execute with segmentation (execute_metered)
+    Segment,
+}
 
 #[derive(Parser)]
 #[command(name = "run", about = "Run an OpenVM program")]
@@ -60,6 +76,15 @@ pub struct RunArgs {
         help_heading = "OpenVM Options"
     )]
     pub init_file_name: String,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value = "pure",
+        help = "Execution mode",
+        help_heading = "OpenVM Options"
+    )]
+    pub mode: ExecutionMode,
 }
 
 impl From<RunArgs> for BuildArgs {
@@ -250,8 +275,109 @@ impl RunCmd {
         let exe: VmExe<F> = read_object_from_file(exe_path)?;
 
         let sdk = Sdk::new(app_config)?;
-        let output = sdk.execute(exe, read_to_stdin(&self.run_args.input)?)?;
-        println!("Execution output: {:?}", output);
+        let inputs = read_to_stdin(&self.run_args.input)?;
+
+        match self.run_args.mode {
+            ExecutionMode::Pure => {
+                let output = sdk.execute(exe, inputs)?;
+                println!("Execution output: {:?}", output);
+            }
+            ExecutionMode::Segment => {
+                let exe = sdk.convert_to_exe(exe)?;
+                let app_pk = sdk.app_pk();
+                let executor_idx_to_air_idx = VirtualMachine::<
+                    BabyBearPoseidon2Engine,
+                    SdkVmCpuBuilder,
+                >::executor_idx_to_air_idx_from_config::<
+                    BabyBearPoseidon2Engine,
+                    SdkVmCpuBuilder,
+                >(
+                    sdk.app_vm_builder(), &app_pk.app_vm_pk.vm_config
+                )
+                .map_err(|e| eyre::eyre!("Failed to get executor mapping: {}", e))?;
+
+                // Extract data from the proving key to build metered context
+                let (constant_trace_heights, air_names, widths, interactions): (
+                    Vec<_>,
+                    Vec<_>,
+                    Vec<_>,
+                    Vec<_>,
+                ) = app_pk
+                    .app_vm_pk
+                    .vm_pk
+                    .per_air
+                    .iter()
+                    .map(|pk| {
+                        let constant_trace_height =
+                            pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
+                        let air_names = pk.air_name.clone();
+                        let width = pk.vk.params.width.total_width(4); // BabyBear extension degree
+                        let num_interactions = pk.vk.symbolic_constraints.interactions.len();
+                        (constant_trace_height, air_names, width, num_interactions)
+                    })
+                    .multiunzip();
+
+                let metered_ctx = sdk.executor().build_metered_ctx(
+                    &constant_trace_heights,
+                    &air_names,
+                    &widths,
+                    &interactions,
+                );
+                let metered_interpreter = sdk
+                    .executor()
+                    .metered_instance(&exe, &executor_idx_to_air_idx)?;
+                let (segments, final_state) =
+                    metered_interpreter.execute_metered(inputs, metered_ctx)?;
+
+                let output = extract_public_values(
+                    sdk.executor().config.as_ref().num_public_values,
+                    &final_state.memory.memory,
+                );
+                println!("Execution output: {:?}", output);
+
+                let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
+                println!("Total instructions: {}", total_instructions);
+                println!("Number of segments: {}", segments.len());
+            }
+            ExecutionMode::Meter => {
+                let exe = sdk.convert_to_exe(exe)?;
+                let app_pk = sdk.app_pk();
+                let executor_idx_to_air_idx = VirtualMachine::<
+                    BabyBearPoseidon2Engine,
+                    SdkVmCpuBuilder,
+                >::executor_idx_to_air_idx_from_config::<
+                    BabyBearPoseidon2Engine,
+                    SdkVmCpuBuilder,
+                >(
+                    sdk.app_vm_builder(), &app_pk.app_vm_pk.vm_config
+                )
+                .map_err(|e| eyre::eyre!("Failed to get executor mapping: {}", e))?;
+
+                // Extract widths from the proving key to build metered cost context
+                let widths: Vec<_> = app_pk
+                    .app_vm_pk
+                    .vm_pk
+                    .per_air
+                    .iter()
+                    .map(|pk| {
+                        pk.vk.params.width.total_width(4) // BabyBear extension degree
+                    })
+                    .collect();
+
+                let output = sdk.execute(exe.clone(), inputs.clone())?;
+                println!("Execution output: {:?}", output);
+
+                let cost_ctx = sdk.executor().build_metered_cost_ctx(&widths);
+                let cost_interpreter = sdk
+                    .executor()
+                    .metered_cost_instance(&exe, &executor_idx_to_air_idx)?;
+                let cost_output = cost_interpreter.execute_metered_cost(inputs, cost_ctx)?;
+
+                println!("Total instructions: {}", cost_output.instret);
+                println!("Total cost: {}", cost_output.cost);
+            }
+        }
+
         Ok(())
     }
 }

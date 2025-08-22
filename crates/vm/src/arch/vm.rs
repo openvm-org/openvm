@@ -762,6 +762,21 @@ where
         ret
     }
 
+    /// Get executor to air index mapping without creating full VirtualMachine
+    pub fn executor_idx_to_air_idx_from_config<E2, VB2>(
+        vm_builder: &VB2,
+        vm_config: &VB2::VmConfig,
+    ) -> Result<Vec<usize>, VirtualMachineError>
+    where
+        E2: StarkEngine,
+        VB2: VmBuilder<E2>,
+        VB2::VmConfig: VmExecutionConfig<Val<E2::SC>> + VmCircuitConfig<E2::SC>,
+    {
+        let circuit = vm_config.create_airs()?;
+        let chip_complex = vm_builder.create_chip_complex(vm_config, circuit)?;
+        Ok(chip_complex.inventory.executor_idx_to_air_idx())
+    }
+
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
     pub fn build_metered_ctx(&self) -> MeteredCtx {
         let (constant_trace_heights, air_names, widths, interactions): (

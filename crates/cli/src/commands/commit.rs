@@ -10,7 +10,7 @@ use openvm_sdk::{fs::write_to_file_json, Sdk};
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
-    commands::{load_app_pk, load_or_build_exe},
+    commands::{load_app_pk, load_or_build_exe, ExecutionMode},
     util::{
         get_app_commit_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir,
         get_target_output_dir,
@@ -75,6 +75,7 @@ impl CommitCmd {
             output_dir: self.output_dir.clone(),
             init_file_name: self.init_file_name.clone(),
             input: None,
+            mode: ExecutionMode::Pure,
         };
         let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
         let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);

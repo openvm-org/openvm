@@ -222,6 +222,127 @@ fn test_cli_init_build() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_cli_run_mode_pure_default() -> Result<()> {
+    install_cli();
+    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+
+    // Build the test program first
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+        ],
+    )?;
+
+    // Test that default mode (pure) works without explicit flag
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "run",
+            "--exe",
+            exe_path,
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+        ],
+    )?;
+
+    // Test explicit pure mode
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "run",
+            "--exe",
+            exe_path,
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+            "--mode",
+            "pure",
+        ],
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn test_cli_run_segment() -> Result<()> {
+    install_cli();
+    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+
+    // Build the test program first
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+        ],
+    )?;
+
+    // Test run with --mode segment
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "run",
+            "--exe",
+            exe_path,
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+            "--mode",
+            "segment",
+        ],
+    )?;
+
+    Ok(())
+}
+
+#[test]
+fn test_cli_run_meter() -> Result<()> {
+    install_cli();
+    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+
+    // Build the test program first
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "build",
+            "--manifest-path",
+            "tests/programs/fibonacci/Cargo.toml",
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+        ],
+    )?;
+
+    // Test run with --mode meter
+    run_cmd(
+        "cargo",
+        &[
+            "openvm",
+            "run",
+            "--exe",
+            exe_path,
+            "--config",
+            "tests/programs/fibonacci/openvm.toml",
+            "--mode",
+            "meter",
+        ],
+    )?;
+
+    Ok(())
+}
+
 fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     let package_dir = env::current_dir()?;
     let prefix = "[test cli e2e]";
