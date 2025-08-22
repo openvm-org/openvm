@@ -118,150 +118,31 @@ permissions:
   contents: write
 
 jobs:
-  bench-new:
-    name: Run benchmark on workflow ref/branch
+  build:
     runs-on:
-      - runs-on
-      - ${{ format('family={0}', fromJSON(inputs.runner).family) }}
-      - ${{ format('image={0}', fromJSON(inputs.runner).image) }}
-      - run-id=${{ github.run_id }}
-      - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - runs-on=${{ github.run_id }}
+      - runner=test-gpu-nvidia
       - extras=s3-cache
+
     steps:
       - uses: runs-on/action@v2
-      ##########################################################################
-      # Environment setup                                                      #
-      ##########################################################################
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
 
-      - name: Install architecture specific tools
+      - name: Check CUDA status and set environment variables
         run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+          nvcc --version
 
-      - name: Display workflow inputs
-        run: echo "${{ toJSON(inputs) }}"
-      - name: "Feature flags: memory allocator"
+      - name: Run tests for primitives
+        working-directory: crates/circuits/primitives
         run: |
-          ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
-          echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
-      - name: "Feature flags: aggregation"
-        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
+
+      - name: Run tests for poseidon2-air
+        working-directory: crates/circuits/poseidon2-air
         run: |
-          echo "Adding aggregation feature flag"
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
-      - name: "Feature flags: workflow"
-        if: inputs.features || github.event.inputs.features
-        run: |
-          EXTRA_FEATURES=${{ inputs.features || github.event.inputs.features }}
-          echo "FEATURE_FLAGS=${FEATURE_FLAGS},$EXTRA_FEATURES" >> $GITHUB_ENV
-
-      - name: Setup e2e (halo2 and arguments)
-        run: |
-          E2E_BENCH=${{ inputs.e2e_bench }}
-          echo "E2E_BENCH=${E2E_BENCH}" >> $GITHUB_ENV
-
-          if [[ "${E2E_BENCH}" == "true" ]]; then
-            ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
-            INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
-            bash ./extensions/native/recursion/trusted_setup_s3.sh
-            PARAMS_DIR=$HOME/.openvm/params
-            PARAMS_ARG="--kzg-params-dir $PARAMS_DIR"
-            echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${PARAMS_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
-          fi
-
-      - name: Set BIN_NAME
-        run: |
-          echo "BIN_NAME=${{ inputs.benchmark_name }}" >> $GITHUB_ENV
-
-      - name: Set working directory
-        id: set-working-dir
-        run: |
-          WORKING_DIR=$(jq -r --arg id "${{ inputs.benchmark_id }}" '
-            .benchmarks[] |
-            select(.id == $id) |
-            .working_directory
-          ' ./ci/benchmark-config.json)
-          RELATIVE_PATH=$(python3 -c "import os.path; print(os.path.relpath('.', '$WORKING_DIR'))")
-          echo "working_dir=$WORKING_DIR" >> $GITHUB_OUTPUT
-          echo "relative_path=$RELATIVE_PATH" >> $GITHUB_OUTPUT
-
-      # Metric name is unique within a run (matrix)
-      # When uploading to S3, use ${METRIC_NAME}-${current_sha}.[md/json]
-      - name: Set metric name
-        run: |
-          METRIC_NAME=${{ inputs.benchmark_id || inputs.benchmark_name }}
-          echo "METRIC_NAME=${METRIC_NAME}" >> $GITHUB_ENV
-          METRIC_PATH=".bench_metrics/${METRIC_NAME}.json"
-          echo "METRIC_PATH=${METRIC_PATH}" >> $GITHUB_ENV
-
-      - name: Set input args
-        run: |
-          FEATURES="--features $FEATURE_FLAGS"
-          APP_ARG="--app_log_blowup ${{ inputs.app_log_blowup }}"
-          AGG_ARG="--leaf_log_blowup ${{ inputs.leaf_log_blowup }}"
-          MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
-          OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
-          echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
-
-      ##########################################################################
-      # Find working directory based on benchmark_name and run the benchmark   #
-      ##########################################################################
-      - name: Run benchmark
-        working-directory: ${{ steps.set-working-dir.outputs.working_dir }}
-        run: |
-          export JEMALLOC_SYS_WITH_MALLOC_CONF="retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1,abort_conf:true"
-          python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
-
-      ##########################################################################
-      # Store metric json file to S3                                           #
-      ##########################################################################
-      - name: Upload metric json and compute diff with previous to generate markdown
-        run: |
-          current_sha=$(git rev-parse HEAD)
-          echo "Current SHA: $current_sha"
-          echo "current_sha=${current_sha}" >> $GITHUB_ENV
-
-          s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
-
-      - name: Install inferno-flamegraph
-        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
-        run: cargo install inferno
-
-      - name: Generate flamegraphs
-        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
-        run: |
-          if [[ -f $METRIC_PATH ]]; then
-            GUEST_SYMBOLS_PATH="${METRIC_PATH%.json}.syms"
-            if [[ -f $GUEST_SYMBOLS_PATH ]]; then
-              echo "Generating flamegraphs with guest symbols"
-              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH --guest-symbols $GUEST_SYMBOLS_PATH
-            else
-              echo "No guest symbols found, generating flamegraphs without symbols"
-              python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
-            fi
-            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_FLAMEGRAPHS_PATH }}/${METRIC_NAME}-${current_sha}/"
-            echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
-          fi
-
-      ##########################################################################
-      # Update s3 for latest branch metrics upon a push event                  #
-      ##########################################################################
-      - name: Update latest branch result in s3
-        if: github.event_name == 'push'
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # for backwards compatibility
-            REF_HASH="main"
-          else
-            REF_HASH=$(echo "${{ github.ref }}" | sha256sum | cut -d' ' -f1)
-          fi
-          s5cmd cp $METRIC_PATH "${{ env.S3_METRICS_PATH }}/${REF_HASH}-${METRIC_NAME}.json"
+          CUDA_OPT_LEVEL=1 cargo nextest run cuda --features parallel,cuda,touchemall"
