@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on:
       - runs-on=${{ github.run_id }}
-      - family=g6.2xlarge
+      - family=g6e.xlarge
       - image=ubuntu24-gpu-x64
       - extras=s3-cache
     continue-on-error: true
@@ -35,14 +35,14 @@ jobs:
         run: |
           nvcc --version
 
-      - name: Run ruint guest library tests
-        working-directory: guest-libs/ruint
+      #- name: Run ruint guest library tests
+      #  working-directory: guest-libs/ruint
+      #  run: |
+      #    rustup component add rust-src --toolchain nightly-2025-02-14
+      #    CUDA_OPT_LEVEL=3 cargo nextest run --features cuda --no-tests=pass --test-threads=1
+
+      - name: Run pairing guest library tests
+        working-directory: guest-libs/pairing
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          CUDA_OPT_LEVEL=3 cargo nextest run --features cuda --no-tests=pass --test-threads=1
-
-      # - name: Run pairing guest library tests
-      #   working-directory: guest-libs/pairing
-      #   run: |
-      #     rustup component add rust-src --toolchain nightly-2025-02-14
-      #     CUDA_OPT_LEVEL=3 cargo nextest run --features cuda,bn254,bls12_381 --no-tests=pass --test-threads=1
+          CUDA_OPT_LEVEL=3 cargo nextest run --features cuda,bn254,bls12_381 --no-tests=pass --test-threads=1
