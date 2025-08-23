@@ -24,10 +24,16 @@ env:
 
 jobs:
   extension-tests-cuda:
+    strategy:
+      matrix:
+        extensions: # group extensions on the same runner based on test time
+          - "rv32im native"
+          - "keccak256 sha256 bigint algebra ecc pairing"
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}
       - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
+      - cpu=8+32 # more cores for faster compilation
       - tag=extension-cuda-tests
       - extras=s3-cache
 
@@ -61,10 +67,27 @@ jobs:
               - "extensions/pairing/**"
 
       - name: Skip if no changes
-        if: steps.filter.outputs.matched == 'false'
+        env:
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
-          echo "No relevant changes, skipping tests."
-          exit 0
+          # Check if common files changed
+          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+          
+          # Check if any extension in the current matrix group changed
+          ANY_EXT_CHANGED=false
+          for ext in ${{ matrix.extensions }}; do
+            ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
+            if [[ "$ext_changed" == "true" ]]; then
+              ANY_EXT_CHANGED=true
+              break
+            fi
+          done
+          
+          # Skip if neither common nor any extension in this matrix group changed
+          if [[ "$COMMON_CHANGED" != "true" && "$ANY_EXT_CHANGED" != "true" ]]; then
+            echo "No relevant changes for extensions [${{ matrix.extensions }}], skipping tests."
+            exit 0
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -84,9 +107,8 @@ jobs:
           FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
           COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-          EXTENSIONS=(rv32im native keccak256 sha256 bigint algebra ecc pairing)
 
-          for ext in "${EXTENSIONS[@]}"; do
+          for ext in ${{ matrix.extensions }}; do
             ext_changed=$(echo $FILTER_OUTPUTS | jq -r .$ext)
             if [[ "$COMMON_CHANGED" == "true" || "$ext_changed" == "true" ]]; then
               echo "::group::Running tests for $ext"
