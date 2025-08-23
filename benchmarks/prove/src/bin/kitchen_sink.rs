@@ -3,9 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::{
-    arch::instructions::exe::VmExe, stark_utils::TestStarkEngine as Poseidon2Engine,
-};
+use openvm_circuit::{arch::instructions::exe::VmExe, utils::TestStarkEngine as Poseidon2Engine};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
 use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_sdk::{

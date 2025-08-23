@@ -17,9 +17,11 @@ use openvm_circuit::{
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
         VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
-    stark_utils::TestStarkEngine as TestEngine,
     system::{memory::CHUNK, program::trace::VmCommittedExe},
-    utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
+    utils::{
+        air_test, air_test_with_min_segments, test_system_config_without_continuations,
+        TestStarkEngine as TestEngine,
+    },
 };
 use openvm_instructions::{
     exe::VmExe,

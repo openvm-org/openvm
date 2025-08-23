@@ -8,7 +8,7 @@ use openvm_circuit::{
         verify_single, Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder,
         VmConfig, VmExecutionConfig,
     },
-    stark_utils::{TestRecordArena as RA, TestStarkEngine as Poseidon2Engine},
+    utils::{TestRecordArena as RA, TestStarkEngine as Poseidon2Engine},
 };
 use openvm_native_circuit::{NativeBuilder as DefaultNativeBuilder, NativeConfig};
 use openvm_native_compiler::conversion::CompilerOptions;

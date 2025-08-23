@@ -11,9 +11,9 @@ mod bn254 {
     };
     use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::{
-        stark_utils::TestStarkEngine as Engine,
-        utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
+    use openvm_circuit::utils::{
+        air_test, air_test_impl, air_test_with_min_segments, test_system_config,
+        TestStarkEngine as Engine,
     };
     use openvm_ecc_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
@@ -477,8 +477,10 @@ mod bls12_381 {
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
-        stark_utils::TestStarkEngine as Engine,
-        utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
+        utils::{
+            air_test, air_test_impl, air_test_with_min_segments, test_system_config,
+            TestStarkEngine as Engine,
+        },
     };
     use openvm_ecc_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,

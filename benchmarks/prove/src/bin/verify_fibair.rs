@@ -8,7 +8,7 @@ use openvm_circuit::{
         instructions::exe::VmExe, verify_single, SingleSegmentVmProver,
         DEFAULT_MAX_NUM_PUBLIC_VALUES,
     },
-    stark_utils::TestStarkEngine as Poseidon2Engine,
+    utils::TestStarkEngine as Poseidon2Engine,
 };
 use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
