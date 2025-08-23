@@ -68,7 +68,7 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 #[cfg(not(feature = "cuda"))]
-pub type NativeBuilder = openvm_native_circuit::NativeCpuBuilder;
+pub type NativeBuilder = crate::NativeCpuBuilder;
 #[cfg(feature = "cuda")]
 pub type NativeBuilder = crate::NativeGpuBuilder;
 

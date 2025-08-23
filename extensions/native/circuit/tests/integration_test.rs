@@ -4,7 +4,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::NativeBuilder;
 use itertools::Itertools;
 #[cfg(feature = "cuda")]
 use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
@@ -62,6 +61,8 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_log::test;
+
+use crate::NativeBuilder;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where

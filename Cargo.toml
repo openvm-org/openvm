@@ -271,3 +271,8 @@ cuda-runtime-sys = "0.3.0-alpha.1"
 
 [workspace.metadata.cargo-shear]
 ignored = ["cargo-openvm"]
+
+# [patch."https://github.com/openvm-org/stark-backend.git"]
+# openvm-stark-backend = { path = "../stark-backend/crates/stark-backend" }
+# openvm-cuda-backend = { path = "../stark-backend/crates/cuda-backend" }
+# openvm-cuda-common = { path = "../stark-backend/crates/cuda-common" }
