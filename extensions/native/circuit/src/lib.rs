@@ -16,14 +16,23 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit::arch::DenseRecordArena,
-    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
-    openvm_circuit::system::cuda::SystemChipInventoryGPU,
-    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_circuit::arch::DenseRecordArena;
+        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
+        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+        pub(crate) mod cuda_abi;
+        pub use self::{
+            NativeGpuBuilder as NativeBuilder,
+        };
+    } else {
+        pub use self::{
+            NativeCpuBuilder as NativeBuilder,
+        };
+    }
+}
 
 pub mod adapters;
 
@@ -36,11 +45,8 @@ mod jal_rangecheck;
 mod loadstore;
 mod poseidon2;
 
-#[cfg(feature = "cuda")]
-pub mod cuda_abi;
-
-mod extensions;
-pub use extensions::*;
+mod extension;
+pub use extension::*;
 
 mod utils;
 #[cfg(any(test, feature = "test-utils"))]
@@ -107,7 +113,7 @@ where
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct NativeGpuBuilder;
 
 #[cfg(feature = "cuda")]

@@ -63,14 +63,21 @@ use crate::{
     },
 };
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
-#[cfg(not(feature = "cuda"))]
-pub type NativeBuilder = crate::NativeCpuBuilder;
-#[cfg(feature = "cuda")]
-pub type NativeBuilder = crate::NativeGpuBuilder;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use self::cuda::*;
+        pub use self::cuda::{
+            NativeGpuProverExt as NativeProverExt,
+        };
+        pub type NativeBuilder = crate::NativeGpuBuilder;
+    } else {
+        pub use self::{
+            NativeCpuProverExt as NativeProverExt,
+        };
+        pub type NativeBuilder = crate::NativeCpuBuilder;
+    }
+}
 
 // ============ VmExtension Implementations ============
 

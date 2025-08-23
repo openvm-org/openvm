@@ -20,7 +20,6 @@ mod tests;
 pub use air::KeccakVmAir;
 pub use extension::*;
 use openvm_circuit::arch::*;
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 
 // ==== Constants for register/memory adapter ====
 /// Register reads to get dst, src, len

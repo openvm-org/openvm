@@ -13,14 +13,6 @@ use openvm_stark_backend::{
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit::arch::DenseRecordArena,
-    openvm_circuit::system::cuda::extensions::SystemGpuBuilder,
-    openvm_circuit::system::cuda::SystemChipInventoryGPU,
-    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
 
 pub mod adapters;
 mod auipc;
@@ -56,8 +48,24 @@ pub use shift::*;
 mod extension;
 pub use extension::*;
 
-#[cfg(feature = "cuda")]
-pub mod cuda_abi;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_circuit::arch::DenseRecordArena;
+        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
+        use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+        pub(crate) mod cuda_abi;
+        pub use self::{
+            Rv32IGpuBuilder as Rv32IBuilder,
+            Rv32ImGpuBuilder as Rv32ImBuilder,
+        };
+    } else {
+        pub use self::{
+            Rv32ICpuBuilder as Rv32IBuilder,
+            Rv32ImCpuBuilder as Rv32ImBuilder,
+        };
+    }
+}
 
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;

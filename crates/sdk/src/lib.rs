@@ -54,22 +54,28 @@ use openvm_transpiler::{
 };
 #[cfg(feature = "evm-verify")]
 use snark_verifier_sdk::{evm::gen_evm_verifier_sol_code, halo2::aggregation::AggregationCircuit};
-#[cfg(feature = "cuda")]
-use {
-    config::SdkVmGpuBuilder, openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine,
-    openvm_native_circuit::NativeGpuBuilder,
-};
 
 #[cfg(feature = "evm-prove")]
 use crate::{
     config::Halo2Config, keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof,
 };
 use crate::{
-    config::{AggregationConfig, SdkVmCpuBuilder, TranspilerConfig},
+    config::{AggregationConfig, SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig},
     keygen::{asm::program_to_asm, AggProvingKey, AggVerifyingKey},
     prover::{AppProver, StarkProver},
     types::ExecutableFormat,
 };
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use config::SdkVmGpuBuilder;
+        use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine;
+        use openvm_native_circuit::NativeGpuBuilder;
+        pub use GpuSdk as Sdk;
+    } else {
+        pub use CpuSdk as Sdk;
+    }
+}
 
 pub mod codec;
 pub mod commit;
@@ -156,12 +162,17 @@ where
     _phantom: PhantomData<E>,
 }
 
-pub type Sdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
+pub type CpuSdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpuBuilder>;
 
 #[cfg(feature = "cuda")]
 pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder, NativeGpuBuilder>;
 
-impl Sdk {
+impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
+where
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E, VmConfig = SdkVmConfig> + Clone + Default,
+    NativeBuilder: Clone + Default,
+{
     /// Creates SDK with a standard configuration that includes a set of default VM extensions
     /// loaded.
     ///
@@ -188,17 +199,10 @@ impl Sdk {
     }
 }
 
-// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
-// aggregation supports.
 impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
-    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
-    <NativeConfig as VmExecutionConfig<F>>::Executor:
-        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+    VB: VmBuilder<E>,
 {
     /// Creates SDK custom to the given [AppConfig], with a RISC-V transpiler.
     pub fn new(app_config: AppConfig<VB::VmConfig>) -> Result<Self, SdkError>
@@ -318,7 +322,20 @@ where
         };
         Ok(exe)
     }
+}
 
+// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
+// aggregation supports.
+impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
+where
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E> + Clone,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+{
     /// Returns the user public values as field elements.
     pub fn execute(
         &self,

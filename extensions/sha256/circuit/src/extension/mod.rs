@@ -24,21 +24,18 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit::{
-        arch::DenseRecordArena,
-        system::cuda::{
-            extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
-            SystemChipInventoryGPU,
-        },
-    },
-    openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend},
-    openvm_rv32im_circuit::Rv32ImGpuProverExt,
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-};
 
 use crate::*;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use self::cuda::*;
+        pub use self::cuda::Sha256GpuProverExt as Sha256ProverExt;
+    } else {
+        pub use self::Sha2CpuProverExt as Sha256ProverExt;
+    }
+}
 
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
@@ -137,93 +134,5 @@ where
         inventory.add_executor_chip(sha256);
 
         Ok(())
-    }
-}
-
-#[cfg(feature = "cuda")]
-pub struct Sha256GpuProverExt;
-
-#[cfg(feature = "cuda")]
-impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Sha256>
-    for Sha256GpuProverExt
-{
-    fn extend_prover(
-        &self,
-        _: &Sha256,
-        inventory: &mut ChipInventory<BabyBearPoseidon2Config, DenseRecordArena, GpuBackend>,
-    ) -> Result<(), ChipInventoryError> {
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
-        let timestamp_max_bits = inventory.timestamp_max_bits();
-
-        let range_checker = get_inventory_range_checker(inventory);
-        let bitwise_lu = get_or_create_bitwise_op_lookup(inventory)?;
-
-        // These calls to next_air are not strictly necessary to construct the chips, but provide a
-        // safeguard to ensure that chip construction matches the circuit definition
-        inventory.next_air::<Sha256VmAir>()?;
-        let sha256 = Sha256VmChipGpu::new(
-            range_checker.clone(),
-            bitwise_lu,
-            pointer_max_bits as u32,
-            timestamp_max_bits as u32,
-        );
-        inventory.add_executor_chip(sha256);
-
-        Ok(())
-    }
-}
-
-#[cfg(feature = "cuda")]
-#[derive(Clone)]
-pub struct Sha256Rv32GpuBuilder;
-
-#[cfg(feature = "cuda")]
-impl VmBuilder<GpuBabyBearPoseidon2Engine> for Sha256Rv32GpuBuilder {
-    type VmConfig = Sha256Rv32Config;
-    type SystemChipInventory = SystemChipInventoryGPU;
-    type RecordArena = DenseRecordArena;
-
-    fn create_chip_complex(
-        &self,
-        config: &Sha256Rv32Config,
-        circuit: AirInventory<BabyBearPoseidon2Config>,
-    ) -> Result<
-        VmChipComplex<
-            BabyBearPoseidon2Config,
-            Self::RecordArena,
-            GpuBackend,
-            Self::SystemChipInventory,
-        >,
-        ChipInventoryError,
-    > {
-        use openvm_circuit::system::cuda::extensions::SystemGpuBuilder;
-
-        let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
-            &SystemGpuBuilder,
-            &config.system,
-            circuit,
-        )?;
-        let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32i,
-            inventory,
-        )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32m,
-            inventory,
-        )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.io,
-            inventory,
-        )?;
-        VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Sha256GpuProverExt,
-            &config.sha256,
-            inventory,
-        )?;
-        Ok(chip_complex)
     }
 }

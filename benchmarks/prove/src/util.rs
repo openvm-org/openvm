@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
-use openvm_circuit::arch::{
-    verify_single, Executor, MatrixRecordArena, MeteredExecutor, PreflightExecutor, SystemConfig,
-    VmBuilder, VmConfig, VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        verify_single, Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder,
+        VmConfig, VmExecutionConfig,
+    },
+    utils::{TestRecordArena as RA, TestStarkEngine as Poseidon2Engine},
 };
-use openvm_native_circuit::{NativeConfig, NativeCpuBuilder};
+use openvm_native_circuit::{NativeBuilder as DefaultNativeBuilder, NativeConfig};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     config::{
@@ -21,10 +24,7 @@ use openvm_sdk::{
     GenericSdk, StdIn,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        FriParameters,
-    },
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, FriParameters},
     engine::StarkFriEngine,
     p3_baby_bear::BabyBear,
 };
@@ -173,15 +173,13 @@ impl BenchmarkCli {
         input_stream: StdIn,
     ) -> Result<()>
     where
-        VB: VmBuilder<BabyBearPoseidon2Engine, VmConfig = VC, RecordArena = MatrixRecordArena<F>>
-            + Clone
-            + Default,
+        VB: VmBuilder<Poseidon2Engine, VmConfig = VC, RecordArena = RA> + Clone + Default,
         VC: VmExecutionConfig<F> + VmConfig<SC> + TranspilerConfig<F>,
         <VC as VmExecutionConfig<F>>::Executor:
-            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F>,
+            Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>,
     {
         let app_config = self.app_config(vm_config);
-        bench_from_exe::<BabyBearPoseidon2Engine, VB, NativeCpuBuilder>(
+        bench_from_exe::<Poseidon2Engine, VB, DefaultNativeBuilder>(
             bench_name,
             app_config,
             exe,

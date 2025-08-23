@@ -13,13 +13,15 @@ mod tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG};
+    use openvm_ecc_circuit::{
+        CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
+    };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
     use openvm_sdk::{
-        config::{AppConfig, SdkVmConfig, TranspilerConfig},
+        config::{AppConfig, SdkVmBuilder, SdkVmConfig, TranspilerConfig},
         StdIn,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;
@@ -28,16 +30,6 @@ mod tests {
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
-    #[cfg(not(feature = "cuda"))]
-    use {
-        openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
-        openvm_sdk::config::SdkVmCpuBuilder as SdkVmBuilder,
-    };
-    #[cfg(feature = "cuda")]
-    use {
-        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-        openvm_sdk::config::SdkVmGpuBuilder as SdkVmBuilder,
-    };
 
     use crate::test_vectors::{
         k256_sec1_decoding_test_vectors, K256_RECOVERY_TEST_VECTORS, P256_RECOVERY_TEST_VECTORS,

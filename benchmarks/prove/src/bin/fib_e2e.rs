@@ -28,6 +28,9 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+        #[cfg(not(feature = "evm"))]
+        let _proof = sdk.prover(elf)?.with_program_name("fib_e2e").prove(stdin)?;
+        #[cfg(feature = "evm")]
         let _proof = sdk
             .evm_prover(elf)?
             .with_program_name("fib_e2e")
