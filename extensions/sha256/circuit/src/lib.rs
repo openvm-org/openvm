@@ -123,8 +123,6 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Sha256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        use openvm_circuit::system::cuda::extensions::SystemGpuBuilder;
-
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &SystemGpuBuilder,
             &config.system,
