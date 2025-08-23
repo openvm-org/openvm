@@ -3,12 +3,14 @@ use std::sync::Arc;
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
+#[cfg(feature = "cuda")]
+use openvm_circuit::utils::cpu_proving_ctx_to_gpu;
 use openvm_circuit::{
     arch::{
         instructions::exe::VmExe, verify_single, SingleSegmentVmProver,
         DEFAULT_MAX_NUM_PUBLIC_VALUES,
     },
-    utils::{cpu_proving_ctx_to_gpu, TestStarkEngine as Poseidon2Engine},
+    utils::TestStarkEngine as Poseidon2Engine,
 };
 use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
