@@ -60,7 +60,7 @@ use crate::{
     config::Halo2Config, keygen::Halo2ProvingKey, prover::EvmHalo2Prover, types::EvmProof,
 };
 use crate::{
-    config::{AggregationConfig, SdkVmCpuBuilder, TranspilerConfig},
+    config::{AggregationConfig, SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig},
     keygen::{asm::program_to_asm, AggProvingKey, AggVerifyingKey},
     prover::{AppProver, StarkProver},
     types::ExecutableFormat,
@@ -167,7 +167,12 @@ pub type CpuSdk = GenericSdk<BabyBearPoseidon2Engine, SdkVmCpuBuilder, NativeCpu
 #[cfg(feature = "cuda")]
 pub type GpuSdk = GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder, NativeGpuBuilder>;
 
-impl CpuSdk {
+impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
+where
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E, VmConfig = SdkVmConfig> + Clone + Default,
+    NativeBuilder: Clone + Default,
+{
     /// Creates SDK with a standard configuration that includes a set of default VM extensions
     /// loaded.
     ///
@@ -194,17 +199,10 @@ impl CpuSdk {
     }
 }
 
-// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
-// aggregation supports.
 impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
 where
     E: StarkFriEngine<SC = SC>,
-    VB: VmBuilder<E> + Clone,
-    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
-        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
-    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
-    <NativeConfig as VmExecutionConfig<F>>::Executor:
-        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+    VB: VmBuilder<E>,
 {
     /// Creates SDK custom to the given [AppConfig], with a RISC-V transpiler.
     pub fn new(app_config: AppConfig<VB::VmConfig>) -> Result<Self, SdkError>
@@ -324,7 +322,20 @@ where
         };
         Ok(exe)
     }
+}
 
+// The SDK is only functional for SC = BabyBearPoseidon2Config because that is what recursive
+// aggregation supports.
+impl<E, VB, NativeBuilder> GenericSdk<E, VB, NativeBuilder>
+where
+    E: StarkFriEngine<SC = SC>,
+    VB: VmBuilder<E> + Clone,
+    <VB::VmConfig as VmExecutionConfig<F>>::Executor:
+        Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
+    NativeBuilder: VmBuilder<E, VmConfig = NativeConfig> + Clone,
+    <NativeConfig as VmExecutionConfig<F>>::Executor:
+        PreflightExecutor<F, <NativeBuilder as VmBuilder<E>>::RecordArena>,
+{
     /// Returns the user public values as field elements.
     pub fn execute(
         &self,

@@ -3,7 +3,7 @@ use std::{fs, io, path::Path, sync::OnceLock};
 use divan::Bencher;
 use eyre::Result;
 use openvm_algebra_circuit::{
-    AlgebraProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
+    AlgebraCpuProverExt, Fp2Extension, Fp2ExtensionExecutor, ModularExtension,
     ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
@@ -176,8 +176,12 @@ where
             inventory,
         )?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.modular, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &AlgebraCpuProverExt,
+            &config.modular,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraCpuProverExt, &config.fp2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,
             &config.weierstrass,

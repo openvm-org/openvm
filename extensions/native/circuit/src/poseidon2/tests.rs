@@ -619,6 +619,7 @@ fn test_vm_compress_poseidon2_as4() {
 mod cuda_tests {
     use std::array::from_fn;
 
+    use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
     use test_case::test_case;
 
     use super::*;

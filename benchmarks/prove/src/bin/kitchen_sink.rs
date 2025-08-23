@@ -90,10 +90,12 @@ fn main() -> Result<()> {
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<()> {
         let stdin = StdIn::default();
         #[cfg(not(feature = "evm"))]
-        let _proof = sdk
-            .prover(exe)?
-            .with_program_name("kitchen_sink")
-            .prove(stdin)?;
+        {
+            let prover = sdk.prover(exe)?.with_program_name("kitchen_sink");
+            let app_commit = prover.app_commit();
+            let proof = prover.prove(stdin)?;
+            Sdk::verify_proof(&agg_pk.get_agg_vk(), app_commit, &proof)?;
+        }
         #[cfg(feature = "evm")]
         let _proof = sdk
             .evm_prover(exe)?
