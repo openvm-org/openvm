@@ -3,25 +3,17 @@ use std::sync::Arc;
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_circuit::{
+    arch::instructions::exe::VmExe, stark_utils::TestStarkEngine as Poseidon2Engine,
+};
 use openvm_continuations::verifier::leaf::types::LeafVmVerifierInput;
-use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_sdk::{
     config::SdkVmConfig,
     prover::vm::{new_local_prover, types::VmProvingKey},
-    StdIn, F, SC,
+    Sdk, StdIn, F, SC,
 };
 use openvm_stark_sdk::bench::run_with_metric_collection;
-#[cfg(feature = "cuda")]
-use {
-    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
-    openvm_native_circuit::NativeGpuBuilder as NativeBuilder, openvm_sdk::GpuSdk as Sdk,
-};
-#[cfg(not(feature = "cuda"))]
-use {
-    openvm_native_circuit::NativeCpuBuilder as NativeBuilder, openvm_sdk::Sdk,
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
-};
 
 fn verify_native_max_trace_heights(
     sdk: &Sdk,

@@ -3,10 +3,14 @@ use std::sync::Arc;
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_circuit::arch::{
-    instructions::exe::VmExe, verify_single, SingleSegmentVmProver, DEFAULT_MAX_NUM_PUBLIC_VALUES,
+use openvm_circuit::{
+    arch::{
+        instructions::exe::VmExe, verify_single, SingleSegmentVmProver,
+        DEFAULT_MAX_NUM_PUBLIC_VALUES,
+    },
+    stark_utils::TestStarkEngine as Poseidon2Engine,
 };
-use openvm_native_circuit::{NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::{NativeBuilder, NativeConfig, NATIVE_MAX_TRACE_HEIGHTS};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_native_recursion::testing_utils::inner::build_verification_program;
 use openvm_sdk::{
@@ -19,18 +23,6 @@ use openvm_stark_sdk::{
     dummy_airs::fib_air::chip::FibonacciChip, engine::StarkFriEngine, openvm_stark_backend::Chip,
 };
 use tracing::info_span;
-#[cfg(feature = "cuda")]
-use {
-    openvm_cuda_backend::{
-        chip::cpu_proving_ctx_to_gpu, engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
-    },
-    openvm_native_circuit::NativeGpuBuilder as NativeBuilder,
-};
-#[cfg(not(feature = "cuda"))]
-use {
-    openvm_native_circuit::NativeCpuBuilder as NativeBuilder,
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
-};
 
 /// Benchmark of aggregation VM performance.
 /// Proofs:

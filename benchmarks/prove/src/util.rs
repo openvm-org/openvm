@@ -3,11 +3,14 @@ use std::path::PathBuf;
 use clap::{command, Parser};
 use eyre::Result;
 use openvm_benchmarks_utils::{build_elf, get_programs_dir};
-use openvm_circuit::arch::{
-    verify_single, Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder, VmConfig,
-    VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        verify_single, Executor, MeteredExecutor, PreflightExecutor, SystemConfig, VmBuilder,
+        VmConfig, VmExecutionConfig,
+    },
+    stark_utils::{TestRecordArena as RA, TestStarkEngine as Poseidon2Engine},
 };
-use openvm_native_circuit::NativeConfig;
+use openvm_native_circuit::{NativeBuilder as DefaultNativeBuilder, NativeConfig};
 use openvm_native_compiler::conversion::CompilerOptions;
 use openvm_sdk::{
     config::{
@@ -27,24 +30,9 @@ use openvm_stark_sdk::{
 };
 use openvm_transpiler::elf::Elf;
 use tracing::info_span;
-#[cfg(feature = "cuda")]
-use {
-    openvm_circuit::arch::DenseRecordArena as RA,
-    openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Poseidon2Engine,
-    openvm_native_circuit::NativeGpuBuilder as DefaultNativeBuilder,
-};
-#[cfg(not(feature = "cuda"))]
-use {
-    openvm_circuit::arch::MatrixRecordArena,
-    openvm_native_circuit::NativeCpuBuilder as DefaultNativeBuilder,
-    openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Poseidon2Engine,
-};
 
 type F = BabyBear;
 type SC = BabyBearPoseidon2Config;
-
-#[cfg(not(feature = "cuda"))]
-type RA = MatrixRecordArena<F>;
 
 #[derive(Parser, Debug)]
 #[command(allow_external_subcommands = true)]

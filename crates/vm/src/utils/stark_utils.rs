@@ -1,23 +1,15 @@
-#[cfg(feature = "cuda")]
-pub use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestStarkEngine;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
 };
-#[cfg(not(feature = "cuda"))]
-pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
 
-#[cfg(feature = "cuda")]
-use crate::arch::DenseRecordArena;
-#[cfg(not(feature = "cuda"))]
-use crate::arch::MatrixRecordArena;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
@@ -27,10 +19,18 @@ use crate::{
     system::memory::{MemoryImage, CHUNK},
 };
 
-#[cfg(feature = "cuda")]
-type RA = DenseRecordArena;
-#[cfg(not(feature = "cuda"))]
-type RA = MatrixRecordArena<BabyBear>;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        pub use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestStarkEngine;
+        use crate::arch::DenseRecordArena;
+        pub type TestRecordArena = DenseRecordArena;
+    } else {
+        pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
+        use crate::arch::MatrixRecordArena;
+        pub type TestRecordArena = MatrixRecordArena<BabyBear>;
+    }
+}
+type RA = TestRecordArena;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
