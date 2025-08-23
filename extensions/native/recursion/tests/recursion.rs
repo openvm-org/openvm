@@ -76,7 +76,7 @@ where
 {
     let fib_program = fibonacci_program(a, b, n);
     let mut config = test_native_config();
-    let fri_params = FriParameters::new_for_testing(3);
+    let fri_params = FriParameters::new_for_testing(1);
     let engine = E::new(fri_params);
     let cpu_engine = CpuEngine::new(fri_params);
     config.as_mut().num_public_values = 3;
