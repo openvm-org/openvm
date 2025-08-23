@@ -3,8 +3,6 @@ mod tests {
     use eyre::Result;
     use openvm_bigint_circuit::{Int256Rv32Config, Int256Rv32Builder};
     use openvm_bigint_transpiler::Int256TranspilerExtension;
-    use openvm_bigint_circuit::Int256Rv32GpuBuilder as Int256Rv32Builder;
-    use openvm_bigint_transpiler::Int256TranspilerExtension;
     use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{

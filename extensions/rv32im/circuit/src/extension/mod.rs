@@ -40,8 +40,7 @@ use crate::{adapters::*, *};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
-        pub use self::cuda::*;
-        pub use self::cuda::{
+        pub use cuda::{
             Rv32ImGpuProverExt as Rv32ImGpuProverExt,
         };
     } else {
