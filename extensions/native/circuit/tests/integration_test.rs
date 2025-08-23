@@ -33,7 +33,7 @@ use openvm_instructions::{
 };
 use openvm_native_circuit::{
     execute_program, test_native_config, test_native_continuations_config,
-    test_rv32_with_kernels_config, NativeConfig,
+    test_rv32_with_kernels_config, NativeBuilder, NativeConfig,
 };
 use openvm_native_compiler::{
     CastfOpcode,
@@ -61,8 +61,6 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_log::test;
-
-use openvm_native_circuit::NativeBuilder;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where

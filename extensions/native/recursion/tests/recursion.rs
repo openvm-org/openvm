@@ -145,7 +145,7 @@ fn test_fibonacci_program_verify() {
     run_recursive_test(fib_program_stark, FriParameters::new_for_testing(3));
 }
 
-#[cfg(feature = "static-verifier")]
+#[cfg(all(feature = "static-verifier", not(feature = "cuda")))]
 #[test]
 #[ignore = "slow"]
 fn test_fibonacci_program_halo2_verify() {
@@ -156,7 +156,7 @@ fn test_fibonacci_program_halo2_verify() {
 
     let fib_program_stark = fibonacci_program_test_proof_input::<
         BabyBearPoseidon2RootConfig,
-        TestEngine,
+        BabyBearPoseidon2RootEngine,
         BabyBearPoseidon2RootEngine,
     >(0, 1, 32);
     run_static_verifier_test(fib_program_stark, FriParameters::new_for_testing(3));
