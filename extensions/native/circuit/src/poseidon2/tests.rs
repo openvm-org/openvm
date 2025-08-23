@@ -3,17 +3,7 @@ use std::cmp::min;
 use openvm_circuit::arch::testing::{
     memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, VmChipTester,
 };
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
-#[cfg(not(feature = "cuda"))]
-use openvm_circuit::utils::air_test;
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::types::F as CudaF;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
-#[cfg(not(feature = "cuda"))]
-use openvm_instructions::{program::Program, SystemOpcode};
-#[cfg(not(feature = "cuda"))]
-use openvm_native_compiler::FieldArithmeticOpcode;
 use openvm_native_compiler::{
     conversion::AS, Poseidon2Opcode, Poseidon2Opcode::*, VerifyBatchOpcode::VERIFY_BATCH,
 };
@@ -45,10 +35,17 @@ use crate::poseidon2::{
     chip::{NativePoseidon2Executor, NativePoseidon2Filler},
     NativePoseidon2Chip, CHUNK,
 };
-#[cfg(feature = "cuda")]
-use crate::poseidon2::{chip::NativePoseidon2RecordMut, cuda::NativePoseidon2ChipGpu};
-#[cfg(not(feature = "cuda"))]
-use crate::{NativeConfig, NativeCpuBuilder};
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_cuda_backend::types::F as CudaF;
+        use crate::poseidon2::{chip::NativePoseidon2RecordMut, cuda::NativePoseidon2ChipGpu};
+    } else {
+        use openvm_circuit::utils::air_test;
+        use openvm_instructions::{program::Program, SystemOpcode};
+        use openvm_native_compiler::FieldArithmeticOpcode;
+        use crate::{NativeConfig, NativeCpuBuilder};
+    }
+}
 
 const VERIFY_BATCH_BUS: VerifyBatchBus = VerifyBatchBus::new(7);
 const MAX_INS_CAPACITY: usize = 1 << 15;

@@ -60,6 +60,7 @@ hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
 rrs-lib.workspace = true
 num-bigint.workspace = true
+cfg-if.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]

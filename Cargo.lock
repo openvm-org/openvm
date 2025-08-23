@@ -6069,6 +6069,7 @@ dependencies = [
  "alloy-sol-types",
  "bitcode",
  "bon",
+ "cfg-if",
  "clap",
  "derivative",
  "derive_more 1.0.0",

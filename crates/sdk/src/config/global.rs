@@ -43,20 +43,24 @@ use openvm_stark_backend::{
 };
 use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "cuda")]
-use {
-    openvm_algebra_circuit::AlgebraGpuProverExt,
-    openvm_bigint_circuit::Int256GpuProverExt,
-    openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU},
-    openvm_cuda_backend::{
-        engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
-    },
-    openvm_ecc_circuit::EccGpuProverExt,
-    openvm_keccak256_circuit::Keccak256GpuProverExt,
-    openvm_native_circuit::NativeGpuProverExt,
-    openvm_rv32im_circuit::Rv32ImGpuProverExt,
-    openvm_sha256_circuit::Sha256GpuProverExt,
-};
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        use openvm_algebra_circuit::AlgebraGpuProverExt;
+        use openvm_bigint_circuit::Int256GpuProverExt;
+        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
+        use openvm_cuda_backend::{
+            engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
+        };
+        use openvm_ecc_circuit::EccGpuProverExt;
+        use openvm_keccak256_circuit::Keccak256GpuProverExt;
+        use openvm_native_circuit::NativeGpuProverExt;
+        use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+        use openvm_sha256_circuit::Sha256GpuProverExt;
+        pub use SdkVmGpuBuilder as SdkVmBuilder;
+    } else {
+        pub use SdkVmCpuBuilder as SdkVmBuilder;
+    }
+}
 
 use super::AppFriParams;
 use crate::{
@@ -299,10 +303,6 @@ impl SdkVmConfig {
 #[derive(Copy, Clone, Default)]
 pub struct SdkVmCpuBuilder;
 
-#[cfg(feature = "cuda")]
-#[derive(Copy, Clone, Default)]
-pub struct SdkVmGpuBuilder;
-
 /// Internal struct to use for the VmConfig derive macro.
 /// Can be obtained via [`SdkVmConfig::to_inner`].
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -422,6 +422,10 @@ where
         Ok(chip_complex)
     }
 }
+
+#[cfg(feature = "cuda")]
+#[derive(Copy, Clone, Default)]
+pub struct SdkVmGpuBuilder;
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {

@@ -57,10 +57,12 @@ cfg_if::cfg_if! {
         pub(crate) mod cuda_abi;
         pub use self::{
             Rv32IGpuBuilder as Rv32IBuilder,
+            Rv32ImGpuBuilder as Rv32ImBuilder,
         };
     } else {
         pub use self::{
             Rv32ICpuBuilder as Rv32IBuilder,
+            Rv32ImCpuBuilder as Rv32ImBuilder,
         };
     }
 }

@@ -20,12 +20,8 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    #[cfg(not(feature = "cuda"))]
-    use openvm_sdk::config::SdkVmCpuBuilder as SdkVmBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_sdk::config::SdkVmGpuBuilder as SdkVmBuilder;
     use openvm_sdk::{
-        config::{AppConfig, SdkVmConfig, TranspilerConfig},
+        config::{AppConfig, SdkVmBuilder, SdkVmConfig, TranspilerConfig},
         StdIn,
     };
     use openvm_stark_backend::p3_field::FieldAlgebra;

@@ -58,10 +58,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 #[ignore = "long prover tests"]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
     use openvm_circuit::utils::air_test;
-    #[cfg(not(feature = "cuda"))]
-    use openvm_rv32im_circuit::Rv32ImCpuBuilder as Rv32ImBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_rv32im_circuit::Rv32ImGpuBuilder as Rv32ImBuilder;
+    use openvm_rv32im_circuit::Rv32ImBuilder;
 
     let config = Rv32ImConfig::default();
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];

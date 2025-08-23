@@ -9,15 +9,7 @@ mod tests {
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
-    use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
-    #[cfg(not(feature = "cuda"))]
-    use openvm_rv32im_circuit::{
-        Rv32ICpuBuilder as Rv32IBuilder, Rv32ImCpuBuilder as Rv32ImBuilder,
-    };
-    #[cfg(feature = "cuda")]
-    use openvm_rv32im_circuit::{
-        Rv32IGpuBuilder as Rv32IBuilder, Rv32ImGpuBuilder as Rv32ImBuilder,
-    };
+    use openvm_rv32im_circuit::{Rv32IBuilder, Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
         DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
