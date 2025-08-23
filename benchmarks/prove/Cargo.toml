@@ -14,7 +14,6 @@ openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-cuda-backend = { workspace = true, optional = true }
 openvm-transpiler.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
@@ -48,7 +47,6 @@ jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
 cuda = [
-    "dep:openvm-cuda-backend",
     "openvm-circuit/cuda",
     "openvm-native-circuit/cuda",
     "openvm-sdk/cuda",

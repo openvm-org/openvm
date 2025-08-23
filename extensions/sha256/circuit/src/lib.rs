@@ -28,7 +28,7 @@ pub use extension::*;
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_circuit::arch::DenseRecordArena;
-        use openvm_circuit::system::cuda::{extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder}, SystemChipInventoryGPU};
+        use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
