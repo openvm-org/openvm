@@ -91,7 +91,7 @@ fn main() -> Result<()> {
         let stdin = StdIn::default();
         #[cfg(not(feature = "evm"))]
         {
-            let prover = sdk.prover(exe)?.with_program_name("kitchen_sink");
+            let mut prover = sdk.prover(exe)?.with_program_name("kitchen_sink");
             let app_commit = prover.app_commit();
             let proof = prover.prove(stdin)?;
             Sdk::verify_proof(&agg_pk.get_agg_vk(), app_commit, &proof)?;
