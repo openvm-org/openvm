@@ -6,11 +6,7 @@ mod guest_tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, test_system_config},
     };
-    #[cfg(not(feature = "cuda"))]
-    use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder;
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG};
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, P256_CONFIG, Rv32WeierstrassBuilder};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -98,7 +94,7 @@ mod guest_tests {
             derive::VmConfig,
         };
         use openvm_ecc_circuit::{
-            CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassConfigExecutor,
+            CurveConfig, Rv32WeierstrassConfig, Rv32WeierstrassConfigExecutor,Rv32WeierstrassBuilder,
         };
         use openvm_sha256_circuit::{Sha256, Sha256Executor};
         use serde::{Deserialize, Serialize};
@@ -111,14 +107,12 @@ mod guest_tests {
                 },
                 system::cuda::SystemChipInventoryGPU,
             },
-            openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha256GpuProverExt,
             openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config,
         };
         #[cfg(not(feature = "cuda"))]
         use {
             openvm_circuit::{arch::MatrixRecordArena, system::SystemChipInventory},
-            openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
             openvm_sha256_circuit::Sha2CpuProverExt,
             openvm_stark_backend::{
                 config::{StarkGenericConfig, Val},

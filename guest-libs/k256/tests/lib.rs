@@ -6,11 +6,7 @@ mod guest_tests {
         arch::instructions::exe::VmExe,
         utils::{air_test, test_system_config},
     };
-    #[cfg(not(feature = "cuda"))]
-    use openvm_ecc_circuit::Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder;
-    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, SECP256K1_CONFIG};
+    use openvm_ecc_circuit::{CurveConfig, Rv32WeierstrassConfig, SECP256K1_CONFIG, Rv32WeierstrassBuilder};
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
