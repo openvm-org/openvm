@@ -14,6 +14,7 @@ openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
+openvm-cuda-backend = { workspace = true, optional = true }
 openvm-transpiler.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
@@ -46,17 +47,20 @@ jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
+cuda = [
+    "dep:openvm-cuda-backend",
+    "openvm-circuit/cuda",
+    "openvm-native-circuit/cuda",
+    "openvm-sdk/cuda",
+]
+
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]
 
 [[bin]]
 name = "fib_e2e"
 path = "src/bin/fib_e2e.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
 
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]

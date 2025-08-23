@@ -2,7 +2,11 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
+#[cfg(feature = "cuda")]
+use openvm_sdk::GpuSdk as Sdk;
+#[cfg(not(feature = "cuda"))]
+use openvm_sdk::Sdk;
+use openvm_sdk::{config::SdkVmConfig, StdIn};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;
@@ -28,6 +32,9 @@ async fn main() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&n);
     run_with_metric_collection("OUTPUT_PATH", || -> eyre::Result<_> {
+        #[cfg(not(feature = "evm"))]
+        let _proof = sdk.prover(elf)?.with_program_name("fib_e2e").prove(stdin)?;
+        #[cfg(feature = "evm")]
         let _proof = sdk
             .evm_prover(elf)?
             .with_program_name("fib_e2e")
