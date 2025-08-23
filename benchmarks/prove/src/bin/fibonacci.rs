@@ -1,11 +1,10 @@
 use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
-#[cfg(not(feature = "cuda"))]
-use openvm_sdk::config::SdkVmCpuBuilder as SdkVmBuilder;
-#[cfg(feature = "cuda")]
-use openvm_sdk::config::SdkVmGpuBuilder as SdkVmBuilder;
-use openvm_sdk::{config::SdkVmConfig, StdIn};
+use openvm_sdk::{
+    config::{SdkVmBuilder, SdkVmConfig},
+    StdIn,
+};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 fn main() -> Result<()> {

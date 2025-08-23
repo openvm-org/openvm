@@ -25,10 +25,23 @@ pub use modular::*;
 mod fp2;
 pub use fp2::*;
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use cuda::*;
+        pub use cuda::{
+            AlgebraGpuProverExt as AlgebraProverExt,
+            Rv32ModularGpuBuilder as Rv32ModularBuilder,
+            Rv32ModularWithFp2GpuBuilder as Rv32ModularWithFp2Builder,
+        };
+    } else {
+        pub use self::{
+            AlgebraCpuProverExt as AlgebraProverExt,
+            Rv32ModularCpuBuilder as Rv32ModularBuilder,
+            Rv32ModularWithFp2CpuBuilder as Rv32ModularWithFp2Builder,
+        };
+    }
+}
 
 pub struct AlgebraCpuProverExt;
 

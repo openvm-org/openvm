@@ -33,6 +33,7 @@ serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
 halo2curves-axiom = { workspace = true }
+cfg-if = { workspace = true }
 
 [dev-dependencies]
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }

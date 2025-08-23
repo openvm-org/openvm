@@ -43,4 +43,4 @@ mod sub_air;
 pub use sub_air::*;
 
 #[cfg(feature = "cuda")]
-pub mod cuda_abi;
+pub(crate) mod cuda_abi;

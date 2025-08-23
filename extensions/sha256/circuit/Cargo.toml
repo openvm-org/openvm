@@ -24,6 +24,7 @@ rand.workspace = true
 serde.workspace = true
 sha2 = { version = "0.10", default-features = false }
 strum = { workspace = true }
+cfg-if.workspace = true
 
 [dev-dependencies]
 hex = { workspace = true }

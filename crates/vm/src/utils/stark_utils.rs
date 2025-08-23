@@ -1,23 +1,15 @@
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as E;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
     engine::VerificationData,
     p3_field::PrimeField32,
 };
-#[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as E;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
 
-#[cfg(feature = "cuda")]
-use crate::arch::DenseRecordArena;
-#[cfg(not(feature = "cuda"))]
-use crate::arch::MatrixRecordArena;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
@@ -27,17 +19,25 @@ use crate::{
     system::memory::{MemoryImage, CHUNK},
 };
 
-#[cfg(feature = "cuda")]
-type RA = DenseRecordArena;
-#[cfg(not(feature = "cuda"))]
-type RA = MatrixRecordArena<BabyBear>;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        pub use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine as TestStarkEngine, chip::cpu_proving_ctx_to_gpu};
+        use crate::arch::DenseRecordArena;
+        pub type TestRecordArena = DenseRecordArena;
+    } else {
+        pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
+        use crate::arch::MatrixRecordArena;
+        pub type TestRecordArena = MatrixRecordArena<BabyBear>;
+    }
+}
+type RA = TestRecordArena;
 
 // NOTE on trait bounds: the compiler cannot figure out Val<SC>=BabyBear without the
 // VmExecutionConfig and VmCircuitConfig bounds even though VmProverBuilder already includes them.
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
-    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -56,7 +56,7 @@ pub fn air_test_with_min_segments<VB, VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -72,9 +72,16 @@ where
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     #[cfg(not(feature = "cuda"))]
     let debug = true;
-    let (final_memory, _) =
-        air_test_impl::<E, VB>(fri_params, builder, config, exe, input, min_segments, debug)
-            .unwrap();
+    let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
+        fri_params,
+        builder,
+        config,
+        exe,
+        input,
+        min_segments,
+        debug,
+    )
+    .unwrap();
     final_memory
 }
 

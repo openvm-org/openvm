@@ -33,6 +33,7 @@ rand.workspace = true
 eyre.workspace = true
 serde.workspace = true
 static_assertions.workspace = true
+cfg-if.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }

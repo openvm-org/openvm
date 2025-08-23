@@ -17,15 +17,25 @@ use openvm_stark_backend::{
 };
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "cuda")]
-mod cuda;
 mod weierstrass;
-
-#[cfg(feature = "cuda")]
-pub use cuda::*;
 pub use weierstrass::*;
 
-use super::*;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use cuda::*;
+        pub use cuda::{
+            EccGpuProverExt as EccProverExt,
+            Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
+        };
+    } else {
+        pub use self::{
+            EccCpuProverExt as EccProverExt,
+            Rv32WeierstrassCpuBuilder as Rv32WeierstrassBuilder,
+        };
+    }
+}
+pub struct EccCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32WeierstrassConfig {

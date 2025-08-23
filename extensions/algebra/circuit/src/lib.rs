@@ -18,9 +18,6 @@ mod extension;
 pub use extension::*;
 pub mod fields;
 
-#[cfg(feature = "cuda")]
-pub mod cuda_abi;
-
 #[derive(Clone, PreflightExecutor, Deref, DerefMut)]
 pub struct FieldExprVecHeapExecutor<
     const BLOCKS: usize,

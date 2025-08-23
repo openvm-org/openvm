@@ -2,11 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_benchmarks_prove::util::BenchmarkCli;
 use openvm_circuit::arch::DEFAULT_MAX_NUM_PUBLIC_VALUES;
-#[cfg(feature = "cuda")]
-use openvm_sdk::GpuSdk as Sdk;
-#[cfg(not(feature = "cuda"))]
-use openvm_sdk::Sdk;
-use openvm_sdk::{config::SdkVmConfig, StdIn};
+use openvm_sdk::{config::SdkVmConfig, Sdk, StdIn};
 use openvm_stark_sdk::bench::run_with_metric_collection;
 
 const NUM_PUBLIC_VALUES: usize = DEFAULT_MAX_NUM_PUBLIC_VALUES;

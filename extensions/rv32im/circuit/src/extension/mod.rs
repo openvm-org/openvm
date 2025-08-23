@@ -37,10 +37,18 @@ use strum::IntoEnumIterator;
 
 use crate::{adapters::*, *};
 
-#[cfg(feature = "cuda")]
-mod cuda;
-#[cfg(feature = "cuda")]
-pub use cuda::*;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "cuda")] {
+        mod cuda;
+        pub use cuda::{
+            Rv32ImGpuProverExt as Rv32ImGpuProverExt,
+        };
+    } else {
+        pub use self::{
+            Rv32ImCpuProverExt as Rv32ImProverExt,
+        };
+    }
+}
 
 // ============ Extension Struct Definitions ============
 

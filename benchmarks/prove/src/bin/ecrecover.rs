@@ -2,11 +2,7 @@ use clap::Parser;
 use eyre::Result;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_benchmarks_prove::util::BenchmarkCli;
-use openvm_sdk::config::SdkVmConfig;
-#[cfg(not(feature = "cuda"))]
-use openvm_sdk::config::SdkVmCpuBuilder as SdkVmBuilder;
-#[cfg(feature = "cuda")]
-use openvm_sdk::config::SdkVmGpuBuilder as SdkVmBuilder;
+use openvm_sdk::config::{SdkVmBuilder, SdkVmConfig};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{bench::run_with_metric_collection, p3_baby_bear::BabyBear};
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
