@@ -5996,6 +5996,7 @@ dependencies = [
 name = "openvm-rv32im-circuit"
 version = "1.4.0-rc.4"
 dependencies = [
+ "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "eyre",
