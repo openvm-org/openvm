@@ -1,19 +1,18 @@
 use openvm_circuit::{
-        arch::DenseRecordArena,
-        system::cuda::{
-            extensions::{
-                get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
-            },
-            SystemChipInventoryGPU,
+    arch::DenseRecordArena,
+    system::cuda::{
+        extensions::{
+            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
         },
-    };
+        SystemChipInventoryGPU,
+    },
+};
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use crate::air::KeccakVmAir;
-use crate::cuda::Keccak256ChipGpu;
 
 use super::*;
+use crate::{air::KeccakVmAir, cuda::Keccak256ChipGpu};
 
 pub struct Keccak256GpuProverExt;
 
@@ -70,27 +69,12 @@ impl VmBuilder<E> for Keccak256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &SystemGpuBuilder,
-            &config.system,
-            circuit,
-        )?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32i,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32m,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.io,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256GpuProverExt,
             &config.keccak,

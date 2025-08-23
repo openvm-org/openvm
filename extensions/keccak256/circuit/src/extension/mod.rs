@@ -3,7 +3,7 @@ use std::{result::Result, sync::Arc};
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
         ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
         RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
         VmExecutionExtension, VmProverExtension,
@@ -15,9 +15,11 @@ use openvm_circuit::{
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor, VmConfig};
 use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::*;
+use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -27,11 +29,10 @@ use openvm_stark_backend::{
     prover::cpu::{CpuBackend, CpuDevice},
 };
 use openvm_stark_sdk::engine::StarkEngine;
-use openvm_circuit::arch::ExecutionBridge;
 use serde::{Deserialize, Serialize};
-use openvm_keccak256_transpiler::Rv32KeccakOpcode;
 use strum::IntoEnumIterator;
-use crate::{KeccakVmExecutor, KeccakVmAir, KeccakVmChip, KeccakVmFiller};
+
+use crate::{KeccakVmAir, KeccakVmChip, KeccakVmExecutor, KeccakVmFiller};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -48,7 +49,6 @@ cfg_if::cfg_if! {
         };
     }
 }
-
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv32Config {
@@ -114,7 +114,6 @@ where
         Ok(chip_complex)
     }
 }
-
 
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]

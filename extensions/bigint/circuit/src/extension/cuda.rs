@@ -1,11 +1,16 @@
 use openvm_circuit::{
     arch::DenseRecordArena,
-    system::cuda::{SystemChipInventoryGPU, extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder}},
+    system::cuda::{
+        extensions::{
+            get_inventory_range_checker, get_or_create_bitwise_op_lookup, SystemGpuBuilder,
+        },
+        SystemChipInventoryGPU,
+    },
 };
 use openvm_circuit_primitives::range_tuple::cuda::RangeTupleCheckerChipGPU;
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use super::*;
 
@@ -128,27 +133,12 @@ impl VmBuilder<E> for Int256Rv32GpuBuilder {
         >,
         ChipInventoryError,
     > {
-        let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &SystemGpuBuilder,
-            &config.system,
-            circuit,
-        )?;
+        let mut chip_complex =
+            VmBuilder::<E>::create_chip_complex(&SystemGpuBuilder, &config.system, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32i,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.rv32m,
-            inventory,
-        )?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &Rv32ImGpuProverExt,
-            &config.io,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.rv32m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImGpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &Int256GpuProverExt,
             &config.bigint,

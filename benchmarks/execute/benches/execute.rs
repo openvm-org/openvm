@@ -176,11 +176,7 @@ where
             inventory,
         )?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &AlgebraProverExt,
-            &config.modular,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.modular, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &EccCpuProverExt,

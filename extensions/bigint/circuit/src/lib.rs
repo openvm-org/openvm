@@ -1,9 +1,6 @@
 use openvm_circuit::{
     self,
-    arch::{
-        InitFileGenerator, SystemConfig,
-        VmAirWrapper, VmChipWrapper,
-    },
+    arch::{InitFileGenerator, SystemConfig, VmAirWrapper, VmChipWrapper},
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
@@ -16,10 +13,9 @@ use openvm_rv32im_circuit::{
     BaseAluCoreAir, BaseAluExecutor, BaseAluFiller, BranchEqualCoreAir, BranchEqualExecutor,
     BranchEqualFiller, BranchLessThanCoreAir, BranchLessThanExecutor, BranchLessThanFiller,
     LessThanCoreAir, LessThanExecutor, LessThanFiller, MultiplicationCoreAir,
-    MultiplicationExecutor, MultiplicationFiller, Rv32I, Rv32IExecutor, Rv32Io,
-    Rv32IoExecutor, Rv32M, Rv32MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
+    MultiplicationExecutor, MultiplicationFiller, Rv32I, Rv32IExecutor, Rv32Io, Rv32IoExecutor,
+    Rv32M, Rv32MExecutor, ShiftCoreAir, ShiftExecutor, ShiftFiller,
 };
-
 use serde::{Deserialize, Serialize};
 
 mod extension;

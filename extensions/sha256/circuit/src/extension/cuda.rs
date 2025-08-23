@@ -1,9 +1,9 @@
 use openvm_circuit::{
-        arch::DenseRecordArena,
-        system::cuda::{
-            extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
-            SystemChipInventoryGPU,
-        },
+    arch::DenseRecordArena,
+    system::cuda::{
+        extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
+        SystemChipInventoryGPU,
+    },
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;

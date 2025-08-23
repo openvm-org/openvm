@@ -7,7 +7,9 @@ use openvm_bigint_transpiler::{
 };
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena, VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
+        ExecutorInventoryBuilder, ExecutorInventoryError, MatrixRecordArena, RowMajorMatrixArena,
+        VmBuilder, VmChipComplex, VmCircuitExtension, VmExecutionExtension, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemPort},
 };
@@ -30,7 +32,6 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
     prover::cpu::{CpuBackend, CpuDevice},
 };
-
 use serde::{Deserialize, Serialize};
 
 use crate::*;
