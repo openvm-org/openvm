@@ -20,4 +20,4 @@ pub mod system;
 pub mod utils;
 
 #[cfg(feature = "cuda")]
-pub mod cuda_abi;
+pub(crate) mod cuda_abi;

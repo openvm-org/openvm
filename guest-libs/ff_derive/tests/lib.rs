@@ -4,11 +4,7 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::Rv32ModularConfig;
-    #[cfg(not(feature = "cuda"))]
-    use openvm_algebra_circuit::Rv32ModularCpuBuilder as Rv32ModularBuilder;
-    #[cfg(feature = "cuda")]
-    use openvm_algebra_circuit::Rv32ModularGpuBuilder as Rv32ModularBuilder;
+    use openvm_algebra_circuit::{Rv32ModularBuilder, Rv32ModularConfig};
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_instructions::exe::VmExe;

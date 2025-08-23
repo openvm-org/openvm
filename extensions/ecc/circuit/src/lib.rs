@@ -10,8 +10,6 @@ mod weierstrass_chip;
 pub use extension::*;
 pub use weierstrass_chip::*;
 
-pub struct EccCpuProverExt;
-
 #[cfg(feature = "cuda")]
 pub(crate) type EccRecord<
     'a,

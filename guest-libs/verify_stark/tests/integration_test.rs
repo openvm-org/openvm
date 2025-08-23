@@ -3,14 +3,10 @@ use std::path::PathBuf;
 use eyre::Result;
 use openvm_circuit::arch::{SystemConfig, DEFAULT_MAX_NUM_PUBLIC_VALUES};
 use openvm_native_compiler::conversion::CompilerOptions;
-#[cfg(feature = "cuda")]
-use openvm_sdk::GpuSdk as Sdk;
-#[cfg(not(feature = "cuda"))]
-use openvm_sdk::Sdk;
 use openvm_sdk::{
     config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
     keygen::AggProvingKey,
-    StdIn,
+    Sdk, StdIn,
 };
 use openvm_stark_sdk::config::FriParameters;
 use openvm_verify_stark::host::{
