@@ -31,7 +31,7 @@ jobs:
         crates: # group crates on the same runner based on test time
           - { names: "sha2 keccak256 ruint", cpu: 8+32 }
           - { names: "ff_derive k256 p256", cpu: 8+32 }
-          - { names: "pairing verify_stark", cpu: 32 } # keygen on cpu is slow
+          - { names: "verify_stark", cpu: 32 } # TODO: pairing # keygen on cpu is slow
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}
       - runner=test-gpu-nvidia

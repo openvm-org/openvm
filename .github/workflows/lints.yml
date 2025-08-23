@@ -93,6 +93,8 @@ jobs:
       - runs-on=${{ github.run_id }}
       - family=g6+g5+g6e+g4dn
       - image=ubuntu24-gpu-x64
+      - cpu=4
+      - spot=false
       - extras=s3-cache
 
     steps:
