@@ -17,11 +17,10 @@ use openvm_circuit::{
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
         VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
+    stark_utils::TestStarkEngine as TestEngine,
     system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{air_test, air_test_with_min_segments, test_system_config_without_continuations},
 };
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestEngine;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -48,8 +47,6 @@ use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
     config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
 };
-#[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestEngine;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::BabyBearPoseidon2Config,

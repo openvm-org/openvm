@@ -11,10 +11,9 @@ mod bn254 {
     };
     use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    #[cfg(feature = "cuda")]
-    use openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine;
-    use openvm_circuit::utils::{
-        air_test, air_test_impl, air_test_with_min_segments, test_system_config,
+    use openvm_circuit::{
+        stark_utils::TestStarkEngine as Engine,
+        utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
     };
     use openvm_ecc_circuit::{
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, WeierstrassExtension,
@@ -37,8 +36,6 @@ mod bn254 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    #[cfg(not(feature = "cuda"))]
-    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine;
     use openvm_stark_sdk::{
         config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };
@@ -478,10 +475,9 @@ mod bls12_381 {
     use num_traits::{self, FromPrimitive};
     use openvm_algebra_circuit::{Fp2Extension, Rv32ModularConfig};
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    #[cfg(feature = "cuda")]
-    use openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine;
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
+        stark_utils::TestStarkEngine as Engine,
         utils::{air_test, air_test_impl, air_test_with_min_segments, test_system_config},
     };
     use openvm_ecc_circuit::{
@@ -507,8 +503,6 @@ mod bls12_381 {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    #[cfg(not(feature = "cuda"))]
-    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine;
     use openvm_stark_sdk::{
         config::FriParameters, openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear,
     };

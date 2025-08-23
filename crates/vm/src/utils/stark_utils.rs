@@ -1,5 +1,5 @@
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as E;
+pub use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestStarkEngine;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
@@ -7,7 +7,7 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 #[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as E;
+pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
     engine::{StarkFriEngine, VerificationDataWithFriParams},
@@ -37,7 +37,7 @@ type RA = MatrixRecordArena<BabyBear>;
 // The compiler also seems to need the extra VC even though VC=VB::VmConfig
 pub fn air_test<VB, VC>(builder: VB, config: VC, exe: impl Into<VmExe<BabyBear>>)
 where
-    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -56,7 +56,7 @@ pub fn air_test_with_min_segments<VB, VC>(
     min_segments: usize,
 ) -> Option<MemoryImage>
 where
-    VB: VmBuilder<E, VmConfig = VC, RecordArena = RA>,
+    VB: VmBuilder<TestStarkEngine, VmConfig = VC, RecordArena = RA>,
     VC: VmExecutionConfig<BabyBear>
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
@@ -72,9 +72,16 @@ where
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     #[cfg(not(feature = "cuda"))]
     let debug = true;
-    let (final_memory, _) =
-        air_test_impl::<E, VB>(fri_params, builder, config, exe, input, min_segments, debug)
-            .unwrap();
+    let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
+        fri_params,
+        builder,
+        config,
+        exe,
+        input,
+        min_segments,
+        debug,
+    )
+    .unwrap();
     final_memory
 }
 
