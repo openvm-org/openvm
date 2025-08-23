@@ -31,10 +31,7 @@ use openvm_instructions::{
     SysPhantom,
     SystemOpcode::*,
 };
-#[cfg(not(feature = "cuda"))]
-use openvm_native_circuit::NativeCpuBuilder as NativeBuilder;
-#[cfg(feature = "cuda")]
-use openvm_native_circuit::NativeGpuBuilder as NativeBuilder;
+use openvm_native_circuit::NativeBuilder;
 use openvm_native_circuit::{
     execute_program, test_native_config, test_native_continuations_config,
     test_rv32_with_kernels_config, NativeConfig,
