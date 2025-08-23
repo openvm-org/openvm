@@ -62,7 +62,7 @@ use openvm_stark_sdk::{
 use rand::Rng;
 use test_log::test;
 
-use crate::NativeBuilder;
+use openvm_native_circuit::NativeBuilder;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
