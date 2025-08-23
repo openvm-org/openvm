@@ -23,7 +23,7 @@ fn verify_native_max_trace_heights(
     let leaf_inputs =
         LeafVmVerifierInput::chunk_continuation_vm_proof(&app_proof, num_children_leaf);
     let mut leaf_prover = new_local_prover::<Poseidon2Engine, _>(
-        NativeBuilder,
+        NativeBuilder {},
         &leaf_vm_pk,
         sdk.app_pk().leaf_committed_exe.exe.clone(),
     )?;
