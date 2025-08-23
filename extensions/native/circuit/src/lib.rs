@@ -24,15 +24,9 @@ cfg_if::cfg_if! {
         use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
         pub(crate) mod cuda_abi;
-        pub use self::{
-            NativeGpuBuilder as NativeBuilder,
-        };
-    } else {
-        pub use self::{
-            NativeCpuBuilder as NativeBuilder,
-        };
     }
 }
+pub use extension::NativeBuilder;
 
 pub mod adapters;
 
