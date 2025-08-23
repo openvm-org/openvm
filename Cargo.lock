@@ -6152,6 +6152,7 @@ dependencies = [
 name = "openvm-sha256-circuit"
 version = "1.4.0-rc.4"
 dependencies = [
+ "cfg-if",
  "derive-new 0.6.0",
  "derive_more 1.0.0",
  "hex",

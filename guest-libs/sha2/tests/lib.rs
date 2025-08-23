@@ -6,11 +6,7 @@ mod tests {
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
-    use openvm_sha256_circuit::Sha256Rv32Config;
-    #[cfg(not(feature = "cuda"))]
-    use openvm_sha256_circuit::Sha256Rv32CpuBuilder as Sha256Rv32Builder;
-    #[cfg(feature = "cuda")]
-    use openvm_sha256_circuit::Sha256Rv32GpuBuilder as Sha256Rv32Builder;
+    use openvm_sha256_circuit::{Sha256Rv32Config, Sha256Rv32Builder};
     use openvm_sha256_transpiler::Sha256TranspilerExtension;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{build_example_program_at_path, get_programs_dir};
