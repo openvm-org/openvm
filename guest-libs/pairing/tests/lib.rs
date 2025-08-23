@@ -38,13 +38,9 @@ mod bn254 {
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
     #[cfg(feature = "cuda")]
-    use {
-        openvm_ecc_circuit::Rv32WeierstrassGpuBuilder as Rv32WeierstrassBuilder,
-    };
+    use openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine;
     #[cfg(not(feature = "cuda"))]
-    use {
-        openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine,
-    };
+    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine;
 
     type F = BabyBear;
 
@@ -508,13 +504,9 @@ mod bls12_381 {
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
     use rand::SeedableRng;
     #[cfg(feature = "cuda")]
-    use {
-        openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine,
-    };
+    use openvm_circuit::openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as Engine;
     #[cfg(not(feature = "cuda"))]
-    use {
-        openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine,
-    };
+    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as Engine;
 
     type F = BabyBear;
 
