@@ -21,7 +21,7 @@ use crate::{
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        pub use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestStarkEngine;
+        pub use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine as TestStarkEngine, chip::cpu_proving_ctx_to_gpu};
         use crate::arch::DenseRecordArena;
         pub type TestRecordArena = DenseRecordArena;
     } else {
