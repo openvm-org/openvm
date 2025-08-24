@@ -29,15 +29,15 @@ jobs:
     strategy:
       matrix:
         crates: # group crates on the same runner based on test time
-          - { names: "sha2 keccak256 ruint", cpu: 8+32 }
-          - { names: "ff_derive k256 p256", cpu: 8+32 }
-          - { names: "verify_stark", cpu: 32 } # TODO: pairing # keygen on cpu is slow
+          - { names: "sha2 keccak256 ruint", family: "g6+g5+g6e" }
+          - { names: "ff_derive k256 p256", family: "g6+g5+g6e" }
+          - { names: "pairing verify_stark", family: "g6e" }
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}
-      - runner=test-gpu-nvidia
+      - family=${{ matrix.crates.family }}
       - image=ubuntu24-gpu-x64
-      - cpu=${{ matrix.crates.cpu }}
-      - spot=false
+      - cpu=8+32
+      - spot=capacity-optimized
       - tag=guest-lib-${{ github.run_id }}-${{ strategy.job-index }}
       - extras=s3-cache
 

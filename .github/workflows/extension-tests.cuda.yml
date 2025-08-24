@@ -34,7 +34,7 @@ jobs:
       - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
       - cpu=8+32 # more cores for faster compilation
-      - spot=false
+      - spot=capacity-optimized
       - tag=extension-cuda-tests
       - extras=s3-cache
 
