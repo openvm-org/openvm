@@ -1,10 +1,11 @@
 use itertools::Itertools;
-use openvm_circuit::arch::{
-    instructions::program::Program, PreflightExecutionOutput, PreflightExecutor, VmBuilder,
-    VmCircuitConfig, VmExecutionConfig,
+use openvm_circuit::{
+    arch::{
+        instructions::program::Program, PreflightExecutionOutput, PreflightExecutor, VmBuilder,
+        VmCircuitConfig, VmExecutionConfig,
+    },
+    utils::TestStarkEngine,
 };
-#[cfg(feature = "cuda")]
-use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine as TestEngine;
 use openvm_native_circuit::{
     execute_program_with_config, test_native_config, NativeBuilder, NativeConfig,
 };
@@ -20,8 +21,6 @@ use openvm_stark_backend::{
         types::AirProvingContext,
     },
 };
-#[cfg(not(feature = "cuda"))]
-use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestEngine;
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
@@ -139,7 +138,7 @@ where
 fn test_fibonacci_program_verify() {
     let fib_program_stark = fibonacci_program_test_proof_input::<
         BabyBearPoseidon2Config,
-        TestEngine,
+        TestStarkEngine,
         BabyBearPoseidon2Engine,
     >(0, 1, 32);
     run_recursive_test(fib_program_stark, FriParameters::new_for_testing(3));
