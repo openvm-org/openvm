@@ -92,6 +92,86 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, B
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $pre_compute:ident, $is_setup:ident) => {
+        if let Some(field_type) = {
+            let modulus = &$pre_compute.expr.builder.prime;
+            get_field_type(modulus)
+        } {
+            match ($is_setup, field_type) {
+                (true, FieldType::K256Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::K256Coordinate as u8 },
+                    true,
+                >),
+                (true, FieldType::P256Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::P256Coordinate as u8 },
+                    true,
+                >),
+                (true, FieldType::BN254Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BN254Coordinate as u8 },
+                    true,
+                >),
+                (true, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BLS12_381Coordinate as u8 },
+                    true,
+                >),
+                (false, FieldType::K256Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::K256Coordinate as u8 },
+                    false,
+                >),
+                (false, FieldType::P256Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::P256Coordinate as u8 },
+                    false,
+                >),
+                (false, FieldType::BN254Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BN254Coordinate as u8 },
+                    false,
+                >),
+                (false, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
+                    _,
+                    _,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    { FieldType::BLS12_381Coordinate as u8 },
+                    false,
+                >),
+                _ => panic!("Unsupported field type"),
+            }
+        } else if $is_setup {
+            Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
+        } else {
+            Ok($execute_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
+        }
+    };
+}
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
@@ -110,85 +190,25 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
-
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        if let Some(field_type) = {
-            let modulus = &pre_compute.expr.builder.prime;
-            get_field_type(modulus)
-        } {
-            match (is_setup, field_type) {
-                (true, FieldType::K256Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::P256Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BN254Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BLS12_381Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    true,
-                >),
-                (false, FieldType::K256Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::P256Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BN254Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BLS12_381Coordinate) => Ok(execute_e1_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    false,
-                >),
-                _ => panic!("Unsupported field type"),
-            }
-        } else if is_setup {
-            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
-        } else {
-            Ok(execute_e1_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
-        }
+        dispatch!(execute_e1_impl, pre_compute, is_setup)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch!(execute_e1_tco_handler, pre_compute, is_setup)
     }
 }
 
@@ -213,84 +233,28 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
-        let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let pre_compute_pure = &mut pre_compute.data;
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+        dispatch!(execute_e2_impl, pre_compute_pure, is_setup)
+    }
 
-        if let Some(field_type) = {
-            let modulus = &pre_compute.data.expr.builder.prime;
-            get_field_type(modulus)
-        } {
-            match (is_setup, field_type) {
-                (true, FieldType::K256Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::P256Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BN254Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BLS12_381Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    true,
-                >),
-                (false, FieldType::K256Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::K256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::P256Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::P256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BN254Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BN254Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BLS12_381Coordinate) => Ok(execute_e2_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    false,
-                >),
-                _ => panic!("Unsupported field type"),
-            }
-        } else if is_setup {
-            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, true>)
-        } else {
-            Ok(execute_e2_impl::<_, _, BLOCKS, BLOCK_SIZE, { u8::MAX }, false>)
-        }
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<EcAddNePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let pre_compute_pure = &mut pre_compute.data;
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+        dispatch!(execute_e2_tco_handler, pre_compute_pure, is_setup)
     }
 }
 
@@ -351,6 +315,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -366,6 +331,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

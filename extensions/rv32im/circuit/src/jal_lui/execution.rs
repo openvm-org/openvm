@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -49,6 +43,17 @@ impl<A> Rv32JalLuiExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_jal:ident, $enabled:ident) => {
+        match ($is_jal, $enabled) {
+            (true, true) => Ok($execute_impl::<_, _, true, true>),
+            (true, false) => Ok($execute_impl::<_, _, true, false>),
+            (false, true) => Ok($execute_impl::<_, _, false, true>),
+            (false, false) => Ok($execute_impl::<_, _, false, false>),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for Rv32JalLuiExecutor<A>
 where
     F: PrimeField32,
@@ -66,13 +71,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
-        let fn_ptr = match (is_jal, enabled) {
-            (true, true) => execute_e1_impl::<_, _, true, true>,
-            (true, false) => execute_e1_impl::<_, _, true, false>,
-            (false, true) => execute_e1_impl::<_, _, false, true>,
-            (false, false) => execute_e1_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_jal, enabled)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut JalLuiPreCompute = data.borrow_mut();
+        let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
+        dispatch!(execute_e1_tco_handler, is_jal, enabled)
     }
 }
 
@@ -97,13 +111,24 @@ where
         let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
-        let fn_ptr = match (is_jal, enabled) {
-            (true, true) => execute_e2_impl::<_, _, true, true>,
-            (true, false) => execute_e2_impl::<_, _, true, false>,
-            (false, true) => execute_e2_impl::<_, _, false, true>,
-            (false, false) => execute_e2_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_jal, enabled)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, is_jal, enabled)
     }
 }
 
@@ -138,6 +163,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -151,6 +177,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

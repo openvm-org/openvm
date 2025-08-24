@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
+#[cfg(feature = "tco")]
+use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -26,12 +28,8 @@ use crate::{
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]
     Fail { pc: u32, msg: &'static str },
-    #[error("pc {pc} out of bounds for program of length {program_len}, with pc_base {pc_base}")]
-    PcOutOfBounds {
-        pc: u32,
-        pc_base: u32,
-        program_len: usize,
-    },
+    #[error("pc {0} out of bounds")]
+    PcOutOfBounds(u32),
     #[error("unreachable instruction at pc {0}")]
     Unreachable(u32),
     #[error("at pc {pc}, opcode {opcode} was not enabled")]
@@ -91,7 +89,20 @@ pub enum StaticProgramError {
 /// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
 /// The contents of `pre_compute` are determined from the program code as specified by the
 /// [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> = unsafe fn(&[u8], &mut VmExecState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+
+/// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
+/// buffer and the function handler table.
+///
+/// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
+/// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
+///   pointer is typeless to avoid self-referential types.
+#[cfg(feature = "tco")]
+pub type Handler<F, CTX> = unsafe fn(
+    interpreter: &InterpretedInstance<F, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+);
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
@@ -106,6 +117,20 @@ pub trait Executor<F> {
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait;
+
+    /// Returns a function pointer with tail call optimization. The handler function assumes that
+    /// the pre-compute buffer it receives is the populated `data`.
+    // NOTE: we could have used `pre_compute` above to populate `data`, but the implementations were
+    // simpler to keep `handler` entirely separate from `pre_compute`.
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
@@ -124,6 +149,22 @@ pub trait MeteredExecutor<F> {
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait;
+
+    /// Returns a function pointer with tail call optimization. The handler function assumes that
+    /// the pre-compute buffer it receives is the populated `data`.
+    // NOTE: we could have used `metered_pre_compute` above to populate `data`, but the
+    // implementations were simpler to keep `metered_handler` entirely separate from
+    // `metered_pre_compute`.
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }

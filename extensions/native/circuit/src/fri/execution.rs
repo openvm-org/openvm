@@ -66,6 +66,24 @@ impl<F> Executor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
+
+        self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        let fn_ptr = execute_e1_tco_handler;
+        Ok(fn_ptr)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<FriReducedOpeningPreCompute>()
@@ -112,8 +130,26 @@ where
         let fn_ptr = execute_e2_impl;
         Ok(fn_ptr)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        let fn_ptr = execute_e2_tco_handler;
+        Ok(fn_ptr)
+    }
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -122,6 +158,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

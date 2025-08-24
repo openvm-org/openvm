@@ -74,6 +74,83 @@ macro_rules! generate_fp2_dispatch {
     };
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident,$execute_generic_impl:ident,$execute_setup_impl:ident,$pre_compute:ident,$op:ident) => {
+        if let Some(op) = $op {
+            let modulus = &$pre_compute.expr.prime;
+            if IS_FP2 {
+                if let Some(field_type) = get_fp2_field_type(modulus) {
+                    generate_fp2_dispatch!(
+                        field_type,
+                        op,
+                        BLOCKS,
+                        BLOCK_SIZE,
+                        $execute_impl,
+                        [
+                            (BN254Coordinate, Add),
+                            (BN254Coordinate, Sub),
+                            (BN254Coordinate, Mul),
+                            (BN254Coordinate, Div),
+                            (BLS12_381Coordinate, Add),
+                            (BLS12_381Coordinate, Sub),
+                            (BLS12_381Coordinate, Mul),
+                            (BLS12_381Coordinate, Div),
+                        ]
+                    )
+                } else {
+                    Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+                }
+            } else if let Some(field_type) = get_field_type(modulus) {
+                generate_field_dispatch!(
+                    field_type,
+                    op,
+                    BLOCKS,
+                    BLOCK_SIZE,
+                    $execute_impl,
+                    [
+                        (K256Coordinate, Add),
+                        (K256Coordinate, Sub),
+                        (K256Coordinate, Mul),
+                        (K256Coordinate, Div),
+                        (K256Scalar, Add),
+                        (K256Scalar, Sub),
+                        (K256Scalar, Mul),
+                        (K256Scalar, Div),
+                        (P256Coordinate, Add),
+                        (P256Coordinate, Sub),
+                        (P256Coordinate, Mul),
+                        (P256Coordinate, Div),
+                        (P256Scalar, Add),
+                        (P256Scalar, Sub),
+                        (P256Scalar, Mul),
+                        (P256Scalar, Div),
+                        (BN254Coordinate, Add),
+                        (BN254Coordinate, Sub),
+                        (BN254Coordinate, Mul),
+                        (BN254Coordinate, Div),
+                        (BN254Scalar, Add),
+                        (BN254Scalar, Sub),
+                        (BN254Scalar, Mul),
+                        (BN254Scalar, Div),
+                        (BLS12_381Coordinate, Add),
+                        (BLS12_381Coordinate, Sub),
+                        (BLS12_381Coordinate, Mul),
+                        (BLS12_381Coordinate, Div),
+                        (BLS12_381Scalar, Add),
+                        (BLS12_381Scalar, Sub),
+                        (BLS12_381Scalar, Mul),
+                        (BLS12_381Scalar, Div),
+                    ]
+                )
+            } else {
+                Ok($execute_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+            }
+        } else {
+            Ok($execute_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
+        }
+    };
+}
+
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct FieldExpressionPreCompute<'a> {
@@ -192,81 +269,37 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
-
         let op = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        if let Some(op) = op {
-            let modulus = &pre_compute.expr.prime;
-            if IS_FP2 {
-                if let Some(field_type) = get_fp2_field_type(modulus) {
-                    generate_fp2_dispatch!(
-                        field_type,
-                        op,
-                        BLOCKS,
-                        BLOCK_SIZE,
-                        execute_e1_impl,
-                        [
-                            (BN254Coordinate, Add),
-                            (BN254Coordinate, Sub),
-                            (BN254Coordinate, Mul),
-                            (BN254Coordinate, Div),
-                            (BLS12_381Coordinate, Add),
-                            (BLS12_381Coordinate, Sub),
-                            (BLS12_381Coordinate, Mul),
-                            (BLS12_381Coordinate, Div),
-                        ]
-                    )
-                } else {
-                    Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-                }
-            } else if let Some(field_type) = get_field_type(modulus) {
-                generate_field_dispatch!(
-                    field_type,
-                    op,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    execute_e1_impl,
-                    [
-                        (K256Coordinate, Add),
-                        (K256Coordinate, Sub),
-                        (K256Coordinate, Mul),
-                        (K256Coordinate, Div),
-                        (K256Scalar, Add),
-                        (K256Scalar, Sub),
-                        (K256Scalar, Mul),
-                        (K256Scalar, Div),
-                        (P256Coordinate, Add),
-                        (P256Coordinate, Sub),
-                        (P256Coordinate, Mul),
-                        (P256Coordinate, Div),
-                        (P256Scalar, Add),
-                        (P256Scalar, Sub),
-                        (P256Scalar, Mul),
-                        (P256Scalar, Div),
-                        (BN254Coordinate, Add),
-                        (BN254Coordinate, Sub),
-                        (BN254Coordinate, Mul),
-                        (BN254Coordinate, Div),
-                        (BN254Scalar, Add),
-                        (BN254Scalar, Sub),
-                        (BN254Scalar, Mul),
-                        (BN254Scalar, Div),
-                        (BLS12_381Coordinate, Add),
-                        (BLS12_381Coordinate, Sub),
-                        (BLS12_381Coordinate, Mul),
-                        (BLS12_381Coordinate, Div),
-                        (BLS12_381Scalar, Add),
-                        (BLS12_381Scalar, Sub),
-                        (BLS12_381Scalar, Mul),
-                        (BLS12_381Scalar, Div),
-                    ]
-                )
-            } else {
-                Ok(execute_e1_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-            }
-        } else {
-            Ok(execute_e1_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-        }
+        dispatch!(
+            execute_e1_impl,
+            execute_e1_generic_impl,
+            execute_e1_setup_impl,
+            pre_compute,
+            op
+        )
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExpressionPreCompute = data.borrow_mut();
+        let op = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch!(
+            execute_e1_tco_handler,
+            execute_e1_generic_tco_handler,
+            execute_e1_setup_tco_handler,
+            pre_compute,
+            op
+        )
     }
 }
 
@@ -291,80 +324,42 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
 
-        let op = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        let pre_compute_pure = &mut pre_compute.data;
+        let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
 
-        if let Some(op) = op {
-            let modulus = &pre_compute.data.expr.prime;
-            if IS_FP2 {
-                if let Some(field_type) = get_fp2_field_type(modulus) {
-                    generate_fp2_dispatch!(
-                        field_type,
-                        op,
-                        BLOCKS,
-                        BLOCK_SIZE,
-                        execute_e2_impl,
-                        [
-                            (BN254Coordinate, Add),
-                            (BN254Coordinate, Sub),
-                            (BN254Coordinate, Mul),
-                            (BN254Coordinate, Div),
-                            (BLS12_381Coordinate, Add),
-                            (BLS12_381Coordinate, Sub),
-                            (BLS12_381Coordinate, Mul),
-                            (BLS12_381Coordinate, Div),
-                        ]
-                    )
-                } else {
-                    Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-                }
-            } else if let Some(field_type) = get_field_type(modulus) {
-                generate_field_dispatch!(
-                    field_type,
-                    op,
-                    BLOCKS,
-                    BLOCK_SIZE,
-                    execute_e2_impl,
-                    [
-                        (K256Coordinate, Add),
-                        (K256Coordinate, Sub),
-                        (K256Coordinate, Mul),
-                        (K256Coordinate, Div),
-                        (K256Scalar, Add),
-                        (K256Scalar, Sub),
-                        (K256Scalar, Mul),
-                        (K256Scalar, Div),
-                        (P256Coordinate, Add),
-                        (P256Coordinate, Sub),
-                        (P256Coordinate, Mul),
-                        (P256Coordinate, Div),
-                        (P256Scalar, Add),
-                        (P256Scalar, Sub),
-                        (P256Scalar, Mul),
-                        (P256Scalar, Div),
-                        (BN254Coordinate, Add),
-                        (BN254Coordinate, Sub),
-                        (BN254Coordinate, Mul),
-                        (BN254Coordinate, Div),
-                        (BN254Scalar, Add),
-                        (BN254Scalar, Sub),
-                        (BN254Scalar, Mul),
-                        (BN254Scalar, Div),
-                        (BLS12_381Coordinate, Add),
-                        (BLS12_381Coordinate, Sub),
-                        (BLS12_381Coordinate, Mul),
-                        (BLS12_381Coordinate, Div),
-                        (BLS12_381Scalar, Add),
-                        (BLS12_381Scalar, Sub),
-                        (BLS12_381Scalar, Mul),
-                        (BLS12_381Scalar, Div),
-                    ]
-                )
-            } else {
-                Ok(execute_e2_generic_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-            }
-        } else {
-            Ok(execute_e2_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>)
-        }
+        dispatch!(
+            execute_e2_impl,
+            execute_e2_generic_impl,
+            execute_e2_setup_impl,
+            pre_compute_pure,
+            op
+        )
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<FieldExpressionPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let pre_compute_pure = &mut pre_compute.data;
+        let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
+
+        dispatch!(
+            execute_e2_tco_handler,
+            execute_e2_generic_tco_handler,
+            execute_e2_setup_tco_handler,
+            pre_compute_pure,
+            op
+        )
     }
 }
 unsafe fn execute_e12_impl<
@@ -496,6 +491,7 @@ unsafe fn execute_e12_setup_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -510,6 +506,7 @@ unsafe fn execute_e1_setup_impl<
     execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_setup_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -527,6 +524,7 @@ unsafe fn execute_e2_setup_impl<
     execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(&pre_compute.data, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -543,6 +541,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -565,6 +564,7 @@ unsafe fn execute_e2_impl<
     );
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_generic_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -579,6 +579,7 @@ unsafe fn execute_e1_generic_impl<
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_generic_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

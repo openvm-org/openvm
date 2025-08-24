@@ -41,6 +41,7 @@ impl<FA: FieldAlgebra> GenericPoseidon2LinearLayers<FA, WIDTH> for BabyBearPosei
             TypeId::of::<BabyBear>(),
             "BabyBear is the only supported field type"
         );
+        // SAFETY: TypeId check above ensures FA::F is BabyBear, so transmute is valid
         let diag_m1_matrix =
             unsafe { std::mem::transmute::<&[BabyBear; WIDTH], &[FA::F; WIDTH]>(diag_m1_matrix) };
         babybear_internal_linear_layer(state, diag_m1_matrix);

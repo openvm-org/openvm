@@ -44,11 +44,9 @@ test-case = { workspace = true }
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
 
-[package.metadata.cargo-shear]
-ignored = ["derive_more"]
-
 [features]
 default = []
+tco = ["openvm-rv32im-circuit/tco"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
@@ -59,9 +57,12 @@ cuda = [
     "openvm-rv32im-circuit/cuda",
 ]
 touchemall = [
-    "cuda", 
+    "cuda",
     "openvm-circuit/touchemall",
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",
 ]
+
+[package.metadata.cargo-shear]
+ignored = ["derive_more"]

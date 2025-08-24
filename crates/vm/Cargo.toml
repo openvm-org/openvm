@@ -77,6 +77,9 @@ basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
 test-utils = ["dep:openvm-stark-sdk"]
+# Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
+# However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
+tco = ["openvm-circuit-derive/tco"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
@@ -90,7 +93,7 @@ cuda = [
     "dep:openvm-cuda-builder",
 ]
 touchemall = [
-    "cuda", 
+    "cuda",
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",

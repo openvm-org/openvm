@@ -56,6 +56,9 @@ impl AlignedBuf {
 impl Drop for AlignedBuf {
     fn drop(&mut self) {
         if self.layout.size() != 0 {
+            // SAFETY:
+            // - self.ptr was allocated with self.layout
+            // - Pointer and layout are valid from creation
             unsafe {
                 dealloc(self.ptr, self.layout);
             }

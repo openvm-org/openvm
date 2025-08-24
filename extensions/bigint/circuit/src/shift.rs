@@ -14,7 +14,10 @@ use openvm_rv32im_circuit::ShiftExecutor;
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32Shift256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u64_array, u64_array_to_bytes},
+    Rv32Shift256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
@@ -30,6 +33,16 @@ struct ShiftPreCompute {
     a: u8,
     b: u8,
     c: u8,
+}
+
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            ShiftOpcode::SLL => $execute_impl::<_, _, SllOp>,
+            ShiftOpcode::SRA => $execute_impl::<_, _, SraOp>,
+            ShiftOpcode::SRL => $execute_impl::<_, _, SrlOp>,
+        })
+    };
 }
 
 impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
@@ -48,12 +61,22 @@ impl<F: PrimeField32> Executor<F> for Rv32Shift256Executor {
     {
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            ShiftOpcode::SLL => execute_e1_impl::<_, _, SllOp>,
-            ShiftOpcode::SRA => execute_e1_impl::<_, _, SraOp>,
-            ShiftOpcode::SRL => execute_e1_impl::<_, _, SrlOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut ShiftPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -75,12 +98,24 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Shift256Executor {
         let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            ShiftOpcode::SLL => execute_e2_impl::<_, _, SllOp>,
-            ShiftOpcode::SRA => execute_e2_impl::<_, _, SraOp>,
-            ShiftOpcode::SRL => execute_e2_impl::<_, _, SrlOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<ShiftPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -100,6 +135,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -107,6 +143,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -158,8 +195,8 @@ struct SraOp;
 impl ShiftOp for SllOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd = [0u64; 4];
         // Only use the first 8 bits.
         let shift = (rs2_u64[0] & 0xff) as u32;
@@ -173,7 +210,7 @@ impl ShiftOp for SllOp {
                 carry = curr >> (u64::BITS - bit_offset);
             }
         }
-        unsafe { std::mem::transmute(rd) }
+        u64_array_to_bytes(rd)
     }
 }
 impl ShiftOp for SrlOp {
@@ -201,8 +238,8 @@ fn shift_right(
     rs2: [u8; INT256_NUM_LIMBS],
     init_value: u64,
 ) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
     let mut rd = [init_value; 4];
     let shift = (rs2_u64[0] & 0xff) as u32;
     let index_offset = (shift / u64::BITS) as usize;
@@ -219,7 +256,7 @@ fn shift_right(
             carry = curr << (u64::BITS - bit_offset);
         }
     }
-    unsafe { std::mem::transmute(rd) }
+    u64_array_to_bytes(rd)
 }
 
 #[cfg(test)]

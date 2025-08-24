@@ -19,9 +19,9 @@ pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
 pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
 
 // Aggregation Tree Defaults
-const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
-const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
-const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
+pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
+pub const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
+pub const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
 
 pub trait TranspilerConfig<F> {
     fn transpiler(&self) -> Transpiler<F>;

@@ -52,6 +52,15 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 # install build tools for Ubuntu
 sudo apt update
 sudo apt install -y build-essential   # gcc, g++, make, libc headers
+
+# install Solidity compiler, only needed for EVM proofs
+cargo install --version 0.5.7 svm-rs
+# Add the binary to your path
+export PATH="$HOME/.cargo/bin:$PATH"
+ 
+# Install solc 0.8.19
+svm install 0.8.19
+svm use 0.8.19
 ```
 
 ```bash [macOS]
@@ -66,4 +75,13 @@ rustup component add rust-src --toolchain nightly-2025-02-14
 # install build tools for macOS
 xcode-select --install
 brew install cmake git curl
+
+# install Solidity compiler, only needed for EVM proofs
+cargo install --version 0.5.7 svm-rs
+# Add the binary to your path
+export PATH="$HOME/.cargo/bin:$PATH"
+ 
+# Install solc 0.8.19
+svm install 0.8.19
+svm use 0.8.19
 ```

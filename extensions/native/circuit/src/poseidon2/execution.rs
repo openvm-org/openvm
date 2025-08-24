@@ -136,6 +136,33 @@ impl<'a, F: PrimeField32, const SBOX_REGISTERS: usize> NativePoseidon2Executor<F
     }
 }
 
+macro_rules! dispatch1 {
+    (
+        $execute_pos2_impl:ident,
+        $execute_verify_batch_impl:ident,
+        $executor:ident,
+        $opcode:expr,
+        $pc:ident,
+        $inst:ident,
+        $data:ident
+    ) => {
+        if $opcode == PERM_POS2.global_opcode() || $opcode == COMP_POS2.global_opcode() {
+            let pos2_data: &mut Pos2PreCompute<F, SBOX_REGISTERS> = $data.borrow_mut();
+            $executor.pre_compute_pos2_impl($pc, $inst, pos2_data)?;
+            if $opcode == PERM_POS2.global_opcode() {
+                Ok($execute_pos2_impl::<_, _, SBOX_REGISTERS, true>)
+            } else {
+                Ok($execute_pos2_impl::<_, _, SBOX_REGISTERS, false>)
+            }
+        } else {
+            let verify_batch_data: &mut VerifyBatchPreCompute<F, SBOX_REGISTERS> =
+                $data.borrow_mut();
+            $executor.pre_compute_verify_batch_impl($pc, $inst, verify_batch_data)?;
+            Ok($execute_verify_batch_impl::<_, _, SBOX_REGISTERS>)
+        }
+    };
+}
+
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
@@ -154,25 +181,67 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let &Instruction { opcode, .. } = inst;
+        dispatch1!(
+            execute_pos2_e1_impl,
+            execute_verify_batch_e1_impl,
+            self,
+            inst.opcode,
+            pc,
+            inst,
+            data
+        )
+    }
 
-        let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
+    #[cfg(feature = "tco")]
+    fn handler<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        dispatch1!(
+            execute_pos2_e1_tco_handler,
+            execute_verify_batch_e1_tco_handler,
+            self,
+            inst.opcode,
+            pc,
+            inst,
+            data
+        )
+    }
+}
 
-        if is_pos2 {
-            let pos2_data: &mut Pos2PreCompute<F, SBOX_REGISTERS> = data.borrow_mut();
-            self.pre_compute_pos2_impl(pc, inst, pos2_data)?;
-            if opcode == PERM_POS2.global_opcode() {
-                Ok(execute_pos2_e1_impl::<_, _, SBOX_REGISTERS, true>)
+macro_rules! dispatch2 {
+    (
+        $execute_pos2_impl:ident,
+        $execute_verify_batch_impl:ident,
+        $executor:ident,
+        $opcode:expr,
+        $chip_idx:ident,
+        $pc:ident,
+        $inst:ident,
+        $data:ident
+    ) => {
+        if $opcode == PERM_POS2.global_opcode() || $opcode == COMP_POS2.global_opcode() {
+            let pre_compute: &mut E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> =
+                $data.borrow_mut();
+            pre_compute.chip_idx = $chip_idx as u32;
+
+            $executor.pre_compute_pos2_impl($pc, $inst, &mut pre_compute.data)?;
+            if $opcode == PERM_POS2.global_opcode() {
+                Ok($execute_pos2_impl::<_, _, SBOX_REGISTERS, true>)
             } else {
-                Ok(execute_pos2_e1_impl::<_, _, SBOX_REGISTERS, false>)
+                Ok($execute_pos2_impl::<_, _, SBOX_REGISTERS, false>)
             }
         } else {
-            let verify_batch_data: &mut VerifyBatchPreCompute<F, SBOX_REGISTERS> =
-                data.borrow_mut();
-            self.pre_compute_verify_batch_impl(pc, inst, verify_batch_data)?;
-            Ok(execute_verify_batch_e1_impl::<_, _, SBOX_REGISTERS>)
+            let pre_compute: &mut E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
+                $data.borrow_mut();
+            pre_compute.chip_idx = $chip_idx as u32;
+
+            $executor.pre_compute_verify_batch_impl($pc, $inst, &mut pre_compute.data)?;
+            Ok($execute_verify_batch_impl::<_, _, SBOX_REGISTERS>)
         }
-    }
+    };
 }
 
 impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
@@ -194,32 +263,40 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let &Instruction { opcode, .. } = inst;
+        dispatch2!(
+            execute_pos2_e2_impl,
+            execute_verify_batch_e2_impl,
+            self,
+            inst.opcode,
+            chip_idx,
+            pc,
+            inst,
+            data
+        )
+    }
 
-        let is_pos2 = opcode == PERM_POS2.global_opcode() || opcode == COMP_POS2.global_opcode();
-
-        if is_pos2 {
-            let pre_compute: &mut E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> =
-                data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
-
-            self.pre_compute_pos2_impl(pc, inst, &mut pre_compute.data)?;
-            if opcode == PERM_POS2.global_opcode() {
-                Ok(execute_pos2_e2_impl::<_, _, SBOX_REGISTERS, true>)
-            } else {
-                Ok(execute_pos2_e2_impl::<_, _, SBOX_REGISTERS, false>)
-            }
-        } else {
-            let pre_compute: &mut E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
-                data.borrow_mut();
-            pre_compute.chip_idx = chip_idx as u32;
-
-            self.pre_compute_verify_batch_impl(pc, inst, &mut pre_compute.data)?;
-            Ok(execute_verify_batch_e2_impl::<_, _, SBOX_REGISTERS>)
-        }
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        dispatch2!(
+            execute_pos2_e2_tco_handler,
+            execute_verify_batch_e2_tco_handler,
+            self,
+            inst.opcode,
+            chip_idx,
+            pc,
+            inst,
+            data
+        )
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -233,6 +310,7 @@ unsafe fn execute_pos2_e1_impl<
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_pos2_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -250,6 +328,7 @@ unsafe fn execute_pos2_e2_impl<
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
+#[create_tco_handler]
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -263,6 +342,7 @@ unsafe fn execute_verify_batch_e1_impl<
     execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_verify_batch_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

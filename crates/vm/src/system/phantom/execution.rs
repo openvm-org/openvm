@@ -7,8 +7,11 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
+#[cfg(feature = "tco")]
+use crate::arch::Handler;
 use crate::{
     arch::{
+        create_tco_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
         E2PreCompute, ExecuteFunc, ExecutionError, Executor, MeteredExecutor, PhantomSubExecutor,
         StaticProgramError, Streams, VmExecState,
@@ -53,6 +56,20 @@ where
         self.pre_compute_impl(inst, data);
         Ok(execute_e1_impl)
     }
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut PhantomPreCompute<F> = data.borrow_mut();
+        self.pre_compute_impl(inst, data);
+        Ok(execute_e1_tco_handler)
+    }
 }
 
 pub(super) struct PhantomStateMut<'a, F> {
@@ -85,6 +102,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -94,6 +112,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -188,5 +207,22 @@ where
         e2_data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(inst, &mut e2_data.data);
         Ok(execute_e2_impl)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
+        e2_data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(inst, &mut e2_data.data);
+        Ok(execute_e2_tco_handler)
     }
 }
