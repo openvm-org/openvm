@@ -19,8 +19,8 @@ jobs:
       - runner=64cpu-linux-x64
       - extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
 
       - uses: codespell-project/actions-codespell@v2
         with:
@@ -94,11 +94,13 @@ jobs:
       - runs-on=${{ github.run_id }}
       - family=g6+g5+g6e+g4dn
       - image=ubuntu24-gpu-x64
+      - cpu=4
+      - spot=false
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

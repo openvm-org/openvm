@@ -34,6 +34,7 @@ jobs:
       - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
       - cpu=8+32 # more cores for faster compilation
+      - spot=capacity-optimized
       - tag=extension-cuda-tests
       - extras=s3-cache
 
@@ -72,7 +73,7 @@ jobs:
         run: |
           # Check if common files changed
           COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-          
+
           # Check if any extension in the current matrix group changed
           ANY_EXT_CHANGED=false
           for ext in ${{ matrix.extensions }}; do
@@ -82,7 +83,7 @@ jobs:
               break
             fi
           done
-          
+
           # Skip if neither common nor any extension in this matrix group changed
           if [[ "$COMMON_CHANGED" != "true" && "$ANY_EXT_CHANGED" != "true" ]]; then
             echo "No relevant changes for extensions [${{ matrix.extensions }}], skipping tests."

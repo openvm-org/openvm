@@ -25,7 +25,7 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
