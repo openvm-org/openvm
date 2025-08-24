@@ -1,13 +1,9 @@
 # Compiling a Program
 
 Once you have written a program to be proven by OpenVM, you need to compile it in a way
-which is compatible with OpenVM.  This will involve **cross-compiling** the program by
-building it for a machine architecture which differs from the machine performing the build.
-
-To explain how this works for OpenVM, we will use the following key terms:
-
-- **Host**: The machine architecture being used for building and proving. Though building and proving can be done on different machine architectures, they are both called **host** architectures since they are not the architecture used to specify the program.
-- **Guest**: The machine architecture being used to express the program to be proven, which is the OpenVM runtime in this case. We refer to programs written to be proven by OpenVM as **guest programs**.
+which is compatible with OpenVM. We refer to programs written to be proven by OpenVM as 
+**guest programs**, with the term coming from its usage in 
+[cross-compilation](/specs/reference/rust-toolchain) as explained in the specs.
 
 ## Building Guest Programs for OpenVM
 
