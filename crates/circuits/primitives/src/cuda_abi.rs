@@ -200,26 +200,6 @@ pub mod encoder {
 }
 
 #[cfg(test)]
-pub mod fibair {
-    use super::*;
-
-    extern "C" {
-        fn _fibair_tracegen(output: *mut std::ffi::c_void, a: u32, b: u32, n: u32) -> i32;
-    }
-
-    #[allow(dead_code)]
-    pub unsafe fn fibair_tracegen<F>(
-        output: &DeviceBuffer<F>,
-        a: u32,
-        b: u32,
-        n: usize,
-    ) -> Result<(), CudaError> {
-        assert!(n.is_power_of_two());
-        CudaError::from_result(_fibair_tracegen(output.as_mut_raw_ptr(), a, b, n as u32))
-    }
-}
-
-#[cfg(test)]
 pub mod is_equal {
     use super::*;
 

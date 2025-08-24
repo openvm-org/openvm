@@ -70,10 +70,12 @@ cfg_if::cfg_if! {
         pub use self::cuda::{
             NativeGpuProverExt as NativeProverExt,
         };
+        pub type NativeBuilder = crate::NativeGpuBuilder;
     } else {
         pub use self::{
             NativeCpuProverExt as NativeProverExt,
         };
+        pub type NativeBuilder = crate::NativeCpuBuilder;
     }
 }
 
