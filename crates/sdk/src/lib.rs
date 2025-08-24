@@ -74,8 +74,10 @@ cfg_if::cfg_if! {
         use openvm_cuda_backend::engine::GpuBabyBearPoseidon2Engine;
         use openvm_native_circuit::NativeGpuBuilder;
         pub use GpuSdk as Sdk;
+        pub type DefaultStarkEngine = GpuBabyBearPoseidon2Engine;
     } else {
         pub use CpuSdk as Sdk;
+        pub type DefaultStarkEngine = BabyBearPoseidon2Engine;
     }
 }
 
