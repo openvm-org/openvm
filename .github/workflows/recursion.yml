@@ -25,7 +25,7 @@ env:
 jobs:
   tests:
     runs-on:
-      - runs-on=${{ github.run_id }}
+      - runs-on=${{ github.run_id }}-cpu
       - runner=64cpu-linux-arm64
       - image=ubuntu24-full-arm64
       - extras=s3-cache
@@ -50,3 +50,24 @@ jobs:
         working-directory: crates/continuations
         run: |
           cargo nextest run --no-tests=pass
+
+  tests-cuda:
+    runs-on:
+      - runs-on=${{ github.run_id }}-cuda
+      - runner=test-gpu-nvidia
+      - image=ubuntu24-gpu-x64
+      - extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Run recursion crate tests
+        working-directory: extensions/native/recursion
+        run: |
+          cargo nextest run --features cuda

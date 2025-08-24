@@ -15,7 +15,7 @@ jobs:
   lint:
     name: Lint
     runs-on:
-      - runs-on=${{ github.run_id }}
+      - runs-on=${{ github.run_id }}-cpu
       - runner=64cpu-linux-x64
       - extras=s3-cache
     steps:
@@ -91,11 +91,9 @@ jobs:
   lint-cuda:
     name: Lint CUDA
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - family=g6+g5+g6e+g4dn
+      - runs-on=${{ github.run_id }}-cuda
+      - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
-      - cpu=4
-      - spot=false
       - extras=s3-cache
 
     steps:
