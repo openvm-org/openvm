@@ -109,7 +109,7 @@ fn test_vm_1() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 // See crates/sdk/src/prover/root.rs for intended usage
@@ -132,7 +132,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
 
     // Test getting heights.
     let vm_config = NativeConfig::aggregation(8, 3);
-    let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeBuilder {}, vm_config)?;
+    let (mut vm, pk) = VirtualMachine::new_with_keygen(e, NativeBuilder::default(), vm_config)?;
     let vk = pk.get_vk();
 
     let state = vm.create_initial_state(&committed_exe.exe, vec![]);
@@ -183,7 +183,7 @@ fn test_vm_1_optional_air() -> eyre::Result<()> {
     // only uses Core and FieldArithmetic. All other chips should not have AIR proof inputs.
     let config = NativeConfig::aggregation(4, 3);
     let engine = TestEngine::new(standard_fri_params_with_100_bits_conjectured_security(3));
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder {}, config)?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config)?;
     let num_airs = pk.per_air.len();
 
     let n = 6;
@@ -282,7 +282,7 @@ fn test_vm_initial_memory() {
         init_memory,
         fn_bounds: Default::default(),
     };
-    air_test(NativeBuilder {}, config, exe);
+    air_test(NativeBuilder::default(), config, exe);
 }
 
 #[test]
@@ -293,7 +293,7 @@ fn test_vm_1_persistent() -> eyre::Result<()> {
     let ptr_max_bits = config.system.memory_config.pointer_max_bits;
     let addr_space_height = config.system.memory_config.addr_space_height;
 
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder {}, config)?;
+    let (vm, pk) = VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config)?;
 
     let n = 6;
     let instructions = vec![
@@ -386,7 +386,7 @@ fn test_vm_without_field_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn test_vm_fibonacci_old() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 #[test]
@@ -492,7 +492,7 @@ fn test_vm_fibonacci_old_cycle_tracker() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 #[test]
@@ -516,7 +516,7 @@ fn test_vm_field_extension_arithmetic() {
 
     let program = Program::from_instructions(&instructions);
 
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn test_vm_max_access_adapter_8() {
             num_sys_airs2 + num_ext_airs
         );
     }
-    air_test(NativeBuilder {}, test_native_config(), program);
+    air_test(NativeBuilder::default(), test_native_config(), program);
 }
 
 #[test]
@@ -589,7 +589,7 @@ fn test_vm_field_extension_arithmetic_persistent() {
 
     let program = Program::from_instructions(&instructions);
     let config = test_native_continuations_config();
-    air_test(NativeBuilder {}, config, program);
+    air_test(NativeBuilder::default(), config, program);
 }
 
 #[test]
@@ -650,7 +650,7 @@ fn test_vm_hint() {
 
     let input_stream: Vec<Vec<F>> = vec![vec![F::TWO]];
     let config = test_native_config();
-    air_test_with_min_segments(NativeBuilder {}, config, program, input_stream, 1);
+    air_test_with_min_segments(NativeBuilder::default(), config, program, input_stream, 1);
 }
 
 #[test]
@@ -903,7 +903,8 @@ fn test_single_segment_executor_no_segmentation() {
         .set_segmentation_limits(SegmentationLimits::default().with_max_trace_height(1));
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
-    let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeBuilder {}, config).unwrap();
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
     let instructions: Vec<_> = (0..2 * DEFAULT_SEGMENT_CHECK_INSNS)
         .map(|_| Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0))
         .chain(std::iter::once(Instruction::from_isize(
@@ -934,7 +935,8 @@ fn test_vm_execute_metered_cost_native_chips() {
     let config = test_native_config();
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
-    let (vm, _) = VirtualMachine::new_with_keygen(engine, NativeBuilder {}, config).unwrap();
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
 
     let instructions = vec![
         // Field Arithmetic operations (FieldArithmeticChip)
@@ -971,7 +973,7 @@ fn test_vm_execute_metered_cost_halt() {
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
     let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, NativeBuilder {}, config.clone()).unwrap();
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
 
     let instructions = vec![
         // Field Arithmetic operations (FieldArithmeticChip)

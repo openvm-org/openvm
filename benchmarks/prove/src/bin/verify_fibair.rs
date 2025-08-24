@@ -72,8 +72,11 @@ fn main() -> Result<()> {
         let app_pk = AppProvingKey::keygen(app_config)?;
         let app_vk = app_pk.get_app_vk();
         let exe = Arc::new(VmExe::new(program));
-        let mut prover =
-            new_local_prover::<Poseidon2Engine, _>(NativeBuilder {}, &app_pk.app_vm_pk, exe)?;
+        let mut prover = new_local_prover::<Poseidon2Engine, _>(
+            NativeBuilder::default(),
+            &app_pk.app_vm_pk,
+            exe,
+        )?;
         let proof = info_span!("verify_fibair", group = "verify_fibair").in_scope(|| {
             #[cfg(feature = "metrics")]
             metrics::counter!("fri.log_blowup")
