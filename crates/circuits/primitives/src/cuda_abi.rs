@@ -207,6 +207,7 @@ pub mod fibair {
         fn _fibair_tracegen(output: *mut std::ffi::c_void, a: u32, b: u32, n: u32) -> i32;
     }
 
+    #[allow(dead_code)]
     pub unsafe fn fibair_tracegen<F>(
         output: &DeviceBuffer<F>,
         a: u32,
