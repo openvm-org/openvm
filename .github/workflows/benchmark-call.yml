@@ -125,11 +125,11 @@ jobs:
       - tag=bench-${{ inputs.benchmark_id || github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}

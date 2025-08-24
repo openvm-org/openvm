@@ -19,8 +19,8 @@ jobs:
       - runner=64cpu-linux-x64
       - extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
 
       - uses: codespell-project/actions-codespell@v2
         with:
@@ -99,8 +99,8 @@ jobs:
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
