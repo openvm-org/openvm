@@ -7,8 +7,11 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
+#[cfg(feature = "tco")]
+use crate::arch::Handler;
 use crate::{
     arch::{
+        create_tco_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
         E2PreCompute, ExecuteFunc, Executor, MeteredExecutor, StaticProgramError, VmExecState,
     },
@@ -57,6 +60,17 @@ where
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $b_is_imm:ident, $c_is_imm:ident) => {
+        match ($b_is_imm, $c_is_imm) {
+            (true, true) => Ok($execute_impl::<_, _, true, true>),
+            (true, false) => Ok($execute_impl::<_, _, true, false>),
+            (false, true) => Ok($execute_impl::<_, _, false, true>),
+            (false, false) => Ok($execute_impl::<_, _, false, false>),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
@@ -79,13 +93,23 @@ where
         let data: &mut PublicValuesPreCompute = data.borrow_mut();
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
 
-        let fn_ptr = match (b_is_imm, c_is_imm) {
-            (true, true) => execute_e1_impl::<_, _, true, true>,
-            (true, false) => execute_e1_impl::<_, _, true, false>,
-            (false, true) => execute_e1_impl::<_, _, false, true>,
-            (false, false) => execute_e1_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, b_is_imm, c_is_imm)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut PublicValuesPreCompute = data.borrow_mut();
+        let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, data);
+
+        dispatch!(execute_e1_tco_handler, b_is_imm, c_is_imm)
     }
 }
 
@@ -111,13 +135,25 @@ where
         data.chip_idx = chip_idx as u32;
         let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
 
-        let fn_ptr = match (b_is_imm, c_is_imm) {
-            (true, true) => execute_e2_impl::<_, _, true, true>,
-            (true, false) => execute_e2_impl::<_, _, true, false>,
-            (false, true) => execute_e2_impl::<_, _, false, true>,
-            (false, false) => execute_e2_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, b_is_imm, c_is_imm)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<PublicValuesPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let (b_is_imm, c_is_imm) = self.pre_compute_impl(inst, &mut data.data);
+
+        dispatch!(execute_e2_tco_handler, b_is_imm, c_is_imm)
     }
 }
 
@@ -155,6 +191,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     state.instret += 1;
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
@@ -166,6 +203,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, state);
 }
 
+#[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],

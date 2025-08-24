@@ -69,7 +69,8 @@ impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
 
 impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
-        // header: AccessRecordHeader (using trivial borrowing)
+        // header: AccessRecordHeader
+        // SAFETY: self.len() >= size_of::<AccessRecordHeader>() from size_by_layout()
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<AccessRecordHeader>()) };
         let header = header_buf.borrow_mut();
@@ -77,6 +78,10 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         let mut offset = 0;
 
         // timestamps: [u32] (block_size / cell_size * 4 bytes)
+        // SAFETY:
+        // - size: (layout.block_size / layout.lowest_block_size) * size_of::<u32>() from
+        //   size_by_layout()
+        // - alignment: u32 aligned due to AccessRecordHeader alignment
         let timestamps = unsafe {
             std::slice::from_raw_parts_mut(
                 rest.as_mut_ptr().add(offset) as *mut u32,
@@ -86,6 +91,9 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         offset += layout.block_size / layout.lowest_block_size * size_of::<u32>();
 
         // data: [u8] (block_size * type_size bytes)
+        // SAFETY:
+        // - size: layout.block_size * layout.type_size from size_by_layout()
+        // - offset points past timestamps section
         let data = unsafe {
             std::slice::from_raw_parts_mut(
                 rest.as_mut_ptr().add(offset),

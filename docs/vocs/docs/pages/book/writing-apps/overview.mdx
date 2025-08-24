@@ -14,7 +14,14 @@ The first thing you will want to do is build and transpile your program using th
 cargo openvm build
 ```
 
-By default this will build the project located in the current directory. To see if it runs correctly, you can try executing it with the following:
+By default this will build the project located in the current directory. Once you have built the program,
+you can generate commitments to the program binary and VM configuration using the following command:
+
+```bash
+cargo openvm commit
+```
+
+To execute the program, you can run the following command:
 
 ```bash
 cargo openvm run --input <path_to_input | hex_string>
@@ -22,7 +29,7 @@ cargo openvm run --input <path_to_input | hex_string>
 
 Note if your program doesn't require inputs, you can omit the `--input` flag.
 
-For more information see the [build](./compiling) and [run](./running-a-program) docs.
+For more information see the [build](/book/writing-apps/compiling-a-program) and [run](/book/writing-apps/running-a-program) docs.
 
 ### Inputs
 
@@ -32,27 +39,28 @@ Each hex string (either in the file or as the direct input) is either:
 - Hex string of bytes, which is prefixed with `0x01`
 - Hex string of native field elements (represented as u32, little endian), prefixed with `0x02`
 
-If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the **Using StdIn** section of the [SDK](/book/advanced-usage/sdk#using-stdin) doc.
+If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the [Using StdIn](/book/advanced-usage/sdk#using-stdin).
 
-## Generating a Proof
+## Generating Application Proofs
 
-To generate a proof, you first need to generate a proving and verifying key:
+To generate a proof, you first need to generate a proving and verifying key for the OpenVM configuration
+used by the program. This depends only on the configuration specified in `openvm.toml` and is done by the
+following command:
 
 ```bash
 cargo openvm keygen
 ```
 
-If you are using custom VM extensions, this will depend on the `openvm.toml` file which encodes the VM extension configuration; see the [custom extensions](/book/acceleration-using-extensions/overview) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
+See the [custom extensions](/book/acceleration-using-extensions/overview) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
 
 ```bash
 cargo openvm prove app --input <path_to_input | hex_string>
 ```
 
-Again, if your program doesn't require inputs, you can omit the `--input` flag.
+Again, if your program doesn't require inputs, you can omit the `--input` flag. For more information 
+on the `keygen` and `prove` commands, see the [prove](/book/writing-apps/generating-proofs) doc.
 
-For more information on the `keygen` and `prove` commands, see the [prove](./generating-proofs) doc.
-
-## Verifying a Proof
+## Verifying Application Proofs
 
 To verify a proof using the CLI, you need to provide the verifying key and the proof.
 
@@ -60,24 +68,30 @@ To verify a proof using the CLI, you need to provide the verifying key and the p
 cargo openvm verify app
 ```
 
-For more information on the `verify` command, see the [verify](./verifying-proofs) doc.
+For more information on the `verify` command, see the [verify](/book/writing-apps/verifying-proofs) doc.
 
-## End-to-end EVM Proof Generation and Verification
+## STARK and EVM Proof Generation and Verification
 
-The process above details the workflow necessary to build, prove, and verify a guest program at the application level. However, to generate the end-to-end EVM proof, you need to (a) setup the aggregation proving key and verifier contract and (b) generate/verify the proof at the EVM level.
-
-To do (a), you need to run the following command. If you've run it previously on your machine, there is no need to do so again. This will write files necessary for EVM proving in `~/.openvm/`.
-
-```bash
-cargo openvm setup --evm
-```
-
-> ⚠️ **WARNING**
-> This command requires very large amounts of computation and memory (~200 GB).
-
-To do (b), you simply need to replace `app` in `cargo openvm prove` and `cargo openvm verify` as such:
+The process above details the workflow necessary to build, prove, and verify a guest program at 
+the application level. As described in the [specs](/specs/architecture/continuations), OpenVM supports
+proof aggregation into a single STARK proof or an EVM proof. Performing this aggregation requires
+key generation for the aggregation proving keys and the EVM verifier contract, which is done by:
 
 ```bash
-cargo openvm prove evm --input <path_to_input | hex_string>
-cargo openvm verify evm
+cargo openvm setup [--evm]
 ```
+
+This will write the files necessary for STARK aggregation and EVM proving to `~/.openvm/`.
+
+:::warning
+This command requires a large amount of compute and memory (~70 GB).
+:::
+
+To generate and verify aggregated STARK or EVM proofs, you can run the following commands:
+
+```bash
+cargo openvm prove [stark | evm] --input <path_to_input | hex_string>
+cargo openvm verify [stark | evm]
+```
+
+For more information on the `prove` and `verify` commands, see the [prove](/book/writing-apps/generating-proofs) and [verify](/book/writing-apps/verifying-proofs) docs.

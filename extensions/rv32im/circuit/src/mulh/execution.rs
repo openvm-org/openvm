@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -48,6 +42,16 @@ impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIM
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            MulHOpcode::MULH => Ok($execute_impl::<_, _, MulHOp>),
+            MulHOpcode::MULHSU => Ok($execute_impl::<_, _, MulHSuOp>),
+            MulHOpcode::MULHU => Ok($execute_impl::<_, _, MulHUOp>),
+        }
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -67,12 +71,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e1_impl::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e1_impl::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e1_impl::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut MulHPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -98,12 +112,24 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            MulHOpcode::MULH => execute_e2_impl::<_, _, MulHOp>,
-            MulHOpcode::MULHSU => execute_e2_impl::<_, _, MulHSuOp>,
-            MulHOpcode::MULHU => execute_e2_impl::<_, _, MulHUOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        _pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -123,6 +149,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOper
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -131,6 +158,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOpera
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

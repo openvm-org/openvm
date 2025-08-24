@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "tco", allow(incomplete_features))]
+#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 extern crate self as openvm_circuit;
 
 pub use openvm_circuit_derive as derive;

@@ -30,7 +30,7 @@ where
     leaf_prover: VmInstance<E, NativeBuilder>,
     leaf_controller: LeafProvingController,
 
-    internal_prover: VmInstance<E, NativeBuilder>,
+    pub internal_prover: VmInstance<E, NativeBuilder>,
     #[cfg(feature = "evm-prove")]
     root_prover: RootVerifierLocalProver,
     pub num_children_internal: usize,

@@ -1,3 +1,5 @@
+#![cfg_attr(feature = "tco", allow(incomplete_features))]
+#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 //! Stateful keccak256 hasher. Handles full keccak sponge (padding, absorb, keccak-f) on
 //! variable length inputs read from VM memory.
 

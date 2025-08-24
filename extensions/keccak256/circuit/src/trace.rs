@@ -85,11 +85,18 @@ pub struct KeccakVmRecordMut<'a> {
 /// Has debug assertions that check the size and alignment of the slices.
 impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: KeccakVmRecordLayout) -> KeccakVmRecordMut<'a> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits and
+        //   constants are guaranteed <= self.len() by layout precondition
         let (record_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecordHeader>()) };
 
         let num_reads = layout.metadata.len.div_ceil(KECCAK_WORD_SIZE);
         // Note: each read is `KECCAK_WORD_SIZE` bytes
+        // SAFETY:
+        // - layout guarantees rest has sufficient length for input data
+        // - num_reads is calculated from layout.metadata.len
+        // - total buffer size was validated to contain header + input + aligned aux records
         let (input, rest) = unsafe { rest.split_at_mut_unchecked(num_reads * KECCAK_WORD_SIZE) };
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         KeccakVmRecordMut {
@@ -260,6 +267,10 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                 sizes.push((0, 0));
                 break;
             } else {
+                // SAFETY:
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - header is the first element of the record
                 let record: &KeccakVmRecordHeader =
                     unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = num_keccak_f(record.len as usize);
@@ -300,6 +311,13 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                             // Need to get rid of the accidental garbage data that might overflow
                             // the F's prime field. Unfortunately, there
                             // is no good way around this
+                            // SAFETY:
+                            // - row has exactly NUM_KECCAK_VM_COLS elements
+                            // - NUM_KECCAK_PERM_COLS offset is less than NUM_KECCAK_VM_COLS by
+                            //   design
+                            // - We're zeroing the remaining (NUM_KECCAK_VM_COLS -
+                            //   NUM_KECCAK_PERM_COLS) elements to clear any garbage data that might
+                            //   overflow the field
                             unsafe {
                                 std::ptr::write_bytes(
                                     row.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
@@ -321,6 +339,12 @@ impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
                 let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
                 let read_len = num_reads * KECCAK_WORD_SIZE;
 
+                // SAFETY:
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - slice contains a valid KeccakVmRecord with the exact layout specified
+                // - get_record_from_slice will correctly split the buffer into header, input, and
+                //   aux components based on this layout
                 let record: KeccakVmRecordMut = unsafe {
                     get_record_from_slice(
                         slice,

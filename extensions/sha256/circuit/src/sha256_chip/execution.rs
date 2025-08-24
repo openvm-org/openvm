@@ -23,6 +23,21 @@ struct ShaPreCompute {
 }
 
 impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut ShaPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_tco_handler::<_, _>)
+    }
+
     fn pre_compute_size(&self) -> usize {
         size_of::<ShaPreCompute>()
     }
@@ -60,6 +75,23 @@ impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl::<_, _>)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<ShaPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_tco_handler::<_, _>)
     }
 }
 
@@ -105,6 +137,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     height
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -112,6 +145,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let pre_compute: &ShaPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, vm_state);
 }
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

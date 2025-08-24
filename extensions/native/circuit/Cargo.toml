@@ -48,7 +48,9 @@ test-case = { workspace = true }
 test-log = { workspace = true }
 
 [features]
-default = ["parallel"]
+default = ["parallel", "jemalloc"]
+tco = ["openvm-rv32im-circuit/tco"]
+jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 cuda = ["dep:openvm-cuda-backend", "dep:openvm-cuda-common", "dep:openvm-cuda-builder", "openvm-circuit-primitives/cuda", "openvm-circuit/cuda"]

@@ -1,6 +1,7 @@
 use std::{
     borrow::{Borrow, BorrowMut},
     fmt::Debug,
+    mem::size_of,
 };
 
 use openvm_circuit::{
@@ -82,6 +83,32 @@ impl<A, const NUM_CELLS: usize> LoadStoreExecutor<A, NUM_CELLS> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident, $enabled:ident, $is_native_store:ident) => {
+        match ($local_opcode, $enabled, $is_native_store) {
+            (LOADW, true, _) => Ok($execute_impl::<_, _, U8, LoadWOp, true>),
+            (LOADW, false, _) => Ok($execute_impl::<_, _, U8, LoadWOp, false>),
+            (LOADHU, true, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, true>),
+            (LOADHU, false, _) => Ok($execute_impl::<_, _, U8, LoadHUOp, false>),
+            (LOADBU, true, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, true>),
+            (LOADBU, false, _) => Ok($execute_impl::<_, _, U8, LoadBUOp, false>),
+            (STOREW, true, false) => Ok($execute_impl::<_, _, U8, StoreWOp, true>),
+            (STOREW, false, false) => Ok($execute_impl::<_, _, U8, StoreWOp, false>),
+            (STOREW, true, true) => Ok($execute_impl::<_, _, F, StoreWOp, true>),
+            (STOREW, false, true) => Ok($execute_impl::<_, _, F, StoreWOp, false>),
+            (STOREH, true, false) => Ok($execute_impl::<_, _, U8, StoreHOp, true>),
+            (STOREH, false, false) => Ok($execute_impl::<_, _, U8, StoreHOp, false>),
+            (STOREH, true, true) => Ok($execute_impl::<_, _, F, StoreHOp, true>),
+            (STOREH, false, true) => Ok($execute_impl::<_, _, F, StoreHOp, false>),
+            (STOREB, true, false) => Ok($execute_impl::<_, _, U8, StoreBOp, true>),
+            (STOREB, false, false) => Ok($execute_impl::<_, _, U8, StoreBOp, false>),
+            (STOREB, true, true) => Ok($execute_impl::<_, _, F, StoreBOp, true>),
+            (STOREB, false, true) => Ok($execute_impl::<_, _, F, StoreBOp, false>),
+            (_, _, _) => unreachable!(),
+        }
+    };
+}
+
 impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
@@ -101,28 +128,28 @@ where
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match (local_opcode, enabled, is_native_store) {
-            (LOADW, true, _) => execute_e1_impl::<_, _, U8, LoadWOp, true>,
-            (LOADW, false, _) => execute_e1_impl::<_, _, U8, LoadWOp, false>,
-            (LOADHU, true, _) => execute_e1_impl::<_, _, U8, LoadHUOp, true>,
-            (LOADHU, false, _) => execute_e1_impl::<_, _, U8, LoadHUOp, false>,
-            (LOADBU, true, _) => execute_e1_impl::<_, _, U8, LoadBUOp, true>,
-            (LOADBU, false, _) => execute_e1_impl::<_, _, U8, LoadBUOp, false>,
-            (STOREW, true, false) => execute_e1_impl::<_, _, U8, StoreWOp, true>,
-            (STOREW, false, false) => execute_e1_impl::<_, _, U8, StoreWOp, false>,
-            (STOREW, true, true) => execute_e1_impl::<_, _, F, StoreWOp, true>,
-            (STOREW, false, true) => execute_e1_impl::<_, _, F, StoreWOp, false>,
-            (STOREH, true, false) => execute_e1_impl::<_, _, U8, StoreHOp, true>,
-            (STOREH, false, false) => execute_e1_impl::<_, _, U8, StoreHOp, false>,
-            (STOREH, true, true) => execute_e1_impl::<_, _, F, StoreHOp, true>,
-            (STOREH, false, true) => execute_e1_impl::<_, _, F, StoreHOp, false>,
-            (STOREB, true, false) => execute_e1_impl::<_, _, U8, StoreBOp, true>,
-            (STOREB, false, false) => execute_e1_impl::<_, _, U8, StoreBOp, false>,
-            (STOREB, true, true) => execute_e1_impl::<_, _, F, StoreBOp, true>,
-            (STOREB, false, true) => execute_e1_impl::<_, _, F, StoreBOp, false>,
-            (_, _, _) => unreachable!(),
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode, enabled, is_native_store)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(
+            execute_e1_tco_handler,
+            local_opcode,
+            enabled,
+            is_native_store
+        )
     }
 }
 
@@ -148,28 +175,30 @@ where
         pre_compute.chip_idx = chip_idx as u32;
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match (local_opcode, enabled, is_native_store) {
-            (LOADW, true, _) => execute_e2_impl::<_, _, U8, LoadWOp, true>,
-            (LOADW, false, _) => execute_e2_impl::<_, _, U8, LoadWOp, false>,
-            (LOADHU, true, _) => execute_e2_impl::<_, _, U8, LoadHUOp, true>,
-            (LOADHU, false, _) => execute_e2_impl::<_, _, U8, LoadHUOp, false>,
-            (LOADBU, true, _) => execute_e2_impl::<_, _, U8, LoadBUOp, true>,
-            (LOADBU, false, _) => execute_e2_impl::<_, _, U8, LoadBUOp, false>,
-            (STOREW, true, false) => execute_e2_impl::<_, _, U8, StoreWOp, true>,
-            (STOREW, false, false) => execute_e2_impl::<_, _, U8, StoreWOp, false>,
-            (STOREW, true, true) => execute_e2_impl::<_, _, F, StoreWOp, true>,
-            (STOREW, false, true) => execute_e2_impl::<_, _, F, StoreWOp, false>,
-            (STOREH, true, false) => execute_e2_impl::<_, _, U8, StoreHOp, true>,
-            (STOREH, false, false) => execute_e2_impl::<_, _, U8, StoreHOp, false>,
-            (STOREH, true, true) => execute_e2_impl::<_, _, F, StoreHOp, true>,
-            (STOREH, false, true) => execute_e2_impl::<_, _, F, StoreHOp, false>,
-            (STOREB, true, false) => execute_e2_impl::<_, _, U8, StoreBOp, true>,
-            (STOREB, false, false) => execute_e2_impl::<_, _, U8, StoreBOp, false>,
-            (STOREB, true, true) => execute_e2_impl::<_, _, F, StoreBOp, true>,
-            (STOREB, false, true) => execute_e2_impl::<_, _, F, StoreBOp, false>,
-            (_, _, _) => unreachable!(),
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode, enabled, is_native_store)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<LoadStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (local_opcode, enabled, is_native_store) =
+            self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(
+            execute_e2_tco_handler,
+            local_opcode,
+            enabled,
+            is_native_store
+        )
     }
 }
 
@@ -226,6 +255,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -240,6 +270,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

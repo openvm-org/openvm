@@ -32,6 +32,15 @@ struct LessThanPreCompute {
     c: u8,
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            LessThanOpcode::SLT => $execute_impl::<_, _, false>,
+            LessThanOpcode::SLTU => $execute_impl::<_, _, true>,
+        })
+    };
+}
+
 impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<LessThanPreCompute>()
@@ -48,11 +57,22 @@ impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
     {
         let data: &mut LessThanPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            LessThanOpcode::SLT => execute_e1_impl::<_, _, false>,
-            LessThanOpcode::SLTU => execute_e1_impl::<_, _, true>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut LessThanPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -74,11 +94,24 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32LessThan256Executor {
         let data: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            LessThanOpcode::SLT => execute_e2_impl::<_, _, false>,
-            LessThanOpcode::SLTU => execute_e2_impl::<_, _, true>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -105,6 +138,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -113,6 +147,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256
     execute_e12_impl::<F, CTX, IS_U256>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

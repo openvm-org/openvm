@@ -107,7 +107,7 @@ on:
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "metrics,parallel"
+  FEATURE_FLAGS: "metrics,parallel,tco"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -118,17 +118,18 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      - runs-on=${{ github.run_id }}
+      - runs-on=${{ github.run_id }}-bench-${{ inputs.benchmark_id ||  github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_number }}-${{ github.run_attempt }}
       - family=${{ github.event.inputs.instance_type || inputs.instance_type }}
       - image=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(github.event.inputs.instance_type || inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}
-      - tag=bench-${{ github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
+      - spot=capacity-optimized
+      - tag=bench-${{ inputs.benchmark_id || github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
       - extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}

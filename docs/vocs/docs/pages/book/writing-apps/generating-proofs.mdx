@@ -3,17 +3,22 @@
 Generating a proof using the CLI is simple - first generate a key, then generate your proof. Using command defaults, this looks like:
 
 ```bash
-cargo openvm keygen
-cargo openvm prove [app | stark | evm]
+cargo openvm keygen         # generate proving and verification keys for app proofs
+cargo openvm prove app      # generate the app proof
+
+cargo openvm setup          # generate proving and verification keys for STARK aggregation
+cargo openvm prove stark    # generate the STARK proof
+
+cargo openvm setup --evm    # generate proving and verification keys for EVM proofs
+cargo openvm prove evm      # generate the EVM proof
 ```
 
-## Key Generation
+## Application Key Generation
 
 The `keygen` command generates both an application proving and verification key.
 
 ```bash
-cargo openvm keygen
-    --config <path_to_app_config>
+cargo openvm keygen --config <path_to_app_config>
 ```
 
 Similarly to `build`, `run`, and `prove`, options `--manifest-path`, `--target-dir`, and `--output-dir` are provided.
@@ -21,6 +26,70 @@ Similarly to `build`, `run`, and `prove`, options `--manifest-path`, `--target-d
 If `--config` is not specified, the command will search for `openvm.toml` in the manifest directory. If the file isn't found, a default configuration will be used.
 
 The proving and verification key will be written to `${target_dir}/openvm/` (and `--output-dir` if specified).
+
+## STARK and EVM Key Generation
+
+The `setup` command generates proving and verification keys for STARK aggregation and EVM proofs.
+
+```bash
+cargo openvm setup [--evm]
+```
+
+If called without the `--evm` flag, it will generate keys for the leaf, internal, and root STARK
+verifiers as detailed in the [specs](/specs/architecture/continuations). If called with the `--evm`
+flag, it will also generate keys for the [static verifier wrapper](/specs/architecture/continuations#static-verifier-wrapper).
+
+### Details on EVM Verification
+
+In addition to generating EVM proving and verification keys, `cargo openvm setup --evm` also
+generates a smart contract verifier for EVM chains. Upon a successful run, the command will write the files
+
+- `agg_stark.pk`
+- `agg_stark.vk`
+- `agg_halo2.pk`
+- `halo2/src/[OPENVM_VERSION]/Halo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/OpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/interfaces/IOpenVmHalo2Verifier.sol`
+- `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
+
+to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and 
+`OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will 
+look for them in this directory. The smart contract verifier is also available via the
+[OpenVM Solidity SDK](/book/writing-apps/solidity-sdk) for released versions of OpenVM.
+
+The files `agg_stark.pk` and `agg_halo2.pk` are the STARK and Halo2 aggregation proving keys necessary to aggregate to a final EVM proof.
+The file `agg_stark.vk` is the STARK aggregation verification key.
+The `OpenVmHalo2Verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `OpenVmHalo2Verifier` and it implements the `IOpenVmHalo2Verifier` interface.
+
+```solidity [IOpenVmHalo2Verifier.sol]
+interface IOpenVmHalo2Verifier {
+    function verify(bytes calldata publicValues, bytes calldata proofData, bytes32 appExeCommit, bytes32 appVmCommit)
+        external
+        view;
+}
+```
+
+In addition, the command outputs a JSON file `verifier.bytecode.json` of the form
+
+```json [verifier.bytecode.json]
+{
+    "sol_compiler_version": "0.8.19",
+    "sol_compiler_options": "",
+    "bytecode": "0x..."
+}
+```
+
+where `sol_compiler_version` is the Solidity compiler version used to compile the contract (currently `0.8.19`),
+`sol_compiler_options` are additional compiler options used, and
+`bytecode` is the compiled EVM bytecode as a hex string.
+
+:::note
+Note that `cargo openvm setup --evm` downloads auxiliary files for halo2 KZG parameters from an AWS S3 bucket into `~/.openvm/`.
+:::
+
+:::warning
+If the `$HOME` environment variable is not set, this command may fail. This command requires a large amount of compute and memory (~70 GB) and can take ~7mins on a `m6a.16xlarge` instance.
+:::
 
 ## Proof Generation
 
@@ -42,21 +111,10 @@ If your program doesn't require inputs, you can (and should) omit the `--input` 
 
 If `--proof` is not provided then the command will write the proof to `./${bin_name}.[app | stark | evm].proof` by default, where `bin_name` is the file stem of the executable run.
 
-The `app` subcommand generates an application-level proof, the `stark` command generates an aggregated root-level proof, while the `evm` command generates an end-to-end EVM proof. For more information on aggregation, see [this specification](https://github.com/openvm-org/openvm/blob/bf8df90b13f4e80bb76dbb71f255a12154c84838/docs/specs/continuations.md).
+The `app` subcommand generates an application-level proof, the `stark` command generates an aggregated root-level proof, while the `evm` command generates an end-to-end EVM proof. For more information on aggregation, see [this specification](https://github.com/openvm-org/openvm/blob/bf8df90b13f4e80bb76dbb71f255a12154c84838/docs/specs/continuations.md). See [EVM Proof Format](./verifying-proofs#evm-proof-json-format) for details on the output format for `cargo openvm prove evm`.
 
-> ⚠️ **WARNING**
-> In order to run the `evm` subcommand, you must have previously called the costly `cargo openvm setup --evm`, which requires very large amounts of computation and memory (~200 GB).
-
-See [EVM Proof Format](./verifying-proofs#evm-proof-json-format) for details on the output format for `cargo openvm prove evm`.
-
-## Commit Hashes
-
-To see the commit hash for an executable, you may run:
-
-```bash
-cargo openvm commit
-    --app-pk <path_to_app_pk>
-    --exe <path_to_transpiled_program>
-```
-
-The `commit` command has all the auxiliary options that `prove` does, and outputs Bn254 commits for both your executable and VM. Commits are written to `${target_dir}/openvm/` (and `--output-dir` if specified).
+:::warning
+The `stark` subcommand requires STARK aggregation key generation to have been run via
+`cargo openvm setup`, and the `evm` subcommand requires EVM key generation to have been run via
+`cargo openvm setup --evm`, which has a large compute and memory requirement (~70 GB).
+:::

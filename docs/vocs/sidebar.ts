@@ -75,8 +75,8 @@ export const bookSidebar: SidebarItem[] = [
                 link: "/book/writing-apps/writing-a-program"
             },
             {
-                text: "Compiling",
-                link: "/book/writing-apps/compiling"
+                text: "Compiling a Program",
+                link: "/book/writing-apps/compiling-a-program"
             },
             {
                 text: "Running a Program",

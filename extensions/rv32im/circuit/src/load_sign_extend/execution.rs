@@ -5,10 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError, Executor,
-        MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, VmExecState,
-    },
+    arch::*,
     system::memory::{online::GuestMemory, POINTER_MAX_BITS},
 };
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
@@ -80,6 +77,17 @@ impl<A, const LIMB_BITS: usize> LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LI
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_loadb:ident, $enabled:ident) => {
+        match ($is_loadb, $enabled) {
+            (true, true) => Ok($execute_impl::<_, _, true, true>),
+            (true, false) => Ok($execute_impl::<_, _, true, false>),
+            (false, true) => Ok($execute_impl::<_, _, false, true>),
+            (false, false) => Ok($execute_impl::<_, _, false, false>),
+        }
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for LoadSignExtendExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -98,13 +106,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
         let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match (is_loadb, enabled) {
-            (true, true) => execute_e1_impl::<_, _, true, true>,
-            (true, false) => execute_e1_impl::<_, _, true, false>,
-            (false, true) => execute_e1_impl::<_, _, false, true>,
-            (false, false) => execute_e1_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_loadb, enabled)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
+        let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_tco_handler, is_loadb, enabled)
     }
 }
 
@@ -130,13 +147,24 @@ where
         let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match (is_loadb, enabled) {
-            (true, true) => execute_e2_impl::<_, _, true, true>,
-            (true, false) => execute_e2_impl::<_, _, true, false>,
-            (false, true) => execute_e2_impl::<_, _, false, true>,
-            (false, false) => execute_e2_impl::<_, _, false, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_loadb, enabled)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let (is_loadb, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_tco_handler, is_loadb, enabled)
     }
 }
 
@@ -185,6 +213,7 @@ unsafe fn execute_e12_impl<
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -198,6 +227,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

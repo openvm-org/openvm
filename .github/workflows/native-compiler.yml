@@ -11,6 +11,7 @@ on:
       - "extensions/native/compiler/**"
       - "Cargo.toml"
       - ".github/workflows/native-compiler.yml"
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -29,8 +30,8 @@ jobs:
       - extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
         with:

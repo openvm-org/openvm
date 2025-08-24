@@ -395,6 +395,11 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = row_slice.split_at_mut(A::WIDTH);
         self.adapter.fill_trace_row(mem_helper, adapter_row);
+        // SAFETY:
+        // - row_slice is guaranteed by the caller to have at least A::WIDTH +
+        //   ModularIsEqualCoreCols::width() elements
+        // - caller ensures core_row contains a valid record written by the executor during trace
+        //   generation
         let record: &ModularIsEqualRecord<READ_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols: &mut ModularIsEqualCoreCols<F, READ_LIMBS> = core_row.borrow_mut();
@@ -523,6 +528,16 @@ impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usiz
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $is_setup:ident) => {
+        Ok(if $is_setup {
+            $execute_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
+        } else {
+            $execute_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
+        })
+    };
+}
+
 impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> Executor<F>
     for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
@@ -540,15 +555,25 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
-
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = if is_setup {
-            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
-        } else {
-            execute_e1_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
-        };
 
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, is_setup)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
+        let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch!(execute_e1_tco_handler, is_setup)
     }
 }
 
@@ -574,16 +599,29 @@ where
         pre_compute.chip_idx = chip_idx as u32;
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = if is_setup {
-            execute_e2_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, true>
-        } else {
-            execute_e2_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, false>
-        };
 
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, is_setup)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
+            data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        dispatch!(execute_e2_tco_handler, is_setup)
     }
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -603,6 +641,7 @@ unsafe fn execute_e1_impl<
     );
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

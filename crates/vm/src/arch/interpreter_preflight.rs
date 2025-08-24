@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{iter::repeat_n, sync::Arc};
 
 use openvm_instructions::{instruction::Instruction, program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::{
@@ -36,6 +36,7 @@ pub struct PreflightInterpretedInstance<F, E> {
 }
 
 #[repr(C)]
+#[derive(Clone)]
 pub struct PcEntry<F> {
     // NOTE[jpw]: revisit storing only smaller `precompute` for better cache locality. Currently
     // VmOpcode is usize so align=8 and there are 7 u32 operands so we store ExecutorId(u32) after
@@ -60,7 +61,10 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
             return Err(StaticProgramError::TooManyExecutors);
         }
         let len = program.instructions_and_debug_infos.len();
-        let mut pc_handler = Vec::with_capacity(len);
+        let pc_base = program.pc_base;
+        let base_idx = get_pc_index(pc_base);
+        let mut pc_handler = Vec::with_capacity(base_idx + len);
+        pc_handler.extend(repeat_n(PcEntry::undefined(), base_idx));
         for insn_and_debug_info in &program.instructions_and_debug_infos {
             if let Some((insn, _)) = insn_and_debug_info {
                 let insn = insn.clone();
@@ -86,9 +90,9 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
         }
         Ok(Self {
             inventory,
-            execution_frequencies: vec![0u32; len],
+            execution_frequencies: vec![0u32; base_idx + len],
+            pc_base,
             pc_handler,
-            pc_base: program.pc_base,
             executor_idx_to_air_idx,
         })
     }
@@ -101,9 +105,11 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
     where
         E: Send + Sync,
     {
+        let base_idx = get_pc_index(self.pc_base);
         self.pc_handler
             .par_iter()
             .enumerate()
+            .skip(base_idx)
             .filter(|(_, entry)| entry.is_some())
             .map(|(i, _)| self.execution_frequencies[i])
             .collect()
@@ -157,15 +163,11 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
         E: PreflightExecutor<F, RA>,
     {
         let pc = state.pc;
-        let pc_idx = get_pc_index(self.pc_base, pc);
-        let pc_entry =
-            self.pc_handler
-                .get(pc_idx)
-                .ok_or_else(|| ExecutionError::PcOutOfBounds {
-                    pc,
-                    pc_base: self.pc_base,
-                    program_len: self.pc_handler.len(),
-                })?;
+        let pc_idx = get_pc_index(pc);
+        let pc_entry = self
+            .pc_handler
+            .get(pc_idx)
+            .ok_or_else(|| ExecutionError::PcOutOfBounds(pc))?;
         // SAFETY: `execution_frequencies` has the same length as `pc_handler` so `get_pc_entry`
         // already does the bounds check
         unsafe {

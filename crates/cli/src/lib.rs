@@ -1,3 +1,6 @@
+#![cfg_attr(feature = "tco", allow(incomplete_features))]
+#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+
 pub mod commands;
 pub mod default;
 pub mod input;

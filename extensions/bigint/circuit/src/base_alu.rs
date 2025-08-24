@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    mem::transmute,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BaseAlu256Opcode;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
@@ -17,7 +14,10 @@ use openvm_rv32im_circuit::BaseAluExecutor;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32BaseAlu256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u64_array, u64_array_to_bytes},
+    Rv32BaseAlu256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
@@ -32,6 +32,18 @@ struct BaseAluPreCompute {
     a: u8,
     b: u8,
     c: u8,
+}
+
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        Ok(match $local_opcode {
+            BaseAluOpcode::ADD => $execute_impl::<_, _, AddOp>,
+            BaseAluOpcode::SUB => $execute_impl::<_, _, SubOp>,
+            BaseAluOpcode::XOR => $execute_impl::<_, _, XorOp>,
+            BaseAluOpcode::OR => $execute_impl::<_, _, OrOp>,
+            BaseAluOpcode::AND => $execute_impl::<_, _, AndOp>,
+        })
+    };
 }
 
 impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
@@ -50,14 +62,24 @@ impl<F: PrimeField32> Executor<F> for Rv32BaseAlu256Executor {
     {
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BaseAluOpcode::ADD => execute_e1_impl::<_, _, AddOp>,
-            BaseAluOpcode::SUB => execute_e1_impl::<_, _, SubOp>,
-            BaseAluOpcode::XOR => execute_e1_impl::<_, _, XorOp>,
-            BaseAluOpcode::OR => execute_e1_impl::<_, _, OrOp>,
-            BaseAluOpcode::AND => execute_e1_impl::<_, _, AndOp>,
-        };
-        Ok(fn_ptr)
+
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BaseAluPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -79,14 +101,26 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32BaseAlu256Executor {
         let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            BaseAluOpcode::ADD => execute_e2_impl::<_, _, AddOp>,
-            BaseAluOpcode::SUB => execute_e2_impl::<_, _, SubOp>,
-            BaseAluOpcode::XOR => execute_e2_impl::<_, _, XorOp>,
-            BaseAluOpcode::OR => execute_e2_impl::<_, _, OrOp>,
-            BaseAluOpcode::AND => execute_e2_impl::<_, _, AndOp>,
-        };
-        Ok(fn_ptr)
+
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BaseAluPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -106,6 +140,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -114,6 +149,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -167,8 +203,8 @@ struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         let (res, mut carry) = rs1_u64[0].overflowing_add(rs2_u64[0]);
         rd_u64[0] = res;
@@ -178,14 +214,14 @@ impl AluOp for AddOp {
             carry = c1 || c2;
             rd_u64[i] = res2;
         }
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for SubOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         let (res, mut borrow) = rs1_u64[0].overflowing_sub(rs2_u64[0]);
         rd_u64[0] = res;
@@ -195,45 +231,45 @@ impl AluOp for SubOp {
             borrow = c1 || c2;
             rd_u64[i] = res2;
         }
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for XorOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] ^ rs2_u64[i];
         }
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for OrOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] | rs2_u64[i];
         }
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }
 impl AluOp for AndOp {
     #[inline(always)]
     fn compute(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> [u8; INT256_NUM_LIMBS] {
-        let rs1_u64: [u64; 4] = unsafe { transmute(rs1) };
-        let rs2_u64: [u64; 4] = unsafe { transmute(rs2) };
+        let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+        let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
         let mut rd_u64 = [0u64; 4];
         // Compiler will expand this loop.
         for i in 0..4 {
             rd_u64[i] = rs1_u64[i] & rs2_u64[i];
         }
-        unsafe { transmute(rd_u64) }
+        u64_array_to_bytes(rd_u64)
     }
 }

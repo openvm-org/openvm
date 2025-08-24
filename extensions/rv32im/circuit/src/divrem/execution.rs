@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -55,6 +49,17 @@ impl<A, const LIMB_BITS: usize> DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, L
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            DivRemOpcode::DIV => Ok($execute_impl::<_, _, DivOp>),
+            DivRemOpcode::DIVU => Ok($execute_impl::<_, _, DivuOp>),
+            DivRemOpcode::REM => Ok($execute_impl::<_, _, RemOp>),
+            DivRemOpcode::REMU => Ok($execute_impl::<_, _, RemuOp>),
+        }
+    };
+}
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -74,13 +79,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut DivRemPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e1_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e1_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e1_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e1_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut DivRemPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -106,13 +120,24 @@ where
         let data: &mut E2PreCompute<DivRemPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e2_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e2_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e2_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e2_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<DivRemPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -128,6 +153,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -136,6 +162,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemOp>
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: DivRemOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

@@ -14,7 +14,10 @@ use openvm_rv32im_circuit::MultiplicationExecutor;
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{Rv32Multiplication256Executor, INT256_NUM_LIMBS};
+use crate::{
+    common::{bytes_to_u32_array, u32_array_to_bytes},
+    Rv32Multiplication256Executor, INT256_NUM_LIMBS,
+};
 
 type AdapterExecutor = Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS>;
 
@@ -50,6 +53,21 @@ impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Executor {
         self.pre_compute_impl(pc, inst, data)?;
         Ok(execute_e1_impl)
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut MultPreCompute = data.borrow_mut();
+        self.pre_compute_impl(pc, inst, data)?;
+        Ok(execute_e1_tco_handler)
+    }
 }
 
 impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Executor {
@@ -72,6 +90,23 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Executor {
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_impl)
     }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(execute_e2_tco_handler)
+    }
 }
 
 #[inline(always)]
@@ -91,6 +126,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -99,6 +135,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -147,8 +184,8 @@ pub(crate) fn u256_mul(
     rs1: [u8; INT256_NUM_LIMBS],
     rs2: [u8; INT256_NUM_LIMBS],
 ) -> [u8; INT256_NUM_LIMBS] {
-    let rs1_u64: [u32; 8] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u32; 8] = unsafe { std::mem::transmute(rs2) };
+    let rs1_u64: [u32; 8] = bytes_to_u32_array(rs1);
+    let rs2_u64: [u32; 8] = bytes_to_u32_array(rs2);
     let mut rd = [0u32; 8];
     for i in 0..8 {
         let mut carry = 0u64;
@@ -158,7 +195,7 @@ pub(crate) fn u256_mul(
             carry = res >> 32;
         }
     }
-    unsafe { std::mem::transmute(rd) }
+    u32_array_to_bytes(rd)
 }
 
 #[cfg(test)]
@@ -166,7 +203,7 @@ mod tests {
     use alloy_primitives::U256;
     use rand::{prelude::StdRng, Rng, SeedableRng};
 
-    use crate::{mult::u256_mul, INT256_NUM_LIMBS};
+    use crate::{common::u64_array_to_bytes, mult::u256_mul, INT256_NUM_LIMBS};
 
     #[test]
     fn test_u256_mul() {
@@ -176,8 +213,8 @@ mod tests {
             let limbs_b: [u64; 4] = rng.gen();
             let a = U256::from_limbs(limbs_a);
             let b = U256::from_limbs(limbs_b);
-            let a_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_a) };
-            let b_u8: [u8; INT256_NUM_LIMBS] = unsafe { std::mem::transmute(limbs_b) };
+            let a_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_a);
+            let b_u8: [u8; INT256_NUM_LIMBS] = u64_array_to_bytes(limbs_b);
             assert_eq!(U256::from_le_bytes(u256_mul(a_u8, b_u8)), a.wrapping_mul(b));
         }
     }

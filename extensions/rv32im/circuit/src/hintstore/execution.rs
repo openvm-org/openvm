@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
@@ -57,6 +60,15 @@ impl Rv32HintStoreExecutor {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            HINT_STOREW => Ok($execute_impl::<_, _, true>),
+            HINT_BUFFER => Ok($execute_impl::<_, _, false>),
+        }
+    };
+}
+
 impl<F> Executor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
@@ -74,11 +86,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e1_impl::<_, _, true>,
-            HINT_BUFFER => execute_e1_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -103,11 +126,24 @@ where
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e2_impl::<_, _, true>,
-            HINT_BUFFER => execute_e2_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -154,6 +190,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     num_words
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -162,6 +199,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT
     execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

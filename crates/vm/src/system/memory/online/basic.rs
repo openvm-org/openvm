@@ -26,6 +26,9 @@ impl BasicMemory {
 impl Drop for BasicMemory {
     fn drop(&mut self) {
         if self.size > 0 {
+            // SAFETY:
+            // - self.ptr is allocated via the global allocator
+            // - self.layout matches the original allocation layout
             unsafe {
                 dealloc(self.ptr.as_ptr(), self.layout);
             }
@@ -38,6 +41,8 @@ impl Clone for BasicMemory {
         if self.size == 0 {
             // Ensure we maintain the same aligned pointer for zero-size
             let aligned_ptr = PAGE_SIZE as *mut u8;
+            // SAFETY:
+            // - aligned_ptr is PAGE_SIZE which is non-null and properly aligned
             let ptr = unsafe { NonNull::new_unchecked(aligned_ptr) };
             return Self {
                 ptr,
@@ -47,6 +52,10 @@ impl Clone for BasicMemory {
         }
 
         let layout = self.layout;
+        // SAFETY:
+        // - alloc_zeroed creates a valid allocation for the layout
+        // - copy_nonoverlapping copies exactly self.size bytes from valid source to valid dest
+        // - new_ptr is guaranteed non-null after alloc check
         let ptr = unsafe {
             let new_ptr = alloc_zeroed(layout);
             if new_ptr.is_null() {
@@ -78,6 +87,8 @@ impl LinearMemory for BasicMemory {
             // For zero-size allocation, use a dangling pointer with proper alignment
             // We need to ensure the pointer is aligned to PAGE_SIZE
             let aligned_ptr = PAGE_SIZE as *mut u8;
+            // SAFETY:
+            // - aligned_ptr is PAGE_SIZE which is non-null and properly aligned
             let ptr = unsafe { NonNull::new_unchecked(aligned_ptr) };
             let layout = Layout::from_size_align(0, PAGE_SIZE)
                 .expect("Failed to create layout with PAGE_SIZE alignment");
@@ -93,6 +104,9 @@ impl LinearMemory for BasicMemory {
         let layout = Layout::from_size_align(size, PAGE_SIZE)
             .expect("Failed to create layout with PAGE_SIZE alignment");
 
+        // SAFETY:
+        // - alloc_zeroed creates a valid allocation for the layout
+        // - raw_ptr is guaranteed non-null after alloc check
         let ptr = unsafe {
             let raw_ptr = alloc_zeroed(layout);
             if raw_ptr.is_null() {
@@ -109,10 +123,14 @@ impl LinearMemory for BasicMemory {
     }
 
     fn as_slice(&self) -> &[u8] {
+        // SAFETY:
+        // - self.ptr is valid for reads of self.size bytes
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.size) }
     }
 
     fn as_mut_slice(&mut self) -> &mut [u8] {
+        // SAFETY:
+        // - self.ptr is valid for reads and writes of self.size bytes
         unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.size) }
     }
 
@@ -232,7 +250,6 @@ impl LinearMemory for BasicMemory {
         // - Alignment check is done via assert above
         // - `T` is "plain old data" (POD), so conversion from underlying bytes is properly
         //   initialized
-        // - `self` will not be mutated while borrowed
         core::slice::from_raw_parts(data, len)
     }
 }

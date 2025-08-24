@@ -57,10 +57,39 @@ impl<A> FieldExtensionCoreExecutor<A> {
     }
 }
 
+macro_rules! dispatch {
+    ($execute_impl:ident, $opcode:ident) => {
+        match $opcode {
+            0 => Ok($execute_impl::<_, _, 0>), // FE4ADD
+            1 => Ok($execute_impl::<_, _, 1>), // FE4SUB
+            2 => Ok($execute_impl::<_, _, 2>), // BBE4MUL
+            3 => Ok($execute_impl::<_, _, 3>), // BBE4DIV
+            _ => panic!("Invalid field extension opcode: {}", $opcode),
+        }
+    };
+}
+
 impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let pre_compute: &mut FieldExtensionPreCompute = data.borrow_mut();
+
+        let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
+
+        dispatch!(execute_e1_tco_handler, opcode)
+    }
+
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
         size_of::<FieldExtensionPreCompute>()
@@ -77,15 +106,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = match opcode {
-            0 => execute_e1_impl::<_, _, 0>, // FE4ADD
-            1 => execute_e1_impl::<_, _, 1>, // FE4SUB
-            2 => execute_e1_impl::<_, _, 2>, // BBE4MUL
-            3 => execute_e1_impl::<_, _, 3>, // BBE4DIV
-            _ => panic!("Invalid field extension opcode: {opcode}"),
-        };
-
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, opcode)
     }
 }
 
@@ -111,15 +132,23 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        let fn_ptr = match opcode {
-            0 => execute_e2_impl::<_, _, 0>, // FE4ADD
-            1 => execute_e2_impl::<_, _, 1>, // FE4SUB
-            2 => execute_e2_impl::<_, _, 2>, // BBE4MUL
-            3 => execute_e2_impl::<_, _, 3>, // BBE4DIV
-            _ => panic!("Invalid field extension opcode: {opcode}"),
-        };
+        dispatch!(execute_e2_impl, opcode)
+    }
 
-        Ok(fn_ptr)
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let pre_compute: &mut E2PreCompute<FieldExtensionPreCompute> = data.borrow_mut();
+        pre_compute.chip_idx = chip_idx as u32;
+
+        let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+
+        dispatch!(execute_e2_tco_handler, opcode)
     }
 }
 
@@ -145,6 +174,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -153,6 +183,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE:
     execute_e12_impl::<F, CTX, OPCODE>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
