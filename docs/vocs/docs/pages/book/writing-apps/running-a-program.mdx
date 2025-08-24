@@ -6,16 +6,16 @@ After building and transpiling a program, you can execute it using the `run` com
 cargo openvm run
     --exe <path_to_transpiled_program>
     --config <path_to_app_config>
-    --input <path_to_input>
+    --input <path_to_input_or_hex_input>
 ```
 
 If `--exe` is not provided, OpenVM will call `build` prior to attempting to run the executable. Note that only one executable may be run, so if your project contains multiple targets you will have to specify which one to run using the `--bin` or `--example` flag.
 
-If your program doesn't require inputs, you can (and should) omit the `--input` flag.
+If your program does not require inputs, you should omit the `--input` flag.
 
 ## Run Flags
 
-Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling](./compiling).
+Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling](/book/writing-apps/compiling-a-program).
 
 ### OpenVM Options
 
@@ -33,7 +33,7 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 - `--input <INPUT>`
 
-  **Description**: Input to the OpenVM program, or a hex string.
+  **Description**: Path to OpenVM program input, or a hex string containing the input as specified [here](/book/writing-apps/overview#inputs).
 
 - `--init-file-name <INIT_FILE_NAME>`
 

@@ -1,14 +1,13 @@
 # Writing a Program
 
-## Writing a guest program
-
-To initialize an OpenVM guest program package, you can use the following CLI command:
+To initialize an OpenVM guest program project, you can use the following CLI command:
 
 ```bash
 cargo openvm init
 ```
 
-For a guest program example, see this [fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci). More examples can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
+This will initialize a new Rust project, and you can start writing your program in `src/main.rs`.
+For a guest program example, see this [Fibonacci program](https://github.com/openvm-org/openvm-example-fibonacci). More examples can be found in the [benchmarks/guest](https://github.com/openvm-org/openvm/tree/main/benchmarks/guest) directory.
 
 ## Handling I/O
 
@@ -26,9 +25,25 @@ let n: u64 = read();
 
 For debugging purposes, `openvm::io::print` and `openvm::io::println` can be used normally, but `println!` will only work if `std` is enabled.
 
-> ⚠️ **WARNING**
->
-> The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+:::warning
+The maximum memory address for an OpenVM program is `2^29`. The majority of that (approximately 480-500 MB depending on transpilation) is available to the guest program, but large reads may exceed the maximum memory and thus fail.
+:::
+
+## Configuring OpenVM
+
+The set of VM extensions used by OpenVM is controlled by a configuration set in the `openvm.toml` file. Projects created by
+`cargo openvm init` have the following minimal default configuration:
+
+```toml [openvm.toml]
+// [!include ~/snippets/examples_cli/openvm.toml]
+```
+
+To use additional [VM extensions](/book/acceleration-using-extensions/overview), you can specify and configure them in the `openvm.toml`
+file. An example of an `openvm.toml` with all commonly used extensions is:
+
+```toml [openvm_standard.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
+```
 
 ## Rust `std` library support
 
@@ -45,9 +60,9 @@ The above applies to the Rust `std` library. Users should also be aware that whe
 
 To use the standard library, you must enable the `"std"` feature in the `openvm` crate. This is **not** one of the default features.
 
-**Note**: If you write a program that only imports `openvm` in `Cargo.toml` but does not import it anywhere in your crate, the Rust linker may optimize away the dependency, which will cause a compile error. To fix this, you may need to explicitly import the `openvm` crate in your code.
-
-### When to use `std` vs `no_std`
+:::note
+If you write a program that only imports `openvm` in `Cargo.toml` but does not import it anywhere in your crate, the Rust linker may optimize away the dependency, which will cause a compile error. To fix this, you may need to explicitly import the `openvm` crate in your code.
+:::
 
 Due to the limitations described above, our general recommendation is that developers should write OpenVM library crates as Rust `no_std` libraries when possible (see [below](#writing-no_std-rust)).
 Binary crates can generally be written using the standard library, although for more control over the expected behavior, we provide [entrypoints](#no_std-binary-crates) for writing `no_std` binaries.
@@ -119,10 +134,6 @@ to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be
 
 and you still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
-
-## Building and running
-
-See the [overview](./overview) on how to build and run the program.
 
 ## Using crates that depend on `getrandom`
 

@@ -3,13 +3,7 @@ use std::{
     mem::size_of,
 };
 
-use openvm_circuit::{
-    arch::{
-        E2PreCompute, ExecuteFunc, ExecutionCtxTrait, Executor, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, VmExecState,
-    },
-    system::memory::online::GuestMemory,
-};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
@@ -25,6 +19,17 @@ struct BranchLePreCompute {
     imm: isize,
     a: u8,
     b: u8,
+}
+
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            BranchLessThanOpcode::BLT => Ok($execute_impl::<_, _, BltOp>),
+            BranchLessThanOpcode::BLTU => Ok($execute_impl::<_, _, BltuOp>),
+            BranchLessThanOpcode::BGE => Ok($execute_impl::<_, _, BgeOp>),
+            BranchLessThanOpcode::BGEU => Ok($execute_impl::<_, _, BgeuOp>),
+        }
+    };
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -78,13 +83,22 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut BranchLePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BranchLessThanOpcode::BLT => execute_e1_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => execute_e1_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => execute_e1_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => execute_e1_impl::<_, _, BgeuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BranchLePreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_tco_handler, local_opcode)
     }
 }
 
@@ -110,13 +124,24 @@ where
         let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            BranchLessThanOpcode::BLT => execute_e2_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => execute_e2_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => execute_e2_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => execute_e2_impl::<_, _, BgeuOp>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_impl, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_tco_handler, local_opcode)
     }
 }
 
@@ -136,6 +161,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -144,6 +170,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLes
     execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

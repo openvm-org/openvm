@@ -11,30 +11,34 @@ license.workspace = true
 openvm-build.workspace = true
 openvm-transpiler.workspace = true
 
+bitcode = { workspace = true, optional = true }
 cargo_metadata.workspace = true
 clap = { version = "4.5.9", features = ["derive", "env"] }
 eyre.workspace = true
 tempfile.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+serde = { workspace = true, optional = true }
 
-bitcode = { workspace = true, optional = true }
 openvm-circuit = { workspace = true, optional = true }
 openvm-continuations = { workspace = true, optional = true }
 openvm-native-circuit = { workspace = true, optional = true }
+openvm-native-recursion = { workspace = true, optional = true }
 openvm-sdk = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 
 [dev-dependencies]
 
 [features]
-default = []
+default = ["generate-fixtures"]
 build-elfs = []
 generate-fixtures = [
     "dep:bitcode",
+    "dep:serde",
     "dep:openvm-circuit",
     "dep:openvm-continuations",
     "dep:openvm-native-circuit",
+    "dep:openvm-native-recursion",
     "dep:openvm-sdk",
     "dep:openvm-stark-sdk",
 ]

@@ -7,7 +7,7 @@
 		"dev": "vocs dev",
 		"build": "vocs build",
 		"preview": "vocs preview",
-		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && cp -rL docs/snippets/examples_sdk docs/snippets/examples_sdk-tmp && rm -rf docs/snippets/examples_sdk && mv docs/snippets/examples_sdk-tmp docs/snippets/examples_sdk && pnpm build"
+		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && cp -rL docs/snippets/examples_sdk docs/snippets/examples_sdk-tmp && rm -rf docs/snippets/examples_sdk && mv docs/snippets/examples_sdk-tmp docs/snippets/examples_sdk && cp -rL docs/snippets/examples_cli docs/snippets/examples_cli-tmp && rm -rf docs/snippets/examples_cli && mv docs/snippets/examples_cli-tmp docs/snippets/examples_cli && cp -rL docs/snippets/examples_sdk_toml docs/snippets/examples_sdk_toml-tmp && rm -rf docs/snippets/examples_sdk_toml && mv docs/snippets/examples_sdk_toml-tmp docs/snippets/examples_sdk_toml && pnpm build"
 	},
 	"dependencies": {
 		"katex": "^0.16.22",

@@ -19,12 +19,6 @@ impl ExecutionCtx {
     }
 }
 
-impl Default for ExecutionCtx {
-    fn default() -> Self {
-        Self::new(None)
-    }
-}
-
 impl ExecutionCtxTrait for ExecutionCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}

@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/docs.yml"
+  merge_group:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -50,8 +51,15 @@ jobs:
           install_s5cmd
 
       - name: Sync static S3 bucket
+        working-directory: target/doc
+        if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
-        run: |
-          cd target/doc
-          s5cmd sync . s3://${S3_BUCKET%/}/static/
+        run: s5cmd sync . s3://${S3_BUCKET%/}/static/
+
+      - name: Sync tagged version S3 bucket
+        working-directory: target/doc
+        if: github.ref_type == 'tag'
+        env:
+          S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
+        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.ref_name }}/

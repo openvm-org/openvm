@@ -109,6 +109,28 @@ where
             Ok(execute_range_check_e1_impl)
         }
     }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx: ExecutionCtxTrait>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let &Instruction { opcode, .. } = inst;
+
+        let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
+
+        if is_jal {
+            let jal_data: &mut JalPreCompute<F> = data.borrow_mut();
+            self.pre_compute_jal_impl(pc, inst, jal_data)?;
+            Ok(execute_jal_e1_tco_handler)
+        } else {
+            let range_check_data: &mut RangeCheckPreCompute = data.borrow_mut();
+            self.pre_compute_range_check_impl(pc, inst, range_check_data)?;
+            Ok(execute_range_check_e1_tco_handler)
+        }
+    }
 }
 
 impl<F> MeteredExecutor<F> for JalRangeCheckExecutor
@@ -147,6 +169,33 @@ where
 
             self.pre_compute_range_check_impl(pc, inst, &mut pre_compute.data)?;
             Ok(execute_range_check_e2_impl)
+        }
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx: MeteredExecutionCtxTrait>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+        let &Instruction { opcode, .. } = inst;
+
+        let is_jal = opcode == NativeJalOpcode::JAL.global_opcode();
+
+        if is_jal {
+            let pre_compute: &mut E2PreCompute<JalPreCompute<F>> = data.borrow_mut();
+            pre_compute.chip_idx = chip_idx as u32;
+
+            self.pre_compute_jal_impl(pc, inst, &mut pre_compute.data)?;
+            Ok(execute_jal_e2_tco_handler)
+        } else {
+            let pre_compute: &mut E2PreCompute<RangeCheckPreCompute> = data.borrow_mut();
+            pre_compute.chip_idx = chip_idx as u32;
+
+            self.pre_compute_range_check_impl(pc, inst, &mut pre_compute.data)?;
+            Ok(execute_range_check_e2_tco_handler)
         }
     }
 }
@@ -190,6 +239,7 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     vm_state.instret += 1;
 }
 
+#[create_tco_handler]
 unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -198,6 +248,7 @@ unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_jal_e12_impl(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -209,6 +260,7 @@ unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     execute_jal_e12_impl(&pre_compute.data, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
@@ -217,6 +269,7 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_range_check_e12_impl(pre_compute, vm_state);
 }
 
+#[create_tco_handler]
 unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,

@@ -214,8 +214,14 @@ where
     A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY:
+        // - row_slice is guaranteed by the caller to have at least A::WIDTH +
+        //   PublicValuesCoreColsView::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
+        // SAFETY:
+        // - caller ensures core_row contains a valid record written by the executor during trace
+        //   generation
         let record: &PublicValuesRecord<F> = unsafe { get_record_from_slice(&mut core_row, ()) };
         let cols = PublicValuesCoreColsView::<_, &mut F>::borrow_mut(core_row);
 

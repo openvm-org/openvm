@@ -28,11 +28,13 @@ Proofs are expected to be passed via the [hintable key-value store](https://gith
 
 The function will panic on failure. Successful STARK verification implies that the app execution was successful and terminated with exit code 0.
 
-> ⚠️ For Advanced Users
->
-> Note that if your guest program directly writes data to the native address space (address space 4), the `verify_stark` function will likely overwrite it. Any data the guest placed in the native address space should be persisted (or treated as corrupt) before invocations to `verify_stark`.
-> 
-> This is not a concern if you are writing vanilla rust with the default RV32 I and M extensions.
+:::warning
+**For Advanced Users**
+
+Note that if your guest program directly writes data to the native address space (address space 4), the `verify_stark` function will likely overwrite it. Any data the guest placed in the native address space should be persisted (or treated as corrupt) before invocations to `verify_stark`.
+ 
+This is not a concern if you are writing vanilla rust with the default RV32 I and M extensions.
+:::
 
 ## Host
 

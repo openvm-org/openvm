@@ -12,6 +12,7 @@ on:
       - "crates/sdk/**"
       - "Cargo.toml"
       - ".github/workflows/sdk.yml"
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
@@ -102,6 +103,6 @@ jobs:
 
       - name: Run ignored tests
         working-directory: crates/sdk
-        if: ${{ github.event_name == 'push' }}
+        # if: ${{ github.event_name == 'push' }}
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel,evm-verify --ignored test_static_verifier_custom_pv_handler
+          cargo nextest run --cargo-profile=fast --features parallel,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
