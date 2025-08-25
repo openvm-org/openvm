@@ -193,11 +193,11 @@ zkhash = { git = "https://github.com/HorizenLabs/poseidon2.git", rev = "bb476b9"
 #    "halo2-axiom",
 #] }
 #snark-verifier = { version = "0.2.0", default-features = false }
-snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = chore/halo2-lib-update, default-features = false, features = [
+snark-verifier-sdk = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "chore/halo2-lib-update", default-features = false, features = [
     "loader_halo2",
     "halo2-axiom",
 ] }
-snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = chore/halo2-lib-update, default-features = false }
+snark-verifier = { git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "chore/halo2-lib-update", default-features = false }
 halo2curves-axiom = "0.7.0"
 
 forge-fmt = "0.2.0"
