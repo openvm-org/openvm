@@ -9,11 +9,9 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
-        cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir, BitwiseOperationLookupChip,
+        BitwiseOperationLookupAir, BitwiseOperationLookupChip, BitwiseOperationLookupChipGPU,
     },
-    var_range::{
-        cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerAir, VariableRangeCheckerChip,
-    },
+    var_range::{VariableRangeCheckerAir, VariableRangeCheckerChip, VariableRangeCheckerChipGPU},
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;

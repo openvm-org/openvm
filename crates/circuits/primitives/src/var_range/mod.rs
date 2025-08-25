@@ -26,7 +26,9 @@ mod bus;
 pub use bus::*;
 
 #[cfg(feature = "cuda")]
-pub mod cuda;
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 pub mod tests;

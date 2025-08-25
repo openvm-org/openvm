@@ -151,7 +151,7 @@ pub mod field_extension_cuda {
 
 pub mod fri_cuda {
     use super::*;
-    use crate::fri::cuda::RowInfo;
+    use crate::fri::RowInfo;
 
     extern "C" {
         pub fn _fri_reduced_opening_tracegen(

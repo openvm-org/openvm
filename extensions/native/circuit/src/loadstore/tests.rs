@@ -33,7 +33,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use crate::{
     adapters::NativeLoadStoreAdapterRecord,
-    loadstore::{cuda::NativeLoadStoreChipGpu, NativeLoadStoreCoreRecord},
+    loadstore::{NativeLoadStoreChipGpu, NativeLoadStoreCoreRecord},
 };
 use crate::{
     adapters::{

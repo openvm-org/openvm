@@ -2,16 +2,16 @@ use std::sync::Arc;
 
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{
-        cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir, BitwiseOperationLookupBus,
-        BitwiseOperationLookupChip, SharedBitwiseOperationLookupChip,
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        BitwiseOperationLookupChipGPU, SharedBitwiseOperationLookupChip,
     },
     range_tuple::{
-        cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir, RangeTupleCheckerBus,
-        RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
+        RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip,
+        RangeTupleCheckerChipGPU, SharedRangeTupleCheckerChip,
     },
     var_range::{
-        cuda::VariableRangeCheckerChipGPU, SharedVariableRangeCheckerChip, VariableRangeCheckerAir,
-        VariableRangeCheckerBus, VariableRangeCheckerChip,
+        SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
+        VariableRangeCheckerChip, VariableRangeCheckerChipGPU,
     },
 };
 use openvm_cuda_backend::{

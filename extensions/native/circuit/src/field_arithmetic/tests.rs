@@ -26,7 +26,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use super::cuda::FieldArithmeticChipGpu;
+use super::FieldArithmeticChipGpu;
 use super::{
     FieldArithmeticChip, FieldArithmeticCoreAir, FieldArithmeticCoreCols, FieldArithmeticExecutor,
 };

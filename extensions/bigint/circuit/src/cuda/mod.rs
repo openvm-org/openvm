@@ -3,8 +3,8 @@ use std::{mem::size_of, sync::Arc};
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
-    range_tuple::cuda::RangeTupleCheckerChipGPU, var_range::cuda::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
     base::DeviceMatrix,

@@ -28,7 +28,7 @@ use super::{
     FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
 };
 #[cfg(feature = "cuda")]
-use crate::fri::{cuda::FriReducedOpeningChipGpu, FriReducedOpeningRecordMut};
+use crate::fri::{FriReducedOpeningChipGpu, FriReducedOpeningRecordMut};
 use crate::{
     fri::{FriReducedOpeningFiller, WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
     write_native_array,

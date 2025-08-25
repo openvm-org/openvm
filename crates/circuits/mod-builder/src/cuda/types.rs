@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
-    var_range::cuda::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 

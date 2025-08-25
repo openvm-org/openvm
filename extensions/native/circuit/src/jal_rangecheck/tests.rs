@@ -36,7 +36,7 @@ use test_case::test_case;
 
 use super::{JalRangeCheckAir, JalRangeCheckExecutor};
 #[cfg(feature = "cuda")]
-use crate::jal_rangecheck::{cuda::JalRangeCheckGpu, JalRangeCheckRecord};
+use crate::jal_rangecheck::{JalRangeCheckGpu, JalRangeCheckRecord};
 use crate::{
     jal_rangecheck::{JalRangeCheckCols, JalRangeCheckFiller, NativeJalRangeCheckChip},
     test_utils::write_native_array,

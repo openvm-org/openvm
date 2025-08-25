@@ -8,7 +8,7 @@ use openvm_circuit::{
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::{encoder::Encoder, var_range::cuda::VariableRangeCheckerChipGPU};
+use openvm_circuit_primitives::{encoder::Encoder, var_range::VariableRangeCheckerChipGPU};
 use openvm_cuda_backend::{
     base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,
 };

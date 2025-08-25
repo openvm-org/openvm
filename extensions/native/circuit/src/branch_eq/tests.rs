@@ -35,7 +35,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use super::cuda::NativeBranchEqChipGpu;
+use super::NativeBranchEqChipGpu;
 #[cfg(feature = "cuda")]
 use crate::{adapters::BranchNativeAdapterRecord, branch_eq::NativeBranchEqualCoreRecord};
 use crate::{

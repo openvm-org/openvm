@@ -9,14 +9,14 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    branch_eq::{cuda::NativeBranchEqChipGpu, NativeBranchEqAir},
-    castf::{cuda::CastFChipGpu, CastFAir},
-    field_arithmetic::{cuda::FieldArithmeticChipGpu, FieldArithmeticAir},
-    field_extension::{cuda::FieldExtensionChipGpu, FieldExtensionAir},
-    fri::{cuda::FriReducedOpeningChipGpu, FriReducedOpeningAir},
-    jal_rangecheck::{cuda::JalRangeCheckGpu, JalRangeCheckAir},
-    loadstore::{cuda::NativeLoadStoreChipGpu, NativeLoadStoreAir},
-    poseidon2::{air::NativePoseidon2Air, cuda::NativePoseidon2ChipGpu},
+    branch_eq::{NativeBranchEqAir, NativeBranchEqChipGpu},
+    castf::{CastFAir, CastFChipGpu},
+    field_arithmetic::{FieldArithmeticAir, FieldArithmeticChipGpu},
+    field_extension::{FieldExtensionAir, FieldExtensionChipGpu},
+    fri::{FriReducedOpeningAir, FriReducedOpeningChipGpu},
+    jal_rangecheck::{JalRangeCheckAir, JalRangeCheckGpu},
+    loadstore::{NativeLoadStoreAir, NativeLoadStoreChipGpu},
+    poseidon2::{air::NativePoseidon2Air, NativePoseidon2ChipGpu},
     CastFExtension, GpuBackend, Native,
 };
 

@@ -4,8 +4,7 @@ use derive_new::new;
 use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
 use openvm_circuit::arch::{AdapterCoreLayout, DenseRecordArena, RecordSeeker};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
-    var_range::cuda::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;

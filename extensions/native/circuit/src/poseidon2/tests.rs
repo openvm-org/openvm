@@ -38,7 +38,7 @@ use crate::poseidon2::{
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_cuda_backend::types::F as CudaF;
-        use crate::poseidon2::{chip::NativePoseidon2RecordMut, cuda::NativePoseidon2ChipGpu};
+        use crate::poseidon2::{chip::NativePoseidon2RecordMut, NativePoseidon2ChipGpu};
     } else {
         use openvm_circuit::utils::air_test;
         use openvm_instructions::{program::Program, SystemOpcode};

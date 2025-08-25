@@ -12,7 +12,7 @@ use openvm_stark_sdk::{
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
-    crate::range_tuple::{cuda::RangeTupleCheckerChipGPU, RangeTupleCheckerAir},
+    crate::range_tuple::{RangeTupleCheckerAir, RangeTupleCheckerChipGPU},
     array::from_fn,
     dummy::DummyInteractionChipGPU,
     openvm_cuda_backend::{

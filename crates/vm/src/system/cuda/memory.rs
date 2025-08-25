@@ -7,7 +7,7 @@ use openvm_circuit::{
         TouchedMemory,
     },
 };
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::{
     copy::{cuda_memcpy, MemCopyD2D, MemCopyH2D},
