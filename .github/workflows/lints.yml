@@ -94,6 +94,7 @@ jobs:
       - runs-on=${{ github.run_id }}-cuda
       - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
+      - spot=false
       - extras=s3-cache
 
     steps:

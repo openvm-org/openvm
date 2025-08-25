@@ -37,6 +37,7 @@ jobs:
       - runner=${{ matrix.platform.runner }}
       - image=${{ matrix.platform.image }}
       - tag=riscv-${{ matrix.platform.runner }}
+      - spot=${{ contains(matrix.platform.runner, 'gpu') && 'false' || 'capacity-optimized' }}
       - extras=s3-cache
 
     steps:
