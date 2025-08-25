@@ -47,8 +47,8 @@ export const specsSidebar: SidebarItem[] = [
                 link: "/specs/reference/transpiler"
             },
             {
-                text: "Rust Toolchain",
-                link: "/specs/reference/rust-toolchain"
+                text: "Rust Frontend",
+                link: "/specs/reference/rust-frontend"
             }
         ]
     }
