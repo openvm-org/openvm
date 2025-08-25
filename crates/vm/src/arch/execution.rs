@@ -12,8 +12,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
-#[cfg(feature = "tco")]
-use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -98,9 +96,14 @@ pub type ExecuteFunc<F, CTX> =
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
+///
+/// The function signature is optimized so that each function argument stays in a hardware register
+/// and does not require host memory load/stores during execution. Typical calling conventions allow
+/// for 6 registers (`u64` on 64-bit architectures) before spilling to the stack.
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
-    interpreter: &InterpretedInstance<F, CTX>,
+    pre_compute_ptrs: *const &[u8], // 1 u64
+    handlers: &[*const ()],         // 2 u64 because we need the length
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

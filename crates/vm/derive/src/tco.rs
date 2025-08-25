@@ -39,7 +39,8 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     let handler_fn = quote! {
         #[inline(never)]
         unsafe fn #handler_name #handler_generics (
-            interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
+            pre_compute_ptrs: *const &[u8],
+            handlers: &[*const ()],
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,
@@ -48,9 +49,15 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         )
         #where_clause
         {
-            use ::openvm_circuit::arch::ExecutionError;
+            use ::openvm_circuit::arch::{ExecutionError, interpreter::get_pc_index};
 
-            let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc);
+            let pc_idx = get_pc_index(exec_state.vm_state.pc);
+            // # Safety
+            // - This assumes that the `pc` is within program bounds - this should be the case if
+            //   the pc is checked to be in bounds before jumping to it.
+            // - The returned slice may not be entirely initialized, but it is the job of each Executor to
+            // initialize the parts of the buffer that the instruction handler will use.
+            let pre_compute = pre_compute_ptrs.add(pc_idx).read();
             #execute_call;
 
             if exec_state.exit_code.is_err() {
@@ -61,17 +68,19 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
                 return;
             }
             // exec_state.pc should have been updated by execute_impl at this point
-            let next_handler = interpreter.get_handler(exec_state.vm_state.pc);
+            let next_pc_idx = get_pc_index(exec_state.vm_state.pc);
+            let next_handler = handlers.get(next_pc_idx).copied();
             if next_handler.is_none() {
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds (exec_state.vm_state.pc));
                 return;
             }
-            let next_handler = next_handler.unwrap_unchecked();
+            // Transmute is needed instead of primitive cast due to lifetimes
+            let next_handler = std::mem::transmute::<*const (), ::openvm_circuit::arch::Handler<#f_type, #ctx_type>>(next_handler.unwrap_unchecked());
 
             // NOTE: `become` is a keyword that requires Rust Nightly.
             // It is part of the explicit tail calls RFC: <https://github.com/rust-lang/rust/issues/112788>
             // which is still incomplete.
-            become next_handler(interpreter, exec_state)
+            become next_handler(pre_compute_ptrs, handlers, exec_state)
         }
     };
 

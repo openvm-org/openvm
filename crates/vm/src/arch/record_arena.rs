@@ -242,7 +242,7 @@ impl DenseRecordArena {
     }
 
     // Returns a [RecordSeeker] on the allocated buffer
-    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<DenseRecordArena, R, L> {
+    pub fn get_record_seeker<R, L>(&mut self) -> RecordSeeker<'_, DenseRecordArena, R, L> {
         RecordSeeker::new(self.allocated_mut())
     }
 }
