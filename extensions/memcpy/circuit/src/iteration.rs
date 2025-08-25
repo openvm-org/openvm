@@ -61,7 +61,7 @@ pub struct MemcpyIterCols<T> {
     pub shift: [T; 2],
     pub is_valid: T,
     pub is_valid_not_start: T,
-    pub is_shift_non_zero: T,
+    pub is_shift_zero: T,
     // -1 for the first iteration, 1 for the last iteration, 0 for the middle iterations
     pub is_boundary: T,
     pub data_1: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -106,7 +106,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         };
 
         let shift = local.shift[0] * AB::Expr::TWO + local.shift[1];
-        let is_shift_zero = not::<AB::Expr>(local.is_shift_non_zero.clone());
+        let is_shift_non_zero = not::<AB::Expr>(local.is_shift_zero);
         let is_shift_one = and::<AB::Expr>(local.shift[0], not::<AB::Expr>(local.shift[1]));
         let is_shift_two = and::<AB::Expr>(not::<AB::Expr>(local.shift[0]), local.shift[1]);
         let is_shift_three = and::<AB::Expr>(local.shift[0], local.shift[1]);
@@ -141,7 +141,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .iter()
             .map(|(prev_data, next_data)| {
                 array::from_fn::<_, MEMCPY_LOOP_NUM_LIMBS, _>(|i| {
-                    is_shift_zero.clone() * (next_data[i])
+                    local.is_shift_zero.clone() * (next_data[i])
                         + is_shift_one.clone()
                             * (if i < 3 {
                                 next_data[i + 1]
@@ -167,7 +167,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         builder.assert_bool(local.is_valid);
         local.shift.iter().for_each(|x| builder.assert_bool(*x));
         builder.assert_bool(local.is_valid_not_start);
-        builder.assert_bool(local.is_shift_non_zero);
+        builder.assert_bool(local.is_shift_zero);
         // is_boundary is either -1, 0 or 1
         builder.assert_tern(local.is_boundary + AB::Expr::ONE);
 
@@ -178,7 +178,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         );
 
         // is_shift_non_zero is correct
-        builder.assert_eq(local.is_shift_non_zero, or::<AB::Expr>(local.shift[0], local.shift[1]));
+        builder.assert_eq(local.is_shift_zero, not::<AB::Expr>(or::<AB::Expr>(local.shift[0], local.shift[1])));
 
         // if !is_valid, then is_boundary = 0, shift = 0 (we will use this assumption later)
         let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
@@ -205,7 +205,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // since is_shift_non_zero degree is 2, we need to keep the degree of the condition to 1
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
-            .assert_eq(local.timestamp, prev.timestamp + local.is_shift_non_zero.clone());
+            .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero.clone());
 
         // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
@@ -247,7 +247,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .enumerate()
             .for_each(|(idx, (data, read_aux))| {
                 let is_valid_read = if idx == 3 {
-                    or::<AB::Expr>(local.is_shift_non_zero.clone(), local.is_valid_not_start)
+                    or::<AB::Expr>(is_shift_non_zero.clone(), local.is_valid_not_start)
                 } else {
                     local.is_valid_not_start.into()
                 };
@@ -694,7 +694,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         } else {
                             F::ZERO
                         };
-                        cols.is_shift_non_zero = F::from_canonical_u8((record.inner.shift != 0) as u8);
+                        cols.is_shift_zero = F::from_canonical_u8((record.inner.shift == 0) as u8);
                         cols.is_valid_not_start = F::from_canonical_u8(1 - is_start as u8);
                         cols.is_valid = F::ONE;
                         cols.shift = [record.inner.shift & 1, record.inner.shift >> 1]

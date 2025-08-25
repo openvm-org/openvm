@@ -5768,6 +5768,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-memcpy-integration-tests"
+version = "1.4.0-rc.6"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-instructions",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand 0.8.5",
+ "serde",
+ "strum",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
 name = "openvm-memcpy-transpiler"
 version = "1.4.0-rc.6"
 dependencies = [
@@ -6257,6 +6277,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-rv32im-circuit",
  "openvm-sha256-air",
  "openvm-sha256-transpiler",
