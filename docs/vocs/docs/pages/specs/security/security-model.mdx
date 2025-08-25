@@ -34,15 +34,23 @@ We now specify security parameters used in the proofs:
 * **STARK proofs**: `app`, `leaf`, `internal`, `root`
 * **EVM proofs**: `static_verifier`
 
-involved in the [Continuations Design](/specs/architecture/continuations) under default settings. 
+involved in the [Continuations Design](/specs/architecture/continuations) under default settings.
+These parameters are of two types:
 
-| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `proof_of_work_bits` |
-| --- | --- | --- | --- | --- | --- |
-| `app` | STARK | 100 | 1 | 100 | 16 |
-| `leaf` | STARK | 100 | 1 | 100 | 16 |
-| `internal` | STARK | 100 | 2 | 44 | 16 |
-| `root` | STARK | 100 | 3 | 30 | 16 |
-| `static_verifier` | Halo2 | 100+ | -- | -- | -- |
+* **FRI parameters**: `log_blowup`, `num_queries`, and `proof_of_work_bits` control the soundness of the FRI
+argument used to generate proofs for the STARKs.
+* **logUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
+controlling the soundness of the logUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+
+The concrete parameter values used by OpenVM are specified in the table below.
+
+| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `proof_of_work_bits` | `max_interaction_count` | `log_max_message_length` | `log_up_pow_bits` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `app` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `leaf` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `internal` | STARK | 100 | 2 | 44 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `root` | STARK | 100 | 3 | 30 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `static_verifier` | Halo2 | 100+ | -- | -- | -- | -- | -- | -- |
 
 ### Details on Universal Trusted Setup
 
