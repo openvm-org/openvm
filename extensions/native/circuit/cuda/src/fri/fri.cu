@@ -205,7 +205,7 @@ __global__ void fri_reduced_opening_tracegen(
     Fp *trace,
     size_t height,
     uint8_t *records,
-    uint32_t rows_used,
+    size_t rows_used,
     RowInfo *rows_info,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -266,9 +266,9 @@ __global__ void fri_reduced_opening_tracegen(
 
 extern "C" int _fri_reduced_opening_tracegen(
     Fp *d_trace,
-    uint32_t height,
+    size_t height,
     uint8_t *d_records,
-    uint32_t rows_used,
+    size_t rows_used,
     RowInfo *d_rows_info,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,

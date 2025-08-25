@@ -397,10 +397,10 @@ __global__ void cukernel_native_poseidon2_tracegen(
 
 extern "C" int _native_poseidon2_tracegen(
     Fp *d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     Fp *d_records,
-    uint32_t num_records,
+    size_t num_records,
     uint32_t *d_chunk_start,
     uint32_t num_chunks,
     uint32_t *d_range_checker,
