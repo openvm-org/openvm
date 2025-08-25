@@ -32,6 +32,23 @@ export const specsSidebar: SidebarItem[] = [
         ]
     },
     {
+        text: "Security",
+        items: [
+            {
+                text: "Security Model",
+                link: "/specs/security/security-model"
+            },
+            {
+                text: "Audits",
+                link: "/specs/security/audits"
+            },
+            {
+                text: "Reporting Vulnerabilities",
+                link: "/specs/security/reporting-vulnerabilities"
+            }
+        ]
+    },
+    {
         text: "OpenVM Reference",
         items: [
             {
