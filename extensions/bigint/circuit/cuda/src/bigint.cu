@@ -4,12 +4,12 @@
 #include "primitives/trace_access.h"
 #include "rv32-adapters/heap.cuh"
 #include "rv32-adapters/heap_branch.cuh"
-#include "rv32im/alu.cuh"
-#include "rv32im/beq.cuh"
-#include "rv32im/blt.cuh"
-#include "rv32im/less_than.cuh"
-#include "rv32im/mul.cuh"
-#include "rv32im/shift.cuh"
+#include "rv32im/cores/alu.cuh"
+#include "rv32im/cores/beq.cuh"
+#include "rv32im/cores/blt.cuh"
+#include "rv32im/cores/less_than.cuh"
+#include "rv32im/cores/mul.cuh"
+#include "rv32im/cores/shift.cuh"
 
 using namespace riscv;
 

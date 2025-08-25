@@ -1,10 +1,10 @@
-#include "adapters/alu.cuh"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32im/less_than.cuh"
+#include "rv32im/adapters/alu.cuh"
+#include "rv32im/cores/less_than.cuh"
 
 using namespace riscv;
 using namespace program;

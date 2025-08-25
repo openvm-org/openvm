@@ -1,6 +1,6 @@
-#include "../adapters/native_vectorized_adapter.cuh"
-#include "field_ext_operations.cuh"
 #include "launcher.cuh"
+#include "native/adapters/native_vectorized_adapter.cuh"
+#include "native/field_ext_operations.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"

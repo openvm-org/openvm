@@ -1,3 +1,4 @@
+#pragma once
 #include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
 

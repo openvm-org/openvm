@@ -1,10 +1,10 @@
-#include "adapters/mul.cuh"
 #include "launcher.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
+#include "rv32im/adapters/mul.cuh"
 
 using namespace riscv;
 

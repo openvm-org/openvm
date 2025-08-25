@@ -1,6 +1,6 @@
-#include "../field_extension/field_ext_operations.cuh"
-#include "column.cuh"
 #include "launcher.cuh"
+#include "native/field_ext_operations.cuh"
+#include "native/fri.cuh"
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"

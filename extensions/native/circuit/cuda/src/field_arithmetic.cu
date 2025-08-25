@@ -1,5 +1,5 @@
-#include "adapters/alu_native_adapter.cuh"
 #include "launcher.cuh"
+#include "native/adapters/alu_native_adapter.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/trace_access.h"
 

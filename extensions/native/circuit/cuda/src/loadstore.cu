@@ -1,5 +1,5 @@
-#include "adapters/loadstore_native_adapter.cuh"
 #include "launcher.cuh"
+#include "native/adapters/loadstore_native_adapter.cuh"
 #include "primitives/buffer_view.cuh"
 #include "primitives/trace_access.h"
 
