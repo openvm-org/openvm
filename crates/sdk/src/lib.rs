@@ -407,12 +407,12 @@ where
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
 
-        let interperter = vm
+        let interpreter = vm
             .executor()
             .metered_cost_instance(&exe, &executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
 
-        let (cost, final_state) = interperter
+        let (cost, final_state) = interpreter
             .execute_metered_cost(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
         let instret = final_state.instret;
