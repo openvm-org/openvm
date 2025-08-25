@@ -112,11 +112,11 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6c60cab9deeb972442ebf5d860786992fc55fbcc", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6c60cab9deeb972442ebf5d860786992fc55fbcc", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6c60cab9deeb972442ebf5d860786992fc55fbcc", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6c60cab9deeb972442ebf5d860786992fc55fbcc", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", rev = "6c60cab9deeb972442ebf5d860786992fc55fbcc", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "eeb023883c1fb86706d5172e0626cb8dd63aa94b", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", rev = "eeb023883c1fb86706d5172e0626cb8dd63aa94b", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", rev = "eeb023883c1fb86706d5172e0626cb8dd63aa94b", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", rev = "eeb023883c1fb86706d5172e0626cb8dd63aa94b", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", rev = "eeb023883c1fb86706d5172e0626cb8dd63aa94b", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }

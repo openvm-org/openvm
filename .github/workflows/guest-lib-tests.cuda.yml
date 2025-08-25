@@ -38,7 +38,7 @@ jobs:
       - image=ubuntu24-gpu-x64
       - cpu=8+32
       - spot=false
-      - tag=guest-lib-${{ github.run_id }}-${{ strategy.job-index }}
+      - tag=guest-lib-cuda-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
       - extras=s3-cache
 
     steps:

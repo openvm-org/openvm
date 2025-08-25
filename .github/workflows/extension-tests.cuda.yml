@@ -30,12 +30,12 @@ jobs:
           - "rv32im native"
           - "keccak256 sha256 bigint algebra ecc pairing"
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}
       - runner=test-gpu-nvidia
       - image=ubuntu24-gpu-x64
       - cpu=8+32 # more cores for faster compilation
       - spot=false
-      - tag=extension-cuda-tests
+      - tag=extension-tests-cuda-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
       - extras=s3-cache
 
     steps:
