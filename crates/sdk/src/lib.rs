@@ -364,7 +364,7 @@ where
     }
 
     /// Executes with segmentation for proof generation.
-    /// Returns both execution output and segments with instruction counts and trace heights.
+    /// Returns both user public values and segments with instruction counts and trace heights.
     pub fn execute_metered(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -385,16 +385,16 @@ where
         let (segments, final_state) = interpreter
             .execute_metered(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
-        let output = extract_public_values(
+        let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
 
-        Ok((output, segments))
+        Ok((public_values, segments))
     }
 
     /// Executes with cost metering to measure computational cost in trace cells.
-    /// Returns both execution output and cost information.
+    /// Returns both user public values, and cost along with instruction count.
     pub fn execute_metered_cost(
         &self,
         app_exe: impl Into<ExecutableFormat>,
@@ -417,12 +417,12 @@ where
             .map_err(VirtualMachineError::from)?;
         let instret = final_state.instret;
 
-        let output = extract_public_values(
+        let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
             &final_state.memory.memory,
         );
 
-        Ok((output, (cost, instret)))
+        Ok((public_values, (cost, instret)))
     }
 
     // ======================== Proving Methods ============================
