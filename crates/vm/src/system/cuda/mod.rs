@@ -10,7 +10,7 @@ use openvm_circuit::{
         SystemChipComplex, SystemRecords,
     },
 };
-use openvm_circuit_primitives::var_range::cuda::VariableRangeCheckerChipGPU;
+use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
 use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
 use openvm_stark_backend::{
     prover::types::{AirProvingContext, CommittedTraceData},

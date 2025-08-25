@@ -16,7 +16,7 @@ use openvm_stark_sdk::{
 use rand::Rng;
 #[cfg(feature = "cuda")]
 use {
-    crate::bitwise_op_lookup::{cuda::BitwiseOperationLookupChipGPU, BitwiseOperationLookupAir},
+    crate::bitwise_op_lookup::{BitwiseOperationLookupAir, BitwiseOperationLookupChipGPU},
     dummy::cuda::DummyInteractionChipGPU,
     openvm_cuda_backend::{
         base::DeviceMatrix,

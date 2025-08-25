@@ -32,7 +32,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use super::cuda::CastFChipGpu;
+use super::CastFChipGpu;
 use super::{CastFChip, CastFCoreAir, CastFCoreCols, CastFExecutor, LIMB_BITS};
 #[cfg(feature = "cuda")]
 use crate::{adapters::ConvertAdapterRecord, castf::CastFCoreRecord};

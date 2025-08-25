@@ -4,7 +4,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types:
 use openvm_cuda_common::{copy::MemCopyH2D as _, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
-use crate::{cuda_abi::range_tuple::dummy_tracegen, range_tuple::cuda::RangeTupleCheckerChipGPU};
+use crate::{cuda_abi::range_tuple::dummy_tracegen, range_tuple::RangeTupleCheckerChipGPU};
 
 pub struct DummyInteractionChipGPU<const N: usize> {
     pub range_tuple_checker: Arc<RangeTupleCheckerChipGPU<N>>,

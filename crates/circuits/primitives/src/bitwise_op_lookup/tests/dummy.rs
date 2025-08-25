@@ -49,7 +49,7 @@ pub mod cuda {
     use openvm_stark_backend::{prover::types::AirProvingContext, Chip};
 
     use crate::{
-        bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
+        bitwise_op_lookup::BitwiseOperationLookupChipGPU,
         cuda_abi::bitwise_op_lookup::dummy_tracegen,
     };
 

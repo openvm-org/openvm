@@ -3,8 +3,8 @@ use std::{iter::repeat_n, sync::Arc};
 use derive_new::new;
 use openvm_circuit::arch::{DenseRecordArena, MultiRowLayout, RecordSeeker};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU, utils::next_power_of_two_or_zero,
-    var_range::cuda::VariableRangeCheckerChipGPU,
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, utils::next_power_of_two_or_zero,
+    var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
     base::DeviceMatrix, chip::get_empty_air_proving_ctx, prelude::F, prover_backend::GpuBackend,

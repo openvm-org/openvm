@@ -10,9 +10,7 @@ use openvm_circuit::{
         online::TracingMemory,
     },
 };
-use openvm_circuit_primitives::var_range::{
-    cuda::VariableRangeCheckerChipGPU, VariableRangeCheckerBus,
-};
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChipGPU};
 use openvm_cuda_backend::{base::DeviceMatrix, prover_backend::GpuBackend, types::F};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::{

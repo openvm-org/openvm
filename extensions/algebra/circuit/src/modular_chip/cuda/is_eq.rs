@@ -4,8 +4,8 @@ use derive_new::new;
 use num_bigint::BigUint;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, bitwise_op_lookup::cuda::BitwiseOperationLookupChipGPU,
-    var_range::cuda::VariableRangeCheckerChipGPU,
+    bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    var_range::VariableRangeCheckerChipGPU,
 };
 use openvm_cuda_backend::{
     base::DeviceMatrix, chip::get_empty_air_proving_ctx, prover_backend::GpuBackend, types::F,

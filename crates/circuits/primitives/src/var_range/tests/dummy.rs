@@ -85,7 +85,7 @@ pub mod cuda {
 
     use crate::{
         cuda_abi::var_range::dummy_tracegen,
-        var_range::{cuda::VariableRangeCheckerChipGPU, NUM_VARIABLE_RANGE_PREPROCESSED_COLS},
+        var_range::{VariableRangeCheckerChipGPU, NUM_VARIABLE_RANGE_PREPROCESSED_COLS},
     };
 
     pub struct DummyInteractionChipGPU {

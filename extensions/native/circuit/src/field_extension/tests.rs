@@ -30,9 +30,10 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 
 #[cfg(feature = "cuda")]
-use crate::field_extension::cuda::FieldExtensionChipGpu;
-#[cfg(feature = "cuda")]
-use crate::{adapters::NativeVectorizedAdapterRecord, field_extension::FieldExtensionRecord};
+use crate::{
+    adapters::NativeVectorizedAdapterRecord,
+    field_extension::{FieldExtensionChipGpu, FieldExtensionRecord},
+};
 use crate::{
     adapters::{
         NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,

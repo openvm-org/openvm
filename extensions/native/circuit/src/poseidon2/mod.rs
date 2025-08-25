@@ -3,9 +3,13 @@ use openvm_circuit::arch::VmChipWrapper;
 pub mod air;
 pub mod chip;
 pub mod columns;
-#[cfg(feature = "cuda")]
-pub mod cuda;
 mod execution;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 mod tests;
 

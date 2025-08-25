@@ -41,7 +41,9 @@ use crate::{
 mod execution;
 
 #[cfg(feature = "cuda")]
-pub mod cuda;
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
