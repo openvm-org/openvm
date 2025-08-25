@@ -55,9 +55,11 @@ impl RootVerifierLocalProver {
             air_id_inv_perm,
         })
     }
+
     pub fn vm_config(&self) -> &NativeConfig {
         self.inner.vm.config()
     }
+
     #[allow(dead_code)]
     pub(crate) fn fri_params(&self) -> &FriParameters {
         &self.inner.vm.engine.fri_params

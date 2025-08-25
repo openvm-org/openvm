@@ -370,16 +370,14 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
-        let exe = self.convert_to_exe(app_exe)?;
-        let app_prover = self.app_prover(exe.clone())?;
+        let app_prover = self.app_prover(app_exe)?;
 
-        let vm = &app_prover.instance().vm;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
         let ctx = vm.build_metered_ctx();
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-
         let interpreter = vm
-            .executor()
-            .metered_instance(&exe, &executor_idx_to_air_idx)
+            .metered_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
 
         let (segments, final_state) = interpreter
@@ -400,16 +398,14 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
-        let exe = self.convert_to_exe(app_exe)?;
-        let app_prover = self.app_prover(exe.clone())?;
+        let app_prover = self.app_prover(app_exe)?;
 
-        let vm = &app_prover.instance().vm;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+
         let ctx = vm.build_metered_cost_ctx();
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-
         let interpreter = vm
-            .executor()
-            .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
 
         let (cost, final_state) = interpreter

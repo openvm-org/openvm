@@ -413,6 +413,19 @@ where
             .metered_instance(exe, &executor_idx_to_air_idx)
     }
 
+    pub fn metered_cost_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCostCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_cost_instance(exe, &executor_idx_to_air_idx)
+    }
+
     pub fn preflight_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,

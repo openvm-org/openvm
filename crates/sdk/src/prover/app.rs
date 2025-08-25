@@ -7,8 +7,8 @@ use openvm_circuit::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
         instructions::exe::VmExe,
         verify_segments, ContinuationVmProof, ContinuationVmProver, Executor, MeteredExecutor,
-        PreflightExecutor, VerifiedExecutionPayload, VirtualMachineError, VmBuilder,
-        VmExecutionConfig, VmInstance, VmVerificationError,
+        PreflightExecutor, VerifiedExecutionPayload, VirtualMachine, VirtualMachineError,
+        VmBuilder, VmExecutionConfig, VmInstance, VmVerificationError,
     },
     system::memory::CHUNK,
 };
@@ -168,6 +168,16 @@ where
             .into());
         }
         Ok(proofs)
+    }
+
+    /// App Exe
+    pub fn exe(&self) -> Arc<VmExe<Val<E::SC>>> {
+        self.instance.exe().clone()
+    }
+
+    /// App VM
+    pub fn vm(&self) -> &VirtualMachine<E, VB> {
+        &self.instance.vm
     }
 
     /// App VM config
