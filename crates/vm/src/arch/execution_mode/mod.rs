@@ -6,7 +6,7 @@ mod preflight;
 mod pure;
 
 pub use metered::{ctx::MeteredCtx, segment_ctx::Segment};
-pub use metered_cost::{MeteredCostCtx, MeteredCostExecutionOutput};
+pub use metered_cost::MeteredCostCtx;
 pub use preflight::PreflightCtx;
 pub use pure::ExecutionCtx;
 

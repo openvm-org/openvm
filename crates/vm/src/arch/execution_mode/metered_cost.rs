@@ -14,12 +14,6 @@ use crate::{
 const DEFAULT_MAX_SEGMENTS: u64 = 100;
 pub const DEFAULT_MAX_COST: u64 = DEFAULT_MAX_SEGMENTS * DEFAULT_SEGMENT_MAX_CELLS as u64;
 
-#[derive(Debug, Copy, Clone, derive_new::new)]
-pub struct MeteredCostExecutionOutput {
-    pub instret: u64,
-    pub cost: u64,
-}
-
 #[derive(Clone, Debug)]
 pub struct AccessAdapterCtx {
     min_block_size_bits: Vec<u8>,

@@ -23,8 +23,8 @@ use crate::arch::Handler;
 use crate::{
     arch::{
         execution_mode::{
-            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCostExecutionOutput,
-            MeteredCtx, MeteredExecutionCtxTrait, Segment,
+            ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCtx, MeteredExecutionCtxTrait,
+            Segment,
         },
         ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
         StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
@@ -407,12 +407,12 @@ where
     /// Metered cost execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
-    /// Returns the trace cost when execution stops.
+    /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost(
         &self,
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCostCtx,
-    ) -> Result<MeteredCostExecutionOutput, ExecutionError> {
+    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = VmState::initial(
             &self.system_config,
             &self.init_memory,
@@ -425,19 +425,19 @@ where
     /// Metered cost execution for the given `VmState`. This function executes the program until
     /// termination.
     ///
-    /// Returns the trace cost when execution stops.
+    /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost_from_state(
         &self,
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<MeteredCostExecutionOutput, ExecutionError> {
+    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
         // Start execution
         run!("execute_metered_cost", self, exec_state, MeteredCostCtx);
         check_exit_code(exec_state.exit_code)?;
         let VmExecState { ctx, vm_state, .. } = exec_state;
-        let output = MeteredCostExecutionOutput::new(vm_state.instret, ctx.cost);
-        Ok(output)
+        let cost = ctx.cost;
+        Ok((cost, vm_state))
     }
 }
 

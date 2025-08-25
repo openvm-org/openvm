@@ -19,6 +19,7 @@ use openvm_build::{
 };
 use openvm_circuit::{
     arch::{
+        execution_mode::Segment,
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         instructions::exe::VmExe,
         Executor, InitFileGenerator, MeteredExecutor, PreflightExecutor, VirtualMachineError,
@@ -360,6 +361,68 @@ where
             &final_memory.memory,
         );
         Ok(public_values)
+    }
+
+    /// Executes with segmentation for proof generation.
+    /// Returns both execution output and segments with instruction counts and trace heights.
+    pub fn execute_metered(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        let app_prover = self.app_prover(exe.clone())?;
+
+        let vm = &app_prover.instance().vm;
+        let ctx = vm.build_metered_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+        let interpreter = vm
+            .executor()
+            .metered_instance(&exe, &executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+
+        let (segments, final_state) = interpreter
+            .execute_metered(inputs, ctx)
+            .map_err(VirtualMachineError::from)?;
+        let output = extract_public_values(
+            self.executor.config.as_ref().num_public_values,
+            &final_state.memory.memory,
+        );
+
+        Ok((output, segments))
+    }
+
+    /// Executes with cost metering to measure computational cost in trace cells.
+    /// Returns both execution output and cost information.
+    pub fn execute_metered_cost(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        let app_prover = self.app_prover(exe.clone())?;
+
+        let vm = &app_prover.instance().vm;
+        let ctx = vm.build_metered_cost_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+        let interperter = vm
+            .executor()
+            .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .map_err(VirtualMachineError::from)?;
+
+        let (cost, final_state) = interperter
+            .execute_metered_cost(inputs, ctx)
+            .map_err(VirtualMachineError::from)?;
+        let instret = final_state.instret;
+
+        let output = extract_public_values(
+            self.executor.config.as_ref().num_public_values,
+            &final_state.memory.memory,
+        );
+
+        Ok((output, (cost, instret)))
     }
 
     // ======================== Proving Methods ============================
