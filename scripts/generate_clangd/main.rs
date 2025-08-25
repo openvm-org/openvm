@@ -1,7 +1,8 @@
-use std::collections::BTreeSet;
-use std::env;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeSet,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use serde::Serialize;
 use walkdir::WalkDir;

@@ -5,11 +5,15 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-openvm-cuda-common = { workspace = true }
+openvm-cuda-common = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_yaml = "0.9"
 walkdir = "2.5"
 
+[features]
+cuda = ["dep:openvm-cuda-common"]
+
 [[bin]]
 name = "generate-clangd"
 path = "generate_clangd/main.rs"
+required-features = ["cuda"]
