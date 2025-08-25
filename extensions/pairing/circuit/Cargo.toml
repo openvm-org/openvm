@@ -71,4 +71,5 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-algebra-circuit/touchemall",
     "openvm-ecc-circuit/touchemall",
+    "openvm-rv32im-circuit/touchemall",
 ]
