@@ -1,10 +1,10 @@
-#include "adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
-#include "constants.h"         // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
-#include "cores/blt.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h" // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
+#include "rv32im/cores/blt.cuh"
 
 using namespace riscv;
 
@@ -38,7 +38,7 @@ __global__ void blt_tracegen(
     RowSlice row(trace + idx, height);
 
     if (idx < records.len()) {
-        auto const& full_record = records[idx];
+        auto const &full_record = records[idx];
 
         Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full_record.adapter);
@@ -67,14 +67,7 @@ extern "C" int _blt_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     blt_tracegen<<<grid, block>>>(
-        d_trace,
-        height,
-        d_records,
-        d_rc,
-        rc_bins,
-        d_bw,
-        bw_bits,
-        timestamp_max_bits
+        d_trace, height, d_records, d_rc, rc_bins, d_bw, bw_bits, timestamp_max_bits
     );
     return cudaGetLastError();
 }

@@ -1,10 +1,9 @@
-#include "adapters/jalr.cuh"
-#include "constants.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
-#include <stdio.h>
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/jalr.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -107,8 +106,7 @@ __global__ void jalr_tracegen(
 
         // adapter pass
         Rv32JalrAdapter adapter(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), 
-            timestamp_max_bits
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, full.adapter);
 

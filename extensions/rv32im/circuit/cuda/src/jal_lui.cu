@@ -1,7 +1,7 @@
-#include "adapters/rdwrite.cuh"
-#include "histogram.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/rdwrite.cuh"
 
 using namespace riscv;
 
@@ -65,7 +65,7 @@ __global__ void jal_lui_tracegen(
     RowSlice row(trace + idx, height);
 
     if (idx < records.len()) {
-        auto const& full = records[idx];
+        auto const &full = records[idx];
 
         Rv32CondRdWriteAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
@@ -94,14 +94,7 @@ extern "C" int _jal_lui_tracegen(
     auto [grid, block] = kernel_launch_params(height);
 
     jal_lui_tracegen<<<grid, block>>>(
-        d_trace,
-        height,
-        d_records,
-        d_rc,
-        rc_bins,
-        d_bw,
-        bw_bits,
-        timestamp_max_bits
+        d_trace, height, d_records, d_rc, rc_bins, d_bw, bw_bits, timestamp_max_bits
     );
     return cudaGetLastError();
 }

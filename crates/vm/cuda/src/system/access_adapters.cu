@@ -1,7 +1,6 @@
+#include "primitives/less_than.cuh"
+#include "primitives/trace_access.h"
 #include <algorithm>
-
-#include "less_than.cuh"
-#include "trace_access.h"
 
 inline __device__ uint32_t next_power_of_two_or_zero(uint32_t x) {
     return x ? (1u << (32 - __clz(x - 1))) : 0;

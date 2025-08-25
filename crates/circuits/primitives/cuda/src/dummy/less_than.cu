@@ -1,7 +1,7 @@
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "less_than.cuh"
-#include "trace_access.h"
+#include "primitives/histogram.cuh"
+#include "primitives/less_than.cuh"
+#include "primitives/trace_access.h"
 #include <climits>
 
 __global__ void cukernel_assert_less_than_tracegen(
