@@ -34,14 +34,14 @@ We now specify security parameters used in the proofs:
 * **STARK proofs**: `app`, `leaf`, `internal`, `root`
 * **EVM proofs**: `static_verifier`
 
-involved in the [Continuations Design](/specs/architecture/continuations).
+involved in the [Continuations Design](/specs/architecture/continuations) under default settings. 
 
 | Proof | Type | Security Bits | `log_blowup` | `num_queries` | `proof_of_work_bits` |
 | --- | --- | --- | --- | --- | --- |
-| `app` | STARK | 100 | 1 | 1 | 1 |
-| `leaf` | STARK | 100 | 1 | 1 | 1 |
-| `internal` | STARK | 100 | 1 | 1 | 1 |
-| `root` | STARK | 100 | 1 | 1 | 1 |
+| `app` | STARK | 100 | 1 | 100 | 16 |
+| `leaf` | STARK | 100 | 1 | 100 | 16 |
+| `internal` | STARK | 100 | 2 | 44 | 16 |
+| `root` | STARK | 100 | 3 | 30 | 16 |
 | `static_verifier` | Halo2 | 100+ | -- | -- | -- |
 
 ### Details on Universal Trusted Setup
