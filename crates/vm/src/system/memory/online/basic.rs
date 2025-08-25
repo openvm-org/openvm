@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{
     alloc::{alloc_zeroed, dealloc, Layout},
     ptr::NonNull,
