@@ -1,8 +1,8 @@
 #pragma once
 
-#include "histogram.cuh"
 #include "offline_checker.cuh"
-#include "trace_access.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 
 struct MemoryAuxColsFactory {
     VariableRangeChecker range_checker;

@@ -1,10 +1,10 @@
-#include "adapters/alu.cuh"
-#include "constants.h"
-#include "cores/shift.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/alu.cuh"
+#include "rv32im/cores/shift.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -38,7 +38,7 @@ __global__ void rv32_shift_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& rec = records[idx];
+        auto const &rec = records[idx];
         auto adapter = Rv32BaseAluAdapter(
             VariableRangeChecker(range_ptr, range_bins),
             BitwiseOperationLookup(lookup_ptr, lookup_bits),

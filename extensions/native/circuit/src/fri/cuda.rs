@@ -59,9 +59,9 @@ impl Chip<DenseRecordArena, GpuBackend> for FriReducedOpeningChipGpu {
         unsafe {
             fri_cuda::tracegen(
                 trace.buffer(),
-                trace_height as u32,
+                trace_height,
                 &d_records,
-                record_info.len() as u32,
+                record_info.len(),
                 &d_record_info,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,

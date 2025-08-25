@@ -1,9 +1,8 @@
-#include "adapters/branch_native_adapter.cuh"
-#include "constants.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "native/adapters/branch_native_adapter.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 
 using namespace riscv;
 using namespace program;
@@ -57,8 +56,8 @@ template <typename F> struct NativeBranchEqualRecord {
 
 __global__ void native_branch_eq_tracegen(
     Fp *trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<NativeBranchEqualRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -67,11 +66,10 @@ __global__ void native_branch_eq_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
 
         auto adapter = BranchNativeAdapter<Fp>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
         auto core = NativeBranchEqual();
@@ -84,8 +82,8 @@ __global__ void native_branch_eq_tracegen(
 
 extern "C" int _native_branch_eq_tracegen(
     Fp *d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<NativeBranchEqualRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
@@ -95,8 +93,13 @@ extern "C" int _native_branch_eq_tracegen(
     assert(width == sizeof(NativeBranchEqualCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     native_branch_eq_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, d_range_checker, 
-        range_checker_num_bins, timestamp_max_bits
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

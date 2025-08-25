@@ -1,7 +1,6 @@
 #include "launcher.cuh"
-#include "tracegen.cuh"
-#include "trace_access.h"
-#include <stdio.h>
+#include "poseidon2-air/tracegen.cuh"
+#include "primitives/trace_access.h"
 
 template <
     size_t WIDTH,

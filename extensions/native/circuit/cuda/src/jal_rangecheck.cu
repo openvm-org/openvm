@@ -1,10 +1,9 @@
-#include "execution.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -38,13 +37,13 @@ struct JalRangeCheck {
     __device__ JalRangeCheck(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits), range_checker(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, const JalRangeCheckRecord<Fp>& record) {
+    __device__ void fill_trace_row(RowSlice row, const JalRangeCheckRecord<Fp> &record) {
         COL_WRITE_VALUE(row, JalRangeCheckCols, is_jal, record.is_jal);
         COL_WRITE_VALUE(row, JalRangeCheckCols, is_range_check, !record.is_jal);
         COL_WRITE_VALUE(row, JalRangeCheckCols, a_pointer, record.a);
         COL_WRITE_VALUE(row, JalRangeCheckCols, state.pc, record.from_pc);
         COL_WRITE_VALUE(row, JalRangeCheckCols, state.timestamp, record.from_timestamp);
-        
+
         COL_WRITE_ARRAY(row, JalRangeCheckCols, writes_aux.prev_data, record.write.prev_data);
         mem_helper.fill(
             row.slice_from(COL_INDEX(JalRangeCheckCols, writes_aux.base)),
@@ -61,11 +60,11 @@ struct JalRangeCheck {
             uint32_t a_val = record.write.prev_data[0].asUInt32();
             uint32_t x = a_val & 0xffff;
             uint32_t y = a_val >> 16;
-            
+
             COL_WRITE_VALUE(row, JalRangeCheckCols, b, record.b);
             COL_WRITE_VALUE(row, JalRangeCheckCols, c, record.c);
             COL_WRITE_VALUE(row, JalRangeCheckCols, y, y);
-            
+
             uint32_t b_bits = record.b.asUInt32();
             uint32_t c_bits = record.c.asUInt32();
 
@@ -84,8 +83,8 @@ struct JalRangeCheck {
 
 __global__ void jal_rangecheck_tracegen(
     Fp *__restrict__ trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<JalRangeCheckRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_max_bins,
@@ -94,10 +93,10 @@ __global__ void jal_rangecheck_tracegen(
 
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
-    
+
     if (idx < records.len()) {
-        auto const& record = records[idx];
-        
+        auto const &record = records[idx];
+
         VariableRangeChecker range_checker(range_checker_ptr, range_checker_max_bins);
 
         JalRangeCheck chip(range_checker, timestamp_max_bits);
@@ -108,21 +107,28 @@ __global__ void jal_rangecheck_tracegen(
 }
 
 extern "C" int _native_jal_rangecheck_tracegen(
-    Fp* d_trace,
-    uint32_t height,
-    uint32_t width,
+    Fp *d_trace,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<JalRangeCheckRecord<Fp>> d_records,
-    uint32_t* d_range_checker,
+    uint32_t *d_range_checker,
     uint32_t range_checker_max_bins,
-    uint32_t timestamp_max_bits) {
-    
+    uint32_t timestamp_max_bits
+) {
+
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(JalRangeCheckCols<uint8_t>));
-    
+
     auto [grid, block] = kernel_launch_params(height);
     jal_rangecheck_tracegen<<<grid, block>>>(
-        (Fp*)d_trace, height, width, d_records,
-        d_range_checker, range_checker_max_bins, timestamp_max_bits);
-    
+        (Fp *)d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_max_bins,
+        timestamp_max_bits
+    );
+
     return cudaGetLastError();
 }

@@ -1,12 +1,12 @@
 #include "fp.h"
 #include "launcher.cuh"
-#include "bigint_ops.cuh"
-#include "expr_codec.cuh"
-#include "meta.cuh"
-#include "overflow_ops.cuh"
-#include "records.cuh"
-#include "rv32_vec_heap_router.cuh"
-#include "trace_access.h"
+#include "mod-builder/bigint_ops.cuh"
+#include "mod-builder/expr_codec.cuh"
+#include "mod-builder/meta.cuh"
+#include "mod-builder/overflow_ops.cuh"
+#include "mod-builder/records.cuh"
+#include "mod-builder/rv32_vec_heap_router.cuh"
+#include "primitives/trace_access.h"
 #include <cstdint>
 
 using namespace mod_builder;
@@ -219,7 +219,7 @@ struct FieldExprCore {
         uint32_t in_size = INPUT_U32_COUNT(meta);
         uint32_t var_size = VAR_U32_COUNT(meta);
         uint32_t carry_size = get_total_carry_count(meta);
-        
+
         uint32_t *inputs = (uint32_t *)workspace;
         uint32_t *vars = (uint32_t *)(workspace + in_size * sizeof(uint32_t));
         uint32_t *all_carries = (uint32_t *)(workspace + (in_size + var_size) * sizeof(uint32_t));

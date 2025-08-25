@@ -12,7 +12,7 @@ fn main() {
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../circuits/primitives/cuda/include")
             .include("../circuits/poseidon2-air/cuda/include")
-            .include("cuda/include/system");
+            .include("cuda/include");
         builder.emit_link_directives();
 
         builder

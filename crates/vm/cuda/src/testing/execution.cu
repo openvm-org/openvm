@@ -1,8 +1,8 @@
-#include "execution.cuh"
 #include "fp.h"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/trace_access.h"
+#include "system/execution.cuh"
 
 template <typename T> struct DummyExecutionInteractionCols {
     T count;
@@ -18,7 +18,7 @@ __global__ void execution_testing_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
         COL_WRITE_VALUE(row, DummyExecutionInteractionCols, count, record.count);
         COL_WRITE_VALUE(
             row, DummyExecutionInteractionCols, initial_state.pc, record.initial_state.pc

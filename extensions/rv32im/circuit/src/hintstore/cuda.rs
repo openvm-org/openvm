@@ -71,7 +71,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32HintStoreChipGpu {
                 d_trace.buffer(),
                 trace_height,
                 &d_records,
-                offsets.len() as u32,
+                offsets.len(),
                 &d_record_offsets,
                 self.pointer_max_bits as u32,
                 &self.range_checker.count,

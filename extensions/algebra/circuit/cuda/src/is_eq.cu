@@ -1,10 +1,8 @@
-#include "constants.h"
-#include "eq_mod.cuh"
-#include "histogram.cuh"
-#include "is_equal.cuh"
 #include "launcher.cuh"
-#include "system/memory/controller.cuh"
-#include "trace_access.h"
+#include "primitives/histogram.cuh"
+#include "primitives/is_equal.cuh"
+#include "primitives/trace_access.h"
+#include "rv32-adapters/eq_mod.cuh"
 
 using namespace riscv;
 
@@ -135,12 +133,9 @@ __global__ void modular_is_equal_tracegen_kernel(
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        constexpr size_t adapter_cols = sizeof(Rv32IsEqualModAdapterCols<
-                                               uint8_t,
-                                               NUM_READS,
-                                               NUM_LANES,
-                                               LANE_SIZE,
-                                               TOTAL_LIMBS>);
+        constexpr size_t adapter_cols = sizeof(
+            Rv32IsEqualModAdapterCols<uint8_t, NUM_READS, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
+        );
         RowSlice core_slice = row.slice_from(adapter_cols);
 
         ModularIsEqualCore<TOTAL_LIMBS> core(d_modulus, bl);

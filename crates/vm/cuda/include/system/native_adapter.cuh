@@ -1,9 +1,9 @@
 #pragma once
 
-#include "execution.h"
 #include "memory/address.cuh"
 #include "memory/controller.cuh"
-#include "trace_access.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 
 template <typename T> struct NativeAdapterReadCols {
     MemoryAddress<T> address;

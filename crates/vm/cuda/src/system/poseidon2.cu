@@ -1,15 +1,13 @@
 #include "launcher.cuh"
-#include "fp_array.cuh"
-#include "tracegen.cuh"
-#include "params.cuh"
-#include "trace_access.h"
-#include "utils.cuh"
+#include "poseidon2-air/params.cuh"
+#include "poseidon2-air/tracegen.cuh"
+#include "primitives/fp_array.cuh"
+#include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include <cstdint>
 #include <cub/cub.cuh>
 
-template <
-    size_t WIDTH,
-    typename PoseidonParams>
+template <size_t WIDTH, typename PoseidonParams>
 __global__ void cukernel_system_poseidon2_tracegen(
     Fp *d_trace,
     size_t trace_height,
@@ -19,13 +17,12 @@ __global__ void cukernel_system_poseidon2_tracegen(
     size_t num_records
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    using Poseidon2Row = poseidon2::
-        Poseidon2Row<
-            WIDTH,
-            PoseidonParams::SBOX_DEGREE,
-            PoseidonParams::SBOX_REGS,
-            PoseidonParams::HALF_FULL_ROUNDS,
-            PoseidonParams::PARTIAL_ROUNDS>;
+    using Poseidon2Row = poseidon2::Poseidon2Row<
+        WIDTH,
+        PoseidonParams::SBOX_DEGREE,
+        PoseidonParams::SBOX_REGS,
+        PoseidonParams::HALF_FULL_ROUNDS,
+        PoseidonParams::PARTIAL_ROUNDS>;
 #ifdef DEBUG
     assert(Poseidon2Row::get_total_size() + 1 == trace_width);
 #endif

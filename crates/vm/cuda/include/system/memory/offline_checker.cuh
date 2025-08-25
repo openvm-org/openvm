@@ -1,7 +1,7 @@
 #pragma once
 
-#include "constants.h"
-#include "less_than.cuh"
+#include "primitives/constants.h"
+#include "primitives/less_than.cuh"
 
 using namespace riscv;
 

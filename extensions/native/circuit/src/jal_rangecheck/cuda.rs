@@ -38,8 +38,8 @@ impl Chip<DenseRecordArena, GpuBackend> for JalRangeCheckGpu {
         unsafe {
             native_jal_rangecheck_cuda::tracegen(
                 trace.buffer(),
-                padded_height as u32,
-                width as u32,
+                padded_height,
+                width,
                 &d_records,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,

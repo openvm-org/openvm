@@ -1,9 +1,9 @@
-#include "adapters/mul.cuh"
-#include "constants.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/mul.cuh"
 
 using namespace riscv;
 
@@ -168,11 +168,10 @@ __global__ void mulh_tracegen(
     RowSlice row(d_trace + idx, height);
 
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32MultAdapter adapter(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), 
-            timestamp_max_bits
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 

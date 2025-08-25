@@ -1,7 +1,7 @@
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "less_than.cuh"
-#include "trace_access.h"
+#include "primitives/histogram.cuh"
+#include "primitives/less_than.cuh"
+#include "primitives/trace_access.h"
 #include <climits>
 
 __global__ void cukernel_assert_less_than_tracegen(
@@ -37,7 +37,7 @@ __global__ void cukernel_assert_less_than_tracegen(
 
 __global__ void cukernel_less_than_tracegen(
     Fp *trace,
-    uint32_t trace_height,
+    size_t trace_height,
     uint2 *pairs,
     uint32_t max_bits,
     uint32_t aux_len,
@@ -114,7 +114,7 @@ __global__ void cukernel_less_than_array_tracegen(
 
 extern "C" int _assert_less_than_tracegen(
     Fp *trace,
-    uint32_t trace_height,
+    size_t trace_height,
     uint32_t *pairs,
     uint32_t max_bits,
     uint32_t aux_len,
@@ -130,7 +130,7 @@ extern "C" int _assert_less_than_tracegen(
 
 extern "C" int _less_than_tracegen(
     Fp *trace,
-    uint32_t trace_height,
+    size_t trace_height,
     uint32_t *pairs,
     uint32_t max_bits,
     uint32_t aux_len,
@@ -146,7 +146,7 @@ extern "C" int _less_than_tracegen(
 
 extern "C" int _less_than_array_tracegen(
     Fp *trace,
-    uint32_t trace_height,
+    size_t trace_height,
     uint32_t *pairs,
     uint32_t max_bits,
     uint32_t array_len,

@@ -37,13 +37,13 @@ pub mod sha256 {
         fn launch_sha256_second_pass_dependencies(
             d_trace: *mut F,
             trace_height: usize,
-            rows_used: u32,
+            rows_used: usize,
         ) -> i32;
 
         fn launch_sha256_fill_invalid_rows(
             d_trace: *mut F,
             trace_height: usize,
-            rows_used: u32,
+            rows_used: usize,
         ) -> i32;
     }
 
@@ -106,7 +106,7 @@ pub mod sha256 {
     pub unsafe fn sha256_second_pass_dependencies(
         d_trace: &DeviceBuffer<F>,
         height: usize,
-        rows_used: u32,
+        rows_used: usize,
     ) -> Result<(), CudaError> {
         let result =
             launch_sha256_second_pass_dependencies(d_trace.as_mut_ptr(), height, rows_used);
@@ -116,7 +116,7 @@ pub mod sha256 {
     pub unsafe fn sha256_fill_invalid_rows(
         d_trace: &DeviceBuffer<F>,
         height: usize,
-        rows_used: u32,
+        rows_used: usize,
     ) -> Result<(), CudaError> {
         let result = launch_sha256_fill_invalid_rows(d_trace.as_mut_ptr(), height, rows_used);
         CudaError::from_result(result)

@@ -1,6 +1,6 @@
-#include "memory/address.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
+#include "primitives/trace_access.h"
+#include "system/memory/address.cuh"
 
 template <typename T, size_t BLOCK_SIZE> struct DummyMemoryInteractionCols {
     MemoryAddress<T> address;
@@ -10,12 +10,7 @@ template <typename T, size_t BLOCK_SIZE> struct DummyMemoryInteractionCols {
 };
 
 template <size_t BLOCK_SIZE>
-__global__ void memory_testing_tracegen(
-    Fp *trace,
-    size_t height,
-    Fp *records,
-    size_t num_records
-) {
+__global__ void memory_testing_tracegen(Fp *trace, size_t height, Fp *records, size_t num_records) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < num_records) {

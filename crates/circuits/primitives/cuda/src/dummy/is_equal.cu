@@ -1,6 +1,6 @@
-#include "is_equal.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
+#include "primitives/is_equal.cuh"
+#include "primitives/trace_access.h"
 
 __global__ void cukernel_isequal_tracegen(Fp *output, Fp *inputs_x, Fp *inputs_y, uint32_t n) {
     uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;

@@ -13,8 +13,8 @@ pub mod castf_cuda {
     extern "C" {
         pub fn _castf_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -24,8 +24,8 @@ pub mod castf_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
@@ -48,8 +48,8 @@ pub mod native_branch_eq_cuda {
     extern "C" {
         pub fn _native_branch_eq_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -59,8 +59,8 @@ pub mod native_branch_eq_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
@@ -120,8 +120,8 @@ pub mod field_extension_cuda {
     extern "C" {
         pub fn _field_extension_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -131,8 +131,8 @@ pub mod field_extension_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
@@ -156,9 +156,9 @@ pub mod fri_cuda {
     extern "C" {
         pub fn _fri_reduced_opening_tracegen(
             d_trace: *mut F,
-            height: u32,
+            height: usize,
             d_records: *const u8,
-            rows_used: u32,
+            rows_used: usize,
             d_record_info: *const RowInfo,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -168,9 +168,9 @@ pub mod fri_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
+        height: usize,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
+        rows_used: usize,
         d_record_info: &DeviceBuffer<RowInfo>,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,
@@ -194,10 +194,10 @@ pub mod poseidon2_cuda {
     extern "C" {
         pub fn _native_poseidon2_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: *const u8,
-            rows_used: u32,
+            rows_used: usize,
             d_chunk_start: *const u32,
             num_chunks: u32,
             d_range_checker: *mut u32,
@@ -209,10 +209,10 @@ pub mod poseidon2_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
+        rows_used: usize,
         d_chunk_start: &DeviceBuffer<u32>,
         num_chunks: u32,
         d_range_checker: &DeviceBuffer<F>,
@@ -241,8 +241,8 @@ pub mod native_loadstore_cuda {
     extern "C" {
         pub fn _native_loadstore_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -253,8 +253,8 @@ pub mod native_loadstore_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         num_cells: u32,
@@ -279,8 +279,8 @@ pub mod native_jal_rangecheck_cuda {
     extern "C" {
         pub fn _native_jal_rangecheck_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_max_bins: u32,
@@ -290,8 +290,8 @@ pub mod native_jal_rangecheck_cuda {
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         timestamp_max_bits: u32,

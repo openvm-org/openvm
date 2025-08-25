@@ -1,5 +1,5 @@
-#include "encoder.cuh"
 #include "launcher.cuh"
+#include "primitives/encoder.cuh"
 #include <cassert>
 
 __global__ void cukernel_encoder_tracegen(

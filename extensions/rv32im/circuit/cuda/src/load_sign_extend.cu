@@ -1,9 +1,9 @@
-#include "adapters/loadstore.cuh"
-#include "constants.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/loadstore.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -98,10 +98,12 @@ __global__ void rv32_load_sign_extend_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
 
         auto adapter = Rv32LoadStoreAdapter(
-            pointer_max_bits, VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 

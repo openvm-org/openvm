@@ -1,15 +1,15 @@
-#include "adapters/mul.cuh"
-#include "constants.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "utils.cuh"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
+#include "rv32im/adapters/mul.cuh"
 
 using namespace riscv;
 
 template <typename T, size_t NUM_LIMBS> struct DivRemCoreCols {
-    // b = c * q + r for some 0 <= |r| < |c| and sign(r) = sign(b) or r = 0.
+    // b = c * q + r for some 0 <= |r| < |c | and sign(r) = sign(b) or r = 0.
     T b[NUM_LIMBS];
     T c[NUM_LIMBS];
     T q[NUM_LIMBS];
@@ -79,7 +79,7 @@ template <size_t NUM_LIMBS> struct DivRemCore {
     )
         : bitwise_lookup(bitwise_lookup), range_tuple_checker(range_tuple_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, DivRemCoreRecords<NUM_LIMBS> const& record) {
+    __device__ void fill_trace_row(RowSlice row, DivRemCoreRecords<NUM_LIMBS> const &record) {
         DivRemOpcode opcode = static_cast<DivRemOpcode>(record.local_opcode);
 
         bool is_signed = opcode == DIV || opcode == REM;
@@ -248,7 +248,7 @@ __global__ void rv32_div_rem_tracegen(
     RowSlice row(d_trace + idx, height);
 
     if (idx < d_records.len()) {
-        auto const& record = d_records[idx];
+        auto const &record = d_records[idx];
 
         Rv32MultAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bits), timestamp_max_bits

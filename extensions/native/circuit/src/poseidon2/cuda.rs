@@ -72,10 +72,10 @@ impl<const SBOX_REGISTERS: usize> Chip<DenseRecordArena, GpuBackend>
         unsafe {
             poseidon2_cuda::tracegen(
                 trace.buffer(),
-                padded_height as u32,
-                width as u32,
+                padded_height,
+                width,
                 &d_records,
-                height as u32,
+                height,
                 &d_chunk_start,
                 d_chunk_start.len() as u32,
                 &self.range_checker.count,

@@ -1,6 +1,6 @@
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/trace_access.h"
 
 static constexpr uint32_t NUM_PHANTOM_OPERANDS = 3;
 
@@ -26,7 +26,7 @@ __global__ void phantom_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& rec = records[idx];
+        auto const &rec = records[idx];
         COL_WRITE_VALUE(row, PhantomCols, pc, rec.pc);
         COL_WRITE_ARRAY(row, PhantomCols, operands, rec.operands);
         COL_WRITE_VALUE(row, PhantomCols, timestamp, rec.timestamp);

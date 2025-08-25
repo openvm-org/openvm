@@ -1,15 +1,15 @@
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "heap.cuh"
-#include "heap_branch.cuh"
-#include "cores/alu.cuh"
-#include "cores/beq.cuh"
-#include "cores/blt.cuh"
-#include "cores/less_than.cuh"
-#include "cores/mul.cuh"
-#include "cores/shift.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32-adapters/heap.cuh"
+#include "rv32-adapters/heap_branch.cuh"
+#include "rv32im/cores/alu.cuh"
+#include "rv32im/cores/beq.cuh"
+#include "rv32im/cores/blt.cuh"
+#include "rv32im/cores/less_than.cuh"
+#include "rv32im/cores/mul.cuh"
+#include "rv32im/cores/shift.cuh"
 
 using namespace riscv;
 
@@ -68,7 +68,7 @@ __global__ void alu256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapAdapterExecutor256 adapter(
             pointer_max_bits,
@@ -144,7 +144,7 @@ __global__ void branch_equal256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapBranchAdapter256 adapter(
             pointer_max_bits,
@@ -216,7 +216,7 @@ __global__ void less_than256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
@@ -288,7 +288,7 @@ __global__ void branch_less_than256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapBranchAdapter256 adapter(
             pointer_max_bits,
@@ -360,7 +360,7 @@ __global__ void shift256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,
@@ -437,7 +437,7 @@ __global__ void multiplication256_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32HeapAdapterExecutor<2, INT256_NUM_LIMBS, INT256_NUM_LIMBS> adapter(
             pointer_max_bits,

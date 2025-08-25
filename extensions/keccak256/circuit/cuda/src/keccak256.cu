@@ -1,11 +1,11 @@
-#include "columns.cuh"
-#include "histogram.cuh"
-#include "keccakvm.cuh"
+#include "keccak256/columns.cuh"
+#include "keccak256/keccakvm.cuh"
+#include "keccak256/p3_generation.cuh"
 #include "launcher.cuh"
-#include "p3_generation.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
-#include "trace_access.h"
-#include "utils.cuh"
 
 using namespace keccak256;
 

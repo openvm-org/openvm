@@ -1,10 +1,9 @@
-#include "adapters/alu.cuh"
-#include "constants.h"
-#include "cores/alu.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/alu.cuh"
+#include "rv32im/cores/alu.cuh"
 
 using namespace riscv;
 
@@ -36,7 +35,7 @@ __global__ void alu_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(d_trace + idx, height);
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         Rv32BaseAluAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),

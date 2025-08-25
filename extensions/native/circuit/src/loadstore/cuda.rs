@@ -51,8 +51,8 @@ impl<const NUM_CELLS: usize> Chip<DenseRecordArena, GpuBackend>
         unsafe {
             native_loadstore_cuda::tracegen(
                 trace.buffer(),
-                padded_height as u32,
-                trace_width as u32,
+                padded_height,
+                trace_width,
                 &d_records,
                 &self.range_checker.count,
                 NUM_CELLS as u32,

@@ -1,7 +1,7 @@
 #include "launcher.cuh"
-#include "program.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/trace_access.h"
+#include "system/program.cuh"
 
 static constexpr uint32_t EXIT_CODE_FAIL = 1;
 
@@ -17,7 +17,7 @@ __global__ void program_cached_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& rec = records[idx];
+        auto const &rec = records[idx];
         COL_WRITE_VALUE(row, ProgramExecutionCols, pc, rec.pc);
         COL_WRITE_VALUE(row, ProgramExecutionCols, opcode, rec.opcode);
         COL_WRITE_VALUE(row, ProgramExecutionCols, a, rec.a);
