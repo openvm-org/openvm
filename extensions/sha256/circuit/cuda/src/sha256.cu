@@ -341,7 +341,7 @@ __global__ __noinline__ void sha256_first_pass_tracegen(
     );
 }
 
-__global__ void sha256_fill_invalid_rows(Fp *d_trace, size_t trace_height, uint32_t rows_used) {
+__global__ void sha256_fill_invalid_rows(Fp *d_trace, size_t trace_height, size_t rows_used) {
     uint32_t thread_idx = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t row_idx = rows_used + thread_idx;
     if (row_idx >= trace_height) {
@@ -420,7 +420,7 @@ extern "C" int launch_sha256_first_pass_tracegen(
 extern "C" int launch_sha256_second_pass_dependencies(
     Fp *d_trace,
     size_t trace_height,
-    uint32_t rows_used
+    size_t rows_used
 ) {
     Fp *inner_trace_start = d_trace + (SHA256_INNER_COLUMN_OFFSET * trace_height);
     uint32_t total_sha256_blocks = rows_used / SHA256_ROWS_PER_BLOCK;
@@ -437,7 +437,7 @@ extern "C" int launch_sha256_second_pass_dependencies(
 extern "C" int launch_sha256_fill_invalid_rows(
     Fp *d_trace,
     size_t trace_height,
-    uint32_t rows_used
+    size_t rows_used
 ) {
     uint32_t invalid_rows = trace_height - rows_used;
     auto [grid_size, block_size] = kernel_launch_params(invalid_rows, 256);
