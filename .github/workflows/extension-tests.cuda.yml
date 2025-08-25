@@ -120,7 +120,7 @@ jobs:
               # Run circuit tests
               if [ -d "extensions/$ext/circuit" ]; then
                 pushd extensions/$ext/circuit
-                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
                 popd
               fi
 
