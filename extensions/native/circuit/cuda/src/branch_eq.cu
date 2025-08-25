@@ -57,8 +57,8 @@ template <typename F> struct NativeBranchEqualRecord {
 
 __global__ void native_branch_eq_tracegen(
     Fp *trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<NativeBranchEqualRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -84,8 +84,8 @@ __global__ void native_branch_eq_tracegen(
 
 extern "C" int _native_branch_eq_tracegen(
     Fp *d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<NativeBranchEqualRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,

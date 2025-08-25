@@ -56,8 +56,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv32DivRemChipGpu {
         unsafe {
             tracegen(
                 d_trace.buffer(),
-                padded_height as u32,
-                trace_width as u32,
+                padded_height,
+                trace_width,
                 &d_records,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

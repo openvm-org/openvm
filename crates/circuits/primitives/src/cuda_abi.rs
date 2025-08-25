@@ -271,7 +271,7 @@ pub mod less_than {
     extern "C" {
         fn _assert_less_than_tracegen(
             trace: *mut F,
-            trace_height: u32,
+            trace_height: usize,
             pairs: *const u32,
             max_bits: u32,
             aux_len: u32,
@@ -281,7 +281,7 @@ pub mod less_than {
 
         fn _less_than_tracegen(
             trace: *mut F,
-            trace_height: u32,
+            trace_height: usize,
             pairs: *const u32,
             max_bits: u32,
             aux_len: u32,
@@ -291,7 +291,7 @@ pub mod less_than {
 
         fn _less_than_array_tracegen(
             trace: *mut F,
-            trace_height: u32,
+            trace_height: usize,
             pairs: *const u32,
             max_bits: u32,
             array_len: u32,
@@ -311,7 +311,7 @@ pub mod less_than {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_assert_less_than_tracegen(
             trace.as_mut_ptr(),
-            trace_height as u32,
+            trace_height,
             pairs.as_ptr(),
             max_bits as u32,
             aux_len as u32,
@@ -330,7 +330,7 @@ pub mod less_than {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_tracegen(
             trace.as_mut_ptr(),
-            trace_height as u32,
+            trace_height,
             pairs.as_ptr(),
             max_bits as u32,
             aux_len as u32,
@@ -350,7 +350,7 @@ pub mod less_than {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_less_than_array_tracegen(
             trace.as_mut_ptr(),
-            trace_height as u32,
+            trace_height,
             pairs.as_ptr(),
             max_bits as u32,
             array_len as u32,

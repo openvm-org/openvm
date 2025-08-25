@@ -84,8 +84,8 @@ struct JalRangeCheck {
 
 __global__ void jal_rangecheck_tracegen(
     Fp *__restrict__ trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<JalRangeCheckRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_max_bins,
@@ -109,8 +109,8 @@ __global__ void jal_rangecheck_tracegen(
 
 extern "C" int _native_jal_rangecheck_tracegen(
     Fp* d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<JalRangeCheckRecord<Fp>> d_records,
     uint32_t* d_range_checker,
     uint32_t range_checker_max_bins,

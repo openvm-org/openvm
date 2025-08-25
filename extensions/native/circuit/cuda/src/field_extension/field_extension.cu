@@ -99,8 +99,8 @@ template <typename F> struct FieldExtensionRecord {
 
 __global__ void field_extension_tracegen(
     Fp *trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<FieldExtensionRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -127,8 +127,8 @@ __global__ void field_extension_tracegen(
 
 extern "C" int _field_extension_tracegen(
     Fp *d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<FieldExtensionRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
