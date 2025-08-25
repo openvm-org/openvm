@@ -52,8 +52,8 @@ template <typename F> struct CastFRecord {
 
 __global__ void castf_tracegen(
     Fp *trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<CastFRecord<Fp>> records,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -80,8 +80,8 @@ __global__ void castf_tracegen(
 
 extern "C" int _castf_tracegen(
     Fp *d_trace,
-    uint32_t height,
-    uint32_t width,
+    size_t height,
+    size_t width,
     DeviceBufferConstView<CastFRecord<Fp>> d_records,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,

@@ -116,12 +116,12 @@ impl Chip<DenseRecordArena, GpuBackend> for Sha256VmChipGpu {
         }
 
         unsafe {
-            sha256_fill_invalid_rows(d_trace.buffer(), trace_height, rows_used as u32)
+            sha256_fill_invalid_rows(d_trace.buffer(), trace_height, rows_used)
                 .expect("Invalid rows filling failed");
         }
 
         unsafe {
-            sha256_second_pass_dependencies(d_trace.buffer(), trace_height, rows_used as u32)
+            sha256_second_pass_dependencies(d_trace.buffer(), trace_height, rows_used)
                 .expect("Second pass trace generation failed");
         }
 

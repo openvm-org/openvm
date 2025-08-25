@@ -654,7 +654,7 @@ __device__ void generate_missing_cells(Fp *trace_chunk, size_t trace_height) {
 __global__ void sha256_second_pass_dependencies(
     Fp *inner_trace_start,
     size_t trace_height,
-    uint32_t total_sha256_blocks
+    size_t total_sha256_blocks
 ) {
     uint32_t sha256_block_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
