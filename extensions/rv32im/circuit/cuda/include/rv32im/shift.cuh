@@ -1,8 +1,10 @@
 #pragma once
 
-#include "constants.h"
-#include "histogram.cuh"
-#include "trace_access.h"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+
+using namespace riscv;
 
 template <size_t NUM_LIMBS> struct ShiftCoreRecord {
     uint8_t b[NUM_LIMBS];
@@ -128,8 +130,9 @@ template <size_t NUM_LIMBS> struct ShiftCore {
             ++num_bits_log;
         }
         range_checker.add_count(
-            ((uint32_t)record.c[0] - (uint32_t)bit_shift - (uint32_t)(limb_shift * RV32_CELL_BITS)
-            ) >> num_bits_log,
+            ((uint32_t)record.c[0] - (uint32_t)bit_shift -
+             (uint32_t)(limb_shift * RV32_CELL_BITS)) >>
+                num_bits_log,
             RV32_CELL_BITS - num_bits_log
         );
 

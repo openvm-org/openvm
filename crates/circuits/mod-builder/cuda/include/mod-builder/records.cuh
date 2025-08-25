@@ -1,6 +1,6 @@
 #pragma once
 
-#include "vec_heap.cuh"
+#include "rv32-adapters/vec_heap.cuh"
 
 struct FieldExprCoreRecord {
     uint8_t opcode;

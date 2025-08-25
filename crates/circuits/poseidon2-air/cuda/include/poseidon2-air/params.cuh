@@ -14,4 +14,4 @@ struct Poseidon2ParamsS1 : Poseidon2DefaultParams {
 
 struct Poseidon2ParamsS0 : Poseidon2DefaultParams {
     static constexpr size_t SBOX_REGS = 0;
-}; 
+};

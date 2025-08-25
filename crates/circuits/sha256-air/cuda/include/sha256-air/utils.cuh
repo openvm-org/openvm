@@ -1,10 +1,8 @@
 #pragma once
 
-#include "constants.h"
+#include "primitives/constants.h"
+#include "primitives/utils.cuh"
 #include "system/memory/offline_checker.cuh"
-#include <cstdio>
-#include <cstring>
-#include <utils.cuh>
 
 using namespace riscv;
 using namespace sha256;

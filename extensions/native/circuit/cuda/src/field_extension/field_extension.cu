@@ -1,10 +1,10 @@
 #include "../adapters/native_vectorized_adapter.cuh"
-#include "constants.h"
 #include "field_ext_operations.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 
 using namespace riscv;
 using namespace program;
@@ -41,7 +41,7 @@ struct FieldExtension {
 
     __device__ FieldExtension(VariableRangeChecker range_checker) : range_checker(range_checker) {}
 
-    __device__ void fill_trace_row(RowSlice row, FieldExtensionCoreRecord<Fp> const& record) {
+    __device__ void fill_trace_row(RowSlice row, FieldExtensionCoreRecord<Fp> const &record) {
         COL_WRITE_ARRAY(row, FieldExtensionCoreCols, y, record.y);
         COL_WRITE_ARRAY(row, FieldExtensionCoreCols, z, record.z);
         FieldExtensionOpcode opcode = static_cast<FieldExtensionOpcode>(record.local_opcode);
@@ -109,11 +109,10 @@ __global__ void field_extension_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
 
         auto adapter = NativeVectorizedAdapter<Fp, EXT_DEG>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
@@ -138,8 +137,13 @@ extern "C" int _field_extension_tracegen(
     assert(width == sizeof(FieldExtensionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     field_extension_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, d_range_checker,
-        range_checker_num_bins, timestamp_max_bits
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

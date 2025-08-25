@@ -1,9 +1,8 @@
-#include "constants.h"
 #include "adapters/convert_adapter.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
+#include "primitives/trace_access.h"
 
 using namespace riscv;
 using namespace program;
@@ -62,11 +61,10 @@ __global__ void castf_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
 
         auto adapter = ConvertAdapter<Fp, RV32_REGISTER_NUM_LIMBS>(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
 
@@ -91,8 +89,13 @@ extern "C" int _castf_tracegen(
     assert(width == sizeof(CastFCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     castf_tracegen<<<grid, block>>>(
-        d_trace, height, width, d_records, d_range_checker, 
-        range_checker_num_bins, timestamp_max_bits
+        d_trace,
+        height,
+        width,
+        d_records,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

@@ -1,4 +1,4 @@
-#include "constants.h"
+#include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
 
 using namespace poseidon2;

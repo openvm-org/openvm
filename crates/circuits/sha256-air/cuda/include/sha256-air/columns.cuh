@@ -1,7 +1,7 @@
 #pragma once
 
-#include "constants.h"
-#include "execution.h"
+#include "primitives/constants.h"
+#include "primitives/execution.h"
 #include "system/memory/offline_checker.cuh"
 
 using namespace riscv;

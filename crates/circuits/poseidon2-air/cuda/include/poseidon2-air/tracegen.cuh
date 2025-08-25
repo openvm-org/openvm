@@ -1,9 +1,9 @@
 #pragma once
 
-#include "poseidon2.cuh"
 #include "columns.cuh"
 #include "linearlayer.cuh"
-#include "trace_access.h"
+#include "poseidon2.cuh"
+#include "primitives/trace_access.h"
 
 namespace poseidon2 {
 

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "constants.h"
-#include "execution.h"
+#include "primitives/constants.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/address.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
 
 using namespace native;
 
@@ -34,7 +34,7 @@ template <typename F> struct BranchNativeAdapter {
     __device__ BranchNativeAdapter(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
         : mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, BranchNativeAdapterRecord<F> const& record) {
+    __device__ void fill_trace_row(RowSlice row, BranchNativeAdapterRecord<F> const &record) {
         COL_WRITE_VALUE(row, BranchNativeAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, BranchNativeAdapterCols, from_state.timestamp, record.from_timestamp);
 

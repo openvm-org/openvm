@@ -1,8 +1,8 @@
 #pragma once
 
-#include "constants.h"
+#include "primitives/constants.h"
+#include "primitives/utils.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "utils.cuh"
 
 using namespace keccak256;
 

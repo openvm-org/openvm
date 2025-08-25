@@ -1,8 +1,8 @@
 #pragma once
 
-#include "vec_heap.cuh"
 #include "meta.cuh"
-#include "trace_access.h"
+#include "primitives/trace_access.h"
+#include "rv32-adapters/vec_heap.cuh"
 
 struct Rv32VecHeapConfig {
     size_t num_reads;

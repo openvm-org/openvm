@@ -1,8 +1,8 @@
 #pragma once
 
-#include "execution.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
-#include "trace_access.h"
 
 using namespace riscv;
 

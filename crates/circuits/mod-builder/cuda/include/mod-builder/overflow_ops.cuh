@@ -1,6 +1,7 @@
 #pragma once
+
 #include "bigint_ops.cuh"
-#include "constants.h"
+#include "primitives/constants.h"
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>

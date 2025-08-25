@@ -1,9 +1,9 @@
-#include "columns.cuh"
-#include "tracegen.cuh"
-#include "params.cuh"
+#include "poseidon2-air/columns.cuh"
+#include "poseidon2-air/params.cuh"
+#include "poseidon2-air/tracegen.cuh"
+#include "primitives/trace_access.h"
 #include "specific.cuh"
 #include "system/memory/controller.cuh"
-#include "trace_access.h"
 
 using namespace poseidon2;
 

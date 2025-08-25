@@ -1,8 +1,8 @@
-#include "constants.h"
-#include "execution.h"
 #include "launcher.cuh"
+#include "primitives/constants.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
-#include "trace_access.h"
 
 using namespace riscv;
 using namespace program;

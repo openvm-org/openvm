@@ -1,8 +1,8 @@
-#include "encoder.cuh"
 #include "launcher.cuh"
-#include "native_adapter.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/encoder.cuh"
+#include "primitives/trace_access.h"
+#include "system/native_adapter.cuh"
 
 struct PublicValuesCoreRecord {
     Fp value;
@@ -40,11 +40,10 @@ __global__ void public_values_tracegen(
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
-        auto const& record = records[idx];
+        auto const &record = records[idx];
 
         auto adapter = NativeAdapter<Fp, 2, 0>(
-            VariableRangeChecker(range_checker, range_checker_bins), 
-            timestamp_max_bits
+            VariableRangeChecker(range_checker, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(
             row.slice_from(COL_INDEX(PublicValuesCols, adapter)), record.adapter

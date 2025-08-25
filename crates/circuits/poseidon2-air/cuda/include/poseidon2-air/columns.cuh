@@ -1,6 +1,7 @@
 #pragma once
+
 #include "fp.h"
-#include "trace_access.h"
+#include "primitives/trace_access.h"
 
 namespace poseidon2 {
 

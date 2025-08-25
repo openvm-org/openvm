@@ -1,10 +1,6 @@
 #pragma once
 
-#include "constants.h"
-#include "histogram.cuh"
-#include "trace_access.h"
-
-using namespace riscv;
+#include "primitives/trace_access.h"
 
 template <size_t NUM_LIMBS> struct BranchEqualCoreRecord {
     uint8_t a[NUM_LIMBS];

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cuda_runtime.h>
 
 // Kernel to fill size-n buffer with a certain value

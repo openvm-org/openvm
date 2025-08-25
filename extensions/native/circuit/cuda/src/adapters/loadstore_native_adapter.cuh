@@ -1,9 +1,9 @@
 #pragma once
 
-#include "execution.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
 
 template <typename T, uint32_t NUM_CELLS> struct NativeLoadStoreAdapterCols {
     ExecutionState<T> from_state;
@@ -44,7 +44,7 @@ template <typename F, uint32_t NUM_CELLS> struct NativeLoadStoreAdapter {
 
     __device__ void fill_trace_row(
         RowSlice &row,
-        NativeLoadStoreAdapterRecord<F, NUM_CELLS> const& record
+        NativeLoadStoreAdapterRecord<F, NUM_CELLS> const &record
     ) {
         bool is_hint_storew = (record.data_read.prev_timestamp == UINT32_MAX);
 

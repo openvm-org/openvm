@@ -1,8 +1,8 @@
 #pragma once
 
-#include "constants.h"
-#include "histogram.cuh"
-#include "trace_access.h"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 
 using namespace riscv;
 

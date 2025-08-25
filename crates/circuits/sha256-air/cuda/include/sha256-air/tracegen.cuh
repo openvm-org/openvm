@@ -1,12 +1,11 @@
 #pragma once
 
 #include "columns.cuh"
-#include "constants.h"
-#include "encoder.cuh"
-#include "histogram.cuh"
-#include "trace_access.h"
+#include "primitives/constants.h"
+#include "primitives/encoder.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 #include "utils.cuh"
-#include <stdio.h>
 
 using namespace riscv;
 using namespace sha256;

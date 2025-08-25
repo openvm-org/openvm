@@ -1,9 +1,9 @@
 #pragma once
 
-#include "execution.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
 
 using namespace native;
 
@@ -34,7 +34,10 @@ template <typename F, size_t WRITE_SIZE> struct ConvertAdapter {
 
     template <typename T> using Cols = ConvertAdapterCols<T, WRITE_SIZE>;
 
-    __device__ void fill_trace_row(RowSlice row, ConvertAdapterRecord<F, WRITE_SIZE> const& record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        ConvertAdapterRecord<F, WRITE_SIZE> const &record
+    ) {
         COL_WRITE_VALUE(row, Cols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(row, Cols, from_state.timestamp, record.from_timestamp);
         COL_WRITE_VALUE(row, Cols, a_pointer, record.a_ptr);

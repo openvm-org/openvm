@@ -1,9 +1,7 @@
 #pragma once
 
-#include "constants.h"
-#include "execution.h"
-#include "launcher.cuh"
-#include "system/memory/controller.cuh"
+#include "primitives/constants.h"
+#include "system/memory/offline_checker.cuh"
 #include <algorithm>
 
 using namespace native;

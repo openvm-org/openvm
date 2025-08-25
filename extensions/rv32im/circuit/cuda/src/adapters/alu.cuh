@@ -1,9 +1,9 @@
 #pragma once
 
-#include "execution.h"
+#include "primitives/execution.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
 
 using namespace riscv;
 
@@ -32,7 +32,11 @@ struct Rv32BaseAluAdapter {
     MemoryAuxColsFactory mem_helper;
     BitwiseOperationLookup bitwise_lookup;
 
-    __device__ Rv32BaseAluAdapter(VariableRangeChecker range_checker, BitwiseOperationLookup lookup, uint32_t timestamp_max_bits)
+    __device__ Rv32BaseAluAdapter(
+        VariableRangeChecker range_checker,
+        BitwiseOperationLookup lookup,
+        uint32_t timestamp_max_bits
+    )
         : mem_helper(range_checker, timestamp_max_bits), bitwise_lookup(lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, Rv32BaseAluAdapterRecord record) {

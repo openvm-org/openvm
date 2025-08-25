@@ -1,8 +1,8 @@
-#include "constants.h"
-#include "histogram.cuh"
-#include "keccakvm.cuh"
+#include "keccak256/keccakvm.cuh"
 #include "launcher.cuh"
-#include "utils.cuh"
+#include "primitives/constants.h"
+#include "primitives/histogram.cuh"
+#include "primitives/utils.cuh"
 
 using namespace keccak256;
 
@@ -167,9 +167,10 @@ __global__ void keccakf_kernel(
     auto record_len = record_mut.header.len;
     auto num_blocks = num_keccak_f(record_len);
     auto block_offset = block_offsets[record_idx];
-    auto this_rec_states =
-        reinterpret_cast<uint64_t(*)[KECCAK_STATE_SIZE]>(states + block_offset * KECCAK_STATE_SIZE);
-    auto next_rec_states = reinterpret_cast<uint64_t(*)[KECCAK_STATE_SIZE]>(
+    auto this_rec_states = reinterpret_cast<uint64_t (*)[KECCAK_STATE_SIZE]>(
+        states + block_offset * KECCAK_STATE_SIZE
+    );
+    auto next_rec_states = reinterpret_cast<uint64_t (*)[KECCAK_STATE_SIZE]>(
         states + (block_offset + total_num_blocks) * KECCAK_STATE_SIZE
     );
     uint64_t state[KECCAK_STATE_SIZE] = {0};

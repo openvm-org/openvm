@@ -1,9 +1,9 @@
 #include "../field_extension/field_ext_operations.cuh"
 #include "column.cuh"
-#include "constants.h"
 #include "launcher.cuh"
+#include "primitives/constants.h"
+#include "primitives/trace_access.h"
 #include "system/memory/controller.cuh"
-#include "trace_access.h"
 
 using namespace riscv;
 using namespace native;
@@ -46,7 +46,7 @@ template <typename F> struct FriReducedOpeningWorkloadRowRecord {
 struct FriReducedOpening {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ FriReducedOpening(VariableRangeChecker range_checker, uint32_t timestamp_max_bits) 
+    __device__ FriReducedOpening(VariableRangeChecker range_checker, uint32_t timestamp_max_bits)
         : mem_helper(range_checker, timestamp_max_bits) {}
 
     __device__ void fill_instruction1_row(
@@ -232,12 +232,12 @@ __global__ void fri_reduced_opening_tracegen(
         auto common_rec = *reinterpret_cast<FriReducedOpeningCommonRecord<Fp> *>(common_rec_start);
 
         auto step = FriReducedOpening(
-            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
-            timestamp_max_bits
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         RowSlice row(trace + idx, height);
         if (local_idx == header.length) {
-            auto wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start
+            auto wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(
+                wl_start
             )[header.length - 1];
             step.fill_instruction1_row(row, common_rec, header, wl_rec.result);
         } else if (local_idx == header.length + 1) {
@@ -247,9 +247,9 @@ __global__ void fri_reduced_opening_tracegen(
                 reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start)[local_idx];
             Fp *prev_result = nullptr;
             if (local_idx > 0) {
-                auto prev_wl_rec =
-                    reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start
-                    )[local_idx - 1];
+                auto prev_wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(
+                    wl_start
+                )[local_idx - 1];
                 prev_result = prev_wl_rec.result;
             }
             Fp *prev_data = header.is_init ? nullptr : reinterpret_cast<Fp *>(prev_data_start);
@@ -276,8 +276,14 @@ extern "C" int _fri_reduced_opening_tracegen(
 ) {
     auto [grid, block] = kernel_launch_params(height);
     fri_reduced_opening_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, rows_used, d_rows_info,
-        d_range_checker, range_checker_num_bins, timestamp_max_bits
+        d_trace,
+        height,
+        d_records,
+        rows_used,
+        d_rows_info,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return cudaGetLastError();
 }

@@ -1,7 +1,7 @@
 #pragma once
 
+#include "primitives/constants.h"
 #include "system/memory/offline_checker.cuh"
-#include "constants.h"
 
 using namespace riscv;
 using namespace keccak256;
