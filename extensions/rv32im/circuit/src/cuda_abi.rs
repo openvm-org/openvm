@@ -56,7 +56,7 @@ pub mod hintstore_cuda {
             height: usize,
             width: usize,
             d_records: *const u8,
-            rows_used: u32,
+            rows_used: usize,
             d_record_offsets: *const OffsetInfo,
             pointer_max_bits: u32,
             d_range_checker: *mut u32,
@@ -72,7 +72,7 @@ pub mod hintstore_cuda {
         d_trace: &DeviceBuffer<F>,
         height: usize,
         d_records: &DeviceBuffer<u8>,
-        rows_used: u32,
+        rows_used: usize,
         d_record_offsets: &DeviceBuffer<OffsetInfo>,
         pointer_max_bits: u32,
         d_range_checker: &DeviceBuffer<F>,
@@ -227,8 +227,8 @@ pub mod divrem_cuda {
     extern "C" {
         pub fn _rv32_div_rem_tracegen(
             d_trace: *mut F,
-            height: u32,
-            width: u32,
+            height: usize,
+            width: usize,
             d_records: DeviceBufferView,
             d_range_checker: *mut u32,
             range_checker_num_bins: u32,
@@ -243,8 +243,8 @@ pub mod divrem_cuda {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
-        height: u32,
-        width: u32,
+        height: usize,
+        width: usize,
         d_records: &DeviceBuffer<u8>,
         d_range_checker: &DeviceBuffer<F>,
         d_bitwise_lookup: &DeviceBuffer<F>,
