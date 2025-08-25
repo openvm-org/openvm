@@ -63,6 +63,7 @@ members = [
     "extensions/pairing/guest",
     "extensions/memcpy/circuit",
     "extensions/memcpy/transpiler",
+    "extensions/memcpy/tests",
     "guest-libs/ff_derive/",
     "guest-libs/k256/",
     "guest-libs/p256/",

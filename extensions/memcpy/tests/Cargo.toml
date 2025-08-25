@@ -10,17 +10,18 @@ repository.workspace = true
 [dependencies]
 openvm-instructions = { workspace = true }
 openvm-stark-sdk.workspace = true
-openvm-transpiler.workspace = true
 openvm-memcpy-circuit.workspace = true
 openvm-memcpy-transpiler.workspace = true
 openvm = { workspace = true }
-openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 eyre.workspace = true
 serde = { workspace = true, features = ["alloc"] }
 strum.workspace = true
 rand.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-circuit-primitives.workspace = true
+openvm-stark-backend.workspace = true
 test-case.workspace = true
+tracing.workspace = true
 
 [features]
 default = ["parallel"]

@@ -3,6 +3,7 @@ mod extension;
 mod iteration;
 mod loops;
 
+pub use bus::*;
 pub use extension::*;
 pub use iteration::*;
 pub use loops::*;
