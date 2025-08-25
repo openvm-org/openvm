@@ -20,7 +20,7 @@ fn install_cli() {
     });
 }
 
-fn build_fibonacci_once() -> Result<()> {
+fn build_fibonacci_once() -> Result<&'static str> {
     static BUILD_ONCE: OnceLock<Result<()>> = OnceLock::new();
     BUILD_ONCE
         .get_or_init(|| {
@@ -37,7 +37,7 @@ fn build_fibonacci_once() -> Result<()> {
             )
         })
         .as_ref()
-        .map(|_| ())
+        .map(|_| "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe")
         .map_err(|e| eyre::eyre!("Failed to build fibonacci: {}", e))
 }
 
@@ -45,8 +45,7 @@ fn build_fibonacci_once() -> Result<()> {
 fn test_cli_app_e2e() -> Result<()> {
     let temp_dir = tempdir()?;
     install_cli();
-    build_fibonacci_once()?;
-    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+    let exe_path = build_fibonacci_once()?;
     let temp_pk = temp_dir.path().join("app.pk");
     let temp_vk = temp_dir.path().join("app.vk");
     let temp_proof = temp_dir.path().join("fibonacci.app.proof");
@@ -235,8 +234,7 @@ fn test_cli_init_build() -> Result<()> {
 #[test]
 fn test_cli_run_mode_pure_default() -> Result<()> {
     install_cli();
-    build_fibonacci_once()?;
-    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+    let exe_path = build_fibonacci_once()?;
 
     // Test that default mode (pure) works without explicit flag
     run_cmd(
@@ -272,8 +270,7 @@ fn test_cli_run_mode_pure_default() -> Result<()> {
 #[test]
 fn test_cli_run_segment() -> Result<()> {
     install_cli();
-    build_fibonacci_once()?;
-    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+    let exe_path = build_fibonacci_once()?;
 
     // Test run with --mode segment
     run_cmd(
@@ -296,8 +293,7 @@ fn test_cli_run_segment() -> Result<()> {
 #[test]
 fn test_cli_run_meter() -> Result<()> {
     install_cli();
-    build_fibonacci_once()?;
-    let exe_path = "tests/programs/fibonacci/target/openvm/release/openvm-cli-example-test.vmexe";
+    let exe_path = build_fibonacci_once()?;
 
     // Test run with --mode meter
     run_cmd(
