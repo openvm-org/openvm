@@ -1,0 +1,15 @@
+[package]
+name = "openvm-scripts"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+openvm-cuda-common = { workspace = true }
+serde = { workspace = true }
+serde_yaml = "0.9"
+walkdir = "2.5"
+
+[[bin]]
+name = "generate-clangd"
+path = "generate_clangd/main.rs"
