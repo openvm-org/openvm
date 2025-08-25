@@ -57,3 +57,10 @@ cuda = [
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda"
 ]
+touchemall = [
+    "cuda",
+    "openvm-circuit/touchemall",
+    "openvm-circuit-primitives/touchemall",
+    "openvm-cuda-backend/touchemall",
+    "openvm-cuda-common/touchemall",
+]

@@ -53,4 +53,18 @@ tco = ["openvm-rv32im-circuit/tco"]
 jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
-cuda = ["dep:openvm-cuda-backend", "dep:openvm-cuda-common", "dep:openvm-cuda-builder", "openvm-circuit-primitives/cuda", "openvm-circuit/cuda"]
+cuda = [
+    "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-builder",
+    "openvm-circuit-primitives/cuda",
+    "openvm-circuit/cuda"
+]
+touchemall = [
+    "cuda",
+    "openvm-circuit/touchemall",
+    "openvm-circuit-primitives/touchemall",
+    "openvm-cuda-backend/touchemall",
+    "openvm-cuda-common/touchemall",
+    "openvm-rv32im-circuit/touchemall",
+]
