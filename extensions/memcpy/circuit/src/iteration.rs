@@ -61,6 +61,7 @@ pub struct MemcpyIterCols<T> {
     pub shift: [T; 2],
     pub is_valid: T,
     pub is_valid_not_start: T,
+    pub is_shift_non_zero: T,
     // -1 for the first iteration, 1 for the last iteration, 0 for the middle iterations
     pub is_boundary: T,
     pub data_1: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -105,8 +106,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         };
 
         let shift = local.shift[0] * AB::Expr::TWO + local.shift[1];
-        let is_shift_non_zero = or::<AB::Expr>(local.shift[0], local.shift[1]);
-        let is_shift_zero = not::<AB::Expr>(is_shift_non_zero.clone());
+        let is_shift_zero = not::<AB::Expr>(local.is_shift_non_zero.clone());
         let is_shift_one = and::<AB::Expr>(local.shift[0], not::<AB::Expr>(local.shift[1]));
         let is_shift_two = and::<AB::Expr>(not::<AB::Expr>(local.shift[0]), local.shift[1]);
         let is_shift_three = and::<AB::Expr>(local.shift[0], local.shift[1]);
@@ -122,6 +122,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         let len = local.len[0]
             + local.len[1] * AB::Expr::from_canonical_u32(1 << (2 * MEMCPY_LOOP_LIMB_BITS));
+        let prev_len = prev.len[0]
+            + prev.len[1] * AB::Expr::from_canonical_u32(1 << (2 * MEMCPY_LOOP_LIMB_BITS));
 
         // write_data =
         //  (local.data_1[shift..4], prev.data_4[0..shift]),
@@ -165,6 +167,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         builder.assert_bool(local.is_valid);
         local.shift.iter().for_each(|x| builder.assert_bool(*x));
         builder.assert_bool(local.is_valid_not_start);
+        builder.assert_bool(local.is_shift_non_zero);
         // is_boundary is either -1, 0 or 1
         builder.assert_tern(local.is_boundary + AB::Expr::ONE);
 
@@ -173,6 +176,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             local.is_valid_not_start,
             and::<AB::Expr>(local.is_valid, is_not_start),
         );
+
+        // is_shift_non_zero is correct
+        builder.assert_eq(local.is_shift_non_zero, or::<AB::Expr>(local.shift[0], local.shift[1]));
 
         // if !is_valid, then is_boundary = 0, shift = 0 (we will use this assumption later)
         let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
@@ -183,7 +189,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // and dest = prev_dest + 16, shift = prev_shift
         let mut is_valid_not_start_when = builder.when(local.is_valid_not_start);
         is_valid_not_start_when
-            .assert_eq(local.len[0], prev.len[0] - AB::Expr::from_canonical_u32(16));
+            .assert_eq(len.clone(), prev_len - AB::Expr::from_canonical_u32(16));
         is_valid_not_start_when
             .assert_eq(local.source, prev.source + AB::Expr::from_canonical_u32(16));
         is_valid_not_start_when.assert_eq(local.dest, prev.dest + AB::Expr::from_canonical_u32(16));
@@ -199,7 +205,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // since is_shift_non_zero degree is 2, we need to keep the degree of the condition to 1
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
-            .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero.clone());
+            .assert_eq(local.timestamp, prev.timestamp + local.is_shift_non_zero.clone());
 
         // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
@@ -222,7 +228,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                     + (local.is_boundary + AB::Expr::ONE) * AB::Expr::from_canonical_usize(4),
                 local.dest,
                 local.source,
-                len,
+                len.clone(),
                 (AB::Expr::ONE - local.is_boundary) * shift.clone() * (AB::F::TWO).inverse()
                     + (local.is_boundary + AB::Expr::ONE) * AB::Expr::TWO,
             )
@@ -241,7 +247,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .enumerate()
             .for_each(|(idx, (data, read_aux))| {
                 let is_valid_read = if idx == 3 {
-                    or::<AB::Expr>(is_shift_non_zero.clone(), local.is_valid_not_start)
+                    or::<AB::Expr>(local.is_shift_non_zero.clone(), local.is_valid_not_start)
                 } else {
                     local.is_valid_not_start.into()
                 };
@@ -288,10 +294,10 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             ),
         ];
         self.range_bus
-            .push(local.len[0], len_bits_limit[0].clone(), true)
+            .push(local.len[0].clone(), len_bits_limit[0].clone(), true)
             .eval(builder, local.is_valid);
         self.range_bus
-            .push(local.len[1], len_bits_limit[1].clone(), true)
+            .push(local.len[1].clone(), len_bits_limit[1].clone(), true)
             .eval(builder, local.is_valid);
     }
 }
@@ -688,6 +694,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         } else {
                             F::ZERO
                         };
+                        cols.is_shift_non_zero = F::from_canonical_u8((record.inner.shift != 0) as u8);
                         cols.is_valid_not_start = F::from_canonical_u8(1 - is_start as u8);
                         cols.is_valid = F::ONE;
                         cols.shift = [record.inner.shift & 1, record.inner.shift >> 1]

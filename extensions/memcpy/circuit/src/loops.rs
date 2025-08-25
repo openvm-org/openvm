@@ -453,9 +453,6 @@ impl ChipUsageGetter for MemcpyLoopChip {
     fn air_name(&self) -> String {
         get_air_name(&self.air)
     }
-    fn constant_trace_height(&self) -> Option<usize> {
-        Some(self.records.lock().unwrap().len())
-    }
     fn current_trace_height(&self) -> usize {
         self.records.lock().unwrap().len()
     }
