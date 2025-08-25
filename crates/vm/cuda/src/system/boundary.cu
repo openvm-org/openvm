@@ -1,9 +1,8 @@
 #include "launcher.cuh"
-#include "less_than.cuh"
-#include "fp_array.cuh"
-#include "shared_buffer.cuh"
-#include "trace_access.h"
-
+#include "primitives/fp_array.cuh"
+#include "primitives/less_than.cuh"
+#include "primitives/shared_buffer.cuh"
+#include "primitives/trace_access.h"
 #include <cassert>
 
 static const size_t PERSISTENT_CHUNK = 8;
@@ -42,7 +41,7 @@ __global__ void cukernel_persistent_boundary_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    uint8_t const* const* initial_mem,
+    uint8_t const *const *initial_mem,
     BoundaryRecord<PERSISTENT_CHUNK> *records,
     size_t num_records,
     FpArray<16> *poseidon2_buffer,
@@ -60,29 +59,35 @@ __global__ void cukernel_persistent_boundary_tracegen(
         COL_WRITE_VALUE(row, PersistentBoundaryCols, leaf_label, record.ptr / PERSISTENT_CHUNK);
         if (row_idx % 2 == 0) {
             // TODO better address space handling
-            FpArray<8> init_values = record.address_space == 4
-                ? FpArray<8>::from_raw_array(
-                    reinterpret_cast<uint32_t const*>(initial_mem[record.address_space - 1]) + record.ptr)
-                : FpArray<8>::from_u8_array(
-                    initial_mem[record.address_space - 1] + record.ptr);
-            FpArray<8> init_hash =
-                poseidon2.hash_and_record(
-                    init_values
-                );
+            FpArray<8> init_values =
+                record.address_space == 4
+                    ? FpArray<8>::from_raw_array(
+                          reinterpret_cast<uint32_t const *>(
+                              initial_mem[record.address_space - 1]
+                          ) +
+                          record.ptr
+                      )
+                    : FpArray<8>::from_u8_array(initial_mem[record.address_space - 1] + record.ptr);
+            FpArray<8> init_hash = poseidon2.hash_and_record(init_values);
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::one());
             COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, Fp::zero());
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, reinterpret_cast<Fp const*>(init_values.v));
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const*>(init_hash.v));
+            COL_WRITE_ARRAY(
+                row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(init_values.v)
+            );
+            COL_WRITE_ARRAY(
+                row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(init_hash.v)
+            );
         } else {
             FpArray<8> final_values = FpArray<8>::from_raw_array(record.values);
-            FpArray<8> final_hash =
-                poseidon2.hash_and_record(
-                    final_values
-                );
+            FpArray<8> final_hash = poseidon2.hash_and_record(final_values);
             COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::neg_one());
             COL_WRITE_VALUE(row, PersistentBoundaryCols, timestamp, record.timestamp);
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, values, reinterpret_cast<Fp const*>(final_values.v));
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const*>(final_hash.v));
+            COL_WRITE_ARRAY(
+                row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(final_values.v)
+            );
+            COL_WRITE_ARRAY(
+                row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(final_hash.v)
+            );
         }
     } else {
         row.fill_zero(0, width);
@@ -169,7 +174,7 @@ extern "C" int _persistent_boundary_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    uint8_t const* const* d_initial_mem,
+    uint8_t const *const *d_initial_mem,
     uint32_t *d_raw_records,
     size_t num_records,
     Fp *d_poseidon2_raw_buffer,

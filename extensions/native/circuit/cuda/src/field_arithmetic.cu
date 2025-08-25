@@ -1,8 +1,7 @@
-#include "adapters/alu_native_adapter.cuh"
-#include "constants.h"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "native/adapters/alu_native_adapter.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/trace_access.h"
 
 using namespace riscv;
 
@@ -88,11 +87,10 @@ __global__ void field_arithmetic_tracegen(
     RowSlice row(d_trace + idx, height);
 
     if (idx < d_records.len()) {
-        auto const& rec = d_records[idx];
+        auto const &rec = d_records[idx];
 
         AluNativeAdapter adapter(
-            VariableRangeChecker(d_range_checker, range_checker_bins), 
-            timestamp_max_bits
+            VariableRangeChecker(d_range_checker, range_checker_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
@@ -119,8 +117,7 @@ extern "C" int _field_arithmetic_tracegen(
     const auto [grid, block] = kernel_launch_params(height);
 
     field_arithmetic_tracegen<<<grid, block>>>(
-        d_trace, height, d_records, d_range_checker,
-        range_checker_bins, timestamp_max_bits
+        d_trace, height, d_records, d_range_checker, range_checker_bins, timestamp_max_bits
     );
 
     return cudaGetLastError();

@@ -1,11 +1,11 @@
-#include "columns.cuh"
-#include "constants.h"
 #include "launcher.cuh"
-#include "tracegen.cuh"
+#include "primitives/constants.h"
+#include "primitives/trace_access.h"
+#include "sha256-air/columns.cuh"
+#include "sha256-air/tracegen.cuh"
+#include "sha256-air/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
-#include "trace_access.h"
-#include "utils.cuh"
 #include <cassert>
 
 using namespace riscv;

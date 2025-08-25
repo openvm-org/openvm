@@ -1,6 +1,6 @@
 #include "fp.h"
-#include "histogram.cuh"
 #include "launcher.cuh"
+#include "primitives/histogram.cuh"
 
 template <uint32_t RANGE_TUPLE_SIZE>
 __global__ void range_tuple_dummy_tracegen(

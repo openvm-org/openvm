@@ -1,7 +1,7 @@
-#include "program.cuh"
 #include "fp.h"
 #include "launcher.cuh"
-#include "trace_access.h"
+#include "primitives/trace_access.h"
+#include "system/program.cuh"
 #include <cuda_runtime.h>
 
 __global__ void program_testing_tracegen(

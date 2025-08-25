@@ -1,6 +1,6 @@
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
 
 template <typename T> struct DummyChipCols {
     T count;

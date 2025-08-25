@@ -1,8 +1,7 @@
-#include "fp.h"
-#include "poseidon2.cuh"
-#include "trace_access.h"
-#include "shared_buffer.cuh"
 #include "launcher.cuh"
+#include "poseidon2.cuh"
+#include "primitives/shared_buffer.cuh"
+#include "primitives/trace_access.h"
 
 using poseidon2::poseidon2_mix;
 
@@ -13,11 +12,8 @@ struct alignas(32) digest_t {
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
 
 // `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
-template<int ADDR_SPACE_IDX>
-__global__ void merkle_tree_init(
-    uint8_t * __restrict__ data,
-    digest_t * __restrict__ out
-) {
+template <int ADDR_SPACE_IDX>
+__global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
 
     Fp cells[CELLS] = {0};
@@ -27,7 +23,7 @@ __global__ void merkle_tree_init(
         if constexpr (ADDR_SPACE_IDX < 3) {
             cells[i] = Fp(data[CELLS_OUT * gid + i]);
         } else {
-            cells[i] = reinterpret_cast<Fp*>(data)[CELLS_OUT * gid + i];
+            cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
         }
     }
 
@@ -37,8 +33,8 @@ __global__ void merkle_tree_init(
 }
 
 __global__ void merkle_tree_compress(
-    digest_t * __restrict__ in,
-    digest_t * __restrict__ out,
+    digest_t *__restrict__ in,
+    digest_t *__restrict__ out,
     size_t num_compressions
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -56,8 +52,8 @@ __global__ void merkle_tree_compress(
 }
 
 __global__ void merkle_tree_restore_path(
-    digest_t* __restrict__ in_out,
-    digest_t* __restrict__ zero_hash,
+    digest_t *__restrict__ in_out,
+    digest_t *__restrict__ zero_hash,
     const size_t remaining_size
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -75,10 +71,7 @@ __global__ void merkle_tree_restore_path(
     }
 }
 
-__global__ void calculate_zero_hash(
-    digest_t* zero_hash,
-    const size_t size
-) {
+__global__ void calculate_zero_hash(digest_t *zero_hash, const size_t size) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
     if (gid != 0) {
         return;
@@ -96,21 +89,21 @@ __global__ void calculate_zero_hash(
 }
 
 __global__ void merkle_tree_root(
-    uintptr_t*  __restrict__ in_roots, // aka digest_t**
-    digest_t*  __restrict__ out,
+    uintptr_t *__restrict__ in_roots, // aka digest_t**
+    digest_t *__restrict__ out,
     const size_t num_roots
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
     if (gid != 0) {
         return;
     }
-    digest_t** in = reinterpret_cast<digest_t**>(in_roots);
+    digest_t **in = reinterpret_cast<digest_t **>(in_roots);
     for (auto i = 0; i < num_roots; ++i) {
         COPY_DIGEST(&out[num_roots - 1 + i], in[i]);
     }
 
     Fp cells[CELLS];
-    for (auto out_idx = num_roots - 1; out_idx --> 0;) {
+    for (auto out_idx = num_roots - 1; out_idx-- > 0;) {
         COPY_DIGEST(cells, &out[2 * out_idx + 1]);
         COPY_DIGEST(cells + CELLS_OUT, &out[2 * out_idx + 2]);
         poseidon2_mix(cells);
@@ -121,8 +114,8 @@ __global__ void merkle_tree_root(
 // ================== Merkle tree update routine ==================
 
 __global__ void initial_subtrees_advance(
-    uintptr_t* d_subtrees,
-    size_t const* actual_subtree_heights,
+    uintptr_t *d_subtrees,
+    size_t const *actual_subtree_heights,
     size_t const num_subtrees,
     size_t const subtree_height
 ) {
@@ -130,14 +123,14 @@ __global__ void initial_subtrees_advance(
     if (gid >= num_subtrees) {
         return;
     }
-    digest_t** subtrees = reinterpret_cast<digest_t**>(d_subtrees);
+    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
     auto const h = actual_subtree_heights[gid];
     subtrees[gid] += (1 << (h + 1)) - 1 + (subtree_height - h);
 }
 
 __global__ void adjust_subtrees_before_layer_update(
-    uintptr_t* d_subtrees,
-    size_t const* actual_subtree_heights,
+    uintptr_t *d_subtrees,
+    size_t const *actual_subtree_heights,
     size_t const num_subtrees,
     size_t const h
 ) {
@@ -145,15 +138,12 @@ __global__ void adjust_subtrees_before_layer_update(
     if (gid >= num_subtrees) {
         return;
     }
-    digest_t** subtrees = reinterpret_cast<digest_t**>(d_subtrees);
+    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
     subtrees[gid] -=
-        h <= actual_subtree_heights[gid]
-            ? 1 << (actual_subtree_heights[gid] - h + 1)
-            : 1;
+        h <= actual_subtree_heights[gid] ? 1 << (actual_subtree_heights[gid] - h + 1) : 1;
 }
 
-template <typename T>
-struct MerkleCols {
+template <typename T> struct MerkleCols {
     T expand_direction;
     T height_section;
     T parent_height;
@@ -175,8 +165,8 @@ struct LabeledDigest {
 };
 
 __global__ void prepare_for_updating(
-    uint32_t* child_buf,
-    LabeledDigest* leaves,
+    uint32_t *child_buf,
+    LabeledDigest *leaves,
     uint32_t const num_leaves
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
@@ -195,21 +185,19 @@ __global__ void prepare_for_updating(
 uint32_t const MISSING_CHILD = UINT_MAX;
 
 __global__ void mark_parents(
-    uint32_t const* current_layer_ptrs,
-    uint32_t* child_ptrs,
-    LabeledDigest const* layer,
+    uint32_t const *current_layer_ptrs,
+    uint32_t *child_ptrs,
+    LabeledDigest const *layer,
     uint32_t const num_children,
     uint32_t const h,
-    uint32_t* out_num_parents
+    uint32_t *out_num_parents
 ) {
     uint32_t num_parents = 1;
     for (uint32_t i = 1; i < num_children; ++i) {
         auto const ptr1 = current_layer_ptrs[i - 1];
         auto const ptr2 = current_layer_ptrs[i];
-        if (
-            layer[ptr1].address_space_idx != layer[ptr2].address_space_idx
-            || (layer[ptr1].label >> h) != (layer[ptr2].label >> h)
-        ) {
+        if (layer[ptr1].address_space_idx != layer[ptr2].address_space_idx ||
+            (layer[ptr1].label >> h) != (layer[ptr2].label >> h)) {
             ++num_parents;
         }
     }
@@ -219,7 +207,8 @@ __global__ void mark_parents(
         auto const label = layer[current_layer_ptrs[j]].label >> h;
         while (j < num_children) {
             auto const ptr = current_layer_ptrs[j];
-            if (layer[ptr].address_space_idx != address_space_idx || (layer[ptr].label >> h) != label) {
+            if (layer[ptr].address_space_idx != address_space_idx ||
+                (layer[ptr].label >> h) != label) {
                 break;
             }
             child_ptrs[2 * i + (layer[ptr].label >> (h - 1)) % 2] = ptr;
@@ -235,10 +224,10 @@ __device__ void fill_merkle_trace_row(
     uint32_t as_label,
     uint32_t parent_label,
     uint32_t parent_height,
-    Fp* digests,
+    Fp *digests,
     bool left_new,
     bool right_new,
-    Poseidon2Buffer& poseidon2
+    Poseidon2Buffer &poseidon2
 ) {
     COL_WRITE_VALUE(row, MerkleCols, expand_direction, new_values ? Fp::neg_one() : Fp::one());
     COL_WRITE_VALUE(row, MerkleCols, height_section, false);
@@ -254,32 +243,31 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_VALUE(row, MerkleCols, right_direction_different, right_new != new_values);
 }
 
-__device__ digest_t const* layer_value_on_height(
-    digest_t const* subtree_layer,
-    digest_t const* zero_hash,
+__device__ digest_t const *layer_value_on_height(
+    digest_t const *subtree_layer,
+    digest_t const *zero_hash,
     uint32_t const height,
     uint32_t const layer_actual_height,
     size_t const label
 ) {
-    auto const layer_size = 1 << (height <= layer_actual_height ? (layer_actual_height - height) : 0);
-    return label < layer_size
-        ? subtree_layer + label
-        : zero_hash + height;
+    auto const layer_size =
+        1 << (height <= layer_actual_height ? (layer_actual_height - height) : 0);
+    return label < layer_size ? subtree_layer + label : zero_hash + height;
 }
 
 __global__ void update_merkle_layer(
     uint32_t layer_height,
-    digest_t const* zero_hash,
-    size_t const* actual_subtree_heights,
-    LabeledDigest* layer,
-    uint32_t const* child_ptrs,
-    uint32_t* parent_ptrs,
+    digest_t const *zero_hash,
+    size_t const *actual_subtree_heights,
+    LabeledDigest *layer,
+    uint32_t const *child_ptrs,
+    uint32_t *parent_ptrs,
     size_t const num_parents,
-    uintptr_t* d_subtree_layers,
-    Fp* const merkle_trace,
+    uintptr_t *d_subtree_layers,
+    Fp *const merkle_trace,
     size_t const trace_height,
-    Fp* poseidon2_buffer,
-    uint32_t* poseidon2_buffer_idx,
+    Fp *poseidon2_buffer,
+    uint32_t *poseidon2_buffer_idx,
     size_t poseidon2_capacity
 ) {
     auto idx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -287,18 +275,15 @@ __global__ void update_merkle_layer(
         return;
     }
     Fp cells[CELLS];
-    digest_t** subtree_layers = reinterpret_cast<digest_t**>(d_subtree_layers);
+    digest_t **subtree_layers = reinterpret_cast<digest_t **>(d_subtree_layers);
 
-    uint32_t const parent_ptr = parent_ptrs[idx] = ((child_ptrs[2 * idx] == MISSING_CHILD) 
-        ? child_ptrs[2 * idx + 1]
-        : child_ptrs[2 * idx]);
+    uint32_t const parent_ptr = parent_ptrs[idx] =
+        ((child_ptrs[2 * idx] == MISSING_CHILD) ? child_ptrs[2 * idx + 1] : child_ptrs[2 * idx]);
     uint32_t const address_space_idx = layer[parent_ptr].address_space_idx;
     uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
     auto const subtree_layer = subtree_layers[address_space_idx];
     Poseidon2Buffer poseidon2(
-        reinterpret_cast<FpArray<16>*>(poseidon2_buffer),
-        poseidon2_buffer_idx,
-        poseidon2_capacity
+        reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
     );
     auto const old_left_digest = layer_value_on_height(
         subtree_layer,
@@ -360,30 +345,28 @@ __global__ void update_merkle_layer(
     }
 }
 
-__device__ uint32_t drop_highest_bit(uint32_t x) {
-    return x & ~(1 << (31 - __clz(x)));
-}
+__device__ uint32_t drop_highest_bit(uint32_t x) { return x & ~(1 << (31 - __clz(x))); }
 
 __global__ void update_to_root(
-    uint32_t* layer_ids,
-    LabeledDigest* layer,
+    uint32_t *layer_ids,
+    LabeledDigest *layer,
     size_t layer_size,
     size_t const num_roots,
-    uintptr_t* d_subtrees,
-    digest_t* out,
-    Fp* const merkle_trace,
+    uintptr_t *d_subtrees,
+    digest_t *out,
+    Fp *const merkle_trace,
     uint32_t merkle_trace_offset,
     size_t const trace_height,
     size_t const root_height,
-    Fp* poseidon2_buffer,
-    uint32_t* poseidon2_buffer_idx,
+    Fp *poseidon2_buffer,
+    uint32_t *poseidon2_buffer_idx,
     size_t poseidon2_capacity
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
     if (gid != 0) {
         return;
     }
-    digest_t** subtrees = reinterpret_cast<digest_t**>(d_subtrees);
+    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
     for (size_t i = 0; i < layer_size; ++i) {
         auto const idx = layer_ids[i];
         auto const address_space_idx = layer[idx].address_space_idx;
@@ -395,15 +378,14 @@ __global__ void update_to_root(
 
     Fp cells[CELLS];
     Poseidon2Buffer poseidon2(
-        reinterpret_cast<FpArray<16>*>(poseidon2_buffer),
-        poseidon2_buffer_idx,
-        poseidon2_capacity
+        reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
     );
-    for (auto out_idx = num_roots - 1; out_idx --> 0;) {
+    for (auto out_idx = num_roots - 1; out_idx-- > 0;) {
         size_t const h = root_height - (31 - __clz((uint32_t)out_idx + 1));
         uint32_t children_ids[2] = {MISSING_CHILD, MISSING_CHILD};
         for (size_t i = 0; i < layer_size; ++i) {
-            if (auto local_idx = layer[layer_ids[i]].label - 2 * out_idx; local_idx == 1 || local_idx == 2) {
+            if (auto local_idx = layer[layer_ids[i]].label - 2 * out_idx;
+                local_idx == 1 || local_idx == 2) {
                 children_ids[local_idx - 1] = i;
             }
         }
@@ -416,21 +398,15 @@ __global__ void update_to_root(
             COPY_DIGEST(cells, &out[2 * out_idx + 1]);
             COPY_DIGEST(cells + CELLS_OUT, &out[2 * out_idx + 2]);
             fill_merkle_trace_row(
-                row,
-                false,
-                drop_highest_bit(out_idx + 1),
-                0,
-                h,
-                cells,
-                false,
-                false,
-                poseidon2
+                row, false, drop_highest_bit(out_idx + 1), 0, h, cells, false, false, poseidon2
             );
             COL_WRITE_VALUE(row, MerkleCols, height_section, true);
         }
         for (auto i : {0, 1}) {
             if (children_ids[i] != MISSING_CHILD) {
-                COPY_DIGEST(&out[2 * out_idx + 1 + i], layer[layer_ids[children_ids[i]]].digest_raw);
+                COPY_DIGEST(
+                    &out[2 * out_idx + 1 + i], layer[layer_ids[children_ids[i]]].digest_raw
+                );
             }
             COPY_DIGEST(cells + CELLS_OUT * i, &out[2 * out_idx + 1 + i]);
         }
@@ -469,9 +445,9 @@ __global__ void update_to_root(
 // ================== Merkle tree update routine end ==================
 
 __global__ void get_subtree_root(
-    digest_t* const* subtrees,
+    digest_t *const *subtrees,
     size_t const address_space_idx,
-    Fp* out
+    Fp *out
 ) {
     auto gid = blockDim.x * blockIdx.x + threadIdx.x;
     if (gid != 0) {
@@ -484,79 +460,66 @@ __global__ void get_subtree_root(
 
 // `addr_space_idx` is the address space _shifted_ by ADDR_SPACE_OFFSET = 1
 extern "C" int _build_merkle_subtree(
-    uint8_t* data,
+    uint8_t *data,
     const size_t size,
-    digest_t* buffer,
+    digest_t *buffer,
     const size_t tree_offset,
     const uint addr_space_idx,
     cudaStream_t stream
 ) {
-    digest_t* tree = buffer + tree_offset;
+    digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
     {
         auto [grid, block] = kernel_launch_params(size);
-        switch (addr_space_idx) {   // TODO: revisit when we sort out address space handling
-            case 0:
-                merkle_tree_init<0><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-                break;
-            case 1:
-                merkle_tree_init<1><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-                break;
-            case 2:
-                merkle_tree_init<2><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-                break;
-            case 3:
-                merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-                break;
-            default:
-                return -1;
+        switch (addr_space_idx) { // TODO: revisit when we sort out address space handling
+        case 0:
+            merkle_tree_init<0><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            break;
+        case 1:
+            merkle_tree_init<1><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            break;
+        case 2:
+            merkle_tree_init<2><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            break;
+        case 3:
+            merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+            break;
+        default:
+            return -1;
         }
     }
     for (auto i = size / 2; i > 0; i /= 2) {
         auto [grid, block] = kernel_launch_params(i);
-        merkle_tree_compress<<<grid, block, 0, stream>>>(
-            tree + (2 * i - 1),
-            tree + (i - 1),
-            i
-        );
+        merkle_tree_compress<<<grid, block, 0, stream>>>(tree + (2 * i - 1), tree + (i - 1), i);
     }
     return cudaGetLastError();
 }
 
 extern "C" int _restore_merkle_subtree_path(
-    digest_t* in_out,
-    digest_t* zero_hash,
+    digest_t *in_out,
+    digest_t *zero_hash,
     const size_t remaining_size,
     const size_t full_size,
     cudaStream_t stream
 ) {
     merkle_tree_restore_path<<<1, 1, 0, stream>>>(
-        in_out,
-        zero_hash + full_size - remaining_size,
-        remaining_size
+        in_out, zero_hash + full_size - remaining_size, remaining_size
     );
     return cudaGetLastError();
 }
 
 extern "C" int _finalize_merkle_tree(
-    uintptr_t* in,
-    digest_t* out,
+    uintptr_t *in,
+    digest_t *out,
     const size_t num_roots,
     cudaStream_t stream
 ) {
     assert((num_roots & (num_roots - 1)) == 0);
-    merkle_tree_root<<<1, 1, 0, stream>>>(
-        in,
-        out,
-        num_roots
-    );
+    merkle_tree_root<<<1, 1, 0, stream>>>(in, out, num_roots);
     return cudaGetLastError();
 }
 
-extern "C" int _calculate_zero_hash(
-    digest_t* zero_hash,
-    const size_t size
-) {
+extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size) {
     calculate_zero_hash<<<1, 1>>>(zero_hash, size);
     return cudaGetLastError();
 }
@@ -575,19 +538,19 @@ extern "C" int _calculate_zero_hash(
 /// to do the remaining work there.
 extern "C" int _update_merkle_tree(
     size_t const num_leaves,
-    LabeledDigest* layer,
+    LabeledDigest *layer,
     size_t subtree_height,
-    uint32_t* child_buf,
-    uint32_t* tmp_buf,
-    Fp* const merkle_trace,
+    uint32_t *child_buf,
+    uint32_t *tmp_buf,
+    Fp *const merkle_trace,
     size_t const unpadded_trace_height,
     size_t const num_subtrees,
-    uintptr_t* subtrees,
-    digest_t* top_roots,
-    digest_t const* zero_hash,
-    size_t const* actual_subtree_heights,
-    Fp* d_poseidon2_raw_buffer,
-    uint32_t* d_poseidon2_buffer_idx,
+    uintptr_t *subtrees,
+    digest_t *top_roots,
+    digest_t const *zero_hash,
+    size_t const *actual_subtree_heights,
+    Fp *d_poseidon2_raw_buffer,
+    uint32_t *d_poseidon2_buffer_idx,
     size_t poseidon2_capacity
 ) {
     assert(num_leaves > 0);
@@ -603,35 +566,28 @@ extern "C" int _update_merkle_tree(
     {
         auto [grid, block] = kernel_launch_params(num_subtrees);
         initial_subtrees_advance<<<grid, block>>>(
-            subtrees,
-            actual_subtree_heights,
-            num_subtrees,
-            subtree_height
+            subtrees, actual_subtree_heights, num_subtrees, subtree_height
         );
     }
 
-    uint32_t* d_num_parents;
+    uint32_t *d_num_parents;
     uint32_t merkle_trace_offset = unpadded_trace_height;
     cudaMallocAsync(&d_num_parents, sizeof(uint32_t), cudaStreamPerThread);
     for (uint32_t h = 1; h <= subtree_height; ++h) {
         uint32_t num_parents;
-        mark_parents<<<1, 1>>>(
-            child_buf,
-            tmp_buf,
-            layer,
-            num_children,
-            h,
-            d_num_parents
+        mark_parents<<<1, 1>>>(child_buf, tmp_buf, layer, num_children, h, d_num_parents);
+        cudaMemcpyAsync(
+            &num_parents,
+            d_num_parents,
+            sizeof(uint32_t),
+            cudaMemcpyDeviceToHost,
+            cudaStreamPerThread
         );
-        cudaMemcpyAsync(&num_parents, d_num_parents, sizeof(uint32_t), cudaMemcpyDeviceToHost, cudaStreamPerThread);
         cudaStreamSynchronize(cudaStreamPerThread);
         {
             auto [grid, block] = kernel_launch_params(num_subtrees);
             adjust_subtrees_before_layer_update<<<grid, block>>>(
-                subtrees,
-                actual_subtree_heights,
-                num_subtrees,
-                h
+                subtrees, actual_subtree_heights, num_subtrees, h
             );
         }
         merkle_trace_offset -= 2 * num_parents;
@@ -669,6 +625,6 @@ extern "C" int _update_merkle_tree(
         d_poseidon2_buffer_idx,
         poseidon2_capacity
     );
-    
+
     return cudaGetLastError();
 }

@@ -1,10 +1,10 @@
-#include "adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
-#include "constants.h"         // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
-#include "cores/beq.cuh"
-#include "histogram.cuh"
 #include "launcher.cuh"
-#include "trace_access.h"
-#include "buffer_view.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/constants.h" // RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "rv32im/adapters/branch.cuh" // Rv32BranchAdapterCols, Rv32BranchAdapterRecord, Rv32BranchAdapter
+#include "rv32im/cores/beq.cuh"
 
 using namespace riscv;
 
@@ -36,7 +36,7 @@ __global__ void beq_tracegen(
     RowSlice row(trace + idx, height);
 
     if (idx < records.len()) {
-        auto const& full = records[idx];
+        auto const &full = records[idx];
 
         Rv32BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, full.adapter);
@@ -62,13 +62,6 @@ extern "C" int _beq_tracegen(
     assert(width == sizeof(BranchEqualCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height);
-    beq_tracegen<<<grid, block>>>(
-        d_trace,
-        height,
-        d_records,
-        d_rc,
-        rc_bins,
-        timestamp_max_bits
-    );
+    beq_tracegen<<<grid, block>>>(d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits);
     return cudaGetLastError();
 }
