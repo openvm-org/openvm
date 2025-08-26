@@ -5429,7 +5429,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=eeb023883c1fb86706d5172e0626cb8dd63aa94b#eeb023883c1fb86706d5172e0626cb8dd63aa94b"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5461,7 +5461,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=eeb023883c1fb86706d5172e0626cb8dd63aa94b#eeb023883c1fb86706d5172e0626cb8dd63aa94b"
 dependencies = [
  "cc",
  "glob",
@@ -5470,7 +5470,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=eeb023883c1fb86706d5172e0626cb8dd63aa94b#eeb023883c1fb86706d5172e0626cb8dd63aa94b"
 dependencies = [
  "bytesize",
  "lazy_static",
@@ -6212,7 +6212,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=eeb023883c1fb86706d5172e0626cb8dd63aa94b#eeb023883c1fb86706d5172e0626cb8dd63aa94b"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6240,7 +6240,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=eeb023883c1fb86706d5172e0626cb8dd63aa94b#eeb023883c1fb86706d5172e0626cb8dd63aa94b"
 dependencies = [
  "dashmap",
  "derivative",
