@@ -25,7 +25,7 @@ impl FromStr for Input {
         } else if PathBuf::from(s).exists() {
             Ok(Input::FilePath(PathBuf::from(s)))
         } else {
-            Err("Input must be a valid file path or hex string.".to_string())
+            Err("Input must be a valid file path or a hex string of even length.".to_string())
         }
     }
 }
@@ -35,13 +35,15 @@ pub fn is_valid_hex_string(s: &str) -> bool {
         return false;
     }
     // All hex digits with optional 0x prefix
-    s.starts_with("0x") && s[2..].chars().all(|c| c.is_ascii_hexdigit())
-        || s.chars().all(|c| c.is_ascii_hexdigit())
+    s.strip_prefix("0x")
+        .unwrap_or(s)
+        .chars()
+        .all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn decode_hex_string(s: &str) -> Result<Vec<u8>> {
-    // Remove 0x prefix if present
-    let s = s.trim_start_matches("0x");
+    // Remove 0x prefix if present (exactly once)
+    let s = s.strip_prefix("0x").unwrap_or(s);
     if s.is_empty() {
         return Ok(Vec::new());
     }
