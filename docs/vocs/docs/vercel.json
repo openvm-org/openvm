@@ -3,7 +3,7 @@
     "buildCommand": "pnpm install --frozen-lockfile && pnpm vercel-build",
     "outputDirectory": "docs/dist",
     "cleanUrls": true,
-    "trailingSlash": false,
+    "trailingSlash": true,
     "headers": [
       {
         "source": "/(.*)",
