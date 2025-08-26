@@ -13,9 +13,7 @@ jobs:
   lint:
     name: Lint
     runs-on:
-      - runs-on=${{ github.run_id }}-cpu
-      - runner=64cpu-linux-x64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5

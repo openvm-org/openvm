@@ -124,8 +124,7 @@ jobs:
   all-checks-pass:
     name: All Checks Pass
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     needs:
       - lints
       - build
@@ -157,7 +156,7 @@ jobs:
           else
             echo "All jobs passed successfully"
           fi
-      
+
       - name: PR status placeholder
         if: github.event_name == 'pull_request'
         run: |

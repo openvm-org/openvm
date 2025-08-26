@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       is_merge_queue:
-        description: 'Whether this is being called from merge queue'
+        description: "Whether this is being called from merge queue"
         required: false
         type: boolean
         default: false
@@ -64,8 +64,7 @@ permissions:
 jobs:
   create-matrix:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:

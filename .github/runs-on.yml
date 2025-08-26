@@ -13,7 +13,8 @@ runners:
     image: ubuntu24-gpu-x64
     cpu: [4, 8, 16, 32]
     disk: default
-    spot: capacity-optimized
+    spot: false
+    extras: s3-cache
     preinstall: |
       nvidia-smi
       nvidia-smi -L

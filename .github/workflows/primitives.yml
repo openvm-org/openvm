@@ -29,10 +29,7 @@ jobs:
           - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
 
     runs-on:
-      - runs-on=${{ github.run_id }}-primitives-${{ github.run_attempt }}-${{ strategy.job-index }}
-      - runner=${{ matrix.platform.runner }}
-      - image=${{ matrix.platform.image }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-primitives-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

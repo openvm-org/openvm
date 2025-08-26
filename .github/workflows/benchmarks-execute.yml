@@ -75,10 +75,7 @@ jobs:
   codspeed-instrumentation-benchmarks:
     name: Run codspeed instrumentation benchmarks
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - family=m5a.xlarge
-      - image=ubuntu24-full-x64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=m5a.xlarge/image=ubuntu24-full-x64/extras=s3-cache
     if: github.event_name != 'pull_request'
 
     env:

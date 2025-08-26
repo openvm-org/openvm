@@ -41,11 +41,7 @@ jobs:
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}
-      - runner=${{ matrix.platform.runner }}
-      - image=${{ matrix.platform.image }}
-      - tag=guest-lib-${{ matrix.crate.name }}-${{ matrix.platform.runner }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

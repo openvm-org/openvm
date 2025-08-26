@@ -123,12 +123,7 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      - runs-on=${{ github.run_id }}-bench-${{ inputs.benchmark_id ||  github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_number }}-${{ github.run_attempt }}
-      - family=${{ github.event.inputs.instance_type || inputs.instance_type }}
-      - image=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(github.event.inputs.instance_type || inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}
-      - spot=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'false' || 'capacity-optimized' }}
-      - tag=bench-${{ inputs.benchmark_id || github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-bench-${{ inputs.benchmark_id ||  github.event.inputs.benchmark_name || inputs.benchmark_name }}-${{ github.run_number }}-${{ github.run_attempt }}/family=${{ github.event.inputs.instance_type || inputs.instance_type }}/image=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(github.event.inputs.instance_type || inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/spot=${{ startsWith(github.event.inputs.instance_type || inputs.instance_type, 'g') && 'false' || 'capacity-optimized' }}/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       ##########################################################################

@@ -23,11 +23,7 @@ env:
 jobs:
   tests:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - family=m7a.24xlarge
-      - image=ubuntu24-full-x64
-      - disk=large
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

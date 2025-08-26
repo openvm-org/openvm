@@ -13,10 +13,7 @@ on:
 jobs:
   verify-versioning:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - extras=s3-cache
-      - disk=large
+      - runs-on=${{ github.run_id }}/runner=64cpu-linux-arm64/extras=s3-cache/disk=large
     steps:
       - name: Checkout base branch
         uses: actions/checkout@v4
