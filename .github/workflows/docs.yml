@@ -19,7 +19,7 @@ jobs:
       contents: write
       packages: read
     concurrency:
-      group: ${{ github.workflow_ref }}-${{ github.ref }}
+      group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
       - runs-on=${{ github.run_id }}
       - runner=8cpu-linux-arm64
