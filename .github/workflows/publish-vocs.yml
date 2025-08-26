@@ -1,9 +1,6 @@
 name: Publish Vocs Docs to Vercel
 
 on:
-  pull_request:
-    branches:
-      - feat/new-execution
   workflow_dispatch:
     inputs:
       branch:
@@ -34,8 +31,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
-          cache-dependency-path: 'docs/vocs/pnpm-lock.yaml'
+          cache: "pnpm"
+          cache-dependency-path: "docs/vocs/pnpm-lock.yaml"
 
       - name: Build docs
         run: |
