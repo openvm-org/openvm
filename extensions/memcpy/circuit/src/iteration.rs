@@ -105,7 +105,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             timestamp + timestamp_delta.clone() - timestamp_increase_value.clone()
         };
 
-        let shift = local.shift[0] * AB::Expr::TWO + local.shift[1];
+        let shift = local.shift[1] * AB::Expr::TWO + local.shift[0];
         let is_shift_zero = not::<AB::Expr>(local.is_shift_non_zero);
         let is_shift_one = and::<AB::Expr>(local.shift[0], not::<AB::Expr>(local.shift[1]));
         let is_shift_two = and::<AB::Expr>(not::<AB::Expr>(local.shift[0]), local.shift[1]);
@@ -236,16 +236,16 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         // Read data from memory
         let read_data = [
-            (local.data_1, local.read_aux[0]),
-            (local.data_2, local.read_aux[1]),
-            (local.data_3, local.read_aux[2]),
-            (local.data_4, local.read_aux[3]),
+            local.data_1,
+            local.data_2,
+            local.data_3,
+            local.data_4,
         ];
 
         read_data
             .iter()
             .enumerate()
-            .for_each(|(idx, (data, read_aux))| {
+            .for_each(|(idx, data)| {
                 let is_valid_read = if idx == 3 {
                     or::<AB::Expr>(local.is_shift_non_zero, local.is_valid_not_start)
                 } else {
@@ -260,7 +260,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                         ),
                         *data,
                         timestamp_pp(is_valid_read.clone()),
-                        read_aux,
+                        &local.read_aux[idx],
                     )
                     .eval(builder, is_valid_read.clone());
             });
@@ -468,7 +468,7 @@ where
                     } else if i > 0 {
                         record.var[idx].data[i - 1][j - (4 - shift as usize)]
                     } else {
-                        record.var[idx - 1].data[i][j - (4 - shift as usize)]
+                        record.var[idx - 1].data[3][j - (4 - shift as usize)]
                     }
                 });
                 write_data
@@ -573,7 +573,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
             num_loops += 1;
             num_iters += num_rows;
         }
-        tracing::info!("num_loops: {:?}, num_iters: {:?}", num_loops, num_iters);
+        // tracing::info!("num_loops: {:?}, num_iters: {:?}", num_loops, num_iters);
         
         chunks
             .par_iter_mut()
@@ -715,75 +715,127 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         source -= 16;
                         len += 16;
 
-                        if row_idx == 0 && is_start {
-                            tracing::info!("first_roooooow, timestamp: {:?}, dest: {:?}, source: {:?}, len_0: {:?}, len_1: {:?}, shift: {:?}, is_valid: {:?}, is_valid_not_start: {:?}, is_shift_non_zero: {:?}, is_boundary: {:?}, data_1: {:?}, data_2: {:?}, data_3: {:?}, data_4: {:?}, read_aux: {:?}, read_aux_lt: {:?}", 
-                            cols.timestamp.as_canonical_u32(), 
-                            cols.dest.as_canonical_u32(), 
-                            cols.source.as_canonical_u32(), 
-                            cols.len[0].as_canonical_u32(), 
-                            cols.len[1].as_canonical_u32(), 
-                            cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32(), 
-                            cols.is_valid.as_canonical_u32(), 
-                            cols.is_valid_not_start.as_canonical_u32(), 
-                            cols.is_shift_non_zero.as_canonical_u32(), 
-                            cols.is_boundary.as_canonical_u32(), 
-                            cols.data_1.map(|x| x.as_canonical_u32()).to_vec(), 
-                            cols.data_2.map(|x| x.as_canonical_u32()).to_vec(), 
-                            cols.data_3.map(|x| x.as_canonical_u32()).to_vec(), 
-                            cols.data_4.map(|x| x.as_canonical_u32()).to_vec(), 
-                            cols.read_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(), 
-                            cols.read_aux.map(|x| x.get_base().timestamp_lt_aux.lower_decomp.iter().map(|x| x.as_canonical_u32()).collect::<Vec<_>>()).to_vec());
-                            }
+                        // if row_idx == 0 && is_start {
+                        //     tracing::info!("first_roooooow, timestamp: {:?}, dest: {:?}, source: {:?}, len_0: {:?}, len_1: {:?}, shift: {:?}, is_valid: {:?}, is_valid_not_start: {:?}, is_shift_non_zero: {:?}, is_boundary: {:?}, data_1: {:?}, data_2: {:?}, data_3: {:?}, data_4: {:?}, read_aux: {:?}, read_aux_lt: {:?}", 
+                        //     cols.timestamp.as_canonical_u32(), 
+                        //     cols.dest.as_canonical_u32(), 
+                        //     cols.source.as_canonical_u32(), 
+                        //     cols.len[0].as_canonical_u32(), 
+                        //     cols.len[1].as_canonical_u32(), 
+                        //     cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32(), 
+                        //     cols.is_valid.as_canonical_u32(), 
+                        //     cols.is_valid_not_start.as_canonical_u32(), 
+                        //     cols.is_shift_non_zero.as_canonical_u32(), 
+                        //     cols.is_boundary.as_canonical_u32(), 
+                        //     cols.data_1.map(|x| x.as_canonical_u32()).to_vec(), 
+                        //     cols.data_2.map(|x| x.as_canonical_u32()).to_vec(), 
+                        //     cols.data_3.map(|x| x.as_canonical_u32()).to_vec(), 
+                        //     cols.data_4.map(|x| x.as_canonical_u32()).to_vec(), 
+                        //     cols.read_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(), 
+                        //     cols.read_aux.map(|x| x.get_base().timestamp_lt_aux.lower_decomp.iter().map(|x| x.as_canonical_u32()).collect::<Vec<_>>()).to_vec());
+                        //     }
                     });
             });
-        chunks.iter().enumerate().map(|(row_idx, chunk)| {
-            chunk.chunks_exact(width)
-            .enumerate()
-            .for_each(|(idx, row)| {
-                let cols: &MemcpyIterCols<F> = row.borrow();
-                let is_valid_not_start = cols.is_valid_not_start.as_canonical_u32() != 0;
-                let is_shift_non_zero = cols.is_shift_non_zero.as_canonical_u32() != 0;
-                let mut bad_col = false;
-                cols.read_aux.iter().enumerate().for_each(|(idx, aux)| {
-                    if is_valid_not_start || (is_shift_non_zero && idx == 3) {
-                        let prev_t = aux.get_base().prev_timestamp.as_canonical_u32();
-                        let curr_t = cols.timestamp.as_canonical_u32();
-                        let ts_lt = aux.get_base().timestamp_lt_aux.lower_decomp.iter()
-                        .enumerate()
-                        .fold(F::ZERO, |acc, (i, &val)| {
-                            acc + val * F::from_canonical_usize(1 << (i * 17))
-                        }).as_canonical_u32();
-                        if curr_t + idx as u32 != ts_lt + prev_t + 1 {
-                            bad_col = true;
-                        }
-                    }
-                });
-                if bad_col {
-                    tracing::info!("row_idx: {:?}, idx: {:?}, timestamp: {:?}, dest: {:?}, source: {:?}, len_0: {:?}, len_1: {:?}, shift_0: {:?}, shift_1: {:?}, is_valid: {:?}, is_valid_not_start: {:?}, is_shift_non_zero: {:?}, is_boundary: {:?}, data_1: {:?}, data_2: {:?}, data_3: {:?}, data_4: {:?}, read_aux: {:?}, read_aux_lt: {:?}", 
-                        row_idx,
-                        idx,
-                        cols.timestamp.as_canonical_u32(), 
-                        cols.dest.as_canonical_u32(), 
-                        cols.source.as_canonical_u32(), 
-                        cols.len[0].as_canonical_u32(), 
-                        cols.len[1].as_canonical_u32(), 
-                        cols.shift[0].as_canonical_u32(),
-                        cols.shift[1].as_canonical_u32(), 
-                        cols.is_valid.as_canonical_u32(), 
-                        cols.is_valid_not_start.as_canonical_u32(), 
-                        cols.is_shift_non_zero.as_canonical_u32(), 
-                        cols.is_boundary.as_canonical_u32(), 
-                        cols.data_1.map(|x| x.as_canonical_u32()).to_vec(), 
-                        cols.data_2.map(|x| x.as_canonical_u32()).to_vec(), 
-                        cols.data_3.map(|x| x.as_canonical_u32()).to_vec(), 
-                        cols.data_4.map(|x| x.as_canonical_u32()).to_vec(), 
-                        cols.read_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(), 
-                        cols.read_aux.map(|x| x.get_base().timestamp_lt_aux.lower_decomp.iter().map(|x| x.as_canonical_u32()).collect::<Vec<_>>()).to_vec());
-                        // cols.write_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(),
-                        // cols.write_aux.map(|x| x.prev_data.map(|x| x.as_canonical_u32()).to_vec()).to_vec());
-                }
-            });
-        });
+
+        // chunks.iter().enumerate().for_each(|(row_idx, chunk)| {
+            // let mut prv_data = [0; 4];
+            // tracing::info!("row_idx: {:?}", row_idx);
+
+            // chunk.chunks_exact(width)
+            // .enumerate()
+            // .for_each(|(idx, row)| {
+            //     let cols: &MemcpyIterCols<F> = row.borrow();
+            //     let is_valid_not_start = cols.is_valid_not_start.as_canonical_u32() != 0;
+            //     let is_shift_non_zero = cols.is_shift_non_zero.as_canonical_u32() != 0;
+            //     let source = cols.source.as_canonical_u32();
+            //     let dest = cols.dest.as_canonical_u32();
+            //     let mut bad_col = false;
+            //     tracing::info!("source: {:?}, dest: {:?}", source, dest);
+            //     cols.read_aux.iter().enumerate().for_each(|(idx, aux)| {
+                    // if is_valid_not_start || (is_shift_non_zero && idx == 3) {
+                    //     let prev_t = aux.get_base().prev_timestamp.as_canonical_u32();
+                    //     let curr_t = cols.timestamp.as_canonical_u32();
+                    //     let ts_lt = aux.get_base().timestamp_lt_aux.lower_decomp.iter()
+                    //     .enumerate()
+                    //     .fold(F::ZERO, |acc, (i, &val)| {
+                    //         acc + val * F::from_canonical_usize(1 << (i * 17))
+                    //     }).as_canonical_u32();
+                    //     if curr_t + idx as u32 != ts_lt + prev_t + 1 {
+                    //         bad_col = true;
+                    //     }
+                    // }
+            //         if dest + 4 * idx as u32 == 2097216 || dest - 4 * (idx + 1) as u32 == 2097216 || dest + 4 * idx as u32 == 2097280 || dest - 4 * (idx + 1) as u32 == 2097280 {
+            //             bad_col = true;
+            //         }
+            //     });
+            //     if bad_col {
+            //         let write_data_pairs = [
+            //             (prv_data, cols.data_1.map(|x| x.as_canonical_u32())),
+            //             (cols.data_1.map(|x| x.as_canonical_u32()), cols.data_2.map(|x| x.as_canonical_u32())),
+            //             (cols.data_2.map(|x| x.as_canonical_u32()), cols.data_3.map(|x| x.as_canonical_u32())),
+            //             (cols.data_3.map(|x| x.as_canonical_u32()), cols.data_4.map(|x| x.as_canonical_u32())),
+            //         ];
+
+            //         let shift = cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32();
+            //         let write_data = write_data_pairs
+            //             .iter()
+            //             .map(|(prev_data, next_data)| {
+            //                 array::from_fn::<_, MEMCPY_LOOP_NUM_LIMBS, _>(|i| {
+            //                 (shift == 0) as u32 * (next_data[i])
+            //                         + (shift == 1) as u32
+            //                             * (if i < 3 {
+            //                                 next_data[i + 1]
+            //                             } else {
+            //                                 prev_data[i - 3]
+            //                             })
+            //                         + (shift == 2) as u32
+            //                             * (if i < 2 {
+            //                                 next_data[i + 2]
+            //                             } else {
+            //                                 prev_data[i - 2]
+            //                             })
+            //                         + (shift == 3) as u32
+            //                             * (if i < 1 {
+            //                                 next_data[i + 3]
+            //                             } else {
+            //                                 prev_data[i - 1]
+            //                             })
+            //                 })
+            //             })
+            //             .collect::<Vec<_>>();
+
+
+
+
+            //         tracing::info!("row_idx: {:?}, idx: {:?}, timestamp: {:?}, dest: {:?}, source: {:?}, len_0: {:?}, len_1: {:?}, shift_0: {:?}, shift_1: {:?}, is_valid: {:?}, is_valid_not_start: {:?}, is_shift_non_zero: {:?}, is_boundary: {:?}, write_data: {:?}, prv_data: {:?}, data_1: {:?}, data_2: {:?}, data_3: {:?}, data_4: {:?}, read_aux: {:?}, read_aux_lt: {:?}, write_aux: {:?}, write_aux_lt: {:?}, write_aux_prev_data: {:?}", 
+            //         row_idx,
+            //         idx,
+            //         cols.timestamp.as_canonical_u32(), 
+            //         cols.dest.as_canonical_u32(), 
+            //         cols.source.as_canonical_u32(), 
+            //         cols.len[0].as_canonical_u32(), 
+            //         cols.len[1].as_canonical_u32(), 
+            //         cols.shift[0].as_canonical_u32(),
+            //         cols.shift[1].as_canonical_u32(), 
+            //         cols.is_valid.as_canonical_u32(), 
+            //         cols.is_valid_not_start.as_canonical_u32(), 
+            //         cols.is_shift_non_zero.as_canonical_u32(), 
+            //         cols.is_boundary.as_canonical_u32(), 
+            //         write_data, 
+            //         prv_data,
+            //         cols.data_1.map(|x| x.as_canonical_u32()).to_vec(),
+            //         cols.data_2.map(|x| x.as_canonical_u32()).to_vec(),
+            //         cols.data_3.map(|x| x.as_canonical_u32()).to_vec(),
+            //         cols.data_4.map(|x| x.as_canonical_u32()).to_vec(),
+            //         cols.read_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(), 
+            //         cols.read_aux.map(|x| x.get_base().timestamp_lt_aux.lower_decomp.iter().map(|x| x.as_canonical_u32()).collect::<Vec<_>>()).to_vec(),
+            //         cols.write_aux.map(|x| x.get_base().prev_timestamp.as_canonical_u32()).to_vec(),
+            //         cols.write_aux.map(|x| x.get_base().timestamp_lt_aux.lower_decomp.iter().map(|x| x.as_canonical_u32()).collect::<Vec<_>>()).to_vec(),
+            //         cols.write_aux.map(|x| x.prev_data.map(|x| x.as_canonical_u32()).to_vec()).to_vec());
+            //     }
+            //     prv_data = cols.data_4.map(|x| x.as_canonical_u32());
+            // });
+        // });
         // assert!(false);
     }
 }
