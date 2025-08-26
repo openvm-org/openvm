@@ -25,6 +25,7 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_memcpy_circuit::MemcpyCpuProverExt;
 use openvm_rv32im_circuit::Rv32ImCpuProverExt;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
@@ -371,6 +372,11 @@ where
         VmProverExtension::<E, _, _>::extend_prover(
             &Int256CpuProverExt,
             &config.bigint,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &MemcpyCpuProverExt,
+            &config.memcpy,
             inventory,
         )?;
         Ok(chip_complex)

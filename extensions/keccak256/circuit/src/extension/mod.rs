@@ -20,6 +20,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 };
 use openvm_instructions::*;
 use openvm_keccak256_transpiler::Rv32KeccakOpcode;
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -62,6 +63,8 @@ pub struct Keccak256Rv32Config {
     pub io: Rv32Io,
     #[extension]
     pub keccak: Keccak256,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 impl Default for Keccak256Rv32Config {
@@ -72,6 +75,7 @@ impl Default for Keccak256Rv32Config {
             rv32m: Rv32M::default(),
             io: Rv32Io,
             keccak: Keccak256,
+            memcpy: Memcpy,
         }
     }
 }
@@ -109,6 +113,11 @@ where
         VmProverExtension::<E, _, _>::extend_prover(
             &Keccak256CpuProverExt,
             &config.keccak,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &MemcpyCpuProverExt,
+            &config.memcpy,
             inventory,
         )?;
         Ok(chip_complex)
