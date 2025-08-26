@@ -5,10 +5,10 @@ then transpiled into an OpenVM executable with instructions from the RV32IM VM e
 We implement this by **cross-compiling** for a platform which differs from the machine
 performing the build. This involves the following:
 
-- **Host**: The target and compiler toolchain used to run the program build and proving binaries. 
+- **Host**: The target and compiler toolchain used to run the program build and proving binaries.
 - **Guest**: The target and compiler toolchain used to build the program to be proven.
 
-We detail the host and guest target and toolchain as well as the guest runtime for the 
+We detail the host and guest target and toolchain as well as the guest runtime for the
 OpenVM Rust frontend below.
 
 ## Host and Guest Target and Toolchain
@@ -20,13 +20,12 @@ For reproducible builds, we recommend using the `x86_64-unknown-linux-gnu` platf
 - **Guest**: `riscv32im-risc0-zkvm-elf` with Rust `nightly-2025-02-14`: `rustc 1.86.0-nightly (a567209da 2025-02-13)`.
 
 The `riscv32im-risc0-zkvm-elf` guest target incorporates special support for
-zkVMs and has official support by the 
+zkVMs and has official support by the
 [Rust toolchain](https://doc.rust-lang.org/rustc/platform-support/riscv32im-risc0-zkvm-elf.html).
 We anticipate upstreaming an OpenVM-specific target to Rust in the future.
 
 :::info
-We use a nightly Rust toolchain for the guest target in order to support compiling
-`std` crates in a way compatible with zkVM usage.
+We use a nightly Rust toolchain for the guest target in order to compile the Rust standard library for this target because it is a [Tier 3](https://doc.rust-lang.org/beta/rustc/target-tier-policy.html#tier-3-target-policy) target.
 :::
 
 ## Guest Runtime
@@ -37,15 +36,15 @@ through the `std` feature.  This section documents the different features of the
 ### Memory Allocator
 
 OpenVM supports 512MB of guest memory, with stack growing down from `STACK_TOP = 0x0020_0400`,
-program loading starting at `TEXT_START = 0x0020_0000`, and heap starting right afterwards.
+program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
 We support two allocators:
 
 - A **bump** allocator which increments a heap pointer for each successive allocation without
 deallocating. This is the default allocator.
-- A **linked-list** allocator from the `embedded-alloc` crate which supports deallocation 
+- A **linked-list** allocator from the `embedded-alloc` crate which supports deallocation
 at the cost of additional allocation overhead.
 
-The linked-list allocator can be selected by enabling the `heap-embedded-alloc` feature on the 
+The linked-list allocator can be selected by enabling the `heap-embedded-alloc` feature on the
 `openvm-platform` crate.
 
 ### System Calls
