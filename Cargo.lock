@@ -5765,6 +5765,7 @@ dependencies = [
  "openvm-stark-backend",
  "serde",
  "strum",
+ "tracing",
 ]
 
 [[package]]

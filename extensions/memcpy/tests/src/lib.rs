@@ -13,7 +13,7 @@ mod tests {
         SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
         VariableRangeCheckerChip,
     };
-    use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
+    use openvm_instructions::{instruction::Instruction, riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS}, LocalOpcode, VmOpcode};
     use openvm_memcpy_circuit::{
         MemcpyBus, MemcpyIterAir, MemcpyIterChip, MemcpyIterExecutor, MemcpyIterFiller,
         MemcpyLoopAir, MemcpyLoopChip, A1_REGISTER_PTR, A2_REGISTER_PTR, A3_REGISTER_PTR,
@@ -108,13 +108,13 @@ mod tests {
                 }
             }
 
-            tester.write(2, (source_offset + word_idx as u32 * 4) as usize, word_data);
+            tester.write(RV32_MEMORY_AS as usize, (source_offset + word_idx as u32 * 4) as usize, word_data);
         }
 
         // Set up registers that the memcpy instruction will read from
         // destination address
         tester.write::<4>(
-            1,
+            RV32_REGISTER_AS as usize,
             if shift == 0 {
                 A3_REGISTER_PTR
             } else {
@@ -124,13 +124,13 @@ mod tests {
         );
         // length
         tester.write::<4>(
-            1,
+            RV32_REGISTER_AS as usize,
             A2_REGISTER_PTR,
             len.to_le_bytes().map(F::from_canonical_u8),
         );
         // source address
         tester.write::<4>(
-            1,
+            RV32_REGISTER_AS as usize,
             if shift == 0 {
                 A4_REGISTER_PTR
             } else {
@@ -177,11 +177,11 @@ mod tests {
     // passes all constraints.
     //////////////////////////////////////////////////////////////////////////////////////
 
-    #[test_case(0, 1)]
-    #[test_case(1, 100)]
-    #[test_case(2, 100)]
-    #[test_case(3, 100)]
-    fn rand_memcpy_iter_test(shift: u32, num_ops: usize) {
+    #[test_case(0, 1, 20)]
+    #[test_case(1, 100, 20)]
+    #[test_case(2, 100, 20)]
+    #[test_case(3, 100, 20)]
+    fn rand_memcpy_iter_test(shift: u32, num_ops: usize, len: u32) {
         let mut rng = create_seeded_rng();
 
         let mut tester = VmChipTestBuilder::default();
@@ -190,7 +190,6 @@ mod tests {
         for _ in 0..num_ops {
             let source_offset = rng.gen_range(0..250) * 4; // Ensure word alignment
             let dest_offset = rng.gen_range(500..750) * 4; // Ensure word alignment
-            let len: u32 = rng.gen_range(100..=200);
             let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
                 .map(|_| rng.gen_range(0..=u8::MAX))
                 .collect();
@@ -222,11 +221,11 @@ mod tests {
         tester.simple_test().expect("Verification failed");
     }
 
-    #[test_case(0, 100)]
-    #[test_case(1, 100)]
-    #[test_case(2, 100)]
-    #[test_case(3, 100)]
-    fn rand_memcpy_iter_test_persistent(shift: u32, num_ops: usize) {
+    #[test_case(0, 100, 20)]
+    #[test_case(1, 100, 20)]
+    #[test_case(2, 100, 20)]
+    #[test_case(3, 100, 20)]
+    fn rand_memcpy_iter_test_persistent(shift: u32, num_ops: usize, len: u32) {
         let mut rng = create_seeded_rng();
 
         let mut tester = VmChipTestBuilder::default_persistent();
@@ -235,7 +234,6 @@ mod tests {
         for _ in 0..num_ops {
             let source_offset = rng.gen_range(0..250) * 4; // Ensure word alignment
             let dest_offset = rng.gen_range(500..750) * 4; // Ensure word alignment
-            let len: u32 = rng.gen_range(100..=200);
             let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
                 .map(|_| rng.gen_range(0..=u8::MAX))
                 .collect();

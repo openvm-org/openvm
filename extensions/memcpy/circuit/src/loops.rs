@@ -432,6 +432,20 @@ impl MemcpyLoopChip {
                 });
             cols.source_minus_twelve_carry = F::from_bool((record.source & 0x0ffff) < 12);
             cols.to_source_minus_twelve_carry = F::from_bool((to_source & 0x0ffff) < 12);
+
+            // tracing::info!("timestamp: {:?}, pc: {:?}, dest: {:?}, source: {:?}, len: {:?}, shift: {:?}, is_valid: {:?}, to_timestamp: {:?}, to_dest: {:?}, to_source: {:?}, to_len: {:?}, write_aux: {:?}", 
+            //                 cols.from_state.timestamp.as_canonical_u32(), 
+            //                 cols.from_state.pc.as_canonical_u32(), 
+            //                 u32::from_le_bytes(cols.dest.map(|x| x.as_canonical_u32() as u8)), 
+            //                 u32::from_le_bytes(cols.source.map(|x| x.as_canonical_u32() as u8)), 
+            //                 u32::from_le_bytes(cols.len.map(|x| x.as_canonical_u32() as u8)), 
+            //                 cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32(), 
+            //                 cols.is_valid.as_canonical_u32(), 
+            //                 cols.to_timestamp.as_canonical_u32(), 
+            //                 u32::from_le_bytes(cols.to_dest.map(|x| x.as_canonical_u32() as u8)), 
+            //                 u32::from_le_bytes(cols.to_source.map(|x| x.as_canonical_u32() as u8)), 
+            //                 cols.to_len.as_canonical_u32(), 
+            //                 cols.write_aux.map(|x| x.prev_timestamp.as_canonical_u32()).to_vec());
         }
         RowMajorMatrix::new(rows, NUM_MEMCPY_LOOP_COLS)
     }
