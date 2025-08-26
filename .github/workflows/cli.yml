@@ -24,7 +24,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-cli-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-cli-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

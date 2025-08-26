@@ -11,7 +11,7 @@ on:
       - ".github/workflows/vm.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-vm-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-vm-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

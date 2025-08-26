@@ -12,7 +12,7 @@ on:
       - ".github/workflows/native-compiler.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-native-compiler-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-native-compiler-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

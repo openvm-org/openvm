@@ -6,7 +6,7 @@ on:
   workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-build-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-build-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:

@@ -15,7 +15,7 @@ on:
       - "crates/sdk/guest/fib/**"
 
 concurrency:
-  group: ${{ github.workflow }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

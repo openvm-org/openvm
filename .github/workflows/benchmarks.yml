@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       is_merge_queue:
-        description: 'Whether this is being called from merge queue'
+        description: "Whether this is being called from merge queue"
         required: false
         type: boolean
         default: false
@@ -43,7 +43,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
