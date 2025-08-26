@@ -43,7 +43,7 @@ on:
         default: false
 
 concurrency:
-  group: benchmark-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

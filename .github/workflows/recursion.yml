@@ -13,7 +13,7 @@ on:
       - ".github/workflows/recursion.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-recursion-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
