@@ -1,0 +1,84 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "buildCommand": "pnpm install --frozen-lockfile && pnpm vercel-build",
+    "outputDirectory": "docs/dist",
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "headers": [
+      {
+        "source": "/(.*)",
+        "headers": [
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          }
+        ]
+      }
+    ],
+    "redirects": [
+        {
+          "source": "/docs",
+          "destination": "/docs/openvm/",
+          "permanent": true
+        },
+        {
+          "source": "/docs/",
+          "destination": "/docs/openvm/",
+          "permanent": true
+        },
+        {
+          "source": "/docs/openvm",
+          "destination": "/docs/openvm/",
+          "permanent": true
+        },
+        {
+          "source": "/docs/stark-backend",
+          "destination": "/docs/stark-backend/",
+          "permanent": true
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/docs/openvm/",
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/index.html"
+        },
+        {
+          "source": "/docs/openvm/:path*",
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/:path*"
+        },
+        {
+          "source": "/(static.files|fonts)/:path*",
+          "has": [
+            {
+              "type": "header",
+              "key": "referer",
+              "value": ".*/openvm.*"
+            }
+          ],
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/$1/:path*"
+        },
+        {
+          "source": "/docs/stark-backend/",
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/index.html"
+        },
+        {
+          "source": "/docs/stark-backend/:path*",
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/:path*"
+        },
+        {
+          "source": "/(static.files|fonts)/:path*",
+          "has": [
+            {
+              "type": "header",
+              "key": "referer",
+              "value": ".*/stark-backend.*"
+            }
+          ],
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/$1/:path*"
+        }
+      ]
+  }
