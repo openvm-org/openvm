@@ -85,3 +85,72 @@ export PATH="$HOME/.cargo/bin:$PATH"
 svm install 0.8.19
 svm use 0.8.19
 ```
+
+# Install with Nvidia GPU support
+
+It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Prerequisites (CUDA)](#installation-prerequisites-cuda))
+
+## Option 1: Install Via Git URL (Recommended)
+
+Begin the installation:
+
+```bash
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.8 --features cuda cargo-openvm
+```
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+## Option 2: Build from source
+
+To build from source, clone the repository and begin the installation.
+
+```bash
+git clone --branch v1.4.0-rc.8 --single-branch https://github.com/openvm-org/openvm.git
+cd openvm
+cargo install --locked --force --path crates/cli --features cuda
+```
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+## Installation Prerequisites (CUDA)
+
+You will need all of the [Common Prerequisites](#installation-prerequisites-common). In addition, you will need to have a machine with
+- Nvidia GPU drivers [installed](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#)
+- CUDA toolkit [installed](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#)
+
+For machines running Ubuntu 24.04, you can install Nvidia drivers using
+```bash [Ubuntu 24.04]
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+
+sudo apt-get install -y cuda-drivers
+```
+
+CUDA toolkit can be installed using the following command, assuming the keyring above has already been installed:
+```bash [Ubuntu 24.04]
+sudo apt-get install -y cuda-toolkit
+```
+To check that CUDA toolkit is installed, run
+```bash
+nvcc --version
+```
+
+The OpenVM CLI has been tested with CUDA toolkit version 12.8, and we recommend using CUDA toolkit version 12.8 or higher.
+
+Post-installation, ensure that your shell profile or startup script sets the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
+```bash
+PATH=/usr/local/cuda/bin${PATH:+:${PATH}}
+LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+```
+Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
+
+You are now ready to [install](#install-with-nvidia-gpu-support) the OpenVM CLI.
