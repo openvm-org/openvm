@@ -4,7 +4,11 @@ To use OpenVM for generating proofs, you must install the OpenVM command line to
 either via Git URL or by cloning the repo and building from source manually. Prior to either
 approach, you should make sure you have installed the necessary [Prerequisites](#installation-prerequisites).
 
-## Option 1: Install Via Git URL (Recommended)
+Skip [below](#install-with-nvidia-gpu-support) for instructions on installing `cargo-openvm` with Nvidia GPU support.
+
+##
+
+### Option 1: Install Via Git URL (Recommended)
 
 Begin the installation:
 
@@ -18,7 +22,7 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Option 2: Build from source
+### Option 2: Build from source
 
 To build from source, clone the repository and begin the installation.
 
@@ -34,7 +38,7 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Installation Prerequisites
+### Installation Prerequisites
 
 Prior to installing `cargo-openvm`, make sure you have the following packages installed:
 
@@ -59,7 +63,7 @@ cargo install --version 0.5.7 svm-rs
 export PATH="$HOME/.cargo/bin:$PATH"
 
 # Install solc 0.8.19
-svm install 0.8.19 
+svm install 0.8.19
 ```
 
 ```bash [macOS]
@@ -85,11 +89,13 @@ svm install 0.8.19
 svm use 0.8.19
 ```
 
-# Install with Nvidia GPU support
+:::
+
+## Install with Nvidia GPU support
 
 It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Prerequisites (CUDA)](#installation-prerequisites-cuda))
 
-## Option 1: Install Via Git URL (Recommended)
+### Option 1: Install Via Git URL (Recommended)
 
 Begin the installation:
 
@@ -103,7 +109,7 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Option 2: Build from source
+### Option 2: Build from source
 
 To build from source, clone the repository and begin the installation.
 
@@ -119,13 +125,14 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Installation Prerequisites (CUDA)
+### Installation Prerequisites (CUDA)
 
-You will need all of the [Common Prerequisites](#installation-prerequisites-common). In addition, you will need to have a machine with
+You will need all of the [Common Prerequisites](#installation-prerequisites). In addition, you will need to have a machine with
 - Nvidia GPU drivers [installed](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#)
 - CUDA toolkit [installed](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#)
 
 For machines running Ubuntu 24.04, you can install Nvidia drivers using
+
 ```bash [Ubuntu 24.04]
 wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb
 sudo dpkg -i cuda-keyring_1.1-1_all.deb
@@ -133,16 +140,19 @@ sudo apt-get update
 
 sudo apt-get install -y cuda-drivers
 ```
+
 To check that CUDA drivers are installed, run
 ```bash
 nvidia-smi
 ```
 
 CUDA toolkit can be installed using the following command, assuming the keyring above has already been installed:
+
 ```bash [Ubuntu 24.04]
 sudo apt-get install -y cuda-toolkit
 export PATH="/usr/local/cuda/bin:$PATH"
 ```
+
 To check that CUDA toolkit is installed, run
 ```bash
 nvcc --version
@@ -150,9 +160,9 @@ nvcc --version
 
 The OpenVM CLI has been tested with CUDA toolkit version 12.8, and we recommend using CUDA toolkit version 12.8 or higher.
 
-Post-installation, ensure that your shell profile or startup script sets the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
+Post-installation, ensure that you set the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
 ```bash
-LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 ```
 Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
