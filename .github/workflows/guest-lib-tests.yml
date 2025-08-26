@@ -70,11 +70,11 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Check CUDA status and set environment variables
-        if: contains(matrix.platform.runner, 'gpu')
+      - name: Set environment variables
         run: |
-          nvcc --version
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+          if [[ "${{ matrix.crate.name }}" == "p256" ]]; then
+            echo "NEXTEST_ENV=RUST_MIN_STACK=8388608" >> $GITHUB_ENV
+          fi
 
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
@@ -84,4 +84,4 @@ jobs:
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1
