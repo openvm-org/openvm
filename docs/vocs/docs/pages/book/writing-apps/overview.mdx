@@ -41,6 +41,10 @@ Each hex string (either in the file or as the direct input) is either:
 
 If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the [Using StdIn](/book/advanced-usage/sdk#using-stdin).
 
+:::note
+The hex string must be of an even length. The reason for this is to avoid ambiguity: for example, if `12c` is passed, it is unclear whether it is supposed to be `012c`, `120c` or anything else.
+:::
+
 ## Generating Application Proofs
 
 To generate a proof, you first need to generate a proving and verifying key for the OpenVM configuration
