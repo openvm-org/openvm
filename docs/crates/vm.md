@@ -1,24 +1,99 @@
 # VM Architecture and Chips
 
-### `PreflightExecutor` Trait
+## Execution
 
-We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Running the instrumented
-runtime for an opcode is encapsulated in the following trait:
+The OpenVM execution architecture provides three distinct execution modes, each optimized for different use cases. All modes share a common foundation through the trait system but differ in their runtime characteristics and outputs.
 
+We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
+
+### Execution Modes
+
+#### Pure Execution
+
+__Also sometimes referred to as E1__
+
+Pure execution runs programs without metering or trace generation. This mode provides the fastest execution speed and is used when only the final state matters.
+
+The `Executor<F>` trait defines the interface:
 ```rust
-pub trait PreflightExecutor<F> {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &mut self,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-  ) -> Result<ExecutionState<u32>>;
+pub trait Executor<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait;
 }
 ```
 
-There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode
-supported in a given VM.
+Each executor pre-computes instruction-specific data and returns a function pointer for efficient execution.
+
+#### Metered Execution
+
+__Also sometimes referred to as E2__
+
+Metered execution tracks computational costs while running. This mode segments execution based on configurable limits (e.g., maximum trace heights) and is essential for proof generation.
+
+The `MeteredExecutor<F>` trait extends execution with AIR tracking:
+```rust
+pub trait MeteredExecutor<F> {
+    fn metered_pre_compute_size(&self) -> usize;
+
+    fn metered_pre_compute<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait;
+}
+```
+
+#### Preflight Execution
+
+__Also sometimes referred to as E3__
+
+Preflight execution records detailed execution traces for proof generation. Unlike E1/E2 which use pre-computed function pointers, E3 uses dynamic dispatch to capture execution records.
+
+Running the instrumented runtime for an opcode is encapsulated in the following trait:
+
+```rust
+pub trait PreflightExecutor<F, RA> {
+    /// Runtime execution of the instruction, if the instruction is owned by the
+    /// current instance. May internally store records of this call for later trace generation.
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError>;
+}
+```
+
+### Interpreter Architecture
+
+The `InterpretedInstance` handles E1/E2 execution modes. It pre-processes programs into optimized representations:
+- Pre-computes instruction-specific data buffers
+- Generates function pointer tables for direct execution
+- Supports optional tail call optimization (TCO) for improved performance
+
+The `PreflightInterpretedInstance` handles E3 execution with:
+- Dynamic instruction dispatch via enum matching
+- Execution record collection in arena allocators
+- Per-instruction frequency tracking for optimization
+
+### Execution Context
+
+Different execution modes use specialized contexts:
+- `ExecutionCtx`: Pure execution with optional instruction count limits
+- `MeteredCtx`: Tracks segment boundaries and computational costs
+- `MeteredCostCtx`: Lightweight cost tracking without full segmentation
+- `PreflightCtx`: Manages arena allocators for trace generation
 
 ### Chips for Opcode Groups
 
