@@ -88,6 +88,8 @@ jobs:
   benchmarks:
     name: Benchmarks
     uses: ./.github/workflows/benchmarks.yml
+    with:
+      is_merge_queue: true
     secrets: inherit
 
   benchmarks-execute:

@@ -103,6 +103,11 @@ on:
         type: string
         required: false
         description: Host features, comma separated (aggregation,perf-metrics)
+      is_merge_queue:
+        type: boolean
+        required: false
+        description: Whether this is being called from merge queue
+        default: false
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
@@ -161,7 +166,7 @@ jobs:
           fi
           echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
-        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.is_merge_queue == true
         run: |
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
@@ -263,9 +268,12 @@ jobs:
       # Update s3 for latest branch metrics upon a push event                  #
       ##########################################################################
       - name: Update latest branch result in s3
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.is_merge_queue == true
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # Treat merge_queue events as main branch for ref-hash purposes
+          if [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
+            REF_HASH="main"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             # for backwards compatibility
             REF_HASH="main"
           else

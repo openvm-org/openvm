@@ -2,6 +2,12 @@ name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
   workflow_call:
+    inputs:
+      is_merge_queue:
+        description: 'Whether this is being called from merge queue'
+        required: false
+        type: boolean
+        default: false
   push:
     branches: ["feat/new-execution"]
   pull_request:
@@ -137,6 +143,7 @@ jobs:
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
       e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
       features: ${{ matrix.benchmark_run.features }}
+      is_merge_queue: ${{ inputs.is_merge_queue }}
     secrets: inherit
 
   summarize:
@@ -193,6 +200,12 @@ jobs:
           BENCHMARK_RESULTS_PATH="benchmarks"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
+      - name: Set github pages path for merge queue
+        if: inputs.is_merge_queue == true
+        run: |
+          BENCHMARK_RESULTS_PATH="benchmarks"
+          echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
+
       - name: Install inferno-flamegraph
         if: github.event.inputs.flamegraphs
         run: cargo install inferno
@@ -218,6 +231,7 @@ jobs:
             fi
             echo "Target branch REF_HASH: $REF_HASH"
           else
+            # For merge_group and push events, use "main" as reference
             REF_HASH="main"
           fi
 
@@ -289,12 +303,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
 
       - name: Update github pages with new bench results
-        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch')
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch') || inputs.is_merge_queue == true
         run: |
           mkdir -p ${BENCHMARK_RESULTS_PATH}
           cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
           git add ${BENCHMARK_RESULTS_PATH}
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          # Update index.md for both push to main and merge_queue events
+          if [[ "${{ github.event_name }}" == "push" ]] || [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
             cp ${TMP_DIR}/summary.md index.md
             git add index.md
           fi
