@@ -176,6 +176,7 @@ impl Halo2WrapperProvingKey {
                 "Snark has multiple phases"
             );
             if circuit.builder.config_params.num_advice_per_phase[0] == 1 {
+                circuit.builder.clear();
                 break;
             }
             if first_run {
@@ -186,6 +187,8 @@ impl Halo2WrapperProvingKey {
                 k += 1;
             }
             first_run = false;
+            // Prevent drop warnings
+            circuit.builder.clear();
         }
         k
     }
