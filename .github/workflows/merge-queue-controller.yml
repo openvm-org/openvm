@@ -5,6 +5,11 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+permissions:
+  contents: write
+  packages: read
+  pull-requests: write
+
 jobs:
   # This job serves as the single required status check for the merge queue
   controller:
