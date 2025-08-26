@@ -1,0 +1,14 @@
+[package]
+name = "stephen-test"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm-build = { workspace = true }
+openvm-sdk = { workspace = true }
+serde = { workspace = true }
+eyre = { workspace = true }
+
+[[bin]]
+name = "sdk_standard"
+path = "src/sdk_standard.rs"
