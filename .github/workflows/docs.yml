@@ -1,15 +1,14 @@
 name: Build and Serve Crate Docs
 
 on:
+  workflow_call:
   push:
-    branches: [main]
     tags:
       - v*.*.*
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/docs.yml"
-  merge_group:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true

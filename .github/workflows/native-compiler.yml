@@ -1,8 +1,7 @@
 name: Native Compiler Tests
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     branches: ["**"]
     paths:
@@ -11,7 +10,6 @@ on:
       - "extensions/native/compiler/**"
       - "Cargo.toml"
       - ".github/workflows/native-compiler.yml"
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

@@ -1,8 +1,7 @@
 name: STARK Recursion Tests
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     branches: ["**"]
     paths:
@@ -12,7 +11,6 @@ on:
       - "extensions/native/recursion/**"
       - "Cargo.toml"
       - ".github/workflows/recursion.yml"
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

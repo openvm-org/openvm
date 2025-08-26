@@ -1,8 +1,7 @@
 name: Guest Library Tests (CUDA)
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     branches: ["**"]
     paths:
@@ -14,7 +13,6 @@ on:
       - "Cargo.toml"
       - ".github/workflows/guest-lib-tests.cuda.yml"
       - "crates/sdk/guest/fib/**"
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

@@ -2,7 +2,6 @@ name: OpenVM CLI Tests
 
 on:
   push:
-    branches: ["main"]
     tags: ["v*"]
   pull_request:
     branches: ["**"]
@@ -15,7 +14,7 @@ on:
       - "examples/**"
       - "Cargo.toml"
       - ".github/workflows/cli.yml"
-  merge_group:
+  workflow_call:
   workflow_dispatch:
     inputs:
       use_local_openvm:

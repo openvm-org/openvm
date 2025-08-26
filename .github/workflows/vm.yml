@@ -1,8 +1,7 @@
 name: VM STARK and Compiler Tests
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     branches: ["**"]
     paths:
@@ -10,7 +9,6 @@ on:
       - "crates/vm/**"
       - "Cargo.toml"
       - ".github/workflows/vm.yml"
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

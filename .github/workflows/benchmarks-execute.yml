@@ -1,8 +1,7 @@
 name: "Execution benchmarks"
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -16,7 +15,6 @@ on:
       - "extensions/**"
       - "Cargo.toml"
       - ".github/workflows/benchmarks-execute.yml"
-  merge_group:
   workflow_dispatch:
 
 concurrency:

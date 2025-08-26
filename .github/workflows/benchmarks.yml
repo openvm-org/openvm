@@ -1,8 +1,9 @@
 name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
 
 on:
+  workflow_call:
   push:
-    branches: ["main", "feat/new-execution"]
+    branches: ["feat/new-execution"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -17,7 +18,6 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
-  merge_group:
   workflow_dispatch:
     inputs:
       flamegraphs:

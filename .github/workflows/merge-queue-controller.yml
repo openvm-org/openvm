@@ -1,0 +1,133 @@
+name: Merge Queue Controller
+
+on:
+  merge_group:
+
+jobs:
+  # This job serves as the single required status check for the merge queue
+  controller:
+    name: Merge Queue Controller
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    steps:
+      - name: Starting merge queue checks
+        run: echo "Starting all merge queue checks..."
+
+  # Call all the existing workflows that need to run in the merge queue
+  lints:
+    name: Lints
+    uses: ./.github/workflows/lints.yml
+    secrets: inherit
+
+  build:
+    name: Build
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  cli:
+    name: CLI
+    uses: ./.github/workflows/cli.yml
+    secrets: inherit
+
+  docs:
+    name: Docs
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+
+  native-compiler:
+    name: Native Compiler
+    uses: ./.github/workflows/native-compiler.yml
+    secrets: inherit
+
+  primitives:
+    name: Primitives
+    uses: ./.github/workflows/primitives.yml
+    secrets: inherit
+
+  recursion:
+    name: Recursion
+    uses: ./.github/workflows/recursion.yml
+    secrets: inherit
+
+  riscv:
+    name: RISCV
+    uses: ./.github/workflows/riscv.yml
+    secrets: inherit
+
+  sdk:
+    name: SDK
+    uses: ./.github/workflows/sdk.yml
+    secrets: inherit
+
+  vm:
+    name: VM
+    uses: ./.github/workflows/vm.yml
+    secrets: inherit
+
+  extension-tests:
+    name: Extension Tests
+    uses: ./.github/workflows/extension-tests.yml
+    secrets: inherit
+
+  extension-tests-cuda:
+    name: Extension Tests CUDA
+    uses: ./.github/workflows/extension-tests.cuda.yml
+    secrets: inherit
+
+  guest-lib-tests:
+    name: Guest Lib Tests
+    uses: ./.github/workflows/guest-lib-tests.yml
+    secrets: inherit
+
+  guest-lib-tests-cuda:
+    name: Guest Lib Tests CUDA
+    uses: ./.github/workflows/guest-lib-tests.cuda.yml
+    secrets: inherit
+
+  benchmarks:
+    name: Benchmarks
+    uses: ./.github/workflows/benchmarks.yml
+    secrets: inherit
+
+  benchmarks-execute:
+    name: Benchmarks Execute
+    uses: ./.github/workflows/benchmarks-execute.yml
+    secrets: inherit
+
+  # Final job that depends on all others - this is what GitHub will track
+  all-checks-pass:
+    name: All Checks Pass
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    needs:
+      - lints
+      - build
+      - cli
+      - docs
+      - native-compiler
+      - primitives
+      - recursion
+      - riscv
+      - sdk
+      - vm
+      - extension-tests
+      - extension-tests-cuda
+      - guest-lib-tests
+      - guest-lib-tests-cuda
+      - benchmarks
+      - benchmarks-execute
+    if: always()
+    steps:
+      - name: Check all job results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs were cancelled"
+            exit 1
+          else
+            echo "All jobs passed successfully"
+          fi

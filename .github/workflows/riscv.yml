@@ -1,8 +1,7 @@
 name: RISC-V Test Vectors
 
 on:
-  push:
-    branches: ["main"]
+  workflow_call:
   pull_request:
     branches: ["**"]
     paths:
@@ -14,7 +13,6 @@ on:
       - "extensions/rv32im/guest/**"
       - "Cargo.toml"
       - ".github/workflows/riscv.yml"
-  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
