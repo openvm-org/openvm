@@ -143,6 +143,7 @@ jobs:
       e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
       features: ${{ matrix.benchmark_run.features }}
       is_merge_queue: ${{ inputs.is_merge_queue }}
+      job_index: ${{ strategy.job-index }}
     secrets: inherit
 
   summarize:
