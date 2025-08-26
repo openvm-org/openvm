@@ -35,6 +35,9 @@ jobs:
       - family=m5a.xlarge # 2.5Ghz clock speed
       - image=ubuntu24-full-x64
       - extras=s3-cache
+    # Skip on merge_group because CodSpeed does not support it yet.
+    # Ref: https://github.com/CodSpeedHQ/action/issues/126
+    if: ${{ github.event_name != 'merge_group' }}
 
     env:
       CODSPEED_RUNNER_MODE: walltime
@@ -79,7 +82,9 @@ jobs:
       - family=m5a.xlarge
       - image=ubuntu24-full-x64
       - extras=s3-cache
-    if: github.event_name != 'pull_request'
+    # Skip on merge_group because CodSpeed does not support it yet.
+    # Ref: https://github.com/CodSpeedHQ/action/issues/126
+    if: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
 
     env:
       CODSPEED_RUNNER_MODE: instrumentation
