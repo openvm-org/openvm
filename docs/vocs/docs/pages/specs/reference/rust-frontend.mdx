@@ -31,11 +31,11 @@ We use a nightly Rust toolchain for the guest target in order to compile the Rus
 ## Guest Runtime
 
 The OpenVM Rust runtime supports `no_std` Rust by default, with optional `std` support available
-through the `std` feature.  This section documents the different features of the runtime.
+through the `"std"` feature.  This section documents the different features of the runtime.
 
 ### Memory Allocator
 
-OpenVM supports 512MB of guest memory, with stack growing down from `STACK_TOP = 0x0020_0400`,
+OpenVM supports 512MB of guest memory, with stack growing down from `STACK_TOP = 0x0020_0400`.
 program loading starting at `TEXT_START = 0x0020_0800`, and heap starting right afterwards.
 We support two allocators:
 
@@ -45,12 +45,28 @@ deallocating. This is the default allocator.
 at the cost of additional allocation overhead.
 
 The linked-list allocator can be selected by enabling the `heap-embedded-alloc` feature on the
-`openvm-platform` crate.
+`openvm` crate.
 
 ### System Calls
 
+OpenVM currently does not support any system calls via the RISC-V `ecall` instruction. Instead, OpenVM supports [custom RISC-V instruction set extensions](/specs/reference/riscv-custom-code) directly via VM extensions.
+
+In particular, [support](#std-support) for the Rust `std` library is implemented via custom RISC-V instructions.
+
 ### OpenVM Intrinsics
+
+OpenVM supports [custom RISC-V instructions](/specs/reference/riscv-custom-code#classification-of-custom-risc-v-machine-code), known as **intrinsic instructions**, within the RISC-V ELF binary. These instructions may be inserted directly from the Rust program code using the Rust [`asm!` macro](https://doc.rust-lang.org/reference/inline-assembly.html) and the [`.insn` directive](https://doc.rust-lang.org/reference/inline-assembly.html#r-asm.directives.supported-directives).
+
+For convenience, we define two procedural macros `custom_insn_i!` and `custom_insn_r!` that provide more streamlined interfaces for calling intrinsic instructions within Rust code. These macros are defined in the `openvm-custom-insn` crate and are re-exported in the `openvm-platform` crate. They may be accessed from the `openvm` crate via `openvm::platform::custom_insn_i!` and `openvm::platform::custom_insn_r!`.
 
 ### OpenVM Kernels
 
+OpenVM also supports insertion of [custom kernel code](/specs/reference/riscv-custom-code#classification-of-custom-risc-v-machine-code) into the RISC-V ELF. Kernel code is used as a means to statically link foreign OpenVM assembly code into the ELF without a custom linker. Custom kernel code should be inserted from Rust using the [`asm!` macro](https://doc.rust-lang.org/reference/inline-assembly.html) and the [`.insn` directive](https://doc.rust-lang.org/reference/inline-assembly.html#r-asm.directives.supported-directives). We recommend that the kernel code is generated in a separate build script and then directly included within the `asm!` macro invocation using `include_str!`.
+
 ### `std` Support
+
+OpenVM supports compilation of guest code using the Rust `std` library when the `openvm` crate is imported with the `"std"` feature enabled. When the `"std"` feature is enabled, the `openvm` crate defines `extern "C"` functions that are compatible with the platform abstraction layer (PAL) ABI defined in the Rust standard library for the guest target. These ABI definitions are statically linked with the Rust standard library at compile time.
+
+The PAL ABI is implemented in `openvm` using Rust and direct calls to [OpenVM intrinsics](#openvm-intrinsics) without the use of system calls.
+
+Users should be aware of the limitations of the Rust `std` support within OpenVM, which are documented in the [book](/book/writing-apps/writing-a-program#rust-std-library-support).
