@@ -2,6 +2,8 @@ name: Merge Queue Controller
 
 on:
   merge_group:
+  pull_request:
+    types: [opened, synchronize, reopened]
 
 jobs:
   # This job serves as the single required status check for the merge queue
@@ -17,76 +19,91 @@ jobs:
   # Call all the existing workflows that need to run in the merge queue
   lints:
     name: Lints
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/lints.yml
     secrets: inherit
 
   build:
     name: Build
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/build.yml
     secrets: inherit
 
   cli:
     name: CLI
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/cli.yml
     secrets: inherit
 
   docs:
     name: Docs
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/docs.yml
     secrets: inherit
 
   native-compiler:
     name: Native Compiler
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/native-compiler.yml
     secrets: inherit
 
   primitives:
     name: Primitives
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/primitives.yml
     secrets: inherit
 
   recursion:
     name: Recursion
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/recursion.yml
     secrets: inherit
 
   riscv:
     name: RISCV
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/riscv.yml
     secrets: inherit
 
   sdk:
     name: SDK
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/sdk.yml
     secrets: inherit
 
   vm:
     name: VM
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/vm.yml
     secrets: inherit
 
   extension-tests:
     name: Extension Tests
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/extension-tests.yml
     secrets: inherit
 
   extension-tests-cuda:
     name: Extension Tests CUDA
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/extension-tests.cuda.yml
     secrets: inherit
 
   guest-lib-tests:
     name: Guest Lib Tests
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/guest-lib-tests.yml
     secrets: inherit
 
   guest-lib-tests-cuda:
     name: Guest Lib Tests CUDA
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/guest-lib-tests.cuda.yml
     secrets: inherit
 
   benchmarks:
     name: Benchmarks
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/benchmarks.yml
     with:
       is_merge_queue: true
@@ -94,6 +111,7 @@ jobs:
 
   benchmarks-execute:
     name: Benchmarks Execute
+    if: github.event_name == 'merge_group'
     uses: ./.github/workflows/benchmarks-execute.yml
     secrets: inherit
 
@@ -122,7 +140,8 @@ jobs:
       - benchmarks-execute
     if: always()
     steps:
-      - name: Check all job results
+      - name: Check job results for merge queue
+        if: github.event_name == 'merge_group'
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more jobs failed"
@@ -133,3 +152,10 @@ jobs:
           else
             echo "All jobs passed successfully"
           fi
+      
+      - name: PR status placeholder
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "This provides the 'All Checks Pass' status for PRs."
+          echo "Individual checks run separately on pull requests."
+          echo "Full validation occurs in the merge queue."
