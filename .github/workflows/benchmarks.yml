@@ -142,7 +142,7 @@ jobs:
       max_segment_length: ${{ matrix.benchmark_run.max_segment_length }}
       e2e_bench: ${{ matrix.benchmark_run.e2e_bench }}
       features: ${{ matrix.benchmark_run.features }}
-      is_merge_queue: ${{ inputs.is_merge_queue }}
+      is_merge_queue: ${{ inputs.is_merge_queue || false }}
       job_index: ${{ strategy.job-index }}
     secrets: inherit
 
