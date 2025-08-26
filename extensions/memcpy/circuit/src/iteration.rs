@@ -34,7 +34,6 @@ use openvm_instructions::{
     LocalOpcode,
 };
 use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
-use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{Air, AirBuilder, BaseAir},
@@ -45,8 +44,7 @@ use openvm_stark_backend::{
 };
 
 use crate::{
-    bus::MemcpyBus, MemcpyLoopChip, A1_REGISTER_PTR, A2_REGISTER_PTR, A3_REGISTER_PTR,
-    A4_REGISTER_PTR,
+    bus::MemcpyBus, read_rv32_register, tracing_read, tracing_write, MemcpyLoopChip, A1_REGISTER_PTR, A2_REGISTER_PTR, A3_REGISTER_PTR, A4_REGISTER_PTR
 };
 // Import constants from lib.rs
 use crate::{MEMCPY_LOOP_LIMB_BITS, MEMCPY_LOOP_NUM_LIMBS};
@@ -58,10 +56,12 @@ pub struct MemcpyIterCols<T> {
     pub dest: T,
     pub source: T,
     pub len: [T; 2],
-    pub shift: [T; 2],
+    // 0: [0, 0, 0], 1: [1, 0, 0], 2: [0, 1, 0], 3: [0, 0, 1]
+    pub shift: [T; 3],
     pub is_valid: T,
     pub is_valid_not_start: T,
-    pub is_shift_non_zero: T,
+    // This should be 0 if is_valid = 0. We use this to determine whether we need ro read data_4.
+    pub is_shift_non_zero_or_not_start: T,
     // -1 for the first iteration, 1 for the last iteration, 0 for the middle iterations
     pub is_boundary: T,
     pub data_1: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -100,16 +100,21 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         let timestamp: AB::Var = local.timestamp;
         let mut timestamp_delta: AB::Expr = AB::Expr::ZERO;
-        let mut timestamp_pp = |timestamp_increase_value: AB::Expr| {
-            timestamp_delta += timestamp_increase_value.clone();
+        let mut timestamp_pp = |timestamp_increase_value: AB::Var| {
+            timestamp_delta += timestamp_increase_value.into();
             timestamp + timestamp_delta.clone() - timestamp_increase_value.clone()
         };
 
-        let shift = local.shift[1] * AB::Expr::TWO + local.shift[0];
-        let is_shift_zero = not::<AB::Expr>(local.is_shift_non_zero);
-        let is_shift_one = and::<AB::Expr>(local.shift[0], not::<AB::Expr>(local.shift[1]));
-        let is_shift_two = and::<AB::Expr>(not::<AB::Expr>(local.shift[0]), local.shift[1]);
-        let is_shift_three = and::<AB::Expr>(local.shift[0], local.shift[1]);
+        let shift = local.shift.iter().enumerate().fold(AB::Expr::ZERO, |acc, (i, x)| {
+            acc + (*x) * AB::Expr::from_canonical_u32(i as u32 + 1)
+        });
+        let is_shift_non_zero = local.shift.iter().fold(AB::Expr::ZERO, |acc, x| {
+            acc + (*x)
+        });
+        let is_shift_zero = not::<AB::Expr>(is_shift_non_zero.clone());
+        let is_shift_one = local.shift[0];
+        let is_shift_two = local.shift[1];
+        let is_shift_three = local.shift[2];
 
         let is_end =
             (local.is_boundary + AB::Expr::ONE) * local.is_boundary * (AB::F::TWO).inverse();
@@ -166,8 +171,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         builder.assert_bool(local.is_valid);
         local.shift.iter().for_each(|x| builder.assert_bool(*x));
+        builder.assert_bool(is_shift_non_zero.clone());
         builder.assert_bool(local.is_valid_not_start);
-        builder.assert_bool(local.is_shift_non_zero);
+        builder.assert_bool(local.is_shift_non_zero_or_not_start);
         // is_boundary is either -1, 0 or 1
         builder.assert_tern(local.is_boundary + AB::Expr::ONE);
 
@@ -177,8 +183,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             and::<AB::Expr>(local.is_valid, is_not_start),
         );
 
-        // is_shift_non_zero is correct
-        builder.assert_eq(local.is_shift_non_zero, or::<AB::Expr>(local.shift[0], local.shift[1]));
+        // is_shift_non_zero_or_not_start is correct
+        builder.assert_eq(local.is_shift_non_zero_or_not_start, or::<AB::Expr>(is_shift_non_zero.clone(), local.is_valid_not_start));
 
         // if !is_valid, then is_boundary = 0, shift = 0 (we will use this assumption later)
         let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
@@ -193,8 +199,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         is_valid_not_start_when
             .assert_eq(local.source, prev.source + AB::Expr::from_canonical_u32(16));
         is_valid_not_start_when.assert_eq(local.dest, prev.dest + AB::Expr::from_canonical_u32(16));
-        is_valid_not_start_when.assert_eq(local.shift[0], prev.shift[0]);
-        is_valid_not_start_when.assert_eq(local.shift[1], prev.shift[1]);
+        local.shift.iter().zip(prev.shift.iter()).for_each(|(local_shift, prev_shift)| {
+            is_valid_not_start_when.assert_eq(*local_shift, *prev_shift);
+        });
 
         // make sure if previous row is valid and not end, then local.is_valid = 1
         builder
@@ -205,7 +212,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // since is_shift_non_zero degree is 2, we need to keep the degree of the condition to 1
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
-            .assert_eq(local.timestamp, prev.timestamp + local.is_shift_non_zero);
+            .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero);
 
         // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
@@ -247,9 +254,9 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .enumerate()
             .for_each(|(idx, data)| {
                 let is_valid_read = if idx == 3 {
-                    or::<AB::Expr>(local.is_shift_non_zero, local.is_valid_not_start)
+                    local.is_shift_non_zero_or_not_start
                 } else {
-                    local.is_valid_not_start.into()
+                    local.is_valid_not_start
                 };
 
                 self.memory_bridge
@@ -274,7 +281,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                         local.dest - AB::Expr::from_canonical_usize(16 - idx * 4),
                     ),
                     data.clone(),
-                    timestamp_pp(local.is_valid_not_start.into()),
+                    timestamp_pp(local.is_valid_not_start),
                     &local.write_aux[idx],
                 )
                 .eval(builder, local.is_valid_not_start);
@@ -701,11 +708,15 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         } else {
                             F::ZERO
                         };
-                        cols.is_shift_non_zero = F::from_canonical_u8((record.inner.shift != 0) as u8);
-                        cols.is_valid_not_start = F::from_canonical_u8(1 - is_start as u8);
+                        cols.is_shift_non_zero_or_not_start = F::from_bool(record.inner.shift != 0 || !is_start);
+                        cols.is_valid_not_start = F::from_bool(!is_start);
                         cols.is_valid = F::ONE;
-                        cols.shift = [record.inner.shift & 1, record.inner.shift >> 1]
-                            .map(F::from_canonical_u8);
+                        cols.shift = [
+                            record.inner.shift == 1,
+                            record.inner.shift == 2,
+                            record.inner.shift == 3,
+                        ]
+                        .map(F::from_bool);
                         cols.len = [len & 0xffff, len >> 16].map(F::from_canonical_u32);
                         cols.source = F::from_canonical_u32(source);
                         cols.dest = F::from_canonical_u32(dest);
