@@ -2,7 +2,7 @@
 
 ## Execution
 
-The OpenVM extension API with the `VmExecutionExtension` trait allows one to create a VM with various executor extensions corresponding to different chips. Each executor extension consists of executor structs that implement traits for different execution modes. Each executor handles specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits.
+OpenVM is modular and the extension API with the `VmExecutionExtension` trait allows one to create a VM with various execution extensions corresponding to different chips. Each extension consists of executor structs that implement traits for different execution modes. Each executor handles specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, each corresponding to a different execution mode.
 
 We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor which contains the logic for executing the instruction.
 There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
@@ -37,7 +37,7 @@ pub type ExecuteFunc<F, CTX> =
     unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 ```
 
-Each executor pre-computes instruction-specific data during program preprocessing and returns function pointers for direct instruction execution.
+Each executor pre-computes instruction-specific data during a preprocessing step and returns function pointers for direct instruction execution.
 
 #### Metered Execution
 
@@ -61,7 +61,7 @@ pub trait MeteredExecutor<F> {
 }
 ```
 
-The additional `air_idx` parameter is the index of the chip's AIR in the verifying key. This is the index used for the trace height in the `trace_heights` array.
+The additional `air_idx` parameter is the index of the chip's AIR in the verifying key. This is the index used for the trace height of the chip in the `trace_heights` array.
 
 #### Preflight Execution
 
@@ -81,46 +81,70 @@ pub trait PreflightExecutor<F, RA> {
 
 ### Interpreter Architecture
 
-The `InterpretedInstance` handles pure and metered execution modes. It pre-processes programs into optimized representations:
+The `InterpretedInstance` handles pure and metered execution modes. More specifically, it:
+
 - Pre-computes instruction-specific data buffers
 - Generates function pointer tables for direct execution
 - Supports optional tail call optimization (TCO) for improved performance
 
 The `PreflightInterpretedInstance` handles preflight execution with:
+
 - Dynamic instruction dispatch
-- Execution record collection in record arenas
-- Per-instruction frequency tracking used by the `ProgramChip`
+- Execution record collection in record arenas `RA`
+- Per-instruction frequency tracking to be used by the `ProgramChip`
 
 ### Chips for Opcode Groups
 
-Opcodes are partitioned into groups, each of which is handled by a single **chip**. A chip should be a struct of
-type `C` and associated Air of type `A` which satisfy the following trait bounds:
+Opcodes are partitioned into groups, each of which is handled by a single executor, air and **chip**. Executor is the struct that contains logic for executing an opcode and generating records. A chip is an object that contains logic for converting execution records into a trace matrix and public values associated with an AIR. And AIR contains the arithmetic and lookup constraints on the trace matrix required to create a proof of execution.
 
 ```rust
-C: Chip<SC> + PreflightExecutor<F>
+pub trait Chip<R, PB: ProverBackend> {
+    /// Generate all necessary context for proving a single AIR.
+    fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB>;
+}
+```
+
+A chip should be a struct of type `C`
+
+```rust
+C: Chip<SC>
+```
+
+where `PB` is either `CpuBackend` or `GpuBackend`.
+
+As mentioned above, the executor should implement the three executor traits: `Executor`, `MeteredExecutor`, and `PreflightExecutor`.
+
+```rust
+ChipExecutor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>
+```
+
+The AIR `A` should implement the following traits, have the following trait bounds:
+
+```rust
 A: Air<AB> + BaseAir<F> + BaseAirWithPublicValues<F>
 ```
+
+where `AB` is an `AirBuilder`
 
 Together, these provide the following functionalities:
 
 - **Keygen:** Performed via the `Air::<AB>::eval()` function.
-- **Trace Generation:** This is done by calling `PreflightExecutor::<F>::execute()` which computes and stores
-  execution records and then `Chip::<SC>::generate_air_proof_input()` which generates the trace using the corresponding
-  records.
+- **Trace Generation:** This is done by calling `PreflightExecutor::<F, RA>::execute()` which computes the execution records and then `Chip::<R, PB>::generate_proving_ctx()` which generates the trace using the corresponding records.
 
 ### VM AIR Integration
 
-At the AIR-level, for an AIR to integrate with the OpenVM architecture (constrain memory, read the instruction from the program, etc.), the AIR
-communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
+At the AIR-level, for an AIR to integrate with the OpenVM architecture (constrain memory, read the instruction from the program, etc.), the AIR communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
 execution bus. The memory bus is used to access memory, the program bus is used to read instructions from the program,
 and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
-which is provided by the `VmInventoryBuilder`.
+which is provided by `AirInventory`/`SystemAirInventory`.
 
 The buses have very low-level APIs and are not intended to be used directly. "Bridges" are provided to provide a cleaner interface for
 sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
 `MemoryBridge` and `ExecutionBridge`, which should respectively be used to constrain memory accesses and execution flow.
 
 ### Phantom Sub-Instructions
+
+Phantom sub-instructions are instructions that affect the runtime and trace matrix values but have no AIR constraints besides advancing the PC by `DEFAULT_PC_STEP`. They should not mutate memory, but they can mutate the input & hint streams.
 
 You can specify phantom sub-instruction executors by implementing the trait:
 
@@ -142,7 +166,7 @@ pub struct PhantomDiscriminant(pub u16);
 ```
 
 The `PhantomExecutor<F>` internally maintains a mapping from `PhantomDiscriminant` to `Box<dyn PhantomSubExecutor<F>>>` to
-handle different phantom sub-instructions. Phantom sub-instructions affect the runtime and trace matrix values but have no AIR constraints besides advancing the PC by `DEFAULT_PC_STEP`.
+handle different phantom sub-instructions.
 
 ### VM Configuration
 
@@ -162,7 +186,7 @@ where
 }
 ```
 
-The engine type `E` implements `StarkEngine` and the VM builder type `VB` implements `VmBuilder<E>`, which provides the VM configuration through `VB::VmConfig`.
+The engine type `E` should implement the `openvm_stark_backend::engine::StarkEngine` trait and the VM builder type `VB` implements `VmBuilder<E>`, which provides the VM configuration through `VB::VmConfig`.
 
 ```rust
 pub trait VmConfig<SC>:
@@ -178,20 +202,27 @@ where
     SC: StarkGenericConfig,
 {
 }
+```
 
+A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution configuration. The `Executor` type is typically an enum over executor structs that handle instruction execution.
+
+```rust
 pub trait VmExecutionConfig<F> {
     type Executor: AnyEnum + Send + Sync;
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 }
+```
 
+Finally, `VmConfig` should also implement the `VmCircuitConfig` trait which provides the AIRs for all chips in the VM. The `AirInventory` contains all AIRs required for constraining the execution trace of each chip.
+
+```rust
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {
     fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 ```
 
-A `VmConfig` provides execution and circuit configuration through its associated traits. The `Executor` type is typically an enum over chips that handle instruction execution.
 See [VM Extensions](./vm-extensions.md) for more details.
 
 ### ZK Operations for the VM
