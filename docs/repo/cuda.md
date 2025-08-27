@@ -53,7 +53,7 @@ Extensions with both CPU and GPU implementations follow a consistent builder pat
 
 - `...CpuBuilder` - CPU implementation builder
 - `...GpuBuilder` - GPU implementation builder  
-- `...Builder` - Public alias that resolves to either CPU or GPU builder based on the `cuda` feature flag
+- `...Builder` - Public alias that resolves to either CPU or GPU builder based on whether or not the `cuda` feature flag is set
 
 Example:
 ```rust
