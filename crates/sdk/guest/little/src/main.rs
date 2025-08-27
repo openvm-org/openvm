@@ -1,7 +1,6 @@
 extern crate alloc;
 
-#[allow(unused_imports)]
-use openvm_algebra_guest::{DivUnsafe, IntMod};
+use openvm_algebra_guest::IntMod;
 use openvm_k256::{Secp256k1Coord, Secp256k1Scalar};
 use openvm_p256::{P256Coord, P256Scalar};
 use openvm_pairing::{bls12_381::Bls12_381Fp, bn254::Bn254Fp};
@@ -17,20 +16,20 @@ where
     let mut pow = F::MODULUS;
     pow.as_mut()[0] -= 2;
 
-    let mut a = F::from_u32(1234);
-    let mut res = F::from_u32(1);
-    let inv = res.clone().div_unsafe(&a);
+    let a = F::from_u32(1234);
+    let mut res = F::ONE;
+    let mut mut_a = a.clone();
 
-    for pow_bit in pow.as_ref() {
+    for pow_byte in pow.as_ref() {
         for j in 0..8 {
-            if pow_bit & (1 << j) != 0 {
-                res *= &a;
+            if pow_byte & (1 << j) != 0 {
+                res *= &mut_a;
             }
-            a *= a.clone();
+            mut_a *= mut_a.clone();
         }
     }
 
-    assert_eq!(res, inv);
+    assert_eq!(res * a, F::ONE);
 }
 
 pub fn main() {

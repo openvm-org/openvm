@@ -50,16 +50,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // [!endregion input]
 
     // [!region evm_verification]
-    // 4. Generate the SNARK verifier smart contract
+    // 5. Generate the SNARK verifier smart contract
     let verifier = sdk.generate_halo2_verifier_solidity()?;
 
-    // 5. Generate an EVM proof
+    // 6. Generate an EVM proof
     // NOTE: this will do app_keygen, agg_keygen, halo2_keygen automatically if they have never been
     // called before. As a consequence, the first call to `prove_evm` will take longer if you do not
     // explicitly call `app_keygen`, `agg_keygen`, and `halo2_keygen` before calling `prove_evm`.
     let proof = sdk.prove_evm(elf, stdin)?;
 
-    // 6. Verify the EVM proof
+    // 7. Verify the EVM proof
     Sdk::verify_evm_halo2_proof(&verifier, proof)?;
     // [!endregion evm_verification]
 

@@ -93,7 +93,7 @@ For large guest programs, the program will be proved in multiple continuation se
 
 ### Verifying App Proofs
 
-After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from your `AppProvingKey`) and the output of your `prove` call.
+After generating a proof, you can verify it. To do so, you need your verifying key (which you can get from `sdk.app_keygen()`) and the output of your `prove` call.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_app.rs:verification]
@@ -112,7 +112,7 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ### Setup
 
-To generate a STARK proof, you first need to generate proving and verification keys for STARK aggregation using the following command:
+To generate a STARK proof, you first need to generate proving and verification keys for STARK aggregation using the following CLI command:
 
 ```bash
 cargo openvm setup
@@ -120,7 +120,7 @@ cargo openvm setup
 
 ### STARK Proof Generation and Verification
 
-You can now run the aggregation keygen, proof, and verification functions for the STARK proof.
+You can now run the aggregation keygen, proof, and verification functions for the STARK proof by either (a) calling `sdk.prove(...)` directly or (b) creating a prover with custom fields. You should also generate an app commit, e.g. hashes of both the app config and executable used to generate the proof.
 
 ```rust 
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:proof_generation]
@@ -131,6 +131,8 @@ Once the proof is generated, you can verify it using the SDK as follows:
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:verification]
 ```
+
+Note that STARK verification requires the app commit to confirm that the submitted proof is for the app config and executable specified.
 
 ## EVM Proof
 
@@ -174,9 +176,9 @@ Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are store
 
 ## Another Example: Using the Standard SDK
 
-For many program with complex arithmetic and/or cryptographic operations, the RISC-V instruction set alone may not be enough to achieve the performance desired. OpenVM provides many extensions to accelerate said operations, almost all of which are included inside the standard configuration.
+For many programs with modular arithmetic and/or cryptographic operations, the RISC-V instruction set alone may not be enough to achieve the performance desired. OpenVM supports many extensions to accelerate said operations, a standard set of which are included inside the standard SDK configuration.
 
-Take, for example, this toy program meant that checks if several guest library implementations of [`IntMod`](/book/acceleration-using-extensions/algebra#available-traits-and-methods) are fields by loosely checking if their moduli are prime.
+Take, for example, this toy program that checks if several guest library implementations of [`IntMod`](/book/acceleration-using-extensions/algebra#available-traits-and-methods) are fields by loosely checking if their moduli are prime.
 
 ```rust
 // [!include ~/snippets/examples_sdk_guest/little/src/main.rs]

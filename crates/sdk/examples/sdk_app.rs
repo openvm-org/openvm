@@ -24,14 +24,16 @@ fn main() -> eyre::Result<()> {
     // [!endregion execution]
 
     // [!region proof_generation]
-    // 4. Generate an app proof.
+    // 5. Generate an app proof.
     let mut prover = sdk.app_prover(elf)?.with_program_name("test_program");
     let proof = prover.prove(StdIn::default())?;
     // [!endregion proof_generation]
 
     // [!region verification]
-    // 5. Verify your program at the app level.
-    verify_app_proof(&sdk.app_pk().get_app_vk(), &proof)?;
+    // 6. Do this once to save the app_vk, independent of the proof.
+    let (_app_pk, app_vk) = sdk.app_keygen();
+    // 7. Verify your program.
+    verify_app_proof(&app_vk, &proof)?;
     // [!endregion verification]
 
     Ok(())
