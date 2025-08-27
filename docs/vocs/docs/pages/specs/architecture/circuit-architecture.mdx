@@ -39,7 +39,7 @@ When the program is being run, in the simple scenario, the following happens at 
   - It is passed to the _instruction executor_ (which is a special kind of chip, we define it later) responsible for executing this instruction,
   - This instruction executor returns the new execution state (and maybe reports that the execution is finished). The timestamp and program counter change accordingly.
 
-There are limitations to how many interactions/trace rows/etc. we can have in total; see [soundness criteria](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf). If executing the full program would lead us to overflowing these limits, the program needs to be executed in several segments. Then the process is slightly different:
+There are limitations to how many trace rows (based on security constraints dependent on the proof system's prime field), trace cells (memory usage) or interactions (see [soundness criteria](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf)) we can have in total. If executing the full program would lead us to overflowing these limits, the program needs to be executed in several segments. Then the process is slightly different:
 - After executing an instruction, we may decide to _segment_ our execution at this point. In this case, the execution will be split into several segments.
 - The timestamp resets on segmentation.
 - Each segment is going to be proven separately. Of course, this means that adjacent segments need to agree on some things (mainly memory state). See [Continuations](/specs/architecture/continuations) for full details.
@@ -102,7 +102,7 @@ The chips that fall into these categories are:
 
 | Name                  | timestamp_delta | # of interactions | Comment                                                                                                                  |
 | --------------------- | --------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| PhantomChip           | 1               | 3 | Case 2. No memory accesses, 3 interactions from program bus and execution bus. |
+| PhantomChip           | 1               | 3                 | Case 2. No memory accesses, 3 interactions from program bus and execution bus. |
 | KeccakVmChip          | -               | -                 | Case 2. Special timestamp jump. |
 | FriReducedOpeningChip | –               | –                 | Case 1. |
 | NativePoseidon2Chip   | –               | –                 | Case 1. |
