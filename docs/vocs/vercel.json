@@ -20,6 +20,26 @@
       }
     ],
     "redirects": [
+      {
+        "source": "/book",
+        "destination": "/book/getting-started/introduction",
+        "permanent": false
+      },
+      {
+        "source": "/book/",
+        "destination": "/book/getting-started/introduction",
+        "permanent": false
+      },
+      {
+        "source": "/specs",
+        "destination": "/specs/openvm/overview",
+        "permanent": false
+      },
+      {
+        "source": "/specs/",
+        "destination": "/specs/openvm/overview",
+        "permanent": false
+      },
         {
           "source": "/docs",
           "destination": "/docs/openvm/",
