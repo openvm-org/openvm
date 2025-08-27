@@ -2,7 +2,7 @@
 
 ## Execution
 
-OpenVM provides a modular interface to add VM instructions via the extension API. The `VmExecutionExtension` trait allows one to specify various execution extensions, and corresponding chips. An extension consists of executor structs that handle specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, corresponding to different execution modes.
+OpenVM provides a modular interface to add VM instructions via the extension API. The `VmExecutionExtension` trait allows one to specify various execution extensions. An extension consists of executor structs that handle specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, corresponding to different execution modes.
 
 We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor that contains the logic for executing the instruction.
 There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
@@ -61,7 +61,7 @@ pub trait MeteredExecutor<F> {
 }
 ```
 
-The additional `air_idx` parameter is the index of the chip's AIR in the verifying key. This is used for indexing the trace height of the chip in the `trace_heights` array contained in the `Segment` struct.
+Each executor is associated with a chip and an AIR. This mapping is defined implicitly by the VM extension. The additional `air_idx` parameter is the index of the executor's AIR in the verifying key. This is used for indexing the trace height of the chip in the `trace_heights` array contained in the `Segment` struct.
 
 #### Preflight Execution
 
