@@ -2,16 +2,16 @@
 
 ## Execution
 
-OpenVM is modular and the extension API with the `VmExecutionExtension` trait allows one to create a VM with various execution extensions corresponding to different chips. Each extension consists of executor structs that implement traits for different execution modes. Each executor handles specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, each corresponding to a different execution mode.
+OpenVM provides a modular interface to add VM instructions via the extension API. The `VmExecutionExtension` trait allows one to specify various execution extensions, and corresponding chips. An extension consists of executor structs that handle specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, corresponding to different execution modes.
 
-We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor which contains the logic for executing the instruction.
+We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor that contains the logic for executing the instruction.
 There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
 
 ### Execution Modes
 
 #### Pure Execution
 
-Pure execution runs the program without any overhead and is used to obtain the final VM state at termination or after executing a fixed number of instructions.
+Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
 
 The `Executor<F>` trait defines the interface for pure execution:
 
@@ -30,7 +30,7 @@ pub trait Executor<F> {
 }
 ```
 
-where `ExecuteFunc<F, Ctx>` is a function pointer that contains the instruction logic.
+where `ExecuteFunc<F, Ctx>` is a function pointer that contains the instruction execution logic.
 
 ```rust
 pub type ExecuteFunc<F, CTX> =
@@ -41,7 +41,7 @@ Each executor pre-computes instruction-specific data during a preprocessing step
 
 #### Metered Execution
 
-Metered execution tracks the trace heights for each chip along with execution. This mode divides execution into segments, where each segment contains a range of instructions and an (over)estimate of the resulting trace heights for each chip. Segmentation is done based on configurable limits (e.g., maximum trace height, maximum trace cells).
+Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
 
 The `MeteredExecutor<F>` trait defines the interface for metered execution:
 
@@ -61,7 +61,7 @@ pub trait MeteredExecutor<F> {
 }
 ```
 
-The additional `air_idx` parameter is the index of the chip's AIR in the verifying key. This is the index used for the trace height of the chip in the `trace_heights` array.
+The additional `air_idx` parameter is the index of the chip's AIR in the verifying key. This is used for indexing the trace height of the chip in the `trace_heights` array contained in the `Segment` struct.
 
 #### Preflight Execution
 
@@ -81,7 +81,7 @@ pub trait PreflightExecutor<F, RA> {
 
 ### Interpreter Architecture
 
-The `InterpretedInstance` handles pure and metered execution modes. More specifically, it:
+The `InterpretedInstance` represents the VM interpreter and handles pure and metered execution modes. More specifically, it:
 
 - Pre-computes instruction-specific data buffers
 - Generates function pointer tables for direct execution
@@ -95,19 +95,13 @@ The `PreflightInterpretedInstance` handles preflight execution with:
 
 ### Chips for Opcode Groups
 
-Opcodes are partitioned into groups, each of which is handled by a single executor, air and **chip**. Executor is the struct that contains logic for executing an opcode and generating records. A chip is an object that contains logic for converting execution records into a trace matrix and public values associated with an AIR. And AIR contains the arithmetic and lookup constraints on the trace matrix required to create a proof of execution.
+Opcodes are partitioned into groups, each of which is handled by a single executor, air and **chip**. Executor is the struct that contains logic for executing an opcode and generating records. A chip is an object that contains logic for converting execution records into a trace matrix. And AIR contains the arithmetic and lookup constraints on the trace matrix required to create a proof of execution.
 
 ```rust
 pub trait Chip<R, PB: ProverBackend> {
     /// Generate all necessary context for proving a single AIR.
     fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB>;
 }
-```
-
-A chip should be a struct of type `C`
-
-```rust
-C: Chip<SC>
 ```
 
 where `PB` is either `CpuBackend` or `GpuBackend`.
@@ -118,7 +112,7 @@ As mentioned above, the executor should implement the three executor traits: `Ex
 ChipExecutor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>
 ```
 
-The AIR `A` should implement the following traits, have the following trait bounds:
+The AIR `A` should have the following trait bounds:
 
 ```rust
 A: Air<AB> + BaseAir<F> + BaseAirWithPublicValues<F>
@@ -129,7 +123,7 @@ where `AB` is an `AirBuilder`
 Together, these provide the following functionalities:
 
 - **Keygen:** Performed via the `Air::<AB>::eval()` function.
-- **Trace Generation:** This is done by calling `PreflightExecutor::<F, RA>::execute()` which computes the execution records and then `Chip::<R, PB>::generate_proving_ctx()` which generates the trace using the corresponding records.
+- **Trace Generation:** This is done by calling `PreflightExecutor::<F, RA>::execute()` which computes the execution records and then `Chip::<R, PB>::generate_proving_ctx()` which generates the trace by consuming the execution records.
 
 ### VM AIR Integration
 
@@ -165,7 +159,7 @@ pub trait PhantomSubExecutor<F>: Send + Sync {
 pub struct PhantomDiscriminant(pub u16);
 ```
 
-The `PhantomExecutor<F>` internally maintains a mapping from `PhantomDiscriminant` to `Box<dyn PhantomSubExecutor<F>>>` to
+The `PhantomExecutor<F>` internally maintains a mapping from `PhantomDiscriminant` to `Arc<dyn PhantomSubExecutor<F>>` to
 handle different phantom sub-instructions.
 
 ### VM Configuration
@@ -238,15 +232,11 @@ Trace generation uses the records generated in preflight execution and proceeds 
 
 > `VirtualMachine::generate_proving_ctx()`
 
-The trace generation process:
-- Creates a `PreflightCtx` with pre-allocated arena capacities based on expected trace heights
-- Uses `TracingMemory` to track memory access patterns during execution
-- Collects each chip's execution records during preflight execution
-- Record arenas are then processed to generate the final trace matrices
+which consumes the execution records and generates the final trace matrices.
 
-For continuation execution, the trace generation process is handled by `VmInstance`:
+For execution with multiple segments (continuations), the trace generation process is handled by `VmInstance` and proceeds as follows:
 
-1. **Metered Execution**: First runs metered execution to determine segment boundaries using `execute_metered()` which returns a list of `Segment` structs containing:
+1. **Metered Execution**: First run metered execution to determine segment boundaries using `execute_metered()` which returns a list of `Segment` structs containing:
    ```rust
    pub struct Segment {
        pub instret_start: u64,
@@ -255,11 +245,10 @@ For continuation execution, the trace generation process is handled by `VmInstan
    }
    ```
 
-2. **Sequential Segment Trace Generation**: For each segment, the process:
-   - Transports initial memory to device via `transport_init_memory_to_device()`
-   - Runs preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
-   - Generates trace context from system records and record arenas via `generate_proving_ctx()`
-   - Passes final state as initial state to next segment
+2. **Segment Trace Generation**: For each segment:
+   - Run preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
+   - Generate trace context from system records and record arenas via `generate_proving_ctx()`
+   - Pass final state as initial state to next segment
 
 This approach ensures each segment has properly allocated record arenas based on metered execution estimates, and segments maintain state continuity between them.
 
@@ -275,14 +264,14 @@ The integration API provides a way to create chips where the following condition
 - a single instruction execution corresponds to a single row of the trace matrix
 - rows of all 0's satisfy the constraints
 
-Most chips in the VM satisfy this, with notable exceptions being Keccak, Sha256 and Poseidon2.
+Most chips in the VM satisfy this, with notable exceptions being Keccak, SHA256 and Poseidon2.
 
-### Architecture: Separation of AIR and Execution Concerns
+### Architecture
 
 The integration API separates chip functionality into two distinct layers:
 
-1. **AIR layer**: Defines arithmetic constraints and interactions with system buses
-2. **Execution/Trace generation layer**: Handles execution and trace generation
+1. **AIR**: Defines arithmetic constraints and interactions with system buses
+2. **Execution/Trace generation**: Handles execution and trace generation
 
 ### AIR traits for Adapter and Core
 
@@ -392,9 +381,10 @@ The execution layer handles execution and trace generation, separate from the co
 
 - `AdapterTraceExecutor<F>` - handles adapter-level execution (memory accesses)
 - `AdapterTraceFiller<F>` - fills adapter columns in the trace matrix
+- `PreflightExecutor<F, RA>` - handles instruction execution logic and generates records
 - `TraceFiller<F>` - fills complete trace rows (adapter + core)
 
-The core component typically implements `PreflightExecutor` to handle instruction execution logic. The core executor generates records that are later used by the trace filler to populate the trace matrix.
+The executor components generate the records that are later used by the trace filler to populate the trace matrix.
 
 ```rust
 /// A helper trait for expressing generic state accesses within the implementation.
@@ -472,7 +462,7 @@ They implement the following traits:
 - `TraceFiller<F>` is implemented on the inner filler, where `fill_trace()` iterates through all records from instruction execution and generates one row of the trace from each record. Rows which do not correspond to an instruction execution are left as **identically zero**. Each used row in the trace is created by calling `fill_trace_row()` with the memory helper and row slice.
 
 - The `VmChipWrapper` provides a blanket implementation of `Chip<RA, CpuBackend<SC>>` for any struct that implements `TraceFiller<Val<SC>>`. The wrapper handles trace generation by:
-  1. Extracting the trace matrix from the record arena
+  1. Instantiating a trace matrix by consuming the record arena
   2. Calling `fill_trace()` on the inner filler to populate the matrix
   3. Generating public values via `generate_public_values()`
 
