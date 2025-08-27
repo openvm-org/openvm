@@ -30,7 +30,7 @@ jobs:
           - "rv32im native"
           - "keccak256 sha256 bigint algebra ecc pairing"
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/spot=false/extras=s3-cache
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32
 
     steps:
       - uses: runs-on/action@v2

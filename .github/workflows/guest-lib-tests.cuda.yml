@@ -33,7 +33,7 @@ jobs:
           - { names: "ff_derive k256 p256 ruint", family: "g6+g5+g6e" }
           - { names: "pairing", family: "g6e" }
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.crates.family }}/image=ubuntu24-gpu-x64/cpu=8+32/spot=false/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.crates.family }}/image=ubuntu24-gpu-x64/cpu=8+32/spot=capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
