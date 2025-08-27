@@ -1,5 +1,4 @@
-#![cfg_attr(not(feature = "std"), no_main)]
-#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
 
 use elliptic_curve::{ops::LinearCombination, CurveArithmetic, Field, Group, PrimeField};
 use openvm_p256::NistP256;
@@ -7,12 +6,9 @@ use openvm_p256::NistP256;
 #[allow(unused)]
 use openvm_p256::{P256Point, P256Point as ProjectivePoint, P256Scalar as Scalar};
 
-openvm::init!("openvm_init_various.rs");
-
-openvm::entry!(main);
+openvm::init!();
 
 pub fn main() {
-    // from scalar_sqrt.rs
     type Scalar = <NistP256 as CurveArithmetic>::Scalar;
 
     let a = Scalar::from_u128(4);
@@ -32,7 +28,6 @@ pub fn main() {
     let b = a.sqrt();
     assert!(bool::from(b.is_none()));
 
-    // from linear_combination.rs
     let g = ProjectivePoint::generator();
     let a = ProjectivePoint::lincomb(&g, &Scalar::from_u128(100), &g, &Scalar::from_u128(156));
     let mut b = g;

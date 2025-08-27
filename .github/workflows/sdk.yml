@@ -95,6 +95,7 @@ jobs:
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
+          export RUST_MIN_STACK=8388608
           cargo nextest run --cargo-profile=fast --features parallel,evm-verify
 
       - name: Run ignored tests

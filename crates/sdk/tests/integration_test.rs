@@ -390,6 +390,19 @@ fn test_sdk_guest_build_and_transpile() -> eyre::Result<()> {
 }
 
 #[test]
+fn test_sdk_standard_with_p256() -> eyre::Result<()> {
+    // WARNING: This test's keygen uses over the cargo test default stack
+    // limit. To run this test, set env variable RUST_MIN_STACK=8388608.
+    let sdk = Sdk::standard();
+    let mut pkg_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
+    pkg_dir.push("guest/p256");
+    let elf = sdk.build(GuestOptions::default(), &pkg_dir, &None, None)?;
+    let (proof, commit) = sdk.prove(elf, StdIn::default())?;
+    Sdk::verify_proof(&sdk.agg_pk().get_agg_vk(), commit, &proof)?;
+    Ok(())
+}
+
+#[test]
 fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     // generate a proof
     let sdk = Sdk::new(small_test_app_config(1))?;

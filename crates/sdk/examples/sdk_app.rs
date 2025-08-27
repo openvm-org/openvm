@@ -3,15 +3,6 @@ use openvm_sdk::{prover::verify_app_proof, Sdk, StdIn};
 
 #[allow(unused_variables, unused_doc_comments)]
 fn main() -> eyre::Result<()> {
-    /// to import example guest code in crate replace `target_path` for:
-    /// ```
-    /// use std::path::PathBuf;
-    ///
-    /// let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).to_path_buf();
-    /// path.push("guest/little");
-    /// let target_path = path.to_str().unwrap();
-    /// ```
-    ///
     // 1. Build the VmConfig with the extensions needed.
     let sdk = Sdk::standard();
 

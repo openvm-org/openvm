@@ -6387,7 +6387,6 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
  "openvm-rv32im-transpiler",
- "openvm-sdk",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",
  "openvm-stark-backend",
