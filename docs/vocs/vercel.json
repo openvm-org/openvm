@@ -46,10 +46,15 @@
         "permanent": false
       },
       {
-        "source": "/stark-backend",
-        "destination": "/docs/stark-backend/",
+        "source": "/openvm/",
+        "destination": "/docs/openvm/",
         "permanent": false
       },
+        {
+          "source": "/stark-backend",
+          "destination": "/docs/stark-backend/",
+          "permanent": false
+        },
         {
           "source": "/docs",
           "destination": "/docs/openvm/",
