@@ -35,7 +35,7 @@ fn execute(
 
 ### Types of record arenas
 
-We have two implementations of record arenas: `MatrixRecordArena` for generating trace on CPU, and `DenseRecordArena` for GPU. The distinction is due to the fact that, for GPU tracegen, we have to first send the records to the GPU, then generate the trace on its side, and send the trace back to CPU. This motivates the arena to pack the record densely, hence the name. On the other hand, if we don't need to send the records anywhere, then they may already represent a partially filled trace -- maybe with gaps between their elements, which will be filled during tracegen.
+We have two implementations of record arenas: `MatrixRecordArena` for generating trace on CPU, and `DenseRecordArena` for GPU. The distinction is due to the fact that, for GPU tracegen, we have to first send the records to the GPU, and then generate the trace on its side. This motivates the arena to pack the record densely, hence the name. On the other hand, if we don't need to send the records anywhere, then they may already represent a partially filled trace -- maybe with gaps between their elements, which will be filled during tracegen.
 
 ### `RecordMut`
 

@@ -65,7 +65,7 @@ Each executor is associated with a chip and an AIR. This mapping is defined impl
 
 #### Preflight Execution
 
-Preflight execution creates execution records of the record arena type `RA` which are needed for trace generation. Preflight execution doesn't have a precompute mechanism and uses runtime dispatch to execute each instruction.
+Preflight execution creates execution [records](records.md) of the record arena type `RA` which are needed for trace generation. Preflight execution doesn't have a precompute mechanism and uses runtime dispatch to execute each instruction.
 
 The `PreflightExecutor<F, RA>` trait defines the interface for preflight execution:
 
