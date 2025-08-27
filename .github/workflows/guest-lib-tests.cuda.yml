@@ -137,7 +137,7 @@ jobs:
                 SPECIAL_ARGS=""
                 if [[ "$crate" == "pairing" ]]; then
                   SPECIAL_ARGS="--features=bn254,bls12_381"
-                else if [[ "$crate" == "ruint" ]]; then
+                elif [[ "$crate" == "ruint" ]]; then
                   # only run integration tests because other tests are not OpenVM related
                   SPECIAL_ARGS="--test '*'"
                 fi
