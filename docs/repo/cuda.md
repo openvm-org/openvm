@@ -5,7 +5,7 @@ See [Development with CUDA](../contributor-setup.md#development-with-cuda) for m
 
 ## Overview
 
-The OpenVM framework includes optional GPU acceleration via CUDA for performance-critical components. GPU implementations are available as an optional feature and can significantly speed up proof and trace generation.
+The OpenVM framework includes optional GPU acceleration via CUDA for performance-critical components. GPU implementations are available as an optional feature `cuda` and can significantly speed up proof and trace generation.
 
 ## Project Structure
 
