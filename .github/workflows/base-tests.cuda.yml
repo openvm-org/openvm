@@ -13,8 +13,7 @@ on:
       - "extensions/native/compiler/**"
       - "extensions/native/recursion/**"
       - "Cargo.toml"
-      - ".github/workflows/recursion.yml"
-      - ".github/workflows/vm.yml"
+      - ".github/workflows/base-tests.cuda.yml"
 
 concurrency:
   group: ${{ github.workflow_ref }}-base-tests-cuda-${{ github.event.pull_request.number || github.sha }}
