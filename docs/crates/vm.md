@@ -277,17 +277,25 @@ The integration API provides a way to create chips where the following condition
 
 Most chips in the VM satisfy this, with notable exceptions being Keccak, Sha256 and Poseidon2.
 
-### Traits for Adapter and Core
+### Architecture: Separation of AIR and Execution Concerns
 
-- `VmAdapterInterface<T>`
-- `VmAdapterAir<AB>`
-- `VmCoreAir<AB, I: VmAdapterInterface<AB::Expr>>`
-- `AdapterTraceExecutor<F>` and `AdapterTraceFiller<F>`
+The integration API separates chip functionality into two distinct layers:
+
+1. **AIR layer**: Defines arithmetic constraints and interactions with system buses
+2. **Execution/Trace generation layer**: Handles execution and trace generation
+
+### AIR traits for Adapter and Core
+
+The AIR layer consists of adapter and core components that define the constraint logic:
+
+- `VmAdapterInterface<T>` - defines the interface between adapter and core
+- `VmAdapterAir<AB>` - handles system interactions (memory, program, execution buses)
+- `VmCoreAir<AB, I>` - implements instruction-specific arithmetic constraints
 
 > [!WARNING]
 > The word **core** will be banned from usage outside of this context.
 
-Main idea: each VM chip is created from an adapter and core components. The VM AIR is created from an
+Main idea: each VM chip AIR is created from an adapter and core components. The VM AIR is created from an
 `AdapterAir` and `CoreAir` so that the columns of the VM AIR are formed by concatenating the columns from the
 `AdapterAir` followed by the `CoreAir`.
 
@@ -299,7 +307,7 @@ The `AdapterAir` does not see the `CoreAir`, but the `CoreAir` is able to see th
 `AdapterAir` can be used with several `CoreAir`s. The AdapterInterface provides a way for `CoreAir` to provide expressions to be
 included in `AdapterAir` constraints -- in particular `AdapterAir` interactions can still involve `CoreAir` expressions.
 
-Traits with their associated types and functions:
+AIR traits with their associated types and functions:
 
 ```rust
 /// The interface between core AIR and adapter AIR.
@@ -313,61 +321,6 @@ pub trait VmAdapterInterface<T> {
     /// is being used and `opcode` to indicate which opcode is being executed if the
     /// VmChip supports multiple opcodes.
     type ProcessedInstruction;
-}
-
-/// Helper trait for CPU tracegen.
-pub trait TraceFiller<F>: Send + Sync {
-    /// Populates `trace`. This function will always be called after
-    /// [`TraceExecutor::execute`], so the `trace` should already contain the records necessary to
-    /// fill in the rest of it.
-    fn fill_trace(
-        &self,
-        mem_helper: &MemoryAuxColsFactory<F>,
-        trace: &mut RowMajorMatrix<F>,
-        rows_used: usize,
-    ) where
-        F: Send + Sync + Clone;
-
-    /// Populates `row_slice` with values corresponding to the record.
-    /// The provided `row_slice` will have length equal to the width of the AIR.
-    /// This function will be called for each row in the trace which is being used.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
-
-    /// Returns a list of public values to publish.
-    fn generate_public_values(&self) -> Vec<F> {
-        vec![]
-    }
-}
-
-/// A helper trait for expressing generic state accesses within the implementation.
-pub trait AdapterTraceExecutor<F>: Clone {
-    const WIDTH: usize;
-    type ReadData;
-    type WriteData;
-    type RecordMut<'a> where Self: 'a;
-
-    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
-
-    fn read(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        record: &mut Self::RecordMut<'_>,
-    ) -> Self::ReadData;
-
-    fn write(
-        &self,
-        memory: &mut TracingMemory,
-        instruction: &Instruction<F>,
-        data: Self::WriteData,
-        record: &mut Self::RecordMut<'_>,
-    );
-}
-
-pub trait AdapterTraceFiller<F>: Send + Sync {
-    const WIDTH: usize;
-    /// Post-execution filling of rest of adapter row.
-    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
 }
 
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
@@ -389,7 +342,6 @@ pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     /// Return the `from_pc` expression.
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
-
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
 where
@@ -434,42 +386,104 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 > [!WARNING]
 > You do not need to implement `Air` on the struct you implement `VmAdapterAir` or `VmCoreAir` on.
 
-### Creating a Chip from Adapter and Core
+### Execution and Trace generation traits
 
-To create a chip used to support a set of opcodes in the VM, we use the `VmChipWrapper` and `VmAirWrapper` types:
+The execution layer handles execution and trace generation, separate from the constraint logic:
+
+- `AdapterTraceExecutor<F>` - handles adapter-level execution (memory accesses)
+- `AdapterTraceFiller<F>` - fills adapter columns in the trace matrix
+- `TraceFiller<F>` - fills complete trace rows (adapter + core)
+
+The core component typically implements `PreflightExecutor` to handle instruction execution logic. The core executor generates records that are later used by the trace filler to populate the trace matrix.
 
 ```rust
-pub struct VmChipWrapper<F, FILLER> {
-    pub inner: FILLER,
-    pub mem_helper: SharedMemoryHelper<F>,
+/// A helper trait for expressing generic state accesses within the implementation.
+pub trait AdapterTraceExecutor<F>: Clone {
+    const WIDTH: usize;
+    type ReadData;
+    type WriteData;
+    type RecordMut<'a> where Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
+
+    fn read(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData;
+
+    fn write(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
+    );
 }
 
+pub trait AdapterTraceFiller<F>: Send + Sync {
+    const WIDTH: usize;
+    /// Post-execution filling of rest of adapter row.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
+}
+
+pub trait TraceFiller<F>: Send + Sync {
+    /// Populates `trace`
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) where
+        F: Send + Sync + Clone;
+
+    /// Populates `row_slice` with values corresponding to the record.
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    /// This function will be called for each row in the trace which is being used.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+
+    ...
+}
+```
+
+### Creating a Chip from Adapter and Core
+
+To create a chip used to support a set of opcodes in the VM, we start with types that implement the appropriate adapter and core traits. We then create `VmAirWrapper` and `VmChipWrapper` types:
+
+```rust
 pub struct VmAirWrapper<A, C> {
     pub adapter: A,
     pub core: C,
 }
+
+pub struct VmChipWrapper<F, FILLER> {
+    pub inner: FILLER,
+    pub mem_helper: SharedMemoryHelper<F>,
+}
 ```
 
-The `VmChipWrapper` provides a blanket implementation of `Chip<RA, CpuBackend<SC>>` for any struct that implements `TraceFiller<Val<SC>>`. The wrapper handles trace generation by:
+They implement the following traits:
 
-1. Extracting the trace matrix from the record arena
-2. Calling `fill_trace()` on the inner filler to populate the matrix
-3. Generating public values via `generate_public_values()`
+- `Air<AB>`, `BaseAir<F>`, and `BaseAirWithPublicValues<F>` are implemented on `VmAirWrapper<A, C>`, where the `eval()` function implements constraints via:
+  - calls `eval()` on `C::Air`
+  - calls `eval()` on `A::Air`
 
-The `VmAirWrapper` combines adapter and core AIRs:
+- `TraceFiller<F>` is implemented on the inner filler, where `fill_trace()` iterates through all records from instruction execution and generates one row of the trace from each record. Rows which do not correspond to an instruction execution are left as **identically zero**. Each used row in the trace is created by calling `fill_trace_row()` with the memory helper and row slice.
 
-- Implements `BaseAir<F>` with width equal to the sum of adapter and core widths
-- Implements `Air<AB>` by:
-  - Splitting the trace columns between adapter and core
-  - Calling `core.eval()` to get the adapter context
-  - Calling `adapter.eval()` with the context
+- The `VmChipWrapper` provides a blanket implementation of `Chip<RA, CpuBackend<SC>>` for any struct that implements `TraceFiller<Val<SC>>`. The wrapper handles trace generation by:
+  1. Extracting the trace matrix from the record arena
+  2. Calling `fill_trace()` on the inner filler to populate the matrix
+  3. Generating public values via `generate_public_values()`
 
-**Convention:** If you have a new `Foo` functionality, create adapter and core components and combine them:
+**Convention:** If you have a new `Foo` functionality you want to support, create structs `FooExecutor`, `FooFiller`, and `FooCoreAir`. Either use existing adapter components or make your own. Then typedef:
 
 ```rust
-pub type FooChip<F> = VmChipWrapper<F, FooTraceFiller<F>>;
+pub type FooChip<F> = VmChipWrapper<F, FooFiller<F>>;
 pub type FooAir = VmAirWrapper<FooAdapterAir, FooCoreAir>;
 ```
+
+If there is a risk of ambiguity, use name `BarFooChip` instead of just `FooChip`.
 
 ### Basic structs for shared use
 
@@ -499,15 +513,6 @@ pub struct ImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
     pub opcode: T,
-    pub immediate: T,
-}
-
-pub struct SignedImmInstruction<T> {
-    pub is_valid: T,
-    /// Absolute opcode number
-    pub opcode: T,
-    pub immediate: T,
-    /// Sign of the immediate (1 if negative, 0 if positive)
-    pub imm_sign: T,
+    pub imm: T,
 }
 ```
