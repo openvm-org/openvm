@@ -18,7 +18,6 @@ The above process generates all segment App proofs in parallel. After the App pr
 ## Modular Abstraction Layers
 
 The distributed proving architecture is designed to be extensible and composable via VM extensions. The architecture allows each VM extension to define their own implementations of execution and trace generation, while a unified hardware abstraction layer ensures:
-- Hardware-agnostic execution - The same execution implementation may be used across different hardware acceleration platforms (CPU or GPU).
 - Optimized parallelization - VM extensions can implement hardware-specific trace generation algorithms to maximize parallel computation efficiency.
 - Decoupled proving backend - The STARK backend prover implements the specifications of the proof system with optimized hardware acceleration while remaining independent of the VM extensions in use.
 
