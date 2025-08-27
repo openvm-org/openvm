@@ -263,11 +263,12 @@ For execution with multiple segments (continuations), the trace generation proce
    ```
 
 2. **Segment Trace Generation**: For each segment:
+   - Recover the starting VM state at the beginning of the segment via pure execution from the program start (only necessary in a distributed setup)
    - Run preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
    - Generate trace context from system records and record arenas via `generate_proving_ctx()`
-   - Pass final state as initial state to next segment
+   - Pass final state as initial state to next segment (only necessary in a local setup when proving is done on a single machine)
 
-This approach ensures each segment has properly allocated record arenas based on metered execution estimates, and segments maintain state continuity between them.
+This approach ensures each segment has properly allocated record arenas based on metered execution estimates, and enables distributed proving where each segment can be proven independently by first recovering its starting state.
 
 #### Proof Generation
 
