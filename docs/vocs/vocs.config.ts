@@ -21,7 +21,7 @@ export default defineConfig({
     { text: 'Specs', link: '/specs/openvm/overview' },
     {
       text: 'Rustdocs',
-      link: `${process.env.VERCEL_PROJECT_PRODUCTION_URL || 'http://localhost:3000'}/docs/openvm`
+      link: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || 'localhost:3000'}/docs/openvm`
     },
     { text: 'GitHub', link: 'https://github.com/openvm-org/openvm' },
     {
