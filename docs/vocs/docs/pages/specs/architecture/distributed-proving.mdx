@@ -22,15 +22,17 @@ The distributed proving architecture is designed to be extensible and composable
 - Optimized parallelization - VM extensions can implement hardware-specific trace generation algorithms to maximize parallel computation efficiency.
 - Decoupled proving backend - The STARK backend prover implements the specifications of the proof system with optimized hardware acceleration while remaining independent of the VM extensions in use.
 
-We now give more details about the components described above.
+The hardware abstraction layer defines a host-device boundary: the _host_ comprises the CPU and system RAM, while the _device_ denotes specialized compute hardware featuring architecture-specific memory that operates either independently or in a unified memory model with the host.
+
+We now give more details about the components of the distributed proving architecture discussed in the overview.
 
 ## Execution
 Given an executable consisting of OpenVM instructions, we have several runtimes which run the executable.
 
 We will have three modes of execution:
 - **Pure** execution. This is "normal" VM execution, currently implemented via an interpreter, where execution starts from a specified VM state and executes either a specific number of instructions or until program termination. Pure execution only needs to output the end VM state when execution stops.
-- **Metered** execution. This is pure execution that additionally measures weighted functions of instruction counts and guest memory usage in order to determine where to [segment](/specs/architecture/circuit-architecture#program-execution) the program execution. The output of metered execution is the sequence of segments together with instruction counters at the segment boundaries.
-- **Preflight** execution. This is a special logging execution that records the minimal execution trace such that subsequent [trace generation](#trace-generation) may be done without reliance on the VM state.
+- **Metered** execution. This is pure execution that additionally measures weighted functions of instruction counts and guest memory usage in order to determine where to [segment](/specs/architecture/circuit-architecture#program-execution) the program execution. The segmentation criteria are designed to account for estimated prover device memory usage and security constraints dependent on the proof system's prime field. The output of metered execution is the sequence of segments together with segmentation-related metadata about the segment boundaries.
+- **Preflight** execution. This is a special logging execution that records the minimal execution trace such that subsequent [trace generation](#trace-generation) may be done in parallel without reliance on the VM state.
     - The logging is done by writing _records_ to in-memory buffers referred to as _record arenas_. During trace generation, these buffers are designed to be transferred to device memory for hardware acceleration purposes.
 
 All modes of execution are inherently serial and performed on a CPU.
@@ -51,5 +53,5 @@ The proving key is generated upon circuit creation independently of any runtime 
 
 The sequence of App proofs, one per segment, is aggregated using distributed proof aggregation following our [continuation design](/specs/architecture/continuations). Proof aggregation proceeds using an aggregation tree, where each node in the same layer of the tree can be proven in parallel.
 
-Presently, each aggregation proof is generated as a proof of a single segment of an Agg VM program. Since aggregation proofs are necessarily of single segments, metered execution is not required.
+Presently, each aggregation proof is generated as the proof of execution of an Agg VM program, and the design requires that the entire execution fits into a single segment. Since aggregation proofs are necessarily of single segments, metered execution is not required.
 Instead, preflight execution is run directly on the single segment without pure or metered execution. Then trace generation and STARK backend proving proceed on device as described above.
