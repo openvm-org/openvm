@@ -34,14 +34,15 @@ Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installe
 To enable the `cuda` feature for `rust-analyzer`, add the following to your IDE settings file (e.g., `.vscode/settings.json`):
 
 ```json
-{  
+{
   "rust-analyzer.cargo.features": [
     "cuda"
   ],
 }
 ```
 
-Note that to build the project from the CLI, you still need to add `--features cuda` to your `cargo` command to enable CUDA.
+> [!NOTE]
+> Note that to build the project from the CLI, you still need to add `--features cuda` to your `cargo` command to enable CUDA.
 
 In addition to `rust-analyzer` for linting Rust code, we recommend installing a `clangd` server for linting CUDA code - in VS Code this comes with the C/C++ extension. For the `clangd` server to work properly, run
 
