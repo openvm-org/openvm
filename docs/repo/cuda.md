@@ -11,12 +11,12 @@ The OpenVM framework includes optional GPU acceleration via CUDA for performance
 
 ### Directory Organization
 
-Each crate with GPU implementation follows a consistent structure:
+Crates with GPU implementation are generally structured as follows:
 
 ```
 crate-root/
 ├── src/                 # Rust source code
-│   ├── cuda.rs          # or cuda/ folder - CUDA support module
+│   ├── module/cuda.rs   # or cuda/ folder - module with CUDA support
 │   └── cuda_abi.rs      # FFI bindings to CUDA functions
 ├── cuda/                # CUDA implementation
 │   ├── include/   
