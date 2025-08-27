@@ -28,6 +28,10 @@ export const specsSidebar: SidebarItem[] = [
             {
                 text: "Continuations Design",
                 link: "/specs/architecture/continuations"
+            },
+            {
+                text: "Distributed Proving",
+                link: "/specs/architecture/distributed-proving"
             }
         ]
     },

@@ -89,12 +89,7 @@ jobs:
   lint-cuda:
     name: Lint CUDA
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda
-      - runner=test-gpu-nvidia
-      - image=ubuntu24-gpu-x64
-      - spot=false
-      - extras=s3-cache
-
+      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5

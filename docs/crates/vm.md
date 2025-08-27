@@ -1,49 +1,136 @@
 # VM Architecture and Chips
 
-### `PreflightExecutor` Trait
+## Execution
 
-We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Running the instrumented
-runtime for an opcode is encapsulated in the following trait:
+OpenVM provides a modular interface to add VM instructions via the extension API. The `VmExecutionExtension` trait allows one to specify various execution extensions. An extension consists of executor structs that handle specific instruction opcodes and must implement the `Executor`, `MeteredExecutor`, and `PreflightExecutor` traits, corresponding to different execution modes.
+
+We define an **instruction** to be an **opcode** combined with the **operands** for the opcode. Each opcode must be mapped to a specific executor that contains the logic for executing the instruction.
+There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode supported in a given VM.
+
+### Execution Modes
+
+#### Pure Execution
+
+Pure execution runs the program without any overhead and is used to obtain the final VM state at termination, or after executing a fixed number of instructions.
+
+The `Executor<F>` trait defines the interface for pure execution:
 
 ```rust
-pub trait PreflightExecutor<F> {
-    /// Runtime execution of the instruction, if the instruction is owned by the
-    /// current instance. May internally store records of this call for later trace generation.
-    fn execute(
-        &mut self,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-  ) -> Result<ExecutionState<u32>>;
+pub trait Executor<F> {
+    fn pre_compute_size(&self) -> usize;
+
+    fn pre_compute<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait;
 }
 ```
 
-There is a `struct VmOpcode(usize)` to protect the global opcode `usize`, which must be globally unique for each opcode
-supported in a given VM.
+where `ExecuteFunc<F, Ctx>` is a function pointer that contains the instruction execution logic.
+
+```rust
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+```
+
+Each executor pre-computes instruction-specific data during a preprocessing step and returns function pointers for direct instruction execution.
+
+#### Metered Execution
+
+Metered execution tracks the trace heights for each chip along with normal execution. This mode divides the execution into segments, where each segment consists of an instruction range and an (over)estimate of the resulting trace heights for each chip in the segment. Segmentation is done based on configurable limits like maximum trace height, maximum trace cells etc.
+
+The `MeteredExecutor<F>` trait defines the interface for metered execution:
+
+```rust
+pub trait MeteredExecutor<F> {
+    fn metered_pre_compute_size(&self) -> usize;
+
+    fn metered_pre_compute<Ctx>(
+        &self,
+        air_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait;
+}
+```
+
+Each executor is associated with a chip and an AIR. This mapping is defined implicitly by the VM extension. The additional `air_idx` parameter is the index of the executor's AIR in the verifying key. This is used for indexing the trace height of the chip in the `trace_heights` array contained in the `Segment` struct.
+
+#### Preflight Execution
+
+Preflight execution creates execution records of the record arena type `RA` which are needed for trace generation. Preflight execution doesn't have a precompute mechanism and uses runtime dispatch to execute each instruction.
+
+The `PreflightExecutor<F, RA>` trait defines the interface for preflight execution:
+
+```rust
+pub trait PreflightExecutor<F, RA> {
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError>;
+}
+```
+
+### Interpreter Architecture
+
+The `InterpretedInstance` represents the VM interpreter and handles pure and metered execution modes. More specifically, it:
+
+- Pre-computes instruction-specific data buffers
+- Generates function pointer tables for direct execution
+- Supports optional tail call optimization (TCO) for improved performance
+
+The `PreflightInterpretedInstance` handles preflight execution with:
+
+- Runtime instruction dispatch (as opposed to the precomputed function pointers used in pure/metered execution)
+- Execution record collection in record arenas `RA`
+- Per-instruction frequency tracking to be used by the `ProgramChip`
 
 ### Chips for Opcode Groups
 
-Opcodes are partitioned into groups, each of which is handled by a single **chip**. A chip should be a struct of
-type `C` and associated Air of type `A` which satisfy the following trait bounds:
+Opcodes are partitioned into groups, each of which is handled by a single executor, air and **chip**. Executor is the struct that contains logic for executing an opcode and generating records. A chip is an object that contains logic for converting execution records into a trace matrix. And AIR contains the arithmetic and lookup constraints on the trace matrix required to create a proof of execution.
 
 ```rust
-C: Chip<SC> + PreflightExecutor<F>
+pub trait Chip<R, PB: ProverBackend> {
+    /// Generate all necessary context for proving a single AIR.
+    fn generate_proving_ctx(&self, records: R) -> AirProvingContext<PB>;
+}
+```
+
+where `PB` is either `CpuBackend` or `GpuBackend`.
+
+As mentioned above, the executor should implement the three executor traits: `Executor`, `MeteredExecutor`, and `PreflightExecutor`.
+
+```rust
+ChipExecutor: Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>
+```
+
+The AIR `A` should have the following trait bounds:
+
+```rust
 A: Air<AB> + BaseAir<F> + BaseAirWithPublicValues<F>
 ```
+
+where `AB` is an `AirBuilder`
 
 Together, these provide the following functionalities:
 
 - **Keygen:** Performed via the `Air::<AB>::eval()` function.
-- **Trace Generation:** This is done by calling `PreflightExecutor::<F>::execute()` which computes and stores
-  execution records and then `Chip::<SC>::generate_air_proof_input()` which generates the trace using the corresponding
-  records.
+- **Trace Generation:** This is done by calling `PreflightExecutor::<F, RA>::execute()` which computes the execution records and then `Chip::<R, PB>::generate_proving_ctx()` which generates the trace by consuming the execution records.
 
 ### VM AIR Integration
 
-At the AIR-level, for an AIR to integrate with the OpenVM architecture (constrain memory, read the instruction from the program, etc.), the AIR
-communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
+At the AIR-level, for an AIR to integrate with the OpenVM architecture (constrain memory, read the instruction from the program, etc.), the AIR communicates over different (virtual) buses. There are three main system buses: the memory bus, program bus, and the
 execution bus. The memory bus is used to access memory, the program bus is used to read instructions from the program,
 and the execution bus is used to constrain the execution flow. These buses are derivable from the `SystemPort` struct,
-which is provided by the `VmInventoryBuilder`.
+which is provided by `AirInventory`/`SystemAirInventory`.
 
 The buses have very low-level APIs and are not intended to be used directly. "Bridges" are provided to provide a cleaner interface for
 sending interactions over the buses and enforcing additional constraints for soundness. The two system bridges are
@@ -51,18 +138,20 @@ sending interactions over the buses and enforcing additional constraints for sou
 
 ### Phantom Sub-Instructions
 
+Phantom sub-instructions are instructions that affect the runtime and trace matrix values but have no AIR constraints besides advancing the PC by `DEFAULT_PC_STEP`. They should not mutate memory, but they can mutate the input & hint streams.
+
 You can specify phantom sub-instruction executors by implementing the trait:
 
 ```rust
-pub trait PhantomSubExecutor<F> {
+pub trait PhantomSubExecutor<F>: Send + Sync {
     fn phantom_execute(
-        &mut self,
-        memory: &MemoryController<F>,
+        &self,
+        memory: &GuestMemory,
         streams: &mut Streams<F>,
         rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
-        a: F,
-        b: F,
+        a: u32,
+        b: u32,
         c_upper: u16,
     ) -> eyre::Result<()>;
 }
@@ -70,80 +159,121 @@ pub trait PhantomSubExecutor<F> {
 pub struct PhantomDiscriminant(pub u16);
 ```
 
-The `PhantomChip<F>` internally maintains a mapping from `PhantomDiscriminant` to `Box<dyn PhantomSubExecutor<F>>>` to
+The `PhantomExecutor<F>` internally maintains a mapping from `PhantomDiscriminant` to `Arc<dyn PhantomSubExecutor<F>>` to
 handle different phantom sub-instructions.
 
 ### VM Configuration
 
-Each specific instantiation of a modular VM is defined by the following struct:
+Each specific instantiation of a modular VM is defined by the `VirtualMachine` struct, which contains the API to generate proofs for arbitrary programs for a fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. This struct represents the complete zkVM.
+
+The `VirtualMachine` can be constructed using:
 
 ```rust
-pub struct VirtualMachine<SC: StarkGenericConfig, E, VC> {
-  pub engine: E,
-  pub executor: VmExecutor<Val<SC>, VC>,
+impl<E, VB> VirtualMachine<E, VB>
+where
+    E: StarkEngine,
+    VB: VmBuilder<E>,
+{
+    pub fn new(
+        engine: E,
+        builder: VB,
+        config: VB::VmConfig,
+        d_pk: DeviceMultiStarkProvingKey<E::PB>,
+    ) -> Result<Self, VirtualMachineError>;
+
+    pub fn new_with_keygen(
+        engine: E,
+        builder: VB,
+        config: VB::VmConfig,
+    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError>;
 }
 ```
 
-The engine type `E` should be `openvm_stark_backend::engine::StarkEngine<SC> `and the VM config type `VC` is
-`openvm_circuit::arch::config::VmConfig<Val<SC>>`, shown below.
+The engine type `E` should implement the `openvm_stark_backend::engine::StarkEngine` trait and the VM builder type `VB` implements `VmBuilder<E>`, which provides the VM configuration through `VB::VmConfig`.
 
 ```rust
-pub trait VmConfig<F: PrimeField32>: Clone + Serialize + DeserializeOwned {
-  type Executor: PreflightExecutor<F> + AnyEnum + ChipUsageGetter;
-  type Periphery: AnyEnum + ChipUsageGetter;
-
-  /// Must contain system config
-  fn system(&self) -> &SystemConfig;
-  fn system_mut(&mut self) -> &mut SystemConfig;
-
-  fn create_chip_complex(
-    &self,
-  ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
+pub trait VmConfig<SC>:
+    Clone
+    + Serialize
+    + DeserializeOwned
+    + InitFileGenerator
+    + VmExecutionConfig<Val<SC>>
+    + VmCircuitConfig<SC>
+    + AsRef<SystemConfig>
+    + AsMut<SystemConfig>
+where
+    SC: StarkGenericConfig,
+{
 }
 ```
 
-A `VmConfig` has two associated types: `Executor` and `Periphery`. The `Executor` is typically an enum over chips that
-are instruction executors, while `Periphery` is an enum for the chips that are not.
+A `VmConfig` should implement the `VmExecutionConfig` trait which provides execution configuration. The `Executor` type is typically an enum over executor structs that handle instruction execution.
+
+```rust
+pub trait VmExecutionConfig<F> {
+    type Executor: AnyEnum + Send + Sync;
+
+    fn create_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+}
+```
+
+Finally, `VmConfig` should also implement the `VmCircuitConfig` trait which provides the AIRs for all chips in the VM. The `AirInventory` contains all AIRs required for constraining the execution trace of each chip.
+
+```rust
+pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+}
+```
+
 See [VM Extensions](./vm-extensions.md) for more details.
 
 ### ZK Operations for the VM
 
 #### Keygen
 
-Key generation is computed from the `VmConfig` describing the VM. The `VmConfig` is used to create the `VmChipComplex`,
+Key generation is computed from the `VmConfig` describing the VM. The `VmConfig` is used to create the `AirInventory` via the `VmCircuitConfig` trait,
 which in turn provides the list of AIRs that are used in the proving and verification process.
 
-#### Trace Generation
-
-Trace generation proceeds from:
-
-> `VirtualMachine::execute_and_generate_with_cached_program()`
-
-with subsets of functionality offered by `VirtualMachine::execute()` and `VirtualMachine::execute_and_generate()`. The
-following struct tracks each continuation segment:
-
 ```rust
-pub struct ExecutionSegment<F: PrimeField32, VC: VmConfig<F>> {
-  pub chip_complex: VmChipComplex<F, VC::Executor, VC::Periphery>,
-  pub final_memory: Option<Equipartition<F, CHUNK>>,
-  pub air_names: Vec<String>,
-  pub since_last_segment_check: usize,
+pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
 }
 ```
 
-This will:
+The `AirInventory` contains a `keygen` method that generates the proving and verifying keys from the collected AIRs.
 
-- Split the execution into `ExecutionSegment`s using `ExecutionSegment.execute_from_pc()`, which calls
-  `ExecutionSegment.should_segment()` to segment online. Note that this creates a `VmChipComplex` for each segment from
-  `VmConfig.create_chip_set()`, where **each segment contains each chip**. It also passes all streams to all segments
-  and runs the generation in serial.
-- Generate traces for each segment by calling `VmChipSet.generate_proof_input()`, which iterates through all chips in
-  order and calls `generate_proof_input()`.
+#### Trace Generation
+
+Trace generation uses the records generated in preflight execution and proceeds from:
+
+> `VirtualMachine::generate_proving_ctx()`
+
+which consumes the execution records and generates the final trace matrices.
+
+For execution with multiple segments (continuations), the trace generation process is handled by `VmInstance` and proceeds as follows:
+
+1. **Metered Execution**: First run metered execution to determine segment boundaries using `execute_metered()` which returns a list of `Segment` structs containing:
+   ```rust
+   pub struct Segment {
+       pub instret_start: u64,
+       pub num_insns: u64,
+       pub trace_heights: Vec<u32>,
+   }
+   ```
+
+2. **Segment Trace Generation**: For each segment:
+   - Recover the starting VM state at the beginning of the segment via pure execution from the program start (only necessary in a distributed setup)
+   - Run preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
+   - Generate trace context from system records and record arenas via `generate_proving_ctx()`
+   - Pass final state as initial state to next segment (only necessary in a local setup when proving is done on a single machine)
+
+This approach ensures each segment has properly allocated record arenas based on metered execution estimates, and enables distributed proving where each segment can be proven independently by first recovering its starting state.
 
 #### Proof Generation
 
-Prove generation is performed by calling `StarkEngine.prove()` on `ProofInput<SC>` created from each segment in
-`generate_proof_input()`. There is no SDK-level API for this in `VirtualMachine` at present.
+Proof generation is performed by calling `StarkEngine.prove()` on `ProvingContext<E::PB>` created for each segment in
+`generate_proving_ctx()`. For continuation proofs, each segment is proven independently using the stark engine.
 
 ## VM Integration API
 
@@ -152,108 +282,72 @@ The integration API provides a way to create chips where the following condition
 - a single instruction execution corresponds to a single row of the trace matrix
 - rows of all 0's satisfy the constraints
 
-Most chips in the VM satisfy this, with notable exceptions being Keccak and Poseidon2.
+Most chips in the VM satisfy this, with notable exceptions being Keccak, SHA256 and Poseidon2.
 
-### Traits for Adapter and Core
+### Architecture
 
-- `VmAdapterInterface<T>`
-- `VmAdapterChip<F>`
-- `VmAdapterAir<AB>`
-- `VmCoreChip<F, I: VmAdapterInterface<F>>`
-- `VmCoreAir<AB, I: VmAdapterInterface<AB::Expr>>`
+The integration API separates chip functionality into two distinct layers:
+
+1. **AIR**: Defines arithmetic constraints and interactions with system buses
+2. **Execution/Trace generation**: Handles execution and trace generation
+
+### AIR traits for Adapter and Core
+
+The AIR layer consists of adapter and core components that define the constraint logic:
+
+- `VmAdapterInterface<T>` - defines the interface between adapter and core
+- `VmAdapterAir<AB>` - handles system interactions (memory, program, execution buses)
+- `VmCoreAir<AB, I>` - implements instruction-specific arithmetic constraints
 
 > [!WARNING]
 > The word **core** will be banned from usage outside of this context.
 
-Main idea: each VM chip is created from an `AdapterChip` and a `CoreChip`. Analogously, the VM AIR is created from an
+Main idea: each VM chip AIR is created from an adapter and core components. The VM AIR is created from an
 `AdapterAir` and `CoreAir` so that the columns of the VM AIR are formed by concatenating the columns from the
 `AdapterAir` followed by the `CoreAir`.
 
-The `AdapterChip` is responsible for all interactions with the VM system: it owns interactions with the memory bus,
-program bus, execution bus. It will read data from memory and expose the data (but not intermediate pointers, address
-spaces, etc.) to the CoreChip and then write data provided by the CoreChip back to memory.
+The adapter is responsible for all interactions with the VM system: it handles interactions with the memory bus,
+program bus, execution bus. It reads data from memory and exposes the data (but not intermediate pointers, address
+spaces, etc.) to the core and then writes data provided by the core back to memory.
 
 The `AdapterAir` does not see the `CoreAir`, but the `CoreAir` is able to see the `AdapterAir`, meaning that the same
-`AdapterAir`
-can be used with several `CoreAir`'s. The AdapterInterface provides a way for `CoreAir` to provide expressions to be
+`AdapterAir` can be used with several `CoreAir`s. The AdapterInterface provides a way for `CoreAir` to provide expressions to be
 included in `AdapterAir` constraints -- in particular `AdapterAir` interactions can still involve `CoreAir` expressions.
 
-Traits with their associated types and functions:
+AIR traits with their associated types and functions:
 
 ```rust
 /// The interface between core AIR and adapter AIR.
 pub trait VmAdapterInterface<T> {
+    /// The memory read data that should be exposed for downstream use
     type Reads;
+    /// The memory write data that are expected to be provided by the integrator
     type Writes;
+    /// The parts of the instruction that should be exposed to the integrator.
+    /// This will typically include `is_valid`, which indicates whether the trace row
+    /// is being used and `opcode` to indicate which opcode is being executed if the
+    /// VmChip supports multiple opcodes.
     type ProcessedInstruction;
-}
-
-pub trait VmAdapterChip<F: Field> {
-    /// Records generated by adapter before main instruction execution
-    type ReadRecord: Send;
-    /// Records generated by adapter after main instruction execution
-    type WriteRecord: Send;
-  /// `AdapterAir` should not have public values
-    type Air: BaseAir<F> + Clone;
-  type Interface: VmAdapterInterface<F>;
-
-    fn preprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-    ) -> Result<(<Self::Interface as VmAdapterInterface<F>>::Reads, Self::ReadRecord)>;
-
-    fn postprocess(
-        &mut self,
-        memory: &mut MemoryController<F>,
-        instruction: &Instruction<F>,
-        from_state: ExecutionState<u32>,
-        ctx: AdapterRuntimeContext<F, Self::Interface<F>>,
-        read_record: &Self::ReadRecord,
-    ) -> Result<(ExecutionState<u32>, Self::WriteRecord)>;
-
-    /// Populates `row_slice` with values corresponding to `record`.
-    /// The provided `row_slice` will have length equal to `self.air().width()`.
-    /// This function will be called for each row in the trace which is being used, and all other
-    /// rows in the trace will be filled with zeroes.
-    fn generate_trace_row(
-        &self,
-        row_slice: &mut [F],
-        read_record: Self::ReadRecord,
-        write_record: Self::WriteRecord,
-        aux_cols_factory: &MemoryAuxColsFactory<F>,
-    );
-
-  fn air(&self) -> &Self::Air;
 }
 
 pub trait VmAdapterAir<AB: AirBuilder>: BaseAir<AB::F> {
     type Interface: VmAdapterInterface<AB::Expr>;
 
+    /// [Air](openvm_stark_backend::p3_air::Air) constraints owned by the adapter.
+    /// The `interface` is given as abstract expressions so it can be directly used in other AIR
+    /// constraints.
+    ///
+    /// Adapters should document the max constraint degree as a function of the constraint degrees
+    /// of `reads, writes, instruction`.
     fn eval(
         &self,
         builder: &mut AB,
         local: &[AB::Var],
         interface: AdapterAirContext<AB::Expr, Self::Interface>,
     );
-}
 
-pub trait VmCoreChip<F, I: VmAdapterInterface<F>> {
-    type Record: Send;
-    type Air: BaseAirWithPublicValues<F> + Clone;
-
-    fn execute_instruction(
-        &self,
-        instruction: &Instruction<F>,
-        from_pc: F,
-        reads: Reads<F, A::Interface<F>>,
-    ) -> Result<(AdapterRuntimeContext<F, A::Interface<F>>, Self::Record)>;
-
-    /// Populates `row_slice` with values corresponding to `record`.
-    /// The provided `row_slice` will have length equal to `self.air().width()`.
-    /// This function will be called for each row in the trace which is being used, and all other
-    /// rows in the trace will be filled with zeroes.
-    fn generate_trace_row(&self, row_slice: &mut [F], record: Self::Record);
+    /// Return the `from_pc` expression.
+    fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var;
 }
 
 pub trait VmCoreAir<AB, I>: BaseAirWithPublicValues<AB::F>
@@ -261,22 +355,32 @@ where
     AB: AirBuilder,
     I: VmAdapterInterface<AB::Expr>,
 {
+    /// Returns `(to_pc, interface)`.
     fn eval(
         &self,
         builder: &mut AB,
         local_core: &[AB::Var],
         from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I>;
+
+    /// The offset the opcodes by this chip start from.
+    /// This is usually just `CorrespondingOpcode::CLASS_OFFSET`,
+    /// but sometimes (for modular chips, for example) it also depends on something else.
+    fn start_offset(&self) -> usize;
+
+    fn start_offset_expr(&self) -> AB::Expr {
+        AB::Expr::from_canonical_usize(self.start_offset())
+    }
+
+    fn expr_to_global_expr(&self, local_expr: impl Into<AB::Expr>) -> AB::Expr {
+        self.start_offset_expr() + local_expr.into()
+    }
+
+    fn opcode_to_global_expr(&self, local_opcode: impl LocalOpcode) -> AB::Expr {
+        self.expr_to_global_expr(AB::Expr::from_canonical_usize(local_opcode.local_usize()))
+    }
 }
 
-// For passing from CoreChip to AdapterChip
-pub struct AdapterRuntimeContext<T, I: VmAdapterInterface<T>> {
-    /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
-    pub to_pc: Option<T>,
-    pub writes: I::Writes,
-}
-
-// For passing from `CoreAir` to `AdapterAir` with T = AB::Expr
 pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
     /// Leave as `None` to allow the adapter to decide the `to_pc` automatically.
     pub to_pc: Option<T>,
@@ -289,52 +393,101 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 > [!WARNING]
 > You do not need to implement `Air` on the struct you implement `VmAdapterAir` or `VmCoreAir` on.
 
-### Creating a Chip from Adapter and Core
+### Execution and Trace Generation Traits
 
-To create a chip used to support a set of opcodes in the VM, we start with types
+The execution layer handles execution and trace generation, separate from the constraint logic:
 
-```rust
-A: VmAdapterChip
-C: VmCoreChip
-A::Air: VmAdapterAir
-C::Air: VmCoreAir
-```
+- `AdapterTraceExecutor<F>` - handles adapter-level execution (memory accesses)
+- `AdapterTraceFiller<F>` - fills adapter columns in the trace matrix
+- `PreflightExecutor<F, RA>` - handles instruction execution logic and generates records
+- `TraceFiller<F>` - fills complete trace rows (adapter + core)
 
-where `A::Air` and `C:Air` are implemented on all relevant `AirBuilder` required by the backend. We can then create `VmChipWrapper` and `VmAirWrapper` types below:
+The executor components generate the records that are later used by the trace filler to populate the trace matrix.
 
 ```rust
-pub struct VmChipWrapper<F, A: VmAdapterChip<F>, C: VmCoreChip<F, A>> {
-    pub adapter: A,
-    pub core: C,
-    pub records: Vec<(A::ReadRecord, A::WriteRecord, C::Record)>,
-    // For accessing memory
-    offline_memory: Arc<Mutex<OfflineMemory<F>>>,
+/// A helper trait for expressing generic state accesses within the implementation.
+pub trait AdapterTraceExecutor<F>: Clone {
+    const WIDTH: usize;
+    type ReadData;
+    type WriteData;
+    type RecordMut<'a> where Self: 'a;
+
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>);
+
+    fn read(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        record: &mut Self::RecordMut<'_>,
+    ) -> Self::ReadData;
+
+    fn write(
+        &self,
+        memory: &mut TracingMemory,
+        instruction: &Instruction<F>,
+        data: Self::WriteData,
+        record: &mut Self::RecordMut<'_>,
+    );
 }
 
+pub trait AdapterTraceFiller<F>: Send + Sync {
+    const WIDTH: usize;
+    /// Post-execution filling of rest of adapter row.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, adapter_row: &mut [F]);
+}
+
+pub trait TraceFiller<F>: Send + Sync {
+    /// Populates `trace`
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) where
+        F: Send + Sync + Clone;
+
+    /// Populates `row_slice` with values corresponding to the record.
+    /// The provided `row_slice` will have length equal to the width of the AIR.
+    /// This function will be called for each row in the trace which is being used.
+    fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]);
+
+    ...
+}
+```
+
+### Creating a Chip from Adapter and Core
+
+To create a chip used to support a set of opcodes in the VM, we start with types that implement the appropriate adapter and core traits. We then create `VmAirWrapper` and `VmChipWrapper` types:
+
+```rust
 pub struct VmAirWrapper<A, C> {
     pub adapter: A,
     pub core: C,
+}
+
+pub struct VmChipWrapper<F, FILLER> {
+    pub inner: FILLER,
+    pub mem_helper: SharedMemoryHelper<F>,
 }
 ```
 
 They implement the following traits:
 
-- `PreflightExecutor<F>` is implemented on `VmChipWrapper<F, A, C>`, where the `execute()` function:
-  - calls `preprocess()` on `A` with `memory` and the raw `instruction`
-  - calls `execute_instruction()` on `C` with the raw `instruction`, `from_pc`, and `reads` from `preprocess()`
-  - calls `postprocess()` on `A` with the raw `instruction`, `from_state`, the `output: AdapterRuntimeContext` from `execute_instruction()`, and the `read_record`
-  - stores the resulting `(read_record, write_record, core_record)`
-- `Air<AB>`, `BaseAir<F>`, and `BaseAirWithPublicValues<F>` are implemented on `VmAirWrapper<A::Air, C::Air>`, where the `eval()` function implements constraints via:
+- `Air<AB>`, `BaseAir<F>`, and `BaseAirWithPublicValues<F>` are implemented on `VmAirWrapper<A, C>`, where the `eval()` function implements constraints via:
   - calls `eval()` on `C::Air`
   - calls `eval()` on `A::Air`
-- `Chip<SC>` is implemented on `VmChipWrapper<F, A, C>` with associated Air `VmAirWrapper<A::Air, C::Air>`, where `generate_air_proof_input()` iterates through all records from instruction execution and generates one row of the trace from each record. Importantly, rows which do not correspond to an instruction execution are not affected and left to be **identically zero**. Each used row in the trace is created via:
-  - calls `generate_trace_row()` on `A` with the `adapter_row`, `read_record`, `write_record`
-  - calls `generate_trace_row()` on `C` with the `core_row`, `core_record`
 
-**Convention:** If you have a new `Foo` functionality you want to support, make structs `FooCoreChip, FooCoreAir`. Either use existing `BarAdapterChip, BarAdapterAir` or make your own. Then typedef
+- `TraceFiller<F>` is implemented on the inner filler, where `fill_trace()` iterates through all records from instruction execution and generates one row of the trace from each record. Rows which do not correspond to an instruction execution are left as **identically zero**. Each used row in the trace is created by calling `fill_trace_row()` with the memory helper and row slice.
+
+- The `VmChipWrapper` provides a blanket implementation of `Chip<RA, CpuBackend<SC>>` for any struct that implements `TraceFiller<Val<SC>>`. The wrapper handles trace generation by:
+  1. Instantiating a trace matrix by consuming the record arena
+  2. Calling `fill_trace()` on the inner filler to populate the matrix
+  3. Generating public values via `generate_public_values()`
+
+**Convention:** If you have a new `Foo` functionality you want to support, create structs `FooExecutor`, `FooFiller`, and `FooCoreAir`. Either use existing adapter components or make your own. Then typedef:
 
 ```rust
-pub type FooChip<F> = VmChipWrapper<F, BarAdapterChip<F>, FooCoreChip<F>>;
+pub type FooChip<F> = VmChipWrapper<F, FooFiller<F>>;
 pub type FooAir = VmAirWrapper<BarAdapterAir, FooCoreAir>;
 ```
 
@@ -368,6 +521,6 @@ pub struct ImmInstruction<T> {
     pub is_valid: T,
     /// Absolute opcode number
     pub opcode: T,
-    pub imm: T
+    pub imm: T,
 }
 ```

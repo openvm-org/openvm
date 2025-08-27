@@ -13,7 +13,7 @@ Skip [below](#installation-with-nvidia-gpu-support) for instructions on installi
 Begin the installation:
 
 ```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.8 cargo-openvm
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.9 cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -27,7 +27,7 @@ cargo openvm --version
 To build from source, clone the repository and begin the installation.
 
 ```bash
-git clone --branch v1.4.0-rc.8 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.4.0-rc.9 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 cargo install --locked --force --path crates/cli
 ```
@@ -91,19 +91,18 @@ svm use 0.8.19
 
 :::
 
-## Installation with Nvidia GPU support
+## Installation with Nvidia GPU Support
 
 It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Prerequisites (CUDA)](#installation-prerequisites-cuda))
 
 With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. Currently only single GPU support is available through the CLI.
-
 
 ### Option 1: Install Via Git URL (Recommended)
 
 Begin the installation:
 
 ```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.8 --features cuda cargo-openvm
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.9 --features cuda cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -117,7 +116,7 @@ cargo openvm --version
 To build from source, clone the repository and begin the installation.
 
 ```bash
-git clone --branch v1.4.0-rc.8 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.4.0-rc.9 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 cargo install --locked --force --path crates/cli --features cuda
 ```
@@ -170,3 +169,58 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PAT
 Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
 You are now ready to [install](#install-with-nvidia-gpu-support) the OpenVM CLI.
+
+## Installation with Experimental Features
+
+For the best execution performance, the CLI may be installed with optimizations that utilize [experimental Rust features](https://github.com/rust-lang/rust/issues/112788). These optimizations may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
+
+This installation requires a nightly Rust toolchain. To install the nightly toolchain, run:
+
+```bash
+rustup install nightly-2025-08-19
+```
+
+### Option 1: Install Via Git URL (Recommended)
+
+Begin the installation:
+
+:::code-group
+```bash [Without GPU]
+cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.9 --features tco cargo-openvm
+```
+```bash [Nvidia GPU]
+cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.9 --features tco,cuda cargo-openvm
+```
+:::
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+### Option 2: Build from source
+
+To build from source, first clone the repository.
+
+```bash
+git clone --branch v1.4.0-rc.9 --single-branch https://github.com/openvm-org/openvm.git
+cd openvm
+```
+
+Then begin the installation:
+
+:::code-group
+```bash [Without GPU]
+cargo +nightly-2025-08-19 install --locked --force --path crates/cli --features tco
+```
+```bash [Nvidia GPU]
+cargo +nightly-2025-08-19 install --locked --force --path crates/cli --features tco,cuda
+```
+:::
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
