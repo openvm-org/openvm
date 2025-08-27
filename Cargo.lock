@@ -5429,7 +5429,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.0-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.6#ba4e49e1c48abb247720c43eba392fbb5c9eea51"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fcuda-memory-init#60c70b42d7ffa1435ac553065ad8103890267167"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5461,7 +5461,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.0-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.6#ba4e49e1c48abb247720c43eba392fbb5c9eea51"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fcuda-memory-init#60c70b42d7ffa1435ac553065ad8103890267167"
 dependencies = [
  "cc",
  "glob",
@@ -5470,7 +5470,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.0-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.6#ba4e49e1c48abb247720c43eba392fbb5c9eea51"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fcuda-memory-init#60c70b42d7ffa1435ac553065ad8103890267167"
 dependencies = [
  "bytesize",
  "lazy_static",
@@ -6212,7 +6212,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.6#ba4e49e1c48abb247720c43eba392fbb5c9eea51"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fcuda-memory-init#60c70b42d7ffa1435ac553065ad8103890267167"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6240,7 +6240,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.6#ba4e49e1c48abb247720c43eba392fbb5c9eea51"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fcuda-memory-init#60c70b42d7ffa1435ac553065ad8103890267167"
 dependencies = [
  "dashmap",
  "derivative",
