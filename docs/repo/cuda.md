@@ -32,8 +32,8 @@ crate-root/
    - Include `extern "C"` launcher functions for kernel invocation
 
 2. **Header Files** (`cuda/include/crate_name/*.cuh, *.h`)
-   - CUDA header files and declarations
-   - Organized by crate name for proper namespacing
+   - CUDA declarations and common implementations
+   - Organized by crate name for a proper namespaced include layout
 
 3. **Rust FFI Bindings** (`src/cuda_abi.rs`)
    - Maps between Rust functions and CUDA `extern "C"` launchers
