@@ -56,7 +56,7 @@ Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field
 // [!include ~/snippets/examples_sdk_toml/openvm_riscv32.toml]
 ```
 
-`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. For more inforamtion, see [Another Example: Using the Standard SDK](/book/advanced-usage/sdk#another-example-using-the-standard-sdk) below.
+`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. For more information, see [Another Example: Using the Standard SDK](/book/advanced-usage/sdk#another-example-using-the-standard-sdk) below.
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
