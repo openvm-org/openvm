@@ -35,9 +35,9 @@ crate-root/
    - CUDA declarations and common implementations
    - Organized by crate name for a proper namespaced include layout
 
-3. **Rust FFI Bindings** (`src/cuda_abi.rs`)
-   - Maps between Rust functions and CUDA `extern "C"` launchers
-   - Provides safe Rust interface to CUDA functionality
+3. **Rust FFI Binding File** (`src/cuda_abi.rs`)
+   - Maps Rust functions to CUDA `extern "C"` launchers
+   - Provides a safe Rust interface for CUDA functionality
 
 4. **CUDA Support Module** (`src/cuda.rs` or `src/cuda/`)
    - Rust code supporting CUDA implementation
