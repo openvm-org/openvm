@@ -134,12 +134,15 @@ jobs:
                 pushd guest-libs/$crate
 
                 # Handle special feature args for pairing crate
-                PAIRING_FEATURE_ARGS=""
+                SPECIAL_ARGS=""
                 if [[ "$crate" == "pairing" ]]; then
-                  PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
+                  SPECIAL_ARGS="--features=bn254,bls12_381"
+                else if [[ "$crate" == "ruint" ]]; then
+                  # only run integration tests because other tests are not OpenVM related
+                  SPECIAL_ARGS="--test '*'"
                 fi
 
-                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1
+                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
                 popd
               fi
               echo "::endgroup::"
