@@ -44,7 +44,7 @@ To enable the `cuda` feature for `rust-analyzer`, add the following to your IDE 
 > [!NOTE]
 > Note that to build the project from the CLI, you still need to add `--features cuda` to your `cargo` command to enable CUDA.
 
-In addition to `rust-analyzer` for linting Rust code, we recommend installing a `clangd` server for linting CUDA code - in VS Code this comes with the C/C++ extension. For the `clangd` server to work properly, run
+In addition to `rust-analyzer` for linting Rust code, we recommend installing a `clangd` server for linting CUDA code (note there is a `clangd` VS Code extension that does this). For the `clangd` server to work properly, run
 
 ```bash
 scripts/generate_clangd.sh
