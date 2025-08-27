@@ -1,15 +1,15 @@
-## CUDA Implementation
+# CUDA Implementation
 
 This document describes the implementation and organization of CUDA GPU acceleration code throughout the OpenVM framework.
 See [Development with CUDA](../contributor-setup.md#development-with-cuda) for more information on machine and IDE setup.
 
-### Overview
+## Overview
 
 The OpenVM framework includes optional GPU acceleration via CUDA for performance-critical components. GPU implementations are available as an optional feature and can significantly speed up proof and trace generation.
 
-### Project Structure
+## Project Structure
 
-#### Directory Organization
+### Directory Organization
 
 Each crate with GPU implementation follows a consistent structure:
 
@@ -25,7 +25,7 @@ crate-root/
 └── build.rs             # Build script using openvm-cuda-builder
 ```
 
-#### Key Components
+### Key Components
 
 1. **CUDA Source Files** (`cuda/src/*.cu`)
    - Contain CUDA kernels
@@ -47,7 +47,7 @@ crate-root/
    - Uses [`openvm-cuda-builder`](https://github.com/openvm-org/stark-backend/tree/main/crates/cuda-builder) for CUDA compilation
    - Must include `openvm-cuda-builder` in `[build-dependencies]`
 
-### Builder Pattern
+## Builder Pattern
 
 Extensions with both CPU and GPU implementations follow a consistent builder pattern:
 
