@@ -6,6 +6,7 @@ use openvm_circuit::{
     system::SystemExecutor,
 };
 use openvm_circuit_derive::{PreflightExecutor, VmConfig};
+use openvm_memcpy_circuit::{Memcpy, MemcpyExecutor};
 use openvm_rv32_adapters::{
     Rv32HeapAdapterAir, Rv32HeapAdapterExecutor, Rv32HeapAdapterFiller, Rv32HeapBranchAdapterAir,
     Rv32HeapBranchAdapterExecutor, Rv32HeapBranchAdapterFiller,
@@ -175,6 +176,8 @@ pub struct Int256Rv32Config {
     pub io: Rv32Io,
     #[extension]
     pub bigint: Int256,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 // Default implementation uses no init file
@@ -188,6 +191,7 @@ impl Default for Int256Rv32Config {
             rv32m: Rv32M::default(),
             io: Rv32Io,
             bigint: Int256::default(),
+            memcpy: Memcpy,
         }
     }
 }
