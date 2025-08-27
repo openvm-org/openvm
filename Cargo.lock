@@ -5721,7 +5721,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-memcpy-circuit"
-version = "1.4.0-rc.6"
+version = "1.4.0-rc.8"
 dependencies = [
  "derive-new 0.6.0",
  "derive_more 1.0.0",
@@ -5740,7 +5740,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-memcpy-integration-tests"
-version = "1.4.0-rc.6"
+version = "1.4.0-rc.8"
 dependencies = [
  "eyre",
  "openvm",
@@ -5760,7 +5760,7 @@ dependencies = [
 
 [[package]]
 name = "openvm-memcpy-transpiler"
-version = "1.4.0-rc.6"
+version = "1.4.0-rc.8"
 dependencies = [
  "openvm-instructions",
  "openvm-instructions-derive",

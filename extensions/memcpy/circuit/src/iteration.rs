@@ -18,7 +18,7 @@ use openvm_circuit::{
             MemoryWriteAuxCols, MemoryWriteBytesAuxRecord,
         },
         online::{GuestMemory, TracingMemory},
-        MemoryAddress, MemoryAuxColsFactory,
+        MemoryAddress, MemoryAuxColsFactory, POINTER_MAX_BITS,
     },
 };
 use openvm_circuit_primitives::{
@@ -441,6 +441,7 @@ where
         );
         let mut len = read_rv32_register(state.memory.data(), A2_REGISTER_PTR as u32);
 
+        // Create a record with var_size = ((len - shift) >> 4) + 1 which is the number of rows in iteration trace
         let record = state.ctx.alloc(MultiRowLayout::new(MemcpyIterMetadata {
             num_rows: ((len - shift as u32) >> 4) as usize + 1,
         }));
@@ -449,7 +450,11 @@ where
         record.inner.shift = shift;
         record.inner.from_pc = *state.pc;
         record.inner.from_timestamp = state.memory.timestamp;
+        record.inner.dest = dest;
+        record.inner.source = source;
+        record.inner.len = len;
 
+        // Fill record.var for the first row of iteration trace
         if shift != 0 {
             source -= 12;
             record.var[0].data[3] = tracing_read(
@@ -460,6 +465,7 @@ where
             );
         };
 
+        // Fill record.var for the rest of the rows of iteration trace
         let mut idx = 1;
         while len - shift as u32 > 15 {
             let writes_data: [[u8; MEMCPY_LOOP_NUM_LIMBS]; 4] = array::from_fn(|i| {
@@ -540,9 +546,9 @@ where
             &mut len_data,
         );
 
-        record.inner.dest = u32::from_le_bytes(dest_data);
-        record.inner.source = u32::from_le_bytes(source_data);
-        record.inner.len = u32::from_le_bytes(len_data);
+        debug_assert_eq!(record.inner.dest, u32::from_le_bytes(dest_data));
+        debug_assert_eq!(record.inner.source, u32::from_le_bytes(source_data));
+        debug_assert_eq!(record.inner.len, u32::from_le_bytes(len_data));
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
 
@@ -580,7 +586,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
             num_loops += 1;
             num_iters += num_rows;
         }
-        // tracing::info!("num_loops: {:?}, num_iters: {:?}", num_loops, num_iters);
+        tracing::info!("num_loops: {:?}, num_iters: {:?}, sizes: {:?}", num_loops, num_iters, sizes);
         
         chunks
             .par_iter_mut()
@@ -594,6 +600,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     )
                 };
 
+                tracing::info!("shift: {:?}", record.inner.shift);
                 // Fill memcpy loop record
                 self.memcpy_loop_chip.add_new_loop(
                     mem_helper,
@@ -606,6 +613,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     record.inner.register_aux.clone(),
                 );
 
+                // Calculate the timestamp for the last memory access
                 // 4 reads + 4 writes per iteration + (shift != 0) read for the loop header
                 let timestamp = record.inner.from_timestamp
                     + ((num_rows - 1) << 3) as u32
@@ -906,6 +914,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> u32 {
     let shift = pre_compute.c;
     let mut height = 1;
+    // Read dest and source from registers
     let (dest, source) = if shift == 0 {
         (
             vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
@@ -917,19 +926,31 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
             vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
         )
     };
+    // Read length from a2 register
     let len = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A2_REGISTER_PTR as u32);
 
     let mut dest = u32::from_le_bytes(dest);
-    let mut source = u32::from_le_bytes(source);
+    let mut source = u32::from_le_bytes(source) - 12 * (shift != 0) as u32;
     let mut len = u32::from_le_bytes(len);
 
+    // Check address ranges are valid
+    debug_assert!(dest < (1 << POINTER_MAX_BITS));
+    debug_assert!((source - 4 * (shift != 0) as u32) < (1 << POINTER_MAX_BITS));
+    let to_dest = dest + ((len - shift as u32) & !15);
+    let to_source = source + ((len - shift as u32) & !15);
+    debug_assert!(to_dest <= (1 << POINTER_MAX_BITS));
+    debug_assert!(to_source <= (1 << POINTER_MAX_BITS));
+    // Make sure the destination and source are not overlapping
+    debug_assert!(to_dest <= source || to_source <= dest);
+
+    // Read the previous data from memory if shift != 0
     let mut prev_data = if shift == 0 {
         [0; 4]
     } else {
-        source -= 12;
         vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
     };
 
+    // Run iterations
     while len - shift as u32 > 15 {
         for i in 0..4 {
             let data = vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
