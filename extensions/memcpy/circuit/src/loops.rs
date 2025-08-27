@@ -181,6 +181,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             .eval(builder, local.is_valid);
 
         // Generate 16-bit limbs for range checking
+        // dest, to_dest, source - 12 * is_shift_non_zero, to_source - 12 * is_shift_non_zero
         let dest_u16_limbs = u8_word_to_u16(local.dest);
         let to_dest_u16_limbs = u8_word_to_u16(local.to_dest);
         let source_u16_limbs = [
@@ -213,12 +214,14 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         ];
 
         range_check_data.iter().for_each(|data| {
+            // Check the low 16 bits of dest and source, make sure they are multiple of 4
             self.range_bus
                 .range_check(
                     data[0].clone() * AB::F::from_canonical_u32(4).inverse(),
                     MEMCPY_LOOP_LIMB_BITS * 2 - 2,
                 )
                 .eval(builder, local.is_valid);
+            // Check the high 16 bits of dest and source, make sure they are in the range [0, 2^pointer_max_bits - 2^MEMCPY_LOOP_LIMB_BITS)
             self.range_bus
                 .range_check(
                     data[1].clone(),
@@ -395,6 +398,7 @@ impl MemcpyLoopChip {
         let height = next_power_of_two_or_zero(self.records.lock().unwrap().len());
         let mut rows = F::zero_vec(height * NUM_MEMCPY_LOOP_COLS);
 
+        // TODO: run in parallel
         for (i, record) in self.records.lock().unwrap().iter().enumerate() {
             let row = &mut rows[i * NUM_MEMCPY_LOOP_COLS..(i + 1) * NUM_MEMCPY_LOOP_COLS];
             let cols: &mut MemcpyLoopCols<F> = row.borrow_mut();

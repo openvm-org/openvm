@@ -255,7 +255,6 @@ memcpy:
 	sb	a6, 2(a3)
 	addi	a2, a2, -3
 	addi	a3, a4, 16
-	li	a4, 16
 .LBBmemcpy0_9:
 	memcpy_loop 1
 	addi	a4, a3, -13
@@ -268,7 +267,6 @@ memcpy:
 .LBBmemcpy0_12:
 	li	a1, 16
 	bltu	a2, a1, .LBBmemcpy0_15
-	li	a1, 15
 .LBBmemcpy0_14:
 	memcpy_loop 0
 .LBBmemcpy0_15:
@@ -294,7 +292,6 @@ memcpy:
 	sb	a5, 0(a3)
 	addi	a2, a2, -1
 	addi	a3, a4, 16
-	li	a4, 18
 .LBBmemcpy0_20:
 	memcpy_loop 3
 	addi	a4, a3, -15
@@ -307,7 +304,6 @@ memcpy:
 	sb	a6, 1(a3)
 	addi	a2, a2, -2
 	addi	a3, a4, 16
-	li	a4, 17
 .LBBmemcpy0_23:
 	memcpy_loop 2
 	addi	a4, a3, -14
