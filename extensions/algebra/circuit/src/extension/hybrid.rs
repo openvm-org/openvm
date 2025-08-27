@@ -383,6 +383,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
     }
 }
 
+/// This builder will do tracegen for the RV32IM extensions on GPU but the modular extensions on
+/// CPU.
 #[derive(Clone)]
 pub struct Rv32ModularHybridBuilder;
 
@@ -416,6 +418,8 @@ impl VmBuilder<E> for Rv32ModularHybridBuilder {
     }
 }
 
+/// This builder will do tracegen for the RV32IM extensions on GPU but the modular and complex
+/// extensions on CPU.
 #[derive(Clone)]
 pub struct Rv32ModularWithFp2HybridBuilder;
 
