@@ -142,7 +142,7 @@ where
 
 #### `MultiRowLayout`
 
-Another example of a layout is a `MultiRowLayout`, which may treat its metadata as the number of trace rows the record will correpond to, or ignore its metadata and assume that one instruction will generate one trace row.
+Another example of a layout is a `MultiRowLayout`, which may treat its metadata as the number of trace rows the record will correspond to, or ignore its metadata and assume that one instruction will generate one trace row.
 
 ```rust
 pub struct MultiRowLayout<M> {
