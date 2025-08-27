@@ -1,6 +1,7 @@
 # CUDA Implementation
 
 This document describes the implementation and organization of CUDA GPU acceleration code throughout the OpenVM framework.
+
 See [Development with CUDA](../contributor-setup.md#development-with-cuda) for more information on machine and IDE setup.
 
 ## Overview
@@ -11,18 +12,21 @@ The OpenVM framework includes optional GPU acceleration via CUDA for performance
 
 ### Directory Organization
 
-Crates with GPU implementation are generally structured as follows:
+GPU-enabled crates in OpenVM generally follow a consistent layout:
 
 ```
 crate-root/
 ├── src/                 # Rust source code
-│   ├── module/cuda.rs   # or cuda/ folder - module with CUDA support
+│   ├── module/          # Module with CUDA support
+│   │   └── cuda(.rs)    # file or folder with Rust impl that uses CUDA
 │   └── cuda_abi.rs      # FFI bindings to CUDA functions
 ├── cuda/                # CUDA implementation
 │   ├── include/   
 │   │   └── crate_name/  # Header files (.cuh, .h)
 │   └── src/             # CUDA source files (.cu)
 └── build.rs             # Build script using openvm-cuda-builder
+└── Cargo.toml           # [build-dependencies] openvm-cuda-builder; [features] cuda
+
 ```
 
 ### Key Components
