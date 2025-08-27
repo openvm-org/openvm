@@ -1,6 +1,6 @@
 ## CUDA Implementation
 
-This document describes the CUDA GPU acceleration structure across the OpenVM framework.
+This document describes the implementation and organization of CUDA GPU acceleration code throughout the OpenVM framework.
 See [Development with CUDA](../contributor-setup.md#development-with-cuda) for more information on machine and IDE setup.
 
 ### Overview
