@@ -65,7 +65,7 @@ Each executor is associated with a chip and an AIR. This mapping is defined impl
 
 #### Preflight Execution
 
-Preflight execution creates execution records of the record arena type `RA` which are needed for trace generation. Preflight execution doesn't have a precompute mechanism and uses dynamic dispatch to execute each instruction.
+Preflight execution creates execution records of the record arena type `RA` which are needed for trace generation. Preflight execution doesn't have a precompute mechanism and uses runtime dispatch to execute each instruction.
 
 The `PreflightExecutor<F, RA>` trait defines the interface for preflight execution:
 
@@ -89,7 +89,7 @@ The `InterpretedInstance` represents the VM interpreter and handles pure and met
 
 The `PreflightInterpretedInstance` handles preflight execution with:
 
-- Dynamic instruction dispatch
+- Runtime instruction dispatch (as opposed to the precomputed function pointers used in pure/metered execution)
 - Execution record collection in record arenas `RA`
 - Per-instruction frequency tracking to be used by the `ProgramChip`
 
@@ -164,19 +164,28 @@ handle different phantom sub-instructions.
 
 ### VM Configuration
 
-Each specific instantiation of a modular VM is defined by the following struct:
+Each specific instantiation of a modular VM is defined by the `VirtualMachine` struct, which contains the API to generate proofs for arbitrary programs for a fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. This struct represents the complete zkVM.
+
+The `VirtualMachine` can be constructed using:
 
 ```rust
-pub struct VirtualMachine<E, VB>
+impl<E, VB> VirtualMachine<E, VB>
 where
     E: StarkEngine,
     VB: VmBuilder<E>,
 {
-    pub engine: E,
-    executor: VmExecutor<Val<E::SC>, VB::VmConfig>,
-    pk: DeviceMultiStarkProvingKey<E::PB>,
-    chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
-    // ...
+    pub fn new(
+        engine: E,
+        builder: VB,
+        config: VB::VmConfig,
+        d_pk: DeviceMultiStarkProvingKey<E::PB>,
+    ) -> Result<Self, VirtualMachineError>;
+
+    pub fn new_with_keygen(
+        engine: E,
+        builder: VB,
+        config: VB::VmConfig,
+    ) -> Result<(Self, MultiStarkProvingKey<E::SC>), VirtualMachineError>;
 }
 ```
 
@@ -375,7 +384,7 @@ pub struct AdapterAirContext<T, I: VmAdapterInterface<T>> {
 > [!WARNING]
 > You do not need to implement `Air` on the struct you implement `VmAdapterAir` or `VmCoreAir` on.
 
-### Execution and Trace generation traits
+### Execution and Trace Generation Traits
 
 The execution layer handles execution and trace generation, separate from the constraint logic:
 
@@ -470,7 +479,7 @@ They implement the following traits:
 
 ```rust
 pub type FooChip<F> = VmChipWrapper<F, FooFiller<F>>;
-pub type FooAir = VmAirWrapper<FooAdapterAir, FooCoreAir>;
+pub type FooAir = VmAirWrapper<BarAdapterAir, FooCoreAir>;
 ```
 
 If there is a risk of ambiguity, use name `BarFooChip` instead of just `FooChip`.
