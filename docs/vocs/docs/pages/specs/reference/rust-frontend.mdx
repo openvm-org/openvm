@@ -65,8 +65,106 @@ OpenVM also supports insertion of [custom kernel code](/specs/reference/riscv-cu
 
 ### `std` Support
 
-OpenVM supports compilation of guest code using the Rust `std` library when the `openvm` crate is imported with the `"std"` feature enabled. When the `"std"` feature is enabled, the `openvm` crate defines `extern "C"` functions that are compatible with the platform abstraction layer (PAL) ABI defined in the Rust standard library for the guest target. These ABI definitions are statically linked with the Rust standard library at compile time.
-
-The PAL ABI is implemented in `openvm` using Rust and direct calls to [OpenVM intrinsics](#openvm-intrinsics) without the use of system calls.
+OpenVM supports compilation of guest code using the Rust `std` library when the `openvm` crate is imported with the `"std"` feature enabled. When the `"std"` feature is enabled, the `openvm` crate defines `extern "C"` functions that are compatible with the [platform abstraction layer](https://github.com/rust-lang/rust/blob/master/library/std/src/sys/pal/zkvm/abi.rs) (PAL) ABI defined in the Rust standard library for the guest target. These ABI definitions are statically linked with the Rust standard library at compile time.
 
 Users should be aware of the limitations of the Rust `std` support within OpenVM, which are documented in the [book](/book/writing-apps/writing-a-program#rust-std-library-support).
+
+The PAL ABI is implemented in `openvm` using Rust and direct calls to [OpenVM intrinsics](#openvm-intrinsics) without the use of system calls. We list below the PAL ABI and how the `openvm` crate handles each of the ABI functions:
+
+```rust
+pub extern "C" fn sys_halt(_user_exit: u8, _out_state: *const [u32; DIGEST_WORDS]);
+```
+Calls the special `terminate` intrinsic with exit code `HALT = 4`.
+
+```rust
+pub extern "C" fn sys_output(_output_id: u32, _output_value: u32);
+```
+This is not used by OpenVM. The function will call the special `terminate` intrinsic with exit code `UNIMP = 2`.
+
+```rust
+pub unsafe extern "C" fn sys_sha_compress(
+    _out_state: *mut [u32; DIGEST_WORDS],
+    _in_state: *const [u32; DIGEST_WORDS],
+    _block1_ptr: *const [u32; DIGEST_WORDS],
+    _block2_ptr: *const [u32; DIGEST_WORDS],
+);
+```
+This is not used by OpenVM and `unreachable!()`. This function panics through the Rust panic handler, which [calls](https://github.com/rust-lang/rust/blob/176d8dbce6a7a7a4541d1c980d4a85dfb76ce1f1/library/panic_abort/src/zkvm.rs#L20) `sys_panic` below.
+
+```rust
+pub unsafe extern "C" fn sys_sha_buffer(
+    _out_state: *mut [u32; DIGEST_WORDS],
+    _in_state: *const [u32; DIGEST_WORDS],
+    _buf: *const u8,
+    _count: u32,
+);
+```
+This is not used by OpenVM and `unreachable!()`.
+
+```rust
+pub unsafe extern "C" fn sys_rand(recv_buf: *mut u32, words: usize);
+```
+Calls `hintrandom` intrinsic to generate `words` random `u32` values using a fixed-seed random number generator on the host machine. Then calls the `hintbuffer` intrinsic to write the random values into `recv_buf`.
+
+:::warning
+Users should ensure that host-provided deterministic pseudo-randomness meets their security requirements.
+:::
+
+```rust
+unsafe extern "C" fn sys_panic(msg_ptr: *const u8, len: usize);
+```
+Calls `printstr` intrinsic to print the panic message, represented in UTF-8 format, stored at `msg_ptr` of length `len`. Then calls special `terminate` intrinsic with exit code `PANIC = 1`.
+
+```rust
+pub unsafe extern "C" fn sys_log(msg_ptr: *const u8, len: usize);
+```
+Calls `printstr` intrinsic to print the panic message, represented in UTF-8 format, stored at `msg_ptr` of length `len`.
+
+```rust
+pub extern "C" fn sys_cycle_count() -> u64;
+```
+This function is currently unimplemented and calls the `terminate` intrinsic with exit code `UNIMP = 2`. However we plan to introduce a new intrinsic for recording the number of instructions executed by the VM in the near future.
+
+```rust
+pub unsafe extern "C" fn sys_read(_fd: u32, _recv_ptr: *mut u8, _nread: usize);
+```
+This function is currently unimplemented and calls the `terminate` intrinsic with exit code `UNIMP = 2`. We plan to add an implementation using hint intrinsics for compatibility with `std::io::Read` in the future.
+
+```rust
+pub unsafe extern "C" fn sys_read_words(_fd: u32, _recv_ptr: *mut u32, _nwords: usize) -> usize;
+```
+This function is not used by OpenVM and calls the `terminate` intrinsic with exit code `UNIMP = 2`.
+
+```rust
+pub unsafe extern "C" fn sys_write(fd: u32, write_ptr: *const u8, nbytes: usize);
+```
+This function is only supported when `fd` equals `STDOUT = 1` OR `STDERR = 2`. In _both_ cases, the function calls the `printstr` intrinsic to print the message, represented in UTF-8 format, stored at `write_ptr` of length `nbytes`, to stdout on the host machine. For other `fd`, the function calls the `terminate` intrinsic with exit code `UNIMP = 2`.
+
+```rust
+pub unsafe extern "C" fn sys_getenv(
+    _out_words: *mut u32,
+    _out_nwords: usize,
+    _varname: *const u8,
+    _varname_len: usize,
+) -> usize;
+```
+This function always returns `0`, which is equivalent to `std::env::var` always returning `None`.
+
+```rust
+pub extern "C" fn sys_argc() -> usize;
+```
+This function always returns `0`, which is equivalent to calls to get `argc` returning nothing.
+
+```rust
+pub unsafe extern "C" fn sys_argv(
+    _out_words: *mut u32,
+    _out_nwords: usize,
+    _arg_index: usize,
+) -> usize;
+```
+This function always returns `0`, which is equivalent to calls to get `argv` returning nothing.
+
+```rust
+pub extern "C" fn sys_alloc_words(nwords: usize) -> *mut u32;
+```
+This function allocates `nwords * 4` bytes by advancing the heap pointer.
