@@ -59,18 +59,20 @@ The EVM proof is written as a JSON of the following format:
 
 ```json [[...].evm.proof]
 {
-  "app_exe_commit": "0x..",
-  "app_vm_commit": "0x..",
-  "user_public_values": "0x..",
+  "version": "v..",
+  "app_exe_commit": "..",
+  "app_vm_commit": "..",
+  "user_public_values": "..",
   "proof_data": {
-    "accumulator": "0x..",
-    "proof": "0x.."
+    "accumulator": "..",
+    "proof": ".."
   },
 }
 ```
 
 where each field is a hex string. We explain what each field represents:
 
+- `version`: current OpenVM version
 - `app_exe_commit`: `32` bytes for the commitment of the app executable.
 - `app_vm_commit`: `32` bytes for the commitment of the app VM configuration.
 - `user_public_values`: concatenation of 32 byte chunks for user public values. The number of user public values is a configuration parameter.

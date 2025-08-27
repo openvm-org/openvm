@@ -27,9 +27,9 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
   **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. By default will search the manifest directory for `openvm.toml`. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](/book/acceleration-using-extensions/overview) section. To use other extensions, use the [SDK](/book/advanced-usage/sdk).
 
-- `--output_dir <OUTPUT_DIR>`
+- `--output-dir <OUTPUT_DIR>`
 
-  **Description**: Output directory for OpenVM artifacts to be copied to. Keys will be placed in `${output-dir}/`, while all other artifacts will be in `${output-dir}/${profile}`.
+  **Description**: Output directory for OpenVM artifacts to be copied to.
 
 - `--input <INPUT>`
 
@@ -41,11 +41,17 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
   **Default**: `openvm_init.rs`
 
+- `--mode <MODE>`
+
+  **Description**: Execution mode, one of `pure`, `meter`, and `segment`. For more information see (Distributed Proving Architecture)[/specs/architecture/distributed-proving.mdx#execution]
+
+  **Default**: `pure`
+
 ### Package Selection
 
 - `--package <PACKAGES>`
 
-  **Description**: The package to run, by default the package in the current workspace.
+  **Description**: The package to run, by default the package in the current working directory.
 
 ### Target Selection
 
