@@ -2,7 +2,7 @@
     "$schema": "https://openapi.vercel.sh/vercel.json",
     "buildCommand": "pnpm install --frozen-lockfile && pnpm vercel-build",
     "outputDirectory": "docs/dist",
-    "cleanUrls": true,
+    "cleanUrls": false,
     "trailingSlash": true,
     "headers": [
       {
@@ -80,6 +80,10 @@
         {
           "source": "/docs/openvm/",
           "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/index.html"
+        },
+        {
+          "source": "/docs/openvm/app_prover/",
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/app_prover/index.html"
         },
         {
           "source": "/docs/openvm/:path*/",
