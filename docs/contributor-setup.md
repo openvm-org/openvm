@@ -1,5 +1,15 @@
 # Contributor Setup
 
+To get `rustfmt` to work with our nightly options, add the following to your IDE settings file (e.g., `.vscode/settings.json`):
+
+```json
+{  
+  "rust-analyzer.rustfmt.extraArgs": [
+    "+nightly"
+  ],
+}
+```
+
 ## Development without CUDA
 
 No additional settings need to be set to develop without CUDA, as the `cuda` feature is disabled by default throughout OpenVM. Please feature gate code that is **not** compatible with CUDA using the `#[cfg(not(feature = "cuda"))]` Rust attribute.
