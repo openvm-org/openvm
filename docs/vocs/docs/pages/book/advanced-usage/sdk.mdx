@@ -12,16 +12,37 @@ If you have a guest program and would like to try running the **host program** s
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:dependencies]
 ```
 
-## Building and Transpiling a Program
+## Configuring the VM
 
-The SDK provides lower-level control over the building and transpiling process.
+### Preset Configurations
 
-```rust
-// [!include ~/snippets/examples_sdk/sdk_stark.rs:build]
-// [!include ~/snippets/examples_sdk/sdk_stark.rs:read_elf]
+The following convenience methods are available to construct a `GenericSdk` object with a preset config:
 
-// [!include ~/snippets/examples_sdk/sdk_stark.rs:transpilation]
+- `Sdk::riscv32()` returns a `GenericSdk` supporting the RV32IM extension.
+- `Sdk::standard()` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
+
+Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field of your `openvm.toml` must exactly match a specific set configuration.
+
+`Sdk::riscv32()` supports normal Rust compiled to the `rv32im` target (for more information see [OpenVM Rust Frontend](/specs/reference/rust-frontend)) and `openvm::io` functions. To use it, the `app_vm_config` field of your `openvm.toml` must be:
+
+```toml [openvm_riscv32.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_riscv32.toml]
 ```
+
+`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. The `app_vm_config` section of the `openvm.toml` of any guest program that uses `Sdk::standard()` must also match a specific preset configuration.
+
+<details>
+<summary> Click here to view the `Sdk::standard()` `openvm.toml`</summary>
+```toml [openvm_standard.toml]
+// [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
+```
+</details>
+
+Observe that this standard `openvm.toml` also enables normal Rust and `openvm::io` functions (via the `rv32i`, `rv32m`, and `io` extensions). `keccak` and `sha256` enable intrinsic instructions for the [Keccak](/book/acceleration-using-extensions/keccak) and [SHA-256](/book/acceleration-using-extensions/sha-256) hashes respectively, and `bigint` supports [Big Integer](/book/acceleration-using-extensions/big-integer) operations.
+
+[Modular](/book/acceleration-using-extensions/algebra) operations for the BN254, Secp256k1 (i.e. K256), Secp256r1 (i.e. P256), and BLS12-381 curves' scalar and coordinate field moduli are also supported, as well as [Complex Field Extension](/book/acceleration-using-extensions/algebra#complex-field-extension) operations over the BN254 and BLS12-381 coordinate fields. [Elliptic Curve Cryptography](/book/acceleration-using-extensions/elliptic-curve-cryptography) operations are also supported for the BN254, Secp256k1, Secp256r1, and BLS12-381 curves, and [Elliptic Curve Pairing](/book/acceleration-using-extensions/elliptic-curve-pairing) checks are supported for the BN254 and BLS12-381 curves.
+
+For more information on extensions and guest libraries, see [Acceleration Using Pre-Built Extensions](/book/acceleration-using-extensions/overview).
 
 ### Customizing the VM Configuration
 
@@ -42,25 +63,26 @@ extensions and system configuration your VM will use. To do this, you can use th
     )?;
 ```
 
-The following convenience methods are also available to construct a `GenericSdk` object:
+A custom OpenVM configuration can also be specified in an `openvm.toml` file and read to create a `GenericSdk`.
 
-- `Sdk::riscv32()` returns a `GenericSdk` supporting the RV32IM extension.
-- `Sdk::standard()` returns a `GenericSdk` supporting all default OpenVM extensions, including RV32IM.
-- `Sdk::new(Sdk::from_toml(openvm.toml))` returns a `GenericSdk` from a custom OpenVM configuration specified in an `openvm.toml` file.
-
-Note that to use `Sdk::riscv32()` or `Sdk::standard()` the `app_vm_config` field of your `openvm.toml` must exactly match a specific set config.
-
-`Sdk::riscv32()` supports normal Rust compiled to the `rv32im` target (for more information see [OpenVM Rust Frontend](/specs/reference/rust-frontend)) and `openvm::io` functions. To use it, the `app_vm_config` field of your `openvm.toml` must be:
-
-```toml [openvm_riscv32.toml]
-// [!include ~/snippets/examples_sdk_toml/openvm_riscv32.toml]
+```rust
+    Sdk::new(Sdk::from_toml(openvm.toml))
 ```
-
-`Sdk::standard()` supports a wider variety of VM extensions, increasing the performance of many cryptographic operations. For more information, see [Another Example: Using the Standard SDK](/book/advanced-usage/sdk#another-example-using-the-standard-sdk) below.
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
 :::
+
+## Building and Transpiling a Program
+
+The SDK provides lower-level control over the building and transpiling process.
+
+```rust
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:build]
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:read_elf]
+
+// [!include ~/snippets/examples_sdk/sdk_stark.rs:transpilation]
+```
 
 ## Running a Program
 
@@ -100,6 +122,10 @@ The SDK, however, combines the first few steps for you. Create a prover and pass
 ```
 
 For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
+
+:::info
+The app prover constructor can take an `Elf`, `VmExe`, or `SharedVmExe` (i.e. `Arc<VmExe>`). This also holds for the STARK and EVM provers specified below.
+:::
 
 ### Verifying App Proofs
 
@@ -194,24 +220,10 @@ Take, for example, this toy program that checks if several guest library impleme
 // [!include ~/snippets/examples_sdk_guest/little/src/main.rs]
 ```
 
-Its `openvm.toml`, as with `Sdk::riscv32()` above, must follow a [specific set configuration](/book/advanced-usage/sdk#standard-sdk-configuration-and-supported-extensions).
+Its `openvm.toml` follows the [preset configuration](/book/advanced-usage/sdk#preset-configurations) specified above.
 
 Simply initialize `Sdk` using `Sdk::standard()` and build, prove, and verify as above.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_app.rs:init]
 ```
-
-### Standard SDK Configuration and Supported Extensions
-
-The `app_vm_config` section of the `openvm.toml` of any guest program that uses `Sdk::standard()` must be the following:
-
-```toml [openvm_standard.toml]
-// [!include ~/snippets/examples_sdk_toml/openvm_standard.toml]
-```
-
-Observe that this standard `openvm.toml` also enables normal Rust and `openvm::io` functions (via the `rv32i`, `rv32m`, and `io` extensions). `keccak` and `sha256` enable intrinsic instructions for the [Keccak](/book/acceleration-using-extensions/keccak) and [SHA-256](/book/acceleration-using-extensions/sha-256) hashes respectively, and `bigint` supports [Big Integer](/book/acceleration-using-extensions/big-integer) operations.
-
-[Modular](/book/acceleration-using-extensions/algebra) operations for the BN254, Secp256k1 (i.e. K256), Secp256r1 (i.e. P256), and BLS12-381 moduli are also supported, as well as [Complex Field Extension](/book/acceleration-using-extensions/algebra#complex-field-extension) operations over the BN254 and BLS12-381 prime fields. [Elliptic Curve Cryptography](/book/acceleration-using-extensions/elliptic-curve-cryptography) operations are also supported for the BN254, Secp256k1, Secp256r1, and BLS12-381 curves, and [Elliptic Curve Pairing](/book/acceleration-using-extensions/elliptic-curve-pairing) checks are supported for the BN254 and BLS12-381 curves.
-
-For more information on extensions and guest libraries, see [Acceleration Using Pre-Built Extensions](/book/acceleration-using-extensions/overview).
