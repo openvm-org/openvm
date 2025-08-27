@@ -234,25 +234,39 @@ which in turn provides the list of AIRs that are used in the proving and verific
 
 #### Trace Generation
 
-Trace generation uses preflight execution to record detailed execution traces for proof generation. The main execution method is:
+Trace generation uses the records generated in preflight execution and proceeds from:
 
-> `VirtualMachine::execute_preflight()`
-
-This method:
-- Takes a `PreflightInterpretedInstance` that handles dynamic instruction dispatch
-- Allocates record arenas based on trace height information from previous metered execution
-- Executes instructions while collecting execution records in arena allocators
-- Returns a `PreflightExecutionOutput` containing system records, record arenas, and final VM state
+> `VirtualMachine::generate_proving_ctx()`
 
 The trace generation process:
 - Creates a `PreflightCtx` with pre-allocated arena capacities based on expected trace heights
 - Uses `TracingMemory` to track memory access patterns during execution
-- Each chip collects its execution records during preflight execution
-- Record arenas are then processed to generate the final trace matrices for proof generation
+- Collects each chip's execution records during preflight execution
+- Record arenas are then processed to generate the final trace matrices
+
+For continuation execution, the trace generation process is handled by `VmInstance`:
+
+1. **Metered Execution**: First runs metered execution to determine segment boundaries using `execute_metered()` which returns a list of `Segment` structs containing:
+   ```rust
+   pub struct Segment {
+       pub instret_start: u64,
+       pub num_insns: u64,
+       pub trace_heights: Vec<u32>,
+   }
+   ```
+
+2. **Sequential Segment Trace Generation**: For each segment, the process:
+   - Transports initial memory to device via `transport_init_memory_to_device()`
+   - Runs preflight execution for the segment using `execute_preflight()` with the predetermined trace heights
+   - Generates trace context from system records and record arenas via `generate_proving_ctx()`
+   - Passes final state as initial state to next segment
+
+This approach ensures each segment has properly allocated record arenas based on metered execution estimates, and segments maintain state continuity between them.
 
 #### Proof Generation
 
-Proof generation is handled through the `StarkEngine`, which processes the execution traces and generates ZK proofs. The `VirtualMachine` integrates with the proving system through its `DeviceMultiStarkProvingKey` and the collected execution records from preflight execution.
+Proof generation is performed by calling `StarkEngine.prove()` on `ProvingContext<E::PB>` created for each segment in
+`generate_proving_ctx()`. For continuation proofs, each segment is proven independently using the stark engine.
 
 ## VM Integration API
 
@@ -261,7 +275,7 @@ The integration API provides a way to create chips where the following condition
 - a single instruction execution corresponds to a single row of the trace matrix
 - rows of all 0's satisfy the constraints
 
-Most chips in the VM satisfy this, with notable exceptions being Keccak and Poseidon2.
+Most chips in the VM satisfy this, with notable exceptions being Keccak, Sha256 and Poseidon2.
 
 ### Traits for Adapter and Core
 
