@@ -232,8 +232,16 @@ See [VM Extensions](./vm-extensions.md) for more details.
 
 #### Keygen
 
-Key generation is computed from the `VmConfig` describing the VM. The `VmConfig` is used to create the `VmChipComplex`,
+Key generation is computed from the `VmConfig` describing the VM. The `VmConfig` is used to create the `AirInventory` via the `VmCircuitConfig` trait,
 which in turn provides the list of AIRs that are used in the proving and verification process.
+
+```rust
+pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+}
+```
+
+The `AirInventory` contains a `keygen` method that generates the proving and verifying keys from the collected AIRs.
 
 #### Trace Generation
 
