@@ -28,8 +28,8 @@ crate-root/
 #### Key Components
 
 1. **CUDA Source Files** (`cuda/src/*.cu`)
-   - Contains CUDA kernels
-   - Includes `extern "C"` launcher functions for kernel invocation
+   - Contain CUDA kernels
+   - Include `extern "C"` launcher functions for kernel invocation
 
 2. **Header Files** (`cuda/include/crate_name/*.cuh, *.h`)
    - CUDA header files and declarations
