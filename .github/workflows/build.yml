@@ -1,6 +1,8 @@
 name: Build Workspace
 
 on:
+  push:
+    branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_call:

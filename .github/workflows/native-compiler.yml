@@ -2,6 +2,8 @@ name: Native Compiler Tests
 
 on:
   workflow_call:
+  push:
+    branches: ["main"]
   pull_request:
     branches: ["**"]
     paths:

@@ -2,6 +2,7 @@ name: OpenVM CLI Tests
 
 on:
   push:
+    branches: ["main"]
     tags: ["v*"]
   pull_request:
     branches: ["**"]

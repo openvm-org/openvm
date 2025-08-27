@@ -9,17 +9,22 @@ on:
         type: boolean
         default: false
   push:
-    branches: ["feat/new-execution"]
+    branches: ["main"]
+    paths:
+      - "benchmarks/prove/**"
+      - "benchmarks/guest/**"
+      - "crates/**"
+      - "extensions/**"
+      - ".github/workflows/benchmark-call.yml"
+      - ".github/workflows/benchmarks.yml"
+      - "Cargo.toml"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
     paths:
       - "benchmarks/prove/**"
-      - "crates/circuits/**"
-      - "crates/toolchain/**"
-      - "crates/prof/**"
-      - "crates/sdk/**"
-      - "crates/vm/**"
+      - "benchmarks/guest/**"
+      - "crates/**"
       - "extensions/**"
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"

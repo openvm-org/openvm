@@ -2,6 +2,8 @@ name: STARK Recursion Tests
 
 on:
   workflow_call:
+  push:
+    branches: ["main"]
   pull_request:
     branches: ["**"]
     paths:
@@ -45,27 +47,3 @@ jobs:
         working-directory: crates/continuations
         run: |
           cargo nextest run --no-tests=pass
-
-  tests-cuda:
-    runs-on:
-      - runs-on=${{ github.run_id }}-cuda
-      - runner=test-gpu-nvidia
-      - image=ubuntu24-gpu-x64
-      - extras=s3-cache
-
-    steps:
-      - uses: runs-on/action@v2
-      - uses: actions/checkout@v5
-      - run: | # avoid cross-device link error
-          rustup component remove clippy || true
-          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Run recursion crate tests
-        working-directory: extensions/native/recursion
-        run: |
-          cargo nextest run --features cuda

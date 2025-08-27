@@ -1,9 +1,11 @@
 name: Merge Queue Controller
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  # NOTE[jpw]: this workflow is currently disabled and not meant to be used
+  workflow_dispatch
+  # merge_group:
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
