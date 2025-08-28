@@ -35,25 +35,22 @@ impl MmapMemory {
     #[cfg(not(feature = "unprotected"))]
     #[inline(always)]
     fn check_bounds(&self, start: usize, size: usize) {
-        if start.saturating_add(size) > self.size() {
-            panic!(
-                "Memory access out of bounds: start={} size={} memory_size={}",
-                start,
-                size,
-                self.size()
-            );
+        let memory_size = self.size();
+        if start > memory_size || size > memory_size - start {
+            panic_oob(start, size, memory_size);
         }
     }
 
     #[cfg(feature = "unprotected")]
     #[inline(always)]
     fn check_bounds(&self, start: usize, size: usize) {
+        let memory_size = self.size();
         debug_assert!(
-            start.saturating_add(size) <= self.size(),
+            start <= memory_size && size <= memory_size - start,
             "Memory access out of bounds: start={} size={} memory_size={}",
             start,
             size,
-            self.size()
+            memory_size
         );
     }
 }
@@ -195,4 +192,13 @@ impl LinearMemory for MmapMemory {
         // - `self` will not be mutated while borrowed
         core::slice::from_raw_parts(data, len)
     }
+}
+
+#[cold]
+#[inline(never)]
+fn panic_oob(start: usize, size: usize, memory_size: usize) -> ! {
+    panic!(
+        "Memory access out of bounds: start={} size={} memory_size={}",
+        start, size, memory_size
+    );
 }

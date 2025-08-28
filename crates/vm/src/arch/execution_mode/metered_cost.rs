@@ -85,14 +85,12 @@ impl MeteredCostCtx {
     }
 
     #[cold]
-    fn check_cost_limit(&self) {
-        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
-            panic!(
-                "Execution cost {} exceeded maximum allowed cost of {}",
-                self.cost,
-                2 * DEFAULT_MAX_COST
-            );
-        }
+    fn panic_cost_exceeded(&self) -> ! {
+        panic!(
+            "Execution cost {} exceeded maximum allowed cost of {}",
+            self.cost,
+            2 * DEFAULT_MAX_COST
+        );
     }
 }
 
@@ -110,7 +108,9 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             size
         );
         // Prevent unbounded memory accesses per instruction
-        self.check_cost_limit();
+        if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {
+            self.panic_cost_exceeded();
+        }
 
         // Handle access adapter updates
         // SAFETY: size passed is always a non-zero power of 2
