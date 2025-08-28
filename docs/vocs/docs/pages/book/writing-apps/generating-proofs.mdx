@@ -66,11 +66,13 @@ generates a smart contract verifier for EVM chains. Upon a successful run, the c
 
 - `agg_stark.pk`
 - `agg_stark.vk`
+- `root.asm`
 - `agg_halo2.pk`
 - `halo2/src/[OPENVM_VERSION]/Halo2Verifier.sol`
 - `halo2/src/[OPENVM_VERSION]/OpenVmHalo2Verifier.sol`
 - `halo2/src/[OPENVM_VERSION]/interfaces/IOpenVmHalo2Verifier.sol`
 - `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
+- `params`
 
 to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and 
 `OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will 
@@ -79,6 +81,8 @@ look for them in this directory. The smart contract verifier is also available v
 
 The files `agg_stark.pk` and `agg_halo2.pk` are the STARK and Halo2 aggregation proving keys necessary to aggregate to a final EVM proof.
 The file `agg_stark.vk` is the STARK aggregation verification key.
+The file `root.asm` contains instructions to verify STARK proofs.
+The `params` directory contains various trusted setup KZG parameters needed to guarantee Halo2's cryptographic security.
 The `OpenVmHalo2Verifier.sol` file contains a Solidity contract to verify the final EVM proof. The contract is named `OpenVmHalo2Verifier` and it implements the `IOpenVmHalo2Verifier` interface.
 
 ```solidity [IOpenVmHalo2Verifier.sol]
