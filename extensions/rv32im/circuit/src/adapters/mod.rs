@@ -119,7 +119,9 @@ pub fn timed_read<const N: usize>(
         unsafe { memory.read::<u8, N, 4>(address_space, ptr) }
     }
     #[cfg(not(feature = "legacy-mem-align"))]
-    unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
+    unsafe {
+        memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr)
+    }
 }
 
 #[inline(always)]
@@ -145,7 +147,9 @@ pub fn timed_write<const N: usize>(
         unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
     }
     #[cfg(not(feature = "legacy-mem-align"))]
-    unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+    unsafe {
+        memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data)
+    }
 }
 
 /// Reads register value at `reg_ptr` from memory and records the memory access in mutable buffer.
