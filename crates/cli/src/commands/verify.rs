@@ -13,11 +13,10 @@ use super::KeygenCargoArgs;
 #[cfg(feature = "evm-verify")]
 use crate::default::default_evm_halo2_verifier_path;
 use crate::{
-    commands::RunCargoArgs,
     default::default_agg_stark_vk_path,
     util::{
         get_app_commit_path, get_app_vk_path, get_files_with_ext, get_manifest_path_and_dir,
-        get_single_target_name, get_target_dir, get_target_output_dir,
+        get_single_target_name_raw, get_target_dir, get_target_output_dir,
     },
 };
 
@@ -70,7 +69,7 @@ enum VerifySubCommand {
         proof: Option<PathBuf>,
 
         #[command(flatten)]
-        cargo_args: RunCargoArgs,
+        cargo_args: SingleTargetCargoArgs,
     },
     #[cfg(feature = "evm-verify")]
     Evm {
@@ -82,6 +81,59 @@ enum VerifySubCommand {
         )]
         proof: Option<PathBuf>,
     },
+}
+
+#[derive(Parser)]
+pub struct SingleTargetCargoArgs {
+    #[arg(
+        long,
+        short = 'p',
+        value_name = "PACKAGES",
+        help = "The package to run; by default is the package in the current workspace",
+        help_heading = "Package Selection"
+    )]
+    pub package: Option<String>,
+
+    #[arg(
+        long,
+        value_name = "BIN",
+        help = "Run the specified binary",
+        help_heading = "Target Selection"
+    )]
+    pub bin: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "EXAMPLE",
+        help = "Run the specified example",
+        help_heading = "Target Selection"
+    )]
+    pub example: Vec<String>,
+
+    #[arg(
+        long,
+        value_name = "NAME",
+        default_value = "release",
+        help = "Run with the given profile",
+        help_heading = "Compilation Options"
+    )]
+    pub profile: String,
+
+    #[arg(
+        long,
+        value_name = "DIR",
+        help = "Directory for all generated artifacts and intermediate files",
+        help_heading = "Output Options"
+    )]
+    pub target_dir: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Path to the Cargo.toml file, by default searches for the file in the current or any parent directory",
+        help_heading = "Manifest Options"
+    )]
+    pub manifest_path: Option<PathBuf>,
 }
 
 impl VerifyCmd {
@@ -133,7 +185,12 @@ impl VerifyCmd {
                     let (manifest_path, _) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
                     let target_dir = get_target_dir(&cargo_args.target_dir, &manifest_path);
                     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
-                    let target_name = get_single_target_name(cargo_args)?;
+                    let target_name = get_single_target_name_raw(
+                        &cargo_args.bin,
+                        &cargo_args.example,
+                        &cargo_args.manifest_path,
+                        &cargo_args.package,
+                    )?;
                     get_app_commit_path(&target_output_dir, target_name)
                 };
                 let expected_app_commit = read_from_file_json(app_commit_path)?;

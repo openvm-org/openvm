@@ -96,22 +96,36 @@ pub fn get_app_commit_path(target_output_dir: &Path, target_name: PathBuf) -> Pa
 // will search the workspace/package for binary targets. If there is a single
 // binary that will be returned, else an error will be raised.
 pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
-    let num_targets = cargo_args.bin.len() + cargo_args.example.len();
+    get_single_target_name_raw(
+        &cargo_args.bin,
+        &cargo_args.example,
+        &cargo_args.manifest_path,
+        &cargo_args.package,
+    )
+}
+
+pub fn get_single_target_name_raw(
+    bin: &[String],
+    example: &[String],
+    manifest_path: &Option<PathBuf>,
+    package: &Option<String>,
+) -> Result<PathBuf> {
+    let num_targets = bin.len() + example.len();
     let single_target_name = if num_targets > 1 {
         return Err(eyre::eyre!(
             "`cargo openvm run` can run at most one executable, but multiple were specified"
         ));
     } else if num_targets == 0 {
-        let (_, manifest_dir) = get_manifest_path_and_dir(&cargo_args.manifest_path)?;
+        let (_, manifest_dir) = get_manifest_path_and_dir(manifest_path)?;
 
-        let packages = if cargo_args.package.is_some() {
+        let packages = if package.is_some() {
             get_workspace_packages(&manifest_dir)
         } else {
             get_in_scope_packages(&manifest_dir)
         }
         .into_iter()
         .filter(|pkg| {
-            if let Some(package) = &cargo_args.package {
+            if let Some(package) = package {
                 pkg.name == *package
             } else {
                 true
@@ -138,10 +152,10 @@ pub fn get_single_target_name(cargo_args: &RunCargoArgs) -> Result<PathBuf> {
         } else {
             PathBuf::from(binaries[0].name.clone())
         }
-    } else if cargo_args.bin.is_empty() {
-        PathBuf::from("examples").join(&cargo_args.example[0])
+    } else if bin.is_empty() {
+        PathBuf::from("examples").join(&example[0])
     } else {
-        PathBuf::from(cargo_args.bin[0].clone())
+        PathBuf::from(bin[0].clone())
     };
     Ok(single_target_name)
 }

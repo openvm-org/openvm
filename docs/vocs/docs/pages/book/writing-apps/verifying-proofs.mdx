@@ -42,6 +42,12 @@ The `cargo openvm verify stark` command implicitly reads the STARK aggregation v
 from `~/.openvm/agg_stark.vk`. 
 :::
 
+:::warning
+The `cargo openvm commit` has many options that can change where the commit is generated to. To ensure the correct
+commit is being verified, ensure that the `package`, `bin`/`example`, `profile`, `target-dir`, and `manifest-path`
+options passed to `cargo openvm verify stark` are the same as those passed to `cargo openvm commit`.
+:::
+
 ## Verifying EVM Proofs
 
 To verify an EVM proof, you can run the following command or call the `IOpenVmHalo2Verifier.verify()` function in the [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk).
