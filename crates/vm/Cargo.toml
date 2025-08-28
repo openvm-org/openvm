@@ -80,13 +80,15 @@ test-utils = ["dep:openvm-stark-sdk"]
 # Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
+# Disable bounds checking in memory operations for performance
+unprotected = []
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk?/nightly-features"]
 cuda = [
-    "dep:openvm-stark-sdk", # for BabyBearPoseidon2Config
+    "dep:openvm-stark-sdk",           # for BabyBearPoseidon2Config
     "openvm-circuit-primitives/cuda",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",

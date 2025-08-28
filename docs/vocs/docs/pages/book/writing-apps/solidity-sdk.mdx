@@ -1,6 +1,6 @@
 # Solidity SDK
 
-As a supplement to OpenVM, we provide a [Solidity SDK](https://github.com/openvm-org/openvm-solidity-sdk) containing OpenVM verifier contracts generated at official release commits using the `cargo openvm setup --evm` [command](/book/advanced-usage/sdk#setup). The contracts are built at every _minor_ release as OpenVM guarantees verifier backward compatibility across patch releases.
+As a supplement to OpenVM, we provide a [Solidity SDK](https://github.com/openvm-org/openvm-solidity-sdk) containing OpenVM verifier contracts generated at official release commits using the `cargo openvm setup --evm` [command](/book/advanced-usage/sdk#setup-1). The contracts are built at every _minor_ release as OpenVM guarantees verifier backward compatibility across patch releases.
 
 Note that these builds are for the default aggregation VM config which should be sufficient for most users. If you use a custom config, you will need to manually generate the verifier contract using the [OpenVM SDK](/book/advanced-usage/sdk).
 
@@ -37,7 +37,7 @@ contract MyContract {
 }
 ```
 
-The arguments to the `verify` function are the fields in the [EVM Proof JSON Format](./verifying-proofs#evm-proof-json-format).
+The arguments to the `verify` function are the fields in the [EVM Proof JSON Format](/book/writing-apps/verifying-proofs#evm-proof-json-format).
 Since the builds use the default aggregation VM config, the number of public values is fixed to 32.
 
 If you want to import the verifier contract into your own repository for testing purposes, note that it is locked to Solidity version `0.8.19`. If your project uses a different version, the import may not compile. As a workaround, you can compile the contract separately and use `vm.etch()` to inject the raw bytecode into your tests.

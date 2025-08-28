@@ -1,4 +1,7 @@
-use openvm_algebra_circuit::{AlgebraGpuProverExt, Rv32ModularGpuBuilder};
+//! GPU builder where the [Rv32ModularBuilder], [AlgebraProverExt], and [EccProverExt] will use
+//! either cuda tracegen or hybrid CPU tracegen depending on what [openvm_algebra_circuit] and
+//! [openvm_ecc_circuit] crates export.
+use openvm_algebra_circuit::{AlgebraProverExt, Rv32ModularBuilder};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, DenseRecordArena, VmBuilder, VmChipComplex,
@@ -7,7 +10,7 @@ use openvm_circuit::{
     system::cuda::SystemChipInventoryGPU,
 };
 use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend};
-use openvm_ecc_circuit::EccGpuProverExt;
+use openvm_ecc_circuit::EccProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{PairingProverExt, Rv32PairingConfig};
@@ -36,14 +39,10 @@ impl VmBuilder<E> for Rv32PairingGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex =
-            VmBuilder::<E>::create_chip_complex(&Rv32ModularGpuBuilder, &config.modular, circuit)?;
+            VmBuilder::<E>::create_chip_complex(&Rv32ModularBuilder, &config.modular, circuit)?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, &config.fp2, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(
-            &EccGpuProverExt,
-            &config.weierstrass,
-            inventory,
-        )?;
+        VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, &config.fp2, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&EccProverExt, &config.weierstrass, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, &config.pairing, inventory)?;
         Ok(chip_complex)
     }

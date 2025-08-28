@@ -28,11 +28,13 @@ pub use fp2::*;
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
+        mod hybrid;
         pub use cuda::*;
-        pub use cuda::{
-            AlgebraGpuProverExt as AlgebraProverExt,
-            Rv32ModularGpuBuilder as Rv32ModularBuilder,
-            Rv32ModularWithFp2GpuBuilder as Rv32ModularWithFp2Builder,
+        pub use hybrid::*;
+        pub use {
+            AlgebraHybridProverExt as AlgebraProverExt,
+            Rv32ModularHybridBuilder as Rv32ModularBuilder,
+            Rv32ModularWithFp2HybridBuilder as Rv32ModularWithFp2Builder,
         };
     } else {
         pub use self::{

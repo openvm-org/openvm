@@ -15,7 +15,7 @@ If your program does not require inputs, you should omit the `--input` flag.
 
 ## Run Flags
 
-Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling](/book/writing-apps/compiling-a-program).
+Many of the options for `cargo openvm run` will be passed to `cargo openvm build` if `--exe` is not specified. For more information on `build` (or `run`'s **Feature Selection**, **Compilation**, **Output**, **Display**, and/or **Manifest** options) see [Compiling a Program](/book/writing-apps/compiling-a-program).
 
 ### OpenVM Options
 
@@ -25,11 +25,11 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 - `--config <CONFIG>`
 
-  **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. By default will search the manifest directory for `openvm.toml`. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Using Existing Extensions](/book/acceleration-using-extensions/overview) section. To use other extensions, use the [SDK](/book/advanced-usage/sdk).
+  **Description**: Path to the OpenVM config `.toml` file that specifies the VM extensions. By default will search the manifest directory for `openvm.toml`. If no file is found, OpenVM will use a default configuration. Currently the CLI only supports known extensions listed in the [Acceleration Using Pre-Built Extensions](/book/acceleration-using-extensions/overview) section. To use other extensions, use the [SDK](/book/advanced-usage/sdk).
 
-- `--output_dir <OUTPUT_DIR>`
+- `--output-dir <OUTPUT_DIR>`
 
-  **Description**: Output directory for OpenVM artifacts to be copied to. Keys will be placed in `${output-dir}/`, while all other artifacts will be in `${output-dir}/${profile}`.
+  **Description**: Output directory for OpenVM artifacts to be copied to.
 
 - `--input <INPUT>`
 
@@ -41,15 +41,24 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
   **Default**: `openvm_init.rs`
 
+- `--mode <MODE>`
+
+  **Description**: Execution mode. Available options are `pure`, `meter`, and `segment`.
+  - **pure**: Runs the program normally
+  - **meter**: Runs the program and estimates the execution cost in terms of number of cells
+  - **segment**: Runs the program and calculates the number of segments that the execution will be split into for proving (see [Continuations Design](/specs/architecture/continuations#continuations))
+
+  **Default**: `pure`
+
 ### Package Selection
 
 - `--package <PACKAGES>`
 
-  **Description**: The package to run, by default the package in the current workspace.
+  **Description**: The package to run, by default the package in the current working directory.
 
 ### Target Selection
 
-Only one target may be built and run. 
+Only one target may be built and run.
 
 - `--bin <BIN>`
 

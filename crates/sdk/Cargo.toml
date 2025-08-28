@@ -90,10 +90,14 @@ tco = [
     "openvm-bigint-circuit/tco",
     "openvm-algebra-circuit/tco",
     "openvm-ecc-circuit/tco",
-    "openvm-pairing-circuit/tco"
+    "openvm-pairing-circuit/tco",
 ]
+unprotected = ["openvm-circuit/unprotected"]
 # for guest profiling:
-perf-metrics = ["openvm-circuit/perf-metrics", "openvm-transpiler/function-span"]
+perf-metrics = [
+    "openvm-circuit/perf-metrics",
+    "openvm-transpiler/function-span",
+]
 # turns on stark-backend debugger in all proofs
 stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]

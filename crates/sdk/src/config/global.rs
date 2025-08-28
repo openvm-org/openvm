@@ -45,13 +45,13 @@ use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_algebra_circuit::AlgebraGpuProverExt;
+        use openvm_algebra_circuit::AlgebraProverExt;
         use openvm_bigint_circuit::Int256GpuProverExt;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{
             engine::GpuBabyBearPoseidon2Engine, prover_backend::GpuBackend, types::SC,
         };
-        use openvm_ecc_circuit::EccGpuProverExt;
+        use openvm_ecc_circuit::EccProverExt;
         use openvm_keccak256_circuit::Keccak256GpuProverExt;
         use openvm_native_circuit::NativeGpuProverExt;
         use openvm_rv32im_circuit::Rv32ImGpuProverExt;
@@ -472,16 +472,16 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
         }
         if let Some(modular) = &config.modular {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, modular, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, modular, inventory)?;
         }
         if let Some(fp2) = &config.fp2 {
-            VmProverExtension::<E, _, _>::extend_prover(&AlgebraGpuProverExt, fp2, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&AlgebraProverExt, fp2, inventory)?;
         }
         if let Some(pairing) = &config.pairing {
             VmProverExtension::<E, _, _>::extend_prover(&PairingProverExt, pairing, inventory)?;
         }
         if let Some(ecc) = &config.ecc {
-            VmProverExtension::<E, _, _>::extend_prover(&EccGpuProverExt, ecc, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&EccProverExt, ecc, inventory)?;
         }
         Ok(chip_complex)
     }

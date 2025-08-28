@@ -17,11 +17,12 @@ use crate::{
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ExecutionMode {
-    /// Pure execution (default)
+    /// Runs the program normally
     Pure,
-    /// Execute with cost metering (execute_metered_cost)
+    /// Runs the program and estimates the execution cost in terms of number of cells
     Meter,
-    /// Execute with segmentation (execute_metered)
+    /// Runs the program and calculates the number of segments that the execution will be split
+    /// into for proving
     Segment,
 }
 
@@ -307,20 +308,20 @@ impl RunCmd {
                 let output = sdk.execute(exe, inputs)?;
                 println!("Execution output: {:?}", output);
             }
+            ExecutionMode::Meter => {
+                let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
+                println!("Execution output: {:?}", output);
+
+                println!("Number of instructions executed: {}", instret);
+                println!("Total cost: {}", cost);
+            }
             ExecutionMode::Segment => {
                 let (output, segments) = sdk.execute_metered(exe, inputs)?;
                 println!("Execution output: {:?}", output);
 
                 let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
-                println!("Total instructions: {}", total_instructions);
-                println!("Number of segments: {}", segments.len());
-            }
-            ExecutionMode::Meter => {
-                let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
-                println!("Execution output: {:?}", output);
-
-                println!("Total instructions: {}", instret);
-                println!("Total cost: {}", cost);
+                println!("Number of instructions executed: {}", total_instructions);
+                println!("Total segments: {}", segments.len());
             }
         }
 

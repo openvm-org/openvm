@@ -31,7 +31,7 @@ jobs:
         crates: # group crates on the same runner based on test time
           - { names: "sha2 keccak256 verify_stark", family: "g6+g5+g6e" }
           - { names: "ff_derive k256 p256 ruint", family: "g6+g5+g6e" }
-          - { names: "pairing", family: "g6e" }
+          - { names: "pairing", family: "g6+g5+g6e" }
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.crates.family }}/image=ubuntu24-gpu-x64/cpu=8+32/spot=capacity-optimized/extras=s3-cache
 
