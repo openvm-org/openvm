@@ -112,6 +112,13 @@ pub fn timed_read<const N: usize>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    #[cfg(feature = "legacy-mem-align")]
+    if address_space == RV32_MEMORY_AS {
+        unsafe { memory.read::<u8, N, 1>(address_space, ptr) }
+    } else {
+        unsafe { memory.read::<u8, N, 4>(address_space, ptr) }
+    }
+    #[cfg(not(feature = "legacy-mem-align"))]
     unsafe { memory.read::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr) }
 }
 
@@ -131,6 +138,13 @@ pub fn timed_write<const N: usize>(
     // SAFETY:
     // - address space `RV32_REGISTER_AS` and `RV32_MEMORY_AS` will always have cell type `u8` and
     //   minimum alignment of `RV32_REGISTER_NUM_LIMBS`
+    #[cfg(feature = "legacy-mem-align")]
+    if address_space == RV32_MEMORY_AS {
+        unsafe { memory.write::<u8, N, 1>(address_space, ptr, data) }
+    } else {
+        unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
+    }
+    #[cfg(not(feature = "legacy-mem-align"))]
     unsafe { memory.write::<u8, N, RV32_REGISTER_NUM_LIMBS>(address_space, ptr, data) }
 }
 
