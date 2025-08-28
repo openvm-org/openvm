@@ -1,86 +1,74 @@
 # VM Extensions
 
-```rust
-pub trait VmExtension<F: PrimeField32> {
-    type Executor: PreflightExecutor<F> + AnyEnum;
-    type Periphery: AnyEnum;
+The OpenVM architecture is designed for maximal composability and modularity through the VM extension framework. The `arch` module in the `openvm-circuit` crate provides the traits to build a VM extension.
 
-    fn build(
+## VM Extension Framework
+The VM extension framework provides a modular way for developers to extend the functionality of a working zkVM. A full VM extension consists of three components:
+- [VmExecutionExtension](#vmexecutionextension) for extending the runtime execution handling of new instructions in custom instruction set extensions.
+- [VmCircuitExtension](#vmcircuitextension) extending the zkVM circuit with additional AIRs.
+- [VmProverExtension](#vmproverextension) extending how trace generation for the additional AIRs specified by the VM circuit extension for different prover backends.
+
+This three components are implemented via three corresponding traits `VmExecutionExtension`, `VmCircuitExtension`, and `VmProverExtension`.
+
+### `VmExecutionExtension`
+
+```rust
+pub trait VmExecutionExtension<F> {
+    /// Enum of executor variants
+    type Executor: AnyEnum;
+
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError>;
+        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+    ) -> Result<(), ExecutorInventoryError>;
 }
 ```
 
-The `VmExtension` trait is a way to specify how to construct a collection of chips and all assign opcodes to be handled
-by them. This data is collected into a `VmInventory` struct, which is returned.
+The `VmExecutionExtension` provides a way to specify hooks for handling new instructions.
+The associated type `Executor` should be an enum of all types implementing the traits
+`Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>` for the different [execution modes](./vm.md#execution-modes) for all new instructions introduced by this VM extension. The `Executor` enum does not need to handle instructions outside of this extension. The VM execution extension is specified by registering these hooks using the `ExecutorInventoryBuilder` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventoryBuilder.html#implementations). The main APIs are
+- `inventory.add_executor(executor, opcodes)` to associate an executor with a set of opcodes.
+- `inventory.add_phantom_sub_executor(sub_executor, discriminant)` to associate a phantom sub-executor with a phantom discriminant.
 
-To handle previous chip dependencies necessary for chip construction and also automatic bus index management, we provide a `VmInventoryBuilder` api.
-
-Due to strong types, we have **two** associated trait types `Executor, Periphery`. It is expected that `Executor` is an enum of all types implementing `PreflightExecutor + Chip` that this extension will construct. It is expected that `Periphery` is an enum of all types that implement `Chip` **but are not PreflightExecutor**. In general, it is always OK for the enum to have more kinds than necessary. For easy downcasting and enum wrangling, we also have an `AnyEnum` trait, which can always be derived by a macro.
-
-### `VmInventory<Executor, Periphery>`
-
-Think of `VmInventory<Executor, Periphery>` as the collection of all chips, which can be either `Executor` or `Periphery`. It also has a lookup from `VmOpcode` to `Executor` which is how runtime execution knows how to route instructions to executors.
-
-`VmInventory` API relevant for `VmExtension`:
-
+### `VmCircuitExtension`
 ```rust
-    pub fn add_executor(
-        &mut self,
-        executor: impl Into<Executor>,
-        opcodes: impl IntoIterator<Item = VmOpcode>,
-    ) -> Result<(), VmInventoryError>;
-
-    pub fn add_periphery_chip(&mut self, periphery_chip: impl Into<Periphery>);
-
-    pub fn add_phantom_sub_executor<F: 'static, PE: PhantomSubExecutor<F> + 'static>(
-        &mut self,
-        phantom_sub: PE,
-        discriminant: PhantomDiscriminant,
-    ) -> Result<(), VmInventoryError>;
-
-    pub fn executors(&self) -> &[Executor] {
-        &self.executors
-    }
-
-    pub fn periphery(&self) -> &[Periphery] {
-        &self.periphery
-    }
+pub trait VmCircuitExtension<SC: StarkGenericConfig> {
+    fn extend_circuit(&self, inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError>;
+}
 ```
-
-where you should specify all opcodes owned by an executor when you add it.
-
-For runtime execution in a segment, the `VmInventory` also provides the getter functions:
-
+The `VmCircuitExtension` trait is the most security critical, and it should have **no** dependencies on the other two extension traits. The `VmCircuitExtension` trait is the only trait that needs to be implemented to specify the AIRs, and consequently their verifying keys, that will be added by this VM extension. The `VmCircuitExtension` should be agnostic to execution implementation details and to differences in prover backends.
+The VM circuit extension is specified by adding new AIRs in order using the `AirInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html). The main APIs are
+- `inventory.add_air(air)` to add a new `air`, where `air` must implement the traits
 ```rust
-    pub fn get_executor(&self, opcode: VmOpcode) -> Option<&Executor>;
-
-    pub fn get_mut_executor(&mut self, opcode: &VmOpcode) -> Option<&mut Executor>;
+Air<AB> + BaseAirWithPublicValues<Val<SC>> + PartitionedBaseAir<Val<SC>> for AB: InteractionBuilder<F = Val<SC>>
 ```
+(in other words, `air` is an AIR with interactions).
+- `inventory.find_air::<ConcreteAir>()` returns an iterator of all preceding AIRs in the circuit which downcast to type `ConcreteAir: 'static`.
 
-### `VmInventoryBuilder`
+The added AIRs may have dependencies on previously added AIRs, including those that may have been added by a previous VM extension. In these cases, the `inventory.find_air()` method should be used to retrieve the dependencies.
 
-Here is the API of `VmInventoryBuilder`:
-
+### `VmProverExtension`
 ```rust
-impl<'a, F: PrimeField32> VmInventoryBuilder<'a, F> {
-    pub fn system_base(&self) -> &SystemBase<F>;
-    pub fn new_bus_idx(&mut self) -> usize;
-    pub fn find_chip<C: 'static>(&self) -> Vec<&C>;
-    /// Shareable streams. Clone to get a shared mutable reference.
-    pub fn streams(&self) -> &Arc<Mutex<Streams<F>>>;
-    pub fn add_phantom_sub_executor<PE: PhantomSubExecutor<F> + 'static>(
+pub trait VmProverExtension<E, RA, EXT>
+where
+    E: StarkEngine,
+    EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
+{
+    fn extend_prover(
         &self,
-        phantom_sub: PE,
-        discriminant: PhantomDiscriminant,
-    ) -> Result<(), VmInventoryError>;
+        extension: &EXT,
+        inventory: &mut ChipInventory<E::SC, RA, E::PB>,
+    ) -> Result<(), ChipInventoryError>;
 }
 ```
 
-You can find the base system chips in `system_base`. If you need to generate a new bus, use `new_bus_idx`. If you want to check if a chip already exists inside of the global VM config _and not just your extension_ use `find_chip` to search for chip by type name. It will return a list of references to the chips. If you need to hold a shared reference, then the expectation is that `C = Arc<_>`.
+The `VmProverExtension` trait is the most customizable, and hence (unfortunately) has the most generics.
+The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html), `RA` for record arena, and `EXT` for execution and circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkGenericConfig` and `PB: ProverBackend`.
+The `VmProverExtension` trait is therefore generic over the `ProverBackend` and the trait is designed to allow for different implementations of the prover extension for _the same_ execution and circuit extension `EXT` targetting different prover backends.
 
-Something the api is lacking: if you want to _change_ a previous chip (such as range tuple checker's constructor parameters) after it has been constructed, that is not currently possible. The current solution is that all those global parameters should be in the VM config (below) and you configure them in the config's constructor.
+Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
+
+
 
 ## Composing extensions into a VM: `VmConfig`
 

@@ -52,8 +52,8 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 /// For users who only need to create an execution environment, use the sub-trait
 /// [VmExecutionConfig] to avoid the `SC` generic.
 ///
-/// This trait does not contain the [VmProverBuilder] trait, because a single VM configuration may
-/// implement multiple [VmProverBuilder]s for different prover backends.
+/// This trait does not contain the [VmBuilder] trait, because a single VM configuration may
+/// implement multiple [VmBuilder]s for different prover backends.
 pub trait VmConfig<SC>:
     Clone
     + Serialize

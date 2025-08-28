@@ -4,7 +4,6 @@ mod config;
 pub mod execution;
 /// Execution context types for different execution modes.
 pub mod execution_mode;
-/// Traits and builders to compose collections of chips into a virtual machine.
 mod extensions;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
