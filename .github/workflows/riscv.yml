@@ -33,7 +33,7 @@ jobs:
           - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
 
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/spot=${{ contains(matrix.platform.runner, 'gpu') && 'false' || 'capacity-optimized' }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

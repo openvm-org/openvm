@@ -24,8 +24,12 @@ env:
 
 jobs:
   tests:
+    strategy:
+      matrix:
+        ignored: [true, false]
+
     runs-on:
-      - runs-on=${{ github.run_id }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=m7a.24xlarge/image=ubuntu24-full-x64/disk=large/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -43,33 +47,8 @@ jobs:
 
       - name: Install architecture specific tools
         run: |
-          arch=$(uname -m)
-          case $arch in
-            arm64|aarch64)
-              S5CMD_BIN="s5cmd_2.2.2_linux_arm64.deb"
-              rustup component add rust-src --toolchain nightly-2025-02-14-aarch64-unknown-linux-gnu
-              ;;
-            x86_64|amd64)
-              S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
-              rustup component add rust-src --toolchain nightly-2025-02-14-x86_64-unknown-linux-gnu
-              ;;
-            *)
-              echo "Unsupported architecture: $arch"
-              exit 1
-              ;;
-          esac
-
-          echo "Checking s5cmd"
-          if type s5cmd &>/dev/null; then
-              echo "s5cmd was installed."
-          else
-              TMP_DIR=/tmp/s5cmd
-              rm -rf $TMP_DIR
-              mkdir $TMP_DIR
-              echo "s5cmd was not installed. Installing.."
-              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
-              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
-          fi
+          source ci/scripts/utils.sh
+          install_s5cmd
 
       - name: Setup halo2
         working-directory: crates/sdk
@@ -77,6 +56,7 @@ jobs:
           bash ../../extensions/native/recursion/trusted_setup_s3.sh
 
       - name: Run openvm-sdk contracts/ tests
+        if: ${{ matrix.ignored == false }}
         working-directory: crates/sdk/contracts
         run: |
           forge fmt --check
@@ -84,6 +64,7 @@ jobs:
           forge test
 
       - name: Check IOpenVmHalo2Verifier.sol abi correctness
+        if: ${{ matrix.ignored == false }}
         working-directory: crates/sdk/contracts
         run: |
           forge build
@@ -92,14 +73,16 @@ jobs:
           diff -u expected_abi_sorted.json compiled_abi.json
 
       - name: Run openvm-sdk crate tests
+        if: ${{ matrix.ignored == false }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          cargo nextest run --cargo-profile=fast --features parallel,evm-verify
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify
 
       - name: Run ignored tests
+        if: ${{ matrix.ignored == true }}
         working-directory: crates/sdk
         # if: ${{ github.event_name == 'push' }}
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,evm-verify --run-ignored=only test_static_verifier_custom_pv_handler
