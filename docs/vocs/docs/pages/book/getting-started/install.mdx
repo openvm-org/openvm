@@ -2,7 +2,7 @@
 
 To use OpenVM for generating proofs, you must install the OpenVM command line tool `cargo-openvm`
 either via Git URL or by cloning the repo and building from source manually. Prior to either
-approach, you should make sure you have installed the necessary [Prerequisites](#installation-prerequisites).
+approach, you should make sure you have the necessary [Installation Prerequisites](#installation-prerequisites).
 
 Skip [below](#installation-with-nvidia-gpu-support) for instructions on installing `cargo-openvm` with Nvidia GPU support.
 
@@ -93,7 +93,7 @@ svm use 0.8.19
 
 ## Installation with Nvidia GPU Support
 
-It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Prerequisites (CUDA)](#installation-prerequisites-cuda))
+It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Installation Prerequisites (CUDA)](#installation-prerequisites-cuda))
 
 With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. Currently only single GPU support is available through the CLI.
 
@@ -129,7 +129,7 @@ cargo openvm --version
 
 ### Installation Prerequisites (CUDA)
 
-You will need all of the [Common Prerequisites](#installation-prerequisites). In addition, you will need to have a machine with
+You will need all of the common prerequisites listed [above](#installation-prerequisites). In addition, you will need to have a machine with
 - Nvidia GPU drivers [installed](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#)
 - CUDA toolkit [installed](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#)
 
@@ -168,7 +168,7 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PAT
 ```
 Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
-You are now ready to [install](#install-with-nvidia-gpu-support) the OpenVM CLI.
+You are now ready to [install](#installation-with-nvidia-gpu-support) the OpenVM CLI.
 
 ## Installation with Experimental Features
 

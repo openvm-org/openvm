@@ -24,7 +24,7 @@ where
 - `app_vm_commit` is the commitment to the app VM configuration.
 - `user_pvs` are the public values revealed by the app.
 
-Proofs are expected to be passed via the [hintable key-value store](https://github.com/openvm-org/openvm/blob/main/docs/specs/ISA.md#inputs-and-hints). Guests will query for proofs at the key `asm_filename || exe_commit_in_u32 || vm_commit_in_u32 || user_pvs`.
+Proofs are expected to be passed via the [hintable key-value store](/specs/openvm/isa#inputs-and-hints). Guests will query for proofs at the key `asm_filename || exe_commit_in_u32 || vm_commit_in_u32 || user_pvs`.
 
 The function will panic on failure. Successful STARK verification implies that the app execution was successful and terminated with exit code 0.
 
@@ -38,7 +38,7 @@ This is not a concern if you are writing vanilla rust with the default RV32 I an
 
 ## Host
 
-Hosts are expected to properly hint the [hintable key-value store](https://github.com/openvm-org/openvm/blob/main/docs/specs/ISA.md#inputs-and-hints) with the OpenVM STARK proofs. To that end, the library provides the following utilities:
+Hosts are expected to properly hint the [hintable key-value store](/specs/openvm/isa#inputs-and-hints) with the OpenVM STARK proofs. To that end, the library provides the following utilities:
 - `compute_hint_key_for_verify_openvm_stark` will compute the exact key at which the guest will look for the proof.
 - `encode_proof_to_kv_store_value` will serialize the proof into the structure expected by the `verify_stark` function.
 

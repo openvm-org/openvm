@@ -135,7 +135,7 @@ If your program doesn't require inputs, you can (and should) omit the `--input` 
 
 If `--proof` is not provided then the command will write the proof to `./${bin_name}.[app | stark | evm].proof` by default, where `bin_name` is the file stem of the executable run.
 
-The `app` subcommand generates an application-level proof, the `stark` command generates an aggregated root-level proof, while the `evm` command generates an end-to-end EVM proof. For more information on aggregation, see [this specification](https://github.com/openvm-org/openvm/blob/bf8df90b13f4e80bb76dbb71f255a12154c84838/docs/specs/continuations.md). See [EVM Proof Format](./verifying-proofs#evm-proof-json-format) for details on the output format for `cargo openvm prove evm`.
+The `app` subcommand generates an application-level proof, the `stark` command generates an aggregated root-level proof, while the `evm` command generates an end-to-end EVM proof. For more information on aggregation, see [the specification](/specs/architecture/continuations). See [Verifying EVM Proofs](/book/writing-apps/verifying-proofs#verifying-evm-proofs) for details on the output format for `cargo openvm prove evm`.
 
 :::warning
 The `stark` subcommand requires STARK aggregation key generation to have been run via
