@@ -43,7 +43,10 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 - `--mode <MODE>`
 
-  **Description**: Execution mode, one of `pure`, `meter`, and `segment`. For more information see (Distributed Proving Architecture)[/specs/architecture/distributed-proving.mdx#execution]
+  **Description**: Execution mode. Available options are `pure`, `meter`, and `segment`.
+  - **pure**: Runs the program normally
+  - **meter**: Runs the program and estimates the execution cost in terms of number of cells
+  - **segment**: Runs the program and calculates the number of segments that the execution will be split into for proving (see [continuations](/specs/architecture/continuations))
 
   **Default**: `pure`
 
@@ -55,7 +58,7 @@ Many of the options for `cargo openvm run` will be passed to `cargo openvm build
 
 ### Target Selection
 
-Only one target may be built and run. 
+Only one target may be built and run.
 
 - `--bin <BIN>`
 
