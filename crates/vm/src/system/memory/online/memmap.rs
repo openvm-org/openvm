@@ -1,5 +1,7 @@
-use std::fmt::Debug;
-use std::mem::{align_of, size_of, size_of_val};
+use std::{
+    fmt::Debug,
+    mem::{align_of, size_of, size_of_val},
+};
 
 use memmap2::MmapMut;
 
@@ -57,8 +59,7 @@ impl MmapMemory {
 
 impl LinearMemory for MmapMemory {
     /// Create a new MmapMemory with the given `size` in bytes.
-    /// We round `size` up to be a multiple of the mmap page size (4kb by default) so that OS-level
-    /// MMU protection corresponds to out of bounds protection.
+    /// We round `size` up to be a multiple of the mmap page size (4kb by default).
     fn new(mut size: usize) -> Self {
         size = size.div_ceil(PAGE_SIZE) * PAGE_SIZE;
         // anonymous mapping means pages are zero-initialized on first use
@@ -112,7 +113,6 @@ impl LinearMemory for MmapMemory {
         let src = self.as_ptr().add(from) as *const BLOCK;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `src` access is out of bounds.
         // - We assume `src` is aligned to `BLOCK`
         // - We assume `BLOCK` is "plain old data" so the underlying `src` bytes is valid to read as
         //   an initialized value of `BLOCK`
@@ -125,7 +125,6 @@ impl LinearMemory for MmapMemory {
         let src = self.as_ptr().add(from) as *const BLOCK;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `src` access is out of bounds.
         // - We assume `BLOCK` is "plain old data" so the underlying `src` bytes is valid to read as
         //   an initialized value of `BLOCK`
         core::ptr::read_unaligned(src)
@@ -137,7 +136,6 @@ impl LinearMemory for MmapMemory {
         let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `dst` access is out of bounds.
         // - We assume `dst` is aligned to `BLOCK`
         core::ptr::write(dst, values);
     }
@@ -148,7 +146,6 @@ impl LinearMemory for MmapMemory {
         let dst = self.as_mut_ptr().add(start) as *mut BLOCK;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `dst` access is out of bounds.
         core::ptr::write_unaligned(dst, values);
     }
 
@@ -157,7 +154,6 @@ impl LinearMemory for MmapMemory {
         self.check_bounds(start, size_of::<BLOCK>());
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `start` access is out of bounds.
         // - We assume `start` is aligned to `BLOCK`
         core::ptr::swap(
             self.as_mut_ptr().add(start) as *mut BLOCK,
@@ -173,7 +169,6 @@ impl LinearMemory for MmapMemory {
         let dst = self.as_mut_ptr().add(to) as *mut T;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `dst..dst + size_of_val(data)` is out of bounds.
         // - Assumes `to` is aligned to `T` and `self.as_mut_ptr()` is aligned to `T`, which implies
         //   the same for `dst`.
         core::ptr::copy_nonoverlapping::<T>(src, dst, data.len());
@@ -185,7 +180,6 @@ impl LinearMemory for MmapMemory {
         let data = self.as_ptr().add(start) as *const T;
         // SAFETY:
         // - Bounds checked above (unless unprotected feature enabled)
-        // - MMU will segfault if `data..data + len * size_of::<T>()` is out of bounds.
         // - Assumes `data` is aligned to `T`
         // - `T` is "plain old data" (POD), so conversion from underlying bytes is properly
         //   initialized
