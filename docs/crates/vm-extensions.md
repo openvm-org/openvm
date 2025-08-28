@@ -28,7 +28,7 @@ pub trait VmExecutionExtension<F> {
 
 The `VmExecutionExtension` provides a way to specify hooks for handling new instructions.
 The associated type `Executor` should be an enum of all types implementing the traits
-`Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>` for the different [execution modes](./vm.md#execution-modes) for all new instructions introduced by this VM extension. The `Executor` enum does not need to handle instructions outside of this extension. The VM execution extension is specified by registering these hooks using the `ExecutorInventoryBuilder` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventoryBuilder.html#implementations). The main APIs are
+`Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, RA>` for the different [execution modes](./vm.md#execution-modes) for all new instructions introduced by this VM extension. The `Executor` enum does not need to handle instructions outside of this extension. The VM execution extension is specified by registering these hooks using the `ExecutorInventoryBuilder` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventoryBuilder.html). The main APIs are
 - `inventory.add_executor(executor, opcodes)` to associate an executor with a set of opcodes.
 - `inventory.add_phantom_sub_executor(sub_executor, discriminant)` to associate a phantom sub-executor with a phantom discriminant.
 
