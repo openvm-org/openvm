@@ -64,7 +64,7 @@ where
 
 The `VmProverExtension` trait is the most customizable, and hence (unfortunately) has the most generics.
 The generics are `E` for [StarkEngine](https://docs.openvm.dev/docs/openvm/openvm_stark_backend/engine/trait.StarkEngine.html), `RA` for record arena, and `EXT` for execution and circuit extension. Note that the `StarkEngine` trait itself has associated types `SC: StarkGenericConfig` and `PB: ProverBackend`.
-The `VmProverExtension` trait is therefore generic over the `ProverBackend` and the trait is designed to allow for different implementations of the prover extension for _the same_ execution and circuit extension `EXT` targetting different prover backends.
+The `VmProverExtension` trait is therefore generic over the `ProverBackend` and the trait is designed to allow for different implementations of the prover extension for _the same_ execution and circuit extension `EXT` targeting different prover backends.
 
 Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
 
