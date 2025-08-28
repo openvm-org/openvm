@@ -510,6 +510,7 @@ where
         &self.airs.config
     }
 
+    // NOTE[jpw]: this is currently unused, it is for debugging purposes
     pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
         if self.cur_num_exts >= self.airs.ext_start.len() {
             return Err(ChipInventoryError::MissingCircuitExtension(

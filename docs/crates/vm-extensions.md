@@ -1,6 +1,8 @@
 # VM Extensions
 
-The OpenVM architecture is designed for maximal composability and modularity through the VM extension framework. The `arch` module in the `openvm-circuit` crate provides the traits to build a VM extension.
+The OpenVM architecture is designed for maximal composability and modularity through the VM extension framework. The `arch` module in the `openvm-circuit` crate provides the traits to build VM extensions and configure a complete VM from a collection of VM extensions.
+
+The architecture centers on [`VmConfig`](#vmconfig), [`VmBuilder`](#vmbuilder), and the [VM extension framework](#vm-extension-framework). While `VmConfig` provides hardware-agnostic definitions for VM execution and circuit key generation, `VmBuilder` specializes these configurations to optimize performance for specific prover backends with hardware acceleration.
 
 ## VM Extension Framework
 The VM extension framework provides a modular way for developers to extend the functionality of a working zkVM. A full VM extension consists of three components:
@@ -68,79 +70,92 @@ The `VmProverExtension` trait is therefore generic over the `ProverBackend` and 
 
 Since there are intended to be multiple `VmProverExtension`s for the same `EXT`, the `VmProverExtension` trait is meant to be implemented on a separate struct from `EXT` to get around Rust orphan rules. This separate struct is usually a [zero sized type](https://doc.rust-lang.org/nomicon/exotic-sizes.html#zero-sized-types-zsts) (ZST).
 
+The VM prover extension is specified by adding new chips in order using the `ChipInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ChipInventory.html). The main functions are:
+- `inventory.add_executor_chip(chip)` adds a chip with an associated executor. Each executor must have exactly one chip associated to it, and this is currently used to determine the record arenas that the executor writes into during preflight execution. It is **required** that the executor chips are adds in the same order as the executors were added in the `VmExecutionExtension` implementation.
+- `inventory.add_periphery_chip(chip)` adds a chip without an associated executor. Not every chip needs to have a corresponding executor.
+- `inventory.find_chip<ConcreteChip>()` returns an iterator of all preceding chips in the inventory, including those from other previous extensions, which downcast to type `ConcreteChip: 'static`. This may be used to obtain previously constructed data, configurations, or buffers.
+- `inventory.next_air::<ConcreteAir>()` returns `Ok(&air)` if the next AIR that was added in the `VmCircuitExtension` implementation is of type `ConcreteAir` and returns error otherwise. It is used to ensure that the associated AIR to each chip is the expected one. It can also be used to obtain configuration data or bus information from the corresponding AIR.
 
+It is **required** that the overall insertion order of the chips (both executor and periphery types) must exactly match the order of the AIRs added in the `VmCircuitExtension` implementation. There should be a 1-to-1 correspondence between AIRs and chips, and implementors should maintain a convention to call `inventory.next_air::<ConcreteAir>()` before adding each chip to clearly indicate the AIR associated with each chip.
 
-## Composing extensions into a VM: `VmConfig`
-
-Once you have multiple extensions, how do you compose them into a VM?
-
-We have trait `VmConfig`:
+## `VmConfig`
 
 ```rust
-pub trait VmConfig<F: PrimeField32> {
-    type Executor: PreflightExecutor<F> + AnyEnum + ChipUsageGetter;
-    type Periphery: AnyEnum + ChipUsageGetter;
-
-    /// Must contain system config
-    fn system(&self) -> &SystemConfig;
-
-    fn create_chip_complex(
-        &self,
-    ) -> Result<VmChipComplex<F, Self::Executor, Self::Periphery>, VmInventoryError>;
+pub trait VmConfig<SC>:
+    Clone
+    + Serialize
+    + DeserializeOwned
+    + InitFileGenerator
+    + VmExecutionConfig<Val<SC>>
+    + VmCircuitConfig<SC>
+    + AsRef<SystemConfig>
+    + AsMut<SystemConfig>
+where
+    SC: StarkGenericConfig,
+{
 }
 ```
+A VM configuration, represented by a struct implementing the `VmConfig` trait is the minimum serializable format to be able to create the execution
+environment and circuit for a zkVM supporting a fixed set of instructions.
+This trait contains the sub-traits `VmExecutionConfig` and `VmCircuitConfig`.
+The `InitFileGenerator` sub-trait provides custom [build hooks](#build-hooks) to generate code for initializing some VM extensions. The `VmConfig` is expected to contain the `SystemConfig` internally.
 
-A `VmConfig` is a struct that is a `SystemConfig` together with a collection of extensions. From the config we should be able to **deterministically** use `create_chip_complex` to create `VmChipComplex`. The `VmConfig` macro will
-automatically implement `VmConfig` using the `#[system]` and `#[extension]` attributes:
+This trait does not contain the [`VmBuilder`](#vmbuilder) trait, because a single VM configuration may
+implement multiple `VmBuilder`s for different prover backends.
+
+```rust
+pub trait VmExecutionConfig<F> {
+    type Executor: AnyEnum + Send + Sync;
+
+    fn create_executors(&self)
+        -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+}
+```
+The `VmExecutionConfig` defines the collection of `VmExecutionExtension`s that together define the VM's runtime execution environment. The implementation should use the `ExecutorInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventory.html) to define the collection of executors and the mapping from opcodes to executors. The associate type `Executor` is expected to be an enum of all executor types necessary to handle all instructions in the VM's instruction set.
+
+Users should typically not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
+
+```rust
+pub trait VmCircuitConfig<SC: StarkGenericConfig> {
+    fn create_airs(&self) -> Result<AirInventory<SC>, AirInventoryError>;
+}
+```
+The `VmCircuitConfig` is the only trait necessary to generate proving and verifying keys for the zkVM circuit. The implementation should use the `AirInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html) to define the ordered collection of AIRs that make up the zkVM circuit. **Note** that the order that the AIRs are added to `AirInventory` is **not** the order they appear in the circuit's verifying key. The ordering of AIRs corresponding to the verifying key is given by the [`AirInventory::into_airs`](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html#method.into_airs) function: the ordering consists of the system AIRs, followed by the other AIRs in the **reverse** of the order they were added into `AirInventory`.
+
+Users should typically not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
+
+### Derive Macro
+Developers are typically not expected to implement `VmConfig`, `VmExecutionConfig`, `VmCircuitConfig` directly. Instead, we provide a procedural macro `#[derive(VmConfig)]` that will automatically implement `VmConfig` on a struct that composes an existing `VmConfig` with additional VM extensions:
 
 ```rust
 #[derive(VmConfig)]
-struct MyVmConfig {
-    #[system]
-    system: SystemConfig,
+pub struct Rv32IConfig {
+    #[config(executor = "SystemExecutor<F>")]
+    pub system: SystemConfig,
     #[extension]
-    ext1: Ext1,
+    pub base: Rv32I,
     #[extension]
-    ext2: Ext2
+    pub io: Rv32Io,
+}
+
+#[derive(VmConfig)]
+pub struct Rv32ImConfig {
+    #[config]
+    pub rv32i: Rv32IConfig,
+    #[extension]
+    pub mul: Rv32M,
 }
 ```
 
-where `Ext1, Ext2` must implement `VmExtension<F>` for any `F: PrimeField32` (trait bounds can be added later).
+The struct deriving `VmConfig` should have fields which are given the attribute `#[config]` or `#[extension]`. Exactly one field should have the attribute `#[config]` and its type should implement `VmConfig`. The other fields should have the attribute `#[extension]` and their types should implement `VmExecutionExtension<F>` and `VmCircuitExtension<SC>`. Each field has associated type `Executor`: the macro by default assumes the executor type name is `{FieldTypeName}Executor` without any type generics. A different executor type name can be specified using the `executor` attribute.
 
-The macro will also make two big enums: one that is an enum of the `Ext*::Executor` enums and another for the `Ext*::Periphery` enums.
+The macro will create a new enum named `{ConfigTypeName}Executor` with variants equal to the associated `Executor` types of each attributed field.
 
-The macro will then generate a `create_chip_complex` function.
+The macro derives `VmExecutionConfig<F>` with associated type `Executor = {ConfigTypeName}Executor` on the new config struct for all `F` where the `#[config]` field implements `VmExecutionConfig<F>` and the `#[extension]` fields all implement `VmExecutionExtension<F>`. The derived `create_executors` function adds executors in the order of the fields, first calling `create_executors` on the inner config and then calling `extend_execution` on each `#[extension]` field.
 
-For that we need to understand what `VmChipComplex` consists of:
+The macro derives `VmCircuitConfig<SC>` on the new config struct for all `SC` where the `#[config]` field implements `VmCircuitConfig<SC>` and the `#[extension]` fields all implement `VmCircuitExtension<SC>`. The derived `create_airs` function adds AIRs in the order of the fields, first calling `create_airs` on the inner config and then calling `extend_circuit` on each `#[extension]` field.
 
-- System chips
-- `VmInventory`
-  and all the methods to generate AIR proof inputs.
-
-The macro will generate the `VmChipComplex` iteratively using the
-
-```rust
-    pub fn extend<E3, P3, Ext>(
-        mut self,
-        config: &Ext,
-    ) -> Result<VmChipComplex<F, E3, P3>, VmInventoryError>
-    where
-        Ext: VmExtension<F>,
-        E: Into<E3> + AnyEnum,
-        P: Into<P3> + AnyEnum,
-        Ext::Executor: Into<E3>,
-        Ext::Periphery: Into<P3>,
-```
-
-function. What this does in words:
-
-- Start with system chips only.
-- Generate `VmInventory` for first extension, and append them to the system chip complex.
-- Generate `VmInventory` for second extension, and append them to previous chip complex.
-
-For each extension's inventory generation, the `VmInventoryBuilder` is provided with a view of all current chips already inside the running chip complex. This means the inventory generation process is sequential in the order the extensions are specified, and each extension has borrow access to all chips constructed by any extension before it.
-
-## Build hooks
+### Build hooks
 Some of our extensions need to generate some code at build-time depending on the VM config (for example, the Algebra extension needs to call `moduli_init!` with the appropriate moduli).
 To accommodate this, we support build hooks in both `cargo openvm` and the SDK.
 To make use of this functionality, implement the `InitFileGenerator` trait.
@@ -148,20 +163,39 @@ The `String` returned by the `generate_init_file_contents` must be valid Rust co
 It will be written to a `openvm_init.rs` file in the package's manifest directory, and then (unhygenically) included in the guest code in place of the `openvm::init!` macro.
 You can specify a custom file name at build time (by a `cargo openvm` option or an SDK method argument), in which case you must also pass it to `openvm::init!` as an argument.
 
+## `VmBuilder`
+
+The [`VmConfig`](#vmconfig) is independent of the prover backend and prover hardware acceleration options. The `VmBuilder` trait provides a modular way to provide different prover implementations for the same `VmConfig`. (These implementations may even be done in separate crates!)
+
+```rust
+pub trait VmBuilder<E: StarkEngine>: Sized {
+    type VmConfig: VmConfig<E::SC>;
+    type RecordArena: Arena;
+    type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
+
+    /// Create a [VmChipComplex] from the full [AirInventory], which should be the output of
+    /// [VmCircuitConfig::create_airs].
+    #[allow(clippy::type_complexity)]
+    fn create_chip_complex(
+        &self,
+        config: &Self::VmConfig,
+        airs: AirInventory<E::SC>,
+    ) -> Result<
+        VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
+        ChipInventoryError,
+    >;
+}
+```
+The `VmBuilder` trait is meant to be implemented on a zero-sized type (ZST). It has an associated type for the `VmConfig`. The `VmBuilder<E>` is generic in `E: StarkEngine`, where the `StarkEngine` trait itself has associated types `SC: StarkGenericConfig` and `PB: ProverBackend`. The `StarkEngine` trait controls the backend implementation of the proof system for a specific `ProverBackend` with specialized hardware acceleration. For a given `StarkEngine`, the `VmBuilder` trait has an associated type for the `RecordArena`, which is the type of in-memory buffer to use to store records during [preflight execution](./vm.md#preflight-execution). Lastly there is an associated type for `SystemChipInventory` which implements the trace generation for the system chips. There are currently two existing choices of `SystemChipInventory` to use: [`SystemChipInventory`](https://docs.openvm.dev/docs/openvm/openvm_circuit/system/struct.SystemChipInventory.html) for CPU and [`SystemChipInventoryGPU`](../../crates/vm/src/system/cuda/mod.rs) for Nvidia GPU.
+
+The `VmBuilder::create_chip_complex` function may assume that it will be called after all AIRs have been constructed using the `VmCircuitConfig` trait on the `VmConfig`. In other words, `airs: AirInventory<E::SC>` may be assumed to be the output of `VmCircuitConfig::create_airs()`.
+
+The implementation of `VmBuilder` should implement `create_chip_complex` by first constructing a `VmChipComplex` from a base `VmConfig` such as the `SystemConfig`. It should then mutate the `ChipInventory` contained inside `VmChipComplex` by calling `VmProverExtension::extend_prover` on the relevant prover extensions.
+
+Currently there is no macro to derive the `VmBuilder` trait implementation, and we refer to the [examples](#examples) as a reference.
+
 ## Examples
 
-The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExtension<F>` in [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit/) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively.
+The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv32I`, `Rv32M`, and `Rv32Io` extensions implement `VmExecutionExtension<F>` and `VmCircuitExtension<SC>` in [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit/src/extension/mod.rs) and correspond to the RISC-V 32-bit base and multiplication instruction sets and an extension for IO, respectively. The ZST `Rv32ImCpuProverExt` [implements](../../extensions/rv32im/circuit/src/extension/mod.rs) `VmProverExtension<E, RA, EXT>` for `EXT = Rv32I, Rv32M, Rv32Io`. When the `"cuda"` feature is enabled, the ZST `Rv32ImGpuProverExt` [implements](../../extensions/rv32im/circuit/src/extension/cuda.rs) `VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, EXT>` for `EXT = Rv32I, Rv32M, Rv32Io`.
 
-# Design Choices
-
-Why enums and not `dyn`?
-
-- Flexibility: when you have a concrete enum type, it is easier to introduce new traits later that the enum type could implement, whereas `dyn Trait` fully limits the functionality to the `Trait`
-- Currently `Chip<SC>` is not object safe so `dyn` is not an option. Overall object safety is not always easy to guarantee.
-- `dyn` has a runtime lookup which has a very marginal performance impact. This is likely not the limiting factor, so it is secondary concern.
-- The opcode lookup in `VmInventory` requires more smart pointers if you use `dyn`, see below.
-
-`VmInventory` gets rid of `Rc<RefCell<_>>` on most chips.
-
-- We were using it just for the instruction opcode lookup even when we didn't need a shared mutable reference -- the exception is `MemoryController`, where we really do need the shared reference, and where we keep the `RefCell`.
-- The internals of `VmInventory` now store all chips exactly once, and opcode lookups are true lookups by index. This should have a very small runtime improvement.
+The `openvm-rv32im-circuit` [crate](../../extensions/rv32im/circuit/src/lib.rs) also provides definitions for `Rv32ImConfig`, `Rv32ImCpuBuilder`, and `Rv32ImGpuBuilder`.
