@@ -124,7 +124,7 @@ The SDK, however, combines the first few steps for you. Create a prover and pass
 For large guest programs, the program will be proved in multiple continuation segments and the returned `proof: ContinuationVmProof` object consists of multiple STARK proofs, one for each segment.
 
 :::info
-The app prover constructor can take an `Elf`, `VmExe`, or `SharedVmExe` (i.e. `Arc<VmExe>`). This also holds for the STARK and EVM provers specified below.
+The app prover constructor can take an `Elf`, `VmExe`, `Arc<VmExe>`, or raw ELF bytes in the form of a `Vec<u8>` or `&[u8]` (via implementations of the `From` trait). This also holds for the STARK and EVM provers specified below.
 :::
 
 ### Verifying App Proofs
