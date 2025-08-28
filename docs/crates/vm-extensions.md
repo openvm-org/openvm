@@ -76,7 +76,7 @@ The VM prover extension is specified by adding new chips in order using the `Chi
 - `inventory.find_chip<ConcreteChip>()` returns an iterator of all preceding chips in the inventory, including those from other previous extensions, which downcast to type `ConcreteChip: 'static`. This may be used to obtain previously constructed data, configurations, or buffers.
 - `inventory.next_air::<ConcreteAir>()` returns `Ok(&air)` if the next AIR that was added in the `VmCircuitExtension` implementation is of type `ConcreteAir` and returns error otherwise. It is used to ensure that the associated AIR to each chip is the expected one. It can also be used to obtain configuration data or bus information from the corresponding AIR.
 
-It is **required** that the overall insertion order of the chips (both executor and periphery types) must exactly match the order of the AIRs added in the `VmCircuitExtension` implementation. There should be a 1-to-1 correspondence between AIRs and chips, and implementors should maintain a convention to call `inventory.next_air::<ConcreteAir>()` before adding each chip to clearly indicate the AIR associated with each chip.
+It is **required** that the overall insertion order of the chips (both executor and periphery types) must exactly match the order of the AIRs added in the `VmCircuitExtension` implementation. There should be a 1-to-1 correspondence between AIRs and chips, and implementers should maintain a convention to call `inventory.next_air::<ConcreteAir>()` before adding each chip to clearly indicate the AIR associated with each chip.
 
 ## `VmConfig`
 
