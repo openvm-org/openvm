@@ -86,7 +86,7 @@ jemalloc = ["openvm-stark-backend/jemalloc"]
 jemalloc-prof = ["openvm-stark-backend/jemalloc-prof"]
 nightly-features = ["openvm-stark-sdk?/nightly-features"]
 cuda = [
-    "dep:openvm-stark-sdk", # for BabyBearPoseidon2Config
+    "dep:openvm-stark-sdk",           # for BabyBearPoseidon2Config
     "openvm-circuit-primitives/cuda",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
@@ -98,3 +98,4 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",
 ]
+unprotected = []
