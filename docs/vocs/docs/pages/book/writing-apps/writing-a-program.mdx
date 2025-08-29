@@ -117,7 +117,7 @@ fn main() {
 }
 ```
 
-The `main.rs` header should be modified to:
+To selectively enable the standard library, add the `std` feature to your `Cargo.toml` as above and modify your `main.rs` header to:
 
 ```rust
 // main.rs
@@ -125,7 +125,7 @@ The `main.rs` header should be modified to:
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-and you still need the `openvm::entry!(main)` line.
+You still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
 
 ## Using crates that depend on `getrandom`
