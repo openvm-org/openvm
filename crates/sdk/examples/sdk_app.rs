@@ -17,16 +17,18 @@ fn main() -> eyre::Result<()> {
     let elf = sdk.build(guest_opts, target_path, &None, None)?;
     // [!endregion build]
 
+    let stdin = StdIn::default();
+
     // [!region execution]
     // 3. Run the program with default inputs.
-    let output = sdk.execute(elf.clone(), StdIn::default())?;
+    let output = sdk.execute(elf.clone(), stdin.clone())?;
     println!("public values output: {:?}", output);
     // [!endregion execution]
 
     // [!region proof_generation]
     // 5. Generate an app proof.
     let mut prover = sdk.app_prover(elf)?.with_program_name("test_program");
-    let proof = prover.prove(StdIn::default())?;
+    let proof = prover.prove(stdin)?;
     // [!endregion proof_generation]
 
     // [!region verification]
