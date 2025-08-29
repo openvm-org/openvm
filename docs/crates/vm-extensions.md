@@ -10,7 +10,7 @@ The VM extension framework provides a modular way for developers to extend the f
 - [VmCircuitExtension](#vmcircuitextension) extending the zkVM circuit with additional AIRs.
 - [VmProverExtension](#vmproverextension) extending how trace generation for the additional AIRs specified by the VM circuit extension for different prover backends.
 
-This three components are implemented via three corresponding traits `VmExecutionExtension`, `VmCircuitExtension`, and `VmProverExtension`.
+These three components are implemented via three corresponding traits `VmExecutionExtension`, `VmCircuitExtension`, and `VmProverExtension`.
 
 ### `VmExecutionExtension`
 
