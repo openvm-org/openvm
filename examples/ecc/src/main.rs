@@ -1,5 +1,6 @@
 // [!region imports]
 use hex_literal::hex;
+use openvm;
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::weierstrass::WeierstrassPoint;
 use openvm_k256::{Secp256k1Coord, Secp256k1Point};
