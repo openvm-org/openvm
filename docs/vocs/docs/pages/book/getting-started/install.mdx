@@ -8,36 +8,6 @@ Skip [below](#installation-with-nvidia-gpu-support) for instructions on installi
 
 ## Installation
 
-### Option 1: Install Via Git URL (Recommended)
-
-Begin the installation:
-
-```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 cargo-openvm
-```
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
-
-```bash
-cargo openvm --version
-```
-
-### Option 2: Build from source
-
-To build from source, clone the repository and begin the installation.
-
-```bash
-git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
-cd openvm
-cargo install --locked --force --path crates/cli
-```
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
-
-```bash
-cargo openvm --version
-```
-
 ### Installation Prerequisites
 
 Prior to installing `cargo-openvm`, make sure you have the following packages installed:
@@ -91,18 +61,12 @@ svm use 0.8.19
 
 :::
 
-## Installation with Nvidia GPU Support
-
-It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Installation Prerequisites (CUDA)](#installation-prerequisites-cuda))
-
-With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. Currently only single GPU support is available through the CLI.
-
 ### Option 1: Install Via Git URL (Recommended)
 
 Begin the installation:
 
 ```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 --features cuda cargo-openvm
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -118,7 +82,7 @@ To build from source, clone the repository and begin the installation.
 ```bash
 git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
-cargo install --locked --force --path crates/cli --features cuda
+cargo install --locked --force --path crates/cli
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -126,6 +90,12 @@ This will globally install `cargo-openvm`. You can validate a successful install
 ```bash
 cargo openvm --version
 ```
+
+## Installation with Nvidia GPU Support
+
+It is possible to install the OpenVM CLI with support for Nvidia GPUs. This requires installation on a machine with an Nvidia GPU and associated drivers (see [Installation Prerequisites (CUDA)](#installation-prerequisites-cuda))
+
+With this version of the CLI, the `prove app` and `prove stark` commands will utilize the Nvidia GPU for hardware acceleration. Currently only single GPU support is available through the CLI.
 
 ### Installation Prerequisites (CUDA)
 
@@ -168,7 +138,35 @@ export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PAT
 ```
 Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
-You are now ready to [install](#installation-with-nvidia-gpu-support) the OpenVM CLI.
+### Option 1: Install Via Git URL (Recommended)
+
+Begin the installation:
+
+```bash
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 --features cuda cargo-openvm
+```
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
+
+### Option 2: Build from source
+
+To build from source, clone the repository and begin the installation.
+
+```bash
+git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
+cd openvm
+cargo install --locked --force --path crates/cli --features cuda
+```
+
+This will globally install `cargo-openvm`. You can validate a successful installation with:
+
+```bash
+cargo openvm --version
+```
 
 ## Installation with Experimental Features
 
