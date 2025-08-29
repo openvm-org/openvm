@@ -45,7 +45,7 @@ If you are providing input for a struct of type `T` that will be deserialized by
 The hex string must be of an even length. The reason for this is to avoid ambiguity: for example, if `12c` is passed, it is unclear whether it is supposed to be `012c`, `120c` or anything else.
 :::
 
-As a example, the code snippet below generates an input json file from a struct of type `T`:
+As an example, the code snippet below generates an input json file from a struct of type `T`:
 ```rust
 use std::{fs, path::PathBuf};
 
