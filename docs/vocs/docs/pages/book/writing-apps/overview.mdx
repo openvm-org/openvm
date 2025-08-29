@@ -48,8 +48,9 @@ The hex string must be of an even length. The reason for this is to avoid ambigu
 As an example, the code snippet below generates an input json file from a struct of type `T`:
 ```rust
 use std::{fs, path::PathBuf};
+use std::error::Error;
 
-fn encode_input_file<T>(value: &T, path: PathBuf) -> Result<(), Error>
+fn encode_input_file<T>(value: &T, path: PathBuf) -> Result<(), Box<dyn Error>>
 where
     T: serde::Serialize + ?Sized,
 {
