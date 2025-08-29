@@ -39,11 +39,35 @@ Each hex string (either in the file or as the direct input) is either:
 - Hex string of bytes, which is prefixed with `0x01`
 - Hex string of native field elements (represented as u32, little endian), prefixed with `0x02`
 
-If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length. For more details on how to serialize complex types into a VM-readable format, see the [Using StdIn](/book/advanced-usage/sdk#using-stdin).
+If you are providing input for a struct of type `T` that will be deserialized by the `openvm::io::read()` function, then the corresponding hex string should be prefixed by `0x01` followed by the serialization of `T` into bytes according to `openvm::serde::to_vec`. The serialization will serialize primitive types (e.g., `u8, u16, u32, u64`) into little-endian bytes. All serialized bytes are zero-padded to a multiple of `4` byte length.
 
 :::note
 The hex string must be of an even length. The reason for this is to avoid ambiguity: for example, if `12c` is passed, it is unclear whether it is supposed to be `012c`, `120c` or anything else.
 :::
+
+As a example, the code snippet below generates an input json file from a struct of type `T`:
+```rust
+use std::{fs, path::PathBuf};
+
+fn encode_input_file<T>(value: &T, path: PathBuf) -> Result<(), Error>
+where
+    T: serde::Serialize + ?Sized,
+{
+  let words = openvm::serde::to_vec(value)?;
+  let bytes: Vec<u8> = words
+      .into_iter()
+      .flat_map(|w| w.to_le_bytes())
+      .collect();
+  let hex_bytes = String::from("0x01") + &hex::encode(&bytes);
+  let input = serde_json::json!({
+      "input": [hex_bytes]
+  });
+  fs::write(path, serde_json::to_string(&input)?)?;
+  Ok(())
+}
+```
+
+For more details on how to serialize complex types into a VM-readable format, see the input utilities in the [OpenVM example program](https://github.com/openvm-org/openvm-example-fibonacci/).
 
 ## Generating Application Proofs
 
@@ -61,7 +85,7 @@ See the [custom extensions](/book/acceleration-using-extensions/overview) docs f
 cargo openvm prove app --input <path_to_input | hex_string>
 ```
 
-Again, if your program doesn't require inputs, you can omit the `--input` flag. For more information 
+Again, if your program doesn't require inputs, you can omit the `--input` flag. For more information
 on the `keygen` and `prove` commands, see the [prove](/book/writing-apps/generating-proofs) doc.
 
 ## Verifying Application Proofs
@@ -76,7 +100,7 @@ For more information on the `verify` command, see the [verify](/book/writing-app
 
 ## STARK and EVM Proof Generation and Verification
 
-The process above details the workflow necessary to build, prove, and verify a guest program at 
+The process above details the workflow necessary to build, prove, and verify a guest program at
 the application level. As described in the [specs](/specs/architecture/continuations), OpenVM supports
 proof aggregation into a single STARK proof or an EVM proof. Performing this aggregation requires
 key generation for the aggregation proving keys and the EVM verifier contract, which is done by:
