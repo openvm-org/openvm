@@ -122,7 +122,7 @@ pub trait VmCircuitConfig<SC: StarkGenericConfig> {
 ```
 The `VmCircuitConfig` is the only trait necessary to generate proving and verifying keys for the zkVM circuit. The implementation should use the `AirInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html) to define the ordered collection of AIRs that make up the zkVM circuit. **Note** that the order that the AIRs are added to `AirInventory` is **not** the order they appear in the circuit's verifying key. The ordering of AIRs corresponding to the verifying key is given by the [`AirInventory::into_airs`](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.AirInventory.html#method.into_airs) function: the ordering consists of the system AIRs, followed by the other AIRs in the **reverse** of the order they were added into `AirInventory`.
 
-Users should typically not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
+Users should typically not need to implement the `VmCircuitConfig` trait directly and should instead use the [derive macro](#derive-macro).
 
 ### Derive Macro
 Developers are typically not expected to implement `VmConfig`, `VmExecutionConfig`, `VmCircuitConfig` directly. Instead, we provide a procedural macro `#[derive(VmConfig)]` that will automatically implement `VmConfig` on a struct that composes an existing `VmConfig` with additional VM extensions:
