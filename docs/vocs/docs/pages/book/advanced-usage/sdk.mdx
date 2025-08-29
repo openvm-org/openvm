@@ -88,7 +88,7 @@ When using Rust to write the guest program, the VM system configuration should k
 
 ## Building and Transpiling a Program
 
-The SDK provides lower-level control over the building and transpiling process.
+The SDK provides lower-level control over the building and transpiling process. You can either use the SDK to build your ELF executable or read it in as bytes using `fs::read`.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:build]
@@ -187,13 +187,11 @@ To generate an EVM proof, you will first need to download trusted setup paramete
 
 ```bash
 #!/bin/bash
-
+ 
 for k in {5..23}
 do
-    wget "https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_${k}.srs"
+    wget -P ~/.openvm/params/ "https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_${k}.srs"
 done
-
-mv *.srs ~/.openvm/params/
 ```
 
 Note that `cargo openvm setup --evm` CLI command will also download these parameters into the `~/.openvm/params/` directory. For more information on the setup process, see [STARK and EVM Key Generation](/book/writing-apps/generating-proofs#stark-and-evm-key-generation).
@@ -231,7 +229,7 @@ Note that `openvm-sdk/evm-verify` will automatically activate `openvm-sdk/evm-pr
 :::
 
 :::warning
-The halo2 aggregation proving key generated in the above example is very large.
+The halo2 aggregation proving key generated in the above example is very large (~16 GB). Avoid dereferencing and cloning it if possible.
 :::
 
 ## Another Example: Using the Standard SDK
