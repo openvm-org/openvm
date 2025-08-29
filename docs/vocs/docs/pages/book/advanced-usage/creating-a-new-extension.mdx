@@ -21,15 +21,15 @@ In the guest component, your goal is to produce the instructions that represent 
 
 ## Transpiler
 
-The transpiler maps the newly introduced RISC-V instructions to their OpenVM counterparts. To achieve this, implement a struct that provides the `TranspilerExtension` trait, which includes:
+The transpiler maps the newly introduced RISC-V instructions to their OpenVM counterparts. To achieve this, implement a struct that provides the [`TranspilerExtension`](https://github.com/openvm-org/openvm/blob/main/crates/toolchain/transpiler/src/extension.rs) trait, which includes:
 
 ```rust
-fn process_custom(&self, instruction_stream: &[u32]) -> Option<(Instruction<F>, usize)>;
+fn process_custom(&self, instruction_stream: &[u32]) -> Option<TranspilerOutput<F>>;
 ```
 
-This function checks if the given instruction stream starts with one of your custom instructions. If so, it returns the corresponding OpenVM instruction and how many 32-bit words were consumed. If not, it returns `None`.
+Here, `TranspilerOutput` holds a list of instructions read and the number of words from the beginning of `instruction_stream` that encodes those instructions. This function checks if the given instruction stream starts with one or more of your custom instructions, and returns the corresponding information if it does.
 
-Note that almost always the valid instruction consists of a single 32-bit RISC-V word (so whenever `Some(_, sz)` is returned, `sz` is 1), but in general this may not be the case.
+Note that almost always the valid instruction consists of a single 32-bit RISC-V word (so whenever `Some(TranspilerOutput { _, used_u32s })` is returned, `used_u32s` is 1), but in general this may not be the case.
 
 ## Circuit
 
