@@ -95,7 +95,6 @@ where
     /// The chips added to `inventory` should exactly match the order of AIRs in the
     /// [VmCircuitExtension] implementation of `EXT`.
     ///
-    /// order of AIRs in [`VmCircuitExtension`] for this extension.
     /// We do not provide access to the [ExecutorInventory] because the process to find an executor
     /// from the inventory seems more cumbersome than to simply re-construct any necessary executors
     /// directly within this function implementation.
