@@ -7,7 +7,7 @@ The architecture centers on [`VmConfig`](#vmconfig), [`VmBuilder`](#vmbuilder), 
 ## VM Extension Framework
 The VM extension framework provides a modular way for developers to extend the functionality of a working zkVM. A full VM extension consists of three components:
 - [VmExecutionExtension](#vmexecutionextension) for extending the runtime execution handling of new instructions in custom extensions.
-- [VmCircuitExtension](#vmcircuitextension) extending the zkVM circuit with additional AIRs.
+- [VmCircuitExtension](#vmcircuitextension) for extending the zkVM circuit with additional AIRs.
 - [VmProverExtension](#vmproverextension) extending how trace generation for the additional AIRs specified by the VM circuit extension for different prover backends.
 
 These three components are implemented via three corresponding traits `VmExecutionExtension`, `VmCircuitExtension`, and `VmProverExtension`.
@@ -113,7 +113,7 @@ pub trait VmExecutionConfig<F> {
 ```
 The `VmExecutionConfig` defines the collection of `VmExecutionExtension`s that together define the VM's runtime execution environment. The implementation should use the `ExecutorInventory` [API](https://docs.openvm.dev/docs/openvm/openvm_circuit/arch/struct.ExecutorInventory.html) to define the collection of executors and the mapping from opcodes to executors. The associate type `Executor` is expected to be an enum of all executor types necessary to handle all instructions in the VM's instruction set.
 
-Users should typically not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
+Users typically should not need to implement the `VmExecutionConfig` trait directly and should instead use the [derive macro](#derive-macro).
 
 ```rust
 pub trait VmCircuitConfig<SC: StarkGenericConfig> {
