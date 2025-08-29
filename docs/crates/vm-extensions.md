@@ -6,7 +6,7 @@ The architecture centers on [`VmConfig`](#vmconfig), [`VmBuilder`](#vmbuilder), 
 
 ## VM Extension Framework
 The VM extension framework provides a modular way for developers to extend the functionality of a working zkVM. A full VM extension consists of three components:
-- [VmExecutionExtension](#vmexecutionextension) for extending the runtime execution handling of new instructions in custom instruction set extensions.
+- [VmExecutionExtension](#vmexecutionextension) for extending the runtime execution handling of new instructions in custom extensions.
 - [VmCircuitExtension](#vmcircuitextension) extending the zkVM circuit with additional AIRs.
 - [VmProverExtension](#vmproverextension) extending how trace generation for the additional AIRs specified by the VM circuit extension for different prover backends.
 
