@@ -66,8 +66,21 @@ extensions and system configuration your VM will use. To do this, you can use th
 A custom OpenVM configuration can also be specified in an `openvm.toml` file and read to create a `GenericSdk`.
 
 ```rust
-    Sdk::new(Sdk::from_toml(openvm.toml))
+    Sdk::new(SdkVmConfig::from_toml(include_str!("your_path_project_root/openvm.toml"))?)?;
 ```
+
+<details>
+<summary>To customize your `Sdk`, you may need additional dependencies. Click here to view.</summary>
+
+```rust
+use openvm_sdk::{
+    config::{AppConfig, SdkVmConfig},
+    Sdk,
+};
+use openvm_stark_sdk::config::FriParameters;
+```
+
+</details>
 
 :::info
 When using Rust to write the guest program, the VM system configuration should keep the default value `pointer_max_bits = 29` to match the hardcoded memory limit of the memory allocator. Otherwise, the guest program may fail due to out of bounds memory access in the VM.
@@ -75,7 +88,7 @@ When using Rust to write the guest program, the VM system configuration should k
 
 ## Building and Transpiling a Program
 
-The SDK provides lower-level control over the building and transpiling process.
+The SDK provides lower-level control over the building and transpiling process. You can either use the SDK to build your ELF executable or read it in as bytes using `fs::read`.
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_stark.rs:build]
@@ -146,14 +159,6 @@ After generating a proof, you can verify it. To do so, you need your verifying k
 
 ## STARK Proof
 
-### Setup
-
-To generate a STARK proof, you first need to generate proving and verification keys for STARK aggregation using the following CLI command:
-
-```bash
-cargo openvm setup
-```
-
 ### STARK Proof Generation and Verification
 
 You can now run the aggregation keygen, proof, and verification functions for the STARK proof by either (a) calling `sdk.prove(...)` directly or (b) creating a prover with custom fields. You should also generate an app commit, e.g. hashes of both the app config and executable used to generate the proof.
@@ -170,23 +175,33 @@ Once the proof is generated, you can verify it using the SDK as follows:
 
 Note that STARK verification requires the app commit to confirm that the submitted proof is for the app config and executable specified.
 
+:::info
+Note that the aggregation proving and verifying keys will be generated (a) once and (b) only when needed. Calling one of `sdk.prove(...)`, `sdk.prover(...)`, and `sdk.agg_keygen(...)` for the first time will initialize key generation.
+:::
+
 ## EVM Proof
 
 ### Setup
 
-To generate an EVM proof, you'll first need to ensure that you have followed the [CLI installation steps](/book/getting-started/install)
-to generate proving and verification keys for EVM proving.
+To generate an EVM proof, you will first need to download trusted setup parameters from our S3 bucket. You can do so using the following script:
 
 ```bash
-cargo openvm setup --evm
+#!/bin/bash
+ 
+for k in {5..23}
+do
+    wget -P ~/.openvm/params/ "https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_${k}.srs"
+done
 ```
+
+Note that `cargo openvm setup --evm` CLI command will also download these parameters into the `~/.openvm/params/` directory. For more information on the setup process, see [STARK and EVM Key Generation](/book/writing-apps/generating-proofs#stark-and-evm-key-generation).
 
 :::warning
 `cargo openvm setup --evm` requires a large amount of computation and memory (~70 GB).
 :::
 
 <details>
-<summary>Also note that there are additional dependencies for the EVM Proof flow. Click here to view.</summary>
+<summary>Note that there are additional dependencies for the EVM Proof flow. Click here to view.</summary>
 
 ```rust
 // [!include ~/snippets/examples_sdk/sdk_evm.rs:dependencies]
@@ -204,11 +219,18 @@ You can now run the aggregation keygen, proof, and verification functions for th
 // [!include ~/snippets/examples_sdk/sdk_evm.rs:evm_verification]
 ```
 
-:::warning
-The halo2 aggregation proving key `agg_halo2.pk` used in the above example is large. Avoid cloning it if possible.
+:::info
+To verify EVM proofs you will need to enable Cargo feature `openvm-sdk/evm-verify` respectively. We recommend adding this feature to your package's `Cargo.toml`.
+```toml
+[features]
+evm-verify = ["openvm-sdk/evm-verify"]
+```
+Note that `openvm-sdk/evm-verify` will automatically activate `openvm-sdk/evm-prove`, which is required for EVM proving.
 :::
 
-Note that `DEFAULT_PARAMS_DIR` is the directory where Halo2 parameters are stored by the `cargo openvm setup --evm` CLI command. For more information on the setup process, see the `EVM Level` section of the [verify](/book/writing-apps/verifying-proofs) doc.
+:::warning
+The halo2 aggregation proving key generated in the above example is very large (~16 GB). Avoid dereferencing and cloning it if possible.
+:::
 
 ## Another Example: Using the Standard SDK
 

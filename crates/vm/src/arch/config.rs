@@ -48,12 +48,15 @@ pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
 
 /// A VM configuration is the minimum serializable format to be able to create the execution
 /// environment and circuit for a zkVM supporting a fixed set of instructions.
+/// This trait contains the sub-traits [VmExecutionConfig] and [VmCircuitConfig].
+/// The [InitFileGenerator] sub-trait provides custom build hooks to generate code for initializing
+/// some VM extensions. The `VmConfig` is expected to contain the [SystemConfig] internally.
 ///
 /// For users who only need to create an execution environment, use the sub-trait
 /// [VmExecutionConfig] to avoid the `SC` generic.
 ///
-/// This trait does not contain the [VmProverBuilder] trait, because a single VM configuration may
-/// implement multiple [VmProverBuilder]s for different prover backends.
+/// This trait does not contain the [VmBuilder] trait, because a single VM configuration may
+/// implement multiple [VmBuilder]s for different prover backends.
 pub trait VmConfig<SC>:
     Clone
     + Serialize

@@ -26,7 +26,7 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/family=g6+g4dn+g6e/image=ubuntu24-gpu-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -43,7 +43,7 @@ jobs:
       - name: Check CUDA status and set environment variables
         run: |
           nvcc --version
-          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=2" >> $GITHUB_ENV
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=1" >> $GITHUB_ENV
 
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives

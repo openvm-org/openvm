@@ -53,7 +53,7 @@ OpenVM supports standard Rust written using the `std` library, with the followin
 - Standard output and standard error (e.g., `println!, eprintln!`) are supported and will _both_ print to the host standard output.
 - System randomness calls are supported by default. **Important**: system randomness requests randomness from the host, and the provided randomness is unvalidated.
   Users must be aware of this and only use system randomness in settings where this meets their security requirements. In particular, system randomness should **not** be used for cryptographic purposes.
-- Reading of environmental variables will always return `None`.
+- Reading of environment variables will always return `None`.
 - Reading of `argc` and `argv` will always return `0`.
 
 The above applies to the Rust `std` library. Users should also be aware that when writing a standard Rust program, usage of external crates that use foreign function interfaces (FFI) may not work as expected.
@@ -117,14 +117,7 @@ fn main() {
 }
 ```
 
-If you want to feature gate the usage of the standard library, you can add
-
-```toml
-[features]
-std = ["openvm/std"]
-```
-
-to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be modified to:
+To selectively enable the standard library, add the `std` feature to your `Cargo.toml` as above and modify your `main.rs` header to:
 
 ```rust
 // main.rs
@@ -132,7 +125,7 @@ to `Cargo.toml` as discussed above. In this case, the `main.rs` header should be
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
-and you still need the `openvm::entry!(main)` line.
+You still need the `openvm::entry!(main)` line.
 This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
 
 ## Using crates that depend on `getrandom`

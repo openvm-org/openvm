@@ -1,12 +1,14 @@
-/// A full VM extension consists of three components, represented by sub-traits:
-/// - [VmExecutionExtension]
-/// - [VmCircuitExtension]
-/// - [VmProverExtension]: there may be multiple implementations of `VmProverExtension` for the
-///   same `VmCircuitExtension` for different prover backends.
-///
-/// It is intended that `VmExecutionExtension` and `VmCircuitExtension` are implemented on the
-/// same struct and `VmProverExtension` is implemented on a separate struct (usually a ZST) to
-/// get around Rust orphan rules.
+//! Traits and builders to compose collections of chips into a virtual machine.
+//!
+//! A full VM extension consists of three components, represented by sub-traits:
+//! - [VmExecutionExtension]
+//! - [VmCircuitExtension]
+//! - [VmProverExtension]: there may be multiple implementations of `VmProverExtension` for the same
+//!   `VmCircuitExtension` for different prover backends.
+//!
+//! It is intended that `VmExecutionExtension` and `VmCircuitExtension` are implemented on the
+//! same struct and `VmProverExtension` is implemented on a separate struct (usually a ZST) to
+//! get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
     iter::{self, zip},
@@ -80,8 +82,7 @@ pub trait VmCircuitExtension<SC: StarkGenericConfig> {
 }
 
 /// Extension of VM trace generation. The generics are `E` for [StarkEngine], `RA` for record arena,
-/// and `EXT` for execution and circuit extension. The returned vector should exactly match the
-/// order of AIRs in [`VmCircuitExtension`] for this extension.
+/// and `EXT` for execution and circuit extension.
 ///
 /// Note that this trait differs from [VmExecutionExtension] and [VmCircuitExtension]. This trait is
 /// meant to be implemented on a separate ZST which may be different for different [ProverBackend]s.
@@ -91,6 +92,9 @@ where
     E: StarkEngine,
     EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
 {
+    /// The chips added to `inventory` should exactly match the order of AIRs in the
+    /// [VmCircuitExtension] implementation of `EXT`.
+    ///
     /// We do not provide access to the [ExecutorInventory] because the process to find an executor
     /// from the inventory seems more cumbersome than to simply re-construct any necessary executors
     /// directly within this function implementation.
@@ -505,6 +509,7 @@ where
         &self.airs.config
     }
 
+    // NOTE[jpw]: this is currently unused, it is for debugging purposes
     pub fn start_new_extension(&mut self) -> Result<(), ChipInventoryError> {
         if self.cur_num_exts >= self.airs.ext_start.len() {
             return Err(ChipInventoryError::MissingCircuitExtension(

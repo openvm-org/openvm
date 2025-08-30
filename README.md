@@ -3,9 +3,9 @@
 [![Telegram Chat][tg-badge]][tg-url] [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openvm-org/openvm)
 
 [**Install**](https://book.openvm.dev/getting-started/install.html)
-| [User Book](https://book.openvm.dev)
+| [Book](https://book.openvm.dev)
 | [Contributor Docs](./docs)
-| [Crate Docs](https://docs.openvm.dev/openvm)
+| [Rustdocs](https://docs.openvm.dev/openvm)
 | [Whitepaper](https://openvm.dev/whitepaper.pdf)
 
 [tg-badge]: https://img.shields.io/endpoint?color=neon&logo=telegram&label=chat&url=https://tg.sumanjay.workers.dev/openvm

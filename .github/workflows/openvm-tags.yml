@@ -1,0 +1,32 @@
+name: Check that tags are everywhere in the docs
+
+on:
+  workflow_call:
+  push:
+    branches: ["main"]
+    tags:
+      - v*.*.*
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs"
+      - ".github/workflows/openvm-tags.yml"
+      - "ci/scripts/check_openvm_tags.sh"
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+
+jobs:
+  docs:
+    permissions:
+      contents: write
+      packages: read
+    concurrency:
+      group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-arm64
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check the tags
+        working-directory: docs
+        run: ../ci/scripts/check_openvm_tags.sh .
