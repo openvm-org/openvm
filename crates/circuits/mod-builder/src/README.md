@@ -179,6 +179,6 @@ See the [examples section](#examples) for code examples to follow along with.
 
 See these examples in the elliptic curve extension code:
 
-- [Short Weierstrass Addition Chip](https://github.com/openvm-org/openvm/blob/main/extensions/ecc/circuit/src/weierstrass_chip/add_ne.rs)
-- [Short Weierstrass Double Chip](https://github.com/openvm-org/openvm/blob/main/extensions/ecc/circuit/src/weierstrass_chip/double.rs)
+- [Short Weierstrass Addition Chip](https://github.com/openvm-org/openvm/blob/main/extensions/ecc/circuit/src/weierstrass_chip/add_ne/mod.rs)
+- [Short Weierstrass Double Chip](https://github.com/openvm-org/openvm/blob/main/extensions/ecc/circuit/src/weierstrass_chip/double/mod.rs)
 
