@@ -100,4 +100,4 @@ touchemall = [
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",
 ]
-legacy-mem-align = []
+legacy-v1-3-mem-align = []
