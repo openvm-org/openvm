@@ -122,7 +122,7 @@ CUDA toolkit can be installed using the following command, assuming the keyring 
 
 ```bash [Ubuntu 24.04]
 sudo apt-get install -y cuda-toolkit-12-9
-export PATH="/usr/local/cuda/bin:$PATH"
+export PATH="/usr/local/cuda-12.9/bin:$PATH"
 ```
 
 To check that CUDA toolkit is installed, run
@@ -134,9 +134,8 @@ The OpenVM CLI has been tested with CUDA toolkit version 12.9, and this is the v
 
 Post-installation, ensure that you set the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
 ```bash
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.9/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 ```
-Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
 ### Option 1: Install Via Git URL (Recommended)
 
