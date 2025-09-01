@@ -66,7 +66,7 @@ svm use 0.8.19
 Begin the installation:
 
 ```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 cargo-openvm
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0 cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -80,7 +80,7 @@ cargo openvm --version
 To build from source, clone the repository and begin the installation.
 
 ```bash
-git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.4.0 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 cargo install --locked --force --path crates/cli
 ```
@@ -143,7 +143,7 @@ Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installe
 Begin the installation:
 
 ```bash
-cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 --features cuda cargo-openvm
+cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0 --features cuda cargo-openvm
 ```
 
 This will globally install `cargo-openvm`. You can validate a successful installation with:
@@ -157,7 +157,7 @@ cargo openvm --version
 To build from source, clone the repository and begin the installation.
 
 ```bash
-git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.4.0 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 cargo install --locked --force --path crates/cli --features cuda
 ```
@@ -184,10 +184,10 @@ Begin the installation:
 
 :::code-group
 ```bash [Without GPU]
-cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 --features tco cargo-openvm
+cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0 --features tco cargo-openvm
 ```
 ```bash [Nvidia GPU]
-cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0-rc.10 --features tco,cuda cargo-openvm
+cargo +nightly-2025-08-19 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0 --features tco,cuda cargo-openvm
 ```
 :::
 
@@ -202,7 +202,7 @@ cargo openvm --version
 To build from source, first clone the repository.
 
 ```bash
-git clone --branch v1.4.0-rc.10 --single-branch https://github.com/openvm-org/openvm.git
+git clone --branch v1.4.0 --single-branch https://github.com/openvm-org/openvm.git
 cd openvm
 ```
 
