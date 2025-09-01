@@ -2340,6 +2340,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67773048316103656a637612c4a62477603b777d91d9c62ff2290f9cde178fdb"
+dependencies = [
+ "ctor-proc-macro",
+ "dtor",
+]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
+
+[[package]]
 name = "cuda-config"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2707,6 +2723,21 @@ dependencies = [
  "quote",
  "syn 2.0.106",
 ]
+
+[[package]]
+name = "dtor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e58a0764cddb55ab28955347b45be00ade43d4d6f3ba4bf3dc354e4ec9432934"
+dependencies = [
+ "dtor-proc-macro",
+]
+
+[[package]]
+name = "dtor-proc-macro"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f678cf4a922c215c63e0de95eb1ff08a958a81d47e485cf9da1e27bf6305cfa5"
 
 [[package]]
 name = "dunce"
@@ -5428,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git#b167d5ec3ce56b30694eb30bf39a5177508e0e20"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#c83d642e23f340c5ffc1255cd3909425e1393d79"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5460,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git#b167d5ec3ce56b30694eb30bf39a5177508e0e20"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#c83d642e23f340c5ffc1255cd3909425e1393d79"
 dependencies = [
  "cc",
  "glob",
@@ -5469,9 +5500,10 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git#b167d5ec3ce56b30694eb30bf39a5177508e0e20"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#c83d642e23f340c5ffc1255cd3909425e1393d79"
 dependencies = [
  "bytesize",
+ "ctor",
  "lazy_static",
  "metrics",
  "openvm-cuda-builder",
@@ -6211,7 +6243,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git#b167d5ec3ce56b30694eb30bf39a5177508e0e20"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#c83d642e23f340c5ffc1255cd3909425e1393d79"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6239,7 +6271,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git#b167d5ec3ce56b30694eb30bf39a5177508e0e20"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#c83d642e23f340c5ffc1255cd3909425e1393d79"
 dependencies = [
  "dashmap",
  "derivative",
