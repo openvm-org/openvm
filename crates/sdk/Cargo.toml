@@ -122,6 +122,16 @@ cuda = [
     "openvm-rv32im-circuit/cuda",
 ]
 
+# Legacy compatibility features for backwards compatibility with v1.2/v1.3
+legacy-v1-3 = ["legacy-v1-3-evm-verifier", "legacy-v1-3-mem-align"]
+# Generate EVM verifier compatible with v1.2/v1.3 format
+legacy-v1-3-evm-verifier = []
+# Enable unaligned memory access for RISC-V 32-bit instructions (v1.2/v1.3 behavior)
+legacy-v1-3-mem-align = [
+    "openvm-rv32im-circuit/legacy-v1-3-mem-align",
+    "openvm-circuit/legacy-v1-3-mem-align"
+]
+
 [[example]]
 name = "sdk_evm"
 path = "examples/sdk_evm.rs"

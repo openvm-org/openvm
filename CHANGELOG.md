@@ -5,11 +5,12 @@ All notable changes to OpenVM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows a versioning principles documented in [VERSIONING.md](./VERSIONING.md).
 
-## v1.4.0-rc (Unreleased)
+## v1.4.0 (2025-09-01)
 
 ### Added
 - (Verifier) An `AggVerifyingKey` struct is introduced so that verifying the final STARK proof does not require the proving key.
 - (Config) Added `addr_spaces` vector of `AddressSpaceHostConfig` to `MemoryConfig`.
+- (Prover) Nvidia GPU trace generation and STARK backend proving support.
 
 ### Changed
 - (Verifier) The `MultiStarkVerifyingKey`s for all existing App and Agg configs remain unchanged. However the serialized binary for the `AppVerifyingKey` has changed due to the removal of `as_offset` from `MemoryDimensions` (see below).

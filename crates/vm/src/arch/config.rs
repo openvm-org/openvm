@@ -213,8 +213,18 @@ impl MemoryConfig {
         addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, 1, MemoryCellType::Null);
         addr_spaces[RV32_REGISTER_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
-        addr_spaces[RV32_MEMORY_AS as usize] =
-            AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+
+        #[cfg(feature = "legacy-v1-3-mem-align")]
+        {
+            addr_spaces[RV32_MEMORY_AS as usize] =
+                AddressSpaceHostConfig::new(0, 1, MemoryCellType::U8);
+        }
+        #[cfg(not(feature = "legacy-v1-3-mem-align"))]
+        {
+            addr_spaces[RV32_MEMORY_AS as usize] =
+                AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
+        }
+
         addr_spaces[PUBLIC_VALUES_AS as usize] =
             AddressSpaceHostConfig::new(0, DEFAULT_U8_BLOCK_SIZE, MemoryCellType::U8);
 

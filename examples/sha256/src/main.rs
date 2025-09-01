@@ -1,15 +1,12 @@
-openvm::entry!(main);
-
 // [!region imports]
 use core::hint::black_box;
 
 use hex::FromHex;
+use openvm as _;
 use openvm_sha2::sha256;
 // [!endregion imports]
 
 // [!region main]
-openvm::entry!(main);
-
 pub fn main() {
     let test_vectors = [(
         "",

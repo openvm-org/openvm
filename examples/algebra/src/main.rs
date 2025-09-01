@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use openvm as _;
 use openvm_algebra_guest::{moduli_macros::*, IntMod};
 
 // This macro will create two structs, `Mod1` and `Mod2`,

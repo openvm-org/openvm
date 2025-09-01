@@ -16,7 +16,11 @@ pub const DEFAULT_APP_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
+
+#[cfg(not(feature = "legacy-v1-3-evm-verifier"))]
 pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
+#[cfg(feature = "legacy-v1-3-evm-verifier")]
+pub const DEFAULT_HALO2_VERIFIER_K: usize = 24;
 
 // Aggregation Tree Defaults
 pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
