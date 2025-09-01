@@ -5,12 +5,20 @@ images:
     owner: "405894839083"
     name: "arm64-rust-riscv-dev-32gb"
     ami: "ami-040a96edd406c9478"
+  # RunsOn nvidia image with cuda 12.9 installed (latest is cuda 13)
+  # See: https://github.com/runs-on/runner-images-for-aws
+  ubuntu24-gpu-x64-cuda12-9:
+    platform: "linux"
+    arch: "x86_64"
+    owner: "135269210855"
+    name: "runs-on-v2.2-ubuntu24-gpu-x64-20250731145109"
+    ami: "ami-017d4d69faf854c81"
 
 runners:
   # runners for running tests
   test-gpu-nvidia:
-    family: ["g6", "g5", "g6e"]
-    image: ubuntu24-gpu-x64
+    family: ["g6", "g5", "g4dn", "g6e"]
+    image: ubuntu24-gpu-x64-cuda12-9
     cpu: [4, 8, 16, 32]
     disk: default
     spot: capacity-optimized
