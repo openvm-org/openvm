@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#6ce474f83a2596b221bb911e6721edf1ad424018"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#00994ad699ab8bdc1cec217d58456ad6538c2683"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#6ce474f83a2596b221bb911e6721edf1ad424018"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#00994ad699ab8bdc1cec217d58456ad6538c2683"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#6ce474f83a2596b221bb911e6721edf1ad424018"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#00994ad699ab8bdc1cec217d58456ad6538c2683"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6243,7 +6243,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#6ce474f83a2596b221bb911e6721edf1ad424018"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#00994ad699ab8bdc1cec217d58456ad6538c2683"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6271,7 +6271,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.0-rc.7"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#6ce474f83a2596b221bb911e6721edf1ad424018"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=feat%2Fvirtual-memory-managerr#00994ad699ab8bdc1cec217d58456ad6538c2683"
 dependencies = [
  "dashmap",
  "derivative",
