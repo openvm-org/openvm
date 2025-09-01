@@ -56,4 +56,4 @@ jobs:
           install_s5cmd
 
       - name: Sync ~/.openvm with S3 bucket in tagged dir
-        run: s5cmd sync ~/.openvm s3://${S3_BUCKET%/}/${{ env.version }}/
+        run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/
