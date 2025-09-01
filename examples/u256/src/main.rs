@@ -2,7 +2,7 @@
 
 use core::array;
 
-use openvm;
+use openvm as _;
 use openvm_ruint::aliases::U256;
 
 const N: usize = 16;

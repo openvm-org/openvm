@@ -2,7 +2,7 @@
 use hex_literal::hex;
 // [!endregion pre]
 // [!region imports]
-use openvm;
+use openvm as _;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
 use openvm_ecc_guest::AffinePoint;
 use openvm_pairing::{

@@ -1,8 +1,8 @@
 // [!region imports]
 use core::hint::black_box;
-use openvm;
 
 use hex::FromHex;
+use openvm as _;
 use openvm_keccak256::keccak256;
 // [!endregion imports]
 

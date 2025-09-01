@@ -2,7 +2,7 @@
 use core::hint::black_box;
 
 use hex::FromHex;
-use openvm;
+use openvm as _;
 use openvm_sha2::sha256;
 // [!endregion imports]
 
