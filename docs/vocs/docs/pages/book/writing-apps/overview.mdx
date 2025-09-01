@@ -14,13 +14,7 @@ The first thing you will want to do is build and transpile your program using th
 cargo openvm build
 ```
 
-By default this will build the project located in the current directory. Once you have built the program,
-you can generate commitments to the program binary and VM configuration using the following command:
-
-```bash
-cargo openvm commit
-```
-
+By default this will build the project located in the current directory.
 To execute the program, you can run the following command:
 
 ```bash
@@ -80,7 +74,15 @@ following command:
 cargo openvm keygen
 ```
 
-See the [custom extensions](/book/acceleration-using-extensions/overview) docs for more information about `openvm.toml`. After generating the keys, you can generate a proof by running:
+See the [custom extensions](/book/acceleration-using-extensions/overview) docs for more information about `openvm.toml`.
+
+Once you have generated the keys, you can generate commitments to the program binary and VM configuration using the following command:
+
+```bash
+cargo openvm commit
+```
+
+Also, after generating the keys, you can generate a proof by running:
 
 ```bash
 cargo openvm prove app --input <path_to_input | hex_string>
