@@ -9,8 +9,6 @@ on:
         required: true
         default: "v1.4.0"
         type: string
-  # TEMPORARY TO TEST
-  push:
 
 env:
   S3_BUCKET: openvm-public-artifacts-us-east-1
