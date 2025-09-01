@@ -15,9 +15,6 @@ fn main() {
 
     if !enabled_features.is_empty() {
         let features_str = enabled_features.join(", ");
-        println!(
-            "cargo:warning=Building cargo-openvm with features: {}",
-            features_str
-        );
+        println!("Building cargo-openvm with features: {features_str}");
     }
 }
