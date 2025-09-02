@@ -56,10 +56,10 @@ jobs:
       - name: Run vm crate tests
         working-directory: crates/vm
         run: |
-          cargo nextest run ${{ env.NEXTEST_ARGS }}
+          OPENVM_SKIP_DEBUG=1 cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run vm crate tests with basic memory
         if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/vm
         run: |
-          cargo nextest run --cargo-profile=fast --features parallel,basic-memory
+          OPENVM_SKIP_DEBUG=1 cargo nextest run --cargo-profile=fast --features parallel,basic-memory

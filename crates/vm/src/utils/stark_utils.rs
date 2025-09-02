@@ -68,10 +68,7 @@ where
         log_blowup += 1;
     }
     let fri_params = FriParameters::new_for_testing(log_blowup);
-    #[cfg(feature = "cuda")]
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
-    #[cfg(not(feature = "cuda"))]
-    let debug = true;
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         fri_params,
         builder,

@@ -58,9 +58,9 @@ jobs:
       - name: Run vm crate tests
         working-directory: crates/vm
         run: |
-          cargo nextest run ${{ env.NEXTEST_ARGS }}
+          OPENVM_SKIP_DEBUG=1 cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run recursion crate tests
         working-directory: extensions/native/recursion
         run: |
-          cargo nextest run --features cuda
+          OPENVM_SKIP_DEBUG=1 cargo nextest run --features cuda

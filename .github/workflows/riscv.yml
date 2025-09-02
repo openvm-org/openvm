@@ -84,4 +84,4 @@ jobs:
           else
             TEST_NAME=test_rv32im_riscv_vector_runtime
           fi
-          cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
+          OPENVM_SKIP_DEBUG=1 cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
