@@ -19,6 +19,7 @@ export default defineConfig({
   topNav: [
     { text: 'Book', link: '/book/getting-started/introduction' },
     { text: 'Specs', link: '/specs/openvm/overview' },
+    { text: 'Whitepaper', link: 'https://openvm.dev/whitepaper.pdf' },
     {
       text: 'Rustdocs',
       link: `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || 'localhost:3000'}/docs/openvm`
