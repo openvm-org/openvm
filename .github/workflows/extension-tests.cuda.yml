@@ -96,7 +96,7 @@ jobs:
       - name: Check CUDA status and set environment variables
         run: |
           nvcc --version
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=1 OPENVM_SKIP_DEBUG=1" >> $GITHUB_ENV
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3 OPENVM_SKIP_DEBUG=1" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
 
       - name: Run extension tests
