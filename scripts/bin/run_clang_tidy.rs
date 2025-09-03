@@ -1,9 +1,12 @@
+use std::{
+    path::{Path, PathBuf},
+    process::Command,
+};
+
 use clap::{arg, Parser};
 use openvm_scripts::{
     find_cuda_include_dirs, find_files_with_extension, get_cuda_dep_common_include_dirs,
 };
-use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Parser)]
 #[command(author, version, about = "Run Clang-Tidy on CUDA files")]

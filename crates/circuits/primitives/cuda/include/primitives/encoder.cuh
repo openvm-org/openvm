@@ -50,6 +50,7 @@ struct Encoder {
     __device__ void write_flag_pt(RowSlice pt, uint32_t idx) const {
 #ifdef DEBUG
         assert(idx < num_flags);
+        assert(this->k > 0);
 #endif
         if (reserve_invalid) {
             idx++;
@@ -72,13 +73,11 @@ struct Encoder {
             while (binom <= idx) {
                 current++;
                 idx -= binom;
-                assert(d + k > 0);
-                binom = (binom * d) / (d + k);
+                binom = (d + k == 0) ? 0 : (binom * d) / (d + k);
                 d--;
             }
             pt[i] = Fp(current);
-            assert(d + k > 0);
-            binom = (binom * k) / (d + k);
+            binom = (d + k == 0) ? 0 : (binom * k) / (d + k);
             k--;
         }
     }
