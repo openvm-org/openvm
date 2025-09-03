@@ -139,20 +139,22 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &JalLuiPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let JalLuiPreCompute { a, signed_imm } = *pre_compute;
 
     let rd = if IS_JAL {
-        let rd_data = (vm_state.pc + DEFAULT_PC_STEP).to_le_bytes();
-        let next_pc = vm_state.pc as i32 + signed_imm;
+        let rd_data = (*pc + DEFAULT_PC_STEP).to_le_bytes();
+        let next_pc = *pc as i32 + signed_imm;
         debug_assert!(next_pc >= 0);
-        vm_state.pc = next_pc as u32;
+        *pc = next_pc as u32;
         rd_data
     } else {
         let imm = signed_imm as u32;
         let rd = imm << 12;
-        vm_state.pc += DEFAULT_PC_STEP;
+        *pc += DEFAULT_PC_STEP;
         rd.to_le_bytes()
     };
 
@@ -160,7 +162,7 @@ unsafe fn execute_e12_impl<
         vm_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
     }
 
-    vm_state.instret += 1;
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -171,10 +173,12 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalLuiPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
@@ -185,11 +189,13 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalLuiPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, pc, instret, vm_state);
 }

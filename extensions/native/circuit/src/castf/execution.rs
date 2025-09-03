@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -142,27 +145,33 @@ where
 #[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &CastFPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, vm_state);
+    execute_e12_impl(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<CastFPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, vm_state);
+    execute_e12_impl(&pre_compute.data, pc, instret, vm_state);
 }
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &CastFPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let y = vm_state.vm_read::<F, 1>(AS::Native as u32, pre_compute.b)[0];
@@ -170,6 +179,6 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     vm_state.vm_write::<u8, RV32_REGISTER_NUM_LIMBS>(RV32_MEMORY_AS, pre_compute.a, &x);
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }

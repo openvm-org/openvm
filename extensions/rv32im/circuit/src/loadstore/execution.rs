@@ -211,6 +211,8 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &LoadStorePreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1_bytes: [u8; RV32_REGISTER_NUM_LIMBS] =
@@ -237,7 +239,7 @@ unsafe fn execute_e12_impl<
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         vm_state.exit_code = Err(ExecutionError::Fail {
-            pc: vm_state.pc,
+            pc: *pc,
             msg: "Invalid LoadStoreOp",
         });
         return;
@@ -251,8 +253,8 @@ unsafe fn execute_e12_impl<
         }
     }
 
-    vm_state.pc += DEFAULT_PC_STEP;
-    vm_state.instret += 1;
+    *pc += DEFAULT_PC_STEP;
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -264,10 +266,12 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LoadStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
@@ -279,13 +283,15 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LoadStorePreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, T, OP, ENABLED>(&pre_compute.data, pc, instret, vm_state);
 }
 
 trait LoadStoreOp<T> {

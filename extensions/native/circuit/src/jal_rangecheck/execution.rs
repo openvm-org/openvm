@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -204,17 +207,21 @@ where
 unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &JalPreCompute<F>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    pc: &mut u32,
+    instret: &mut u64,
 ) {
     vm_state.vm_write(AS::Native as u32, pre_compute.a, &[pre_compute.return_pc]);
     // TODO(ayush): better way to do this
-    vm_state.pc = (F::from_canonical_u32(vm_state.pc) + pre_compute.b).as_canonical_u32();
-    vm_state.instret += 1;
+    *pc = (F::from_canonical_u32(*pc) + pre_compute.b).as_canonical_u32();
+    *instret += 1;
 }
 
 #[inline(always)]
 unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &RangeCheckPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    pc: &mut u32,
+    instret: &mut u64,
 ) {
     let [a_val]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.a);
 
@@ -229,54 +236,62 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         // The range of `b`,`c` had already been checked in `pre_compute_e1`.
         if !(x < (1 << b) && y < (1 << c)) {
             vm_state.exit_code = Err(ExecutionError::Fail {
-                pc: vm_state.pc,
+                pc: *pc,
                 msg: "NativeRangeCheck",
             });
             return;
         }
     }
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
 unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalPreCompute<F> = pre_compute.borrow();
-    execute_jal_e12_impl(pre_compute, vm_state);
+    execute_jal_e12_impl(pre_compute, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
 unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalPreCompute<F>> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_jal_e12_impl(&pre_compute.data, vm_state);
+    execute_jal_e12_impl(&pre_compute.data, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
 unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &RangeCheckPreCompute = pre_compute.borrow();
-    execute_range_check_e12_impl(pre_compute, vm_state);
+    execute_range_check_e12_impl(pre_compute, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
 unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<RangeCheckPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_range_check_e12_impl(&pre_compute.data, vm_state);
+    execute_range_check_e12_impl(&pre_compute.data, vm_state, pc, instret);
 }

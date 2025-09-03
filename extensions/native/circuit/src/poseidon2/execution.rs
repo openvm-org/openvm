@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -304,10 +307,12 @@ unsafe fn execute_pos2_e1_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
-    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
+    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
@@ -318,11 +323,17 @@ unsafe fn execute_pos2_e2_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
-    let height =
-        execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(&pre_compute.data, vm_state);
+    let height = execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(
+        &pre_compute.data,
+        vm_state,
+        pc,
+        instret,
+    );
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -335,11 +346,13 @@ unsafe fn execute_verify_batch_e1_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     // NOTE: using optimistic execution
-    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state);
+    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
@@ -349,12 +362,18 @@ unsafe fn execute_verify_batch_e2_impl<
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     // NOTE: using optimistic execution
-    let height =
-        execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(&pre_compute.data, vm_state);
+    let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(
+        &pre_compute.data,
+        vm_state,
+        pc,
+        instret,
+    );
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -369,6 +388,8 @@ unsafe fn execute_pos2_e12_impl<
 >(
     pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    pc: &mut u32,
+    instret: &mut u64,
 ) -> u32 {
     let subchip = pre_compute.subchip;
 
@@ -409,8 +430,8 @@ unsafe fn execute_pos2_e12_impl<
         );
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 
     1
 }
@@ -424,6 +445,8 @@ unsafe fn execute_verify_batch_e12_impl<
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    pc: &mut u32,
+    instret: &mut u64,
 ) -> u32 {
     let subchip = pre_compute.subchip;
     let opened_element_size = pre_compute.opened_element_size;
@@ -573,8 +596,8 @@ unsafe fn execute_verify_batch_e12_impl<
         assert_eq!(commit, root);
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 
     height
 }

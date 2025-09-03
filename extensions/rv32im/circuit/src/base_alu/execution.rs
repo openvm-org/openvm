@@ -173,6 +173,8 @@ unsafe fn execute_e12_impl<
     OP: AluOp,
 >(
     pre_compute: &BaseAluPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -186,8 +188,8 @@ unsafe fn execute_e12_impl<
     let rd = <OP as AluOp>::compute(rs1, rs2);
     let rd = rd.to_le_bytes();
     vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -199,10 +201,12 @@ unsafe fn execute_e1_impl<
     OP: AluOp,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BaseAluPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
@@ -214,13 +218,15 @@ unsafe fn execute_e2_impl<
     OP: AluOp,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BaseAluPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, pc, instret, vm_state);
 }
 
 trait AluOp {

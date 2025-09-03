@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -160,6 +163,8 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &PublicValuesPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
@@ -187,31 +192,35 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
             panic!("Custom public value {} already set", idx);
         }
     }
-    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-    state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
     let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, pc, instret, state);
 }
 
 #[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: MeteredExecutionCtxTrait,
 {
     let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, pc, instret, state);
 }

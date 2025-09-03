@@ -1,6 +1,7 @@
 use std::{
     array::from_fn,
     borrow::{Borrow, BorrowMut},
+    mem::size_of,
 };
 
 use num_bigint::BigUint;
@@ -140,7 +141,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        std::mem::size_of::<EcDoublePreCompute>()
+        size_of::<EcDoublePreCompute>()
     }
 
     fn pre_compute<Ctx>(
@@ -180,7 +181,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
-        std::mem::size_of::<E2PreCompute<EcDoublePreCompute>>()
+        size_of::<E2PreCompute<EcDoublePreCompute>>()
     }
 
     fn metered_pre_compute<Ctx>(
@@ -230,6 +231,8 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &EcDoublePreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
@@ -249,7 +252,7 @@ unsafe fn execute_e12_impl<
 
         if input_prime != pre_compute.expr.builder.prime {
             vm_state.exit_code = Err(ExecutionError::Fail {
-                pc: vm_state.pc,
+                pc: *pc,
                 msg: "EcDouble: mismatched prime",
             });
             return;
@@ -260,7 +263,7 @@ unsafe fn execute_e12_impl<
         let coeff_a = &pre_compute.expr.setup_values[0];
         if input_a != *coeff_a {
             vm_state.exit_code = Err(ExecutionError::Fail {
-                pc: vm_state.pc,
+                pc: *pc,
                 msg: "EcDouble: mismatched coeff_a",
             });
             return;
@@ -287,8 +290,8 @@ unsafe fn execute_e12_impl<
         vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -301,10 +304,17 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
+        pre_compute,
+        pc,
+        instret,
+        vm_state,
+    );
 }
 
 #[create_tco_handler]
@@ -317,6 +327,8 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
@@ -325,6 +337,8 @@ unsafe fn execute_e2_impl<
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
+        pc,
+        instret,
         vm_state,
     );
 }

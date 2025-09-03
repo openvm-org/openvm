@@ -85,12 +85,16 @@ pub enum StaticProgramError {
     ExecutorNotFound { opcode: VmOpcode },
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, exec_state)`.
-/// The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a single instruction.
-/// The contents of `pre_compute` are determined from the program code as specified by the
-/// [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+/// Function pointer for interpreter execution with function signature `(pre_compute, pc, instret,
+/// exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a
+/// single instruction. The contents of `pre_compute` are determined from the program code as
+/// specified by the [Executor] and [MeteredExecutor] traits.
+pub type ExecuteFunc<F, CTX> = unsafe fn(
+    pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -98,9 +102,12 @@ pub type ExecuteFunc<F, CTX> =
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
+/// - `pc` and `instret` are passed as separate arguments for efficiency
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
+    pc: u32,
+    instret: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

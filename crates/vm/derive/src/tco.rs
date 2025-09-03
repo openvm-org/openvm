@@ -30,9 +30,9 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     // Build the function call with all the generics
     let generic_args = build_generic_args(generics);
     let execute_call = if generic_args.is_empty() {
-        quote! { #fn_name(pre_compute, exec_state) }
+        quote! { #fn_name(pre_compute, &mut pc, &mut instret, exec_state) }
     } else {
-        quote! { #fn_name::<#(#generic_args),*>(pre_compute, exec_state) }
+        quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut pc, &mut instret, exec_state) }
     };
 
     // Generate the TCO handler function
@@ -40,6 +40,8 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         #[inline(never)]
         unsafe fn #handler_name #handler_generics (
             interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
+            mut pc: u32,
+            mut instret: u64,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,
@@ -50,20 +52,25 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         {
             use ::openvm_circuit::arch::ExecutionError;
 
-            let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc);
+            let pre_compute = interpreter.get_pre_compute(pc);
             #execute_call;
 
             if exec_state.exit_code.is_err() {
-                // stop execution
+                exec_state.pc = pc;
+                exec_state.instret = instret;
                 return;
             }
             if #ctx_type::should_suspend(exec_state) {
+                exec_state.pc = pc;
+                exec_state.instret = instret;
                 return;
             }
-            // exec_state.pc should have been updated by execute_impl at this point
-            let next_handler = interpreter.get_handler(exec_state.vm_state.pc);
+
+            let next_handler = interpreter.get_handler(pc);
             if next_handler.is_none() {
-                exec_state.exit_code = Err(ExecutionError::PcOutOfBounds (exec_state.vm_state.pc));
+                exec_state.pc = pc;
+                exec_state.instret = instret;
+                exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
                 return;
             }
             let next_handler = next_handler.unwrap_unchecked();
@@ -71,7 +78,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             // NOTE: `become` is a keyword that requires Rust Nightly.
             // It is part of the explicit tail calls RFC: <https://github.com/rust-lang/rust/issues/112788>
             // which is still incomplete.
-            become next_handler(interpreter, exec_state)
+            become next_handler(interpreter, pc, instret, exec_state)
         }
     };
 

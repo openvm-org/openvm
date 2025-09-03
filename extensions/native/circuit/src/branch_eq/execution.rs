@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{
     arch::*,
@@ -184,6 +187,8 @@ unsafe fn execute_e12_impl<
     const IS_NE: bool,
 >(
     pre_compute: &NativeBranchEqualPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = if A_IS_IMM {
@@ -197,11 +202,11 @@ unsafe fn execute_e12_impl<
         vm_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
     };
     if (rs1 == rs2) ^ IS_NE {
-        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+        *pc = (*pc as isize + pre_compute.imm) as u32;
     } else {
-        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *pc = (*pc).wrapping_add(DEFAULT_PC_STEP);
     }
-    vm_state.instret += 1;
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -213,10 +218,12 @@ unsafe fn execute_e1_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
@@ -228,11 +235,13 @@ unsafe fn execute_e2_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeBranchEqualPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(&pre_compute.data, pc, instret, vm_state);
 }

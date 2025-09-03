@@ -267,6 +267,8 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &EcAddNePreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
@@ -284,7 +286,7 @@ unsafe fn execute_e12_impl<
         let input_prime = BigUint::from_bytes_le(read_data[0][..BLOCKS / 2].as_flattened());
         if input_prime != pre_compute.expr.prime {
             vm_state.exit_code = Err(ExecutionError::Fail {
-                pc: vm_state.pc,
+                pc: *pc,
                 msg: "EcAddNe: mismatched prime",
             });
             return;
@@ -311,8 +313,8 @@ unsafe fn execute_e12_impl<
         vm_state.vm_write(RV32_MEMORY_AS, rd_val + (i * BLOCK_SIZE) as u32, &block);
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -325,10 +327,17 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(pre_compute, vm_state);
+    execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
+        pre_compute,
+        pc,
+        instret,
+        vm_state,
+    );
 }
 
 #[create_tco_handler]
@@ -341,6 +350,8 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
@@ -349,6 +360,8 @@ unsafe fn execute_e2_impl<
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
+        pc,
+        instret,
         vm_state,
     );
 }

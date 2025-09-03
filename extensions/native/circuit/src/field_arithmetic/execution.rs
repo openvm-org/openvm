@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{
     arch::*,
@@ -225,6 +228,8 @@ unsafe fn execute_e12_impl<
     const OPCODE: u8,
 >(
     pre_compute: &FieldArithmeticPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read values based on the adapter logic
@@ -247,7 +252,7 @@ unsafe fn execute_e12_impl<
             // DIV
             if c_val.is_zero() {
                 vm_state.exit_code = Err(ExecutionError::Fail {
-                    pc: vm_state.pc,
+                    pc: *pc,
                     msg: "DivF divide by zero",
                 });
                 return;
@@ -259,8 +264,8 @@ unsafe fn execute_e12_impl<
 
     vm_state.vm_write::<F, 1>(AS::Native as u32, pre_compute.a, &[a_val]);
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 }
 
 #[create_tco_handler]
@@ -272,10 +277,12 @@ unsafe fn execute_e1_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, pc, instret, vm_state);
 }
 
 #[create_tco_handler]
@@ -287,11 +294,18 @@ unsafe fn execute_e2_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(
+        &pre_compute.data,
+        pc,
+        instret,
+        vm_state,
+    );
 }

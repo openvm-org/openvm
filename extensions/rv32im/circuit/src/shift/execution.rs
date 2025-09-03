@@ -156,6 +156,8 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -171,8 +173,8 @@ unsafe fn execute_e12_impl<
     // Write the result back to memory
     state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    state.instret += 1;
-    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
 }
 
 #[create_tco_handler]
@@ -183,10 +185,12 @@ unsafe fn execute_e1_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, pc, instret, state);
 }
 
 #[create_tco_handler]
@@ -197,11 +201,13 @@ unsafe fn execute_e2_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
     state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, pc, instret, state);
 }
 
 trait ShiftOp {

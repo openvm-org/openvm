@@ -119,6 +119,8 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchEqual256Executor {
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &BranchEqPreCompute,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    pc: &mut u32,
+    instret: &mut u64,
 ) {
     let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
     let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -126,33 +128,37 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
-        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+        *pc = (*pc as isize + pre_compute.imm) as u32;
     } else {
-        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     }
 
-    vm_state.instret += 1;
+    *instret += 1;
 }
 
 #[create_tco_handler]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BranchEqPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_NE>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, IS_NE>(pre_compute, vm_state, pc, instret);
 }
 
 #[create_tco_handler]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
+    pc: &mut u32,
+    instret: &mut u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BranchEqPreCompute> = pre_compute.borrow();
     vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state, pc, instret);
 }
 
 impl Rv32BranchEqual256Executor {
