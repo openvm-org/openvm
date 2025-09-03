@@ -72,10 +72,12 @@ struct Encoder {
             while (binom <= idx) {
                 current++;
                 idx -= binom;
+                assert(d + k > 0);
                 binom = (binom * d) / (d + k);
                 d--;
             }
             pt[i] = Fp(current);
+            assert(d + k > 0);
             binom = (binom * k) / (d + k);
             k--;
         }

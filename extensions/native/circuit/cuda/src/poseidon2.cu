@@ -77,6 +77,7 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     ) {
+        assert(row.is_valid());
         Poseidon2Row first_p2_row(row);
         uint32_t num_non_inside_rows = first_p2_row.export_col()[0].asUInt32();
         RowSlice last_non_inside_row = row.shift_row(num_non_inside_rows - 1);
@@ -185,6 +186,7 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
     }
 
     __device__ static void fill_inner(RowSlice row) {
+        assert(row.is_valid());
         Poseidon2Row poseidon2_row(row);
         Fp state[WIDTH];
         {
@@ -201,6 +203,7 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
         VariableRangeChecker range_checker,
         uint32_t timestamp_max_bits
     ) {
+        assert(row.is_valid());
         RowSlice specific = row.slice_from(COL_INDEX(Cols, specific));
         MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
         uint32_t start_timestamp = row[COL_INDEX(Cols, start_timestamp)].asUInt32();
@@ -214,8 +217,7 @@ template <size_t SBOX_REGISTERS> struct Poseidon2Wrapper {
             mem_fill_base(
                 mem_helper,
                 start_timestamp + 1,
-                specific.slice_from(
-                    COL_INDEX(SimplePoseidonSpecificCols, read_input_pointer_1.base)
+                specific.slice_from(COL_INDEX(SimplePoseidonSpecificCols, read_input_pointer_1.base)
                 )
             );
             mem_fill_base(

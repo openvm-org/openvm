@@ -6,7 +6,9 @@ authors.workspace = true
 
 [dependencies]
 openvm-cuda-common = { workspace = true, optional = true }
+eyre = { workspace = true }
 serde = { workspace = true }
+clap = { version = "4.5.9", features = ["derive", "env"] }
 serde_yaml = "0.9"
 walkdir = "2.5"
 
@@ -18,5 +20,10 @@ ignored = ["openvm-cuda-common"]
 
 [[bin]]
 name = "generate-clangd"
-path = "generate_clangd/main.rs"
+path = "bin/generate_clangd.rs"
+required-features = ["cuda"]
+
+[[bin]]
+name = "run-clang-tidy"
+path = "bin/run_clang_tidy.rs"
 required-features = ["cuda"]

@@ -6069,6 +6069,8 @@ dependencies = [
 name = "openvm-scripts"
 version = "1.4.0"
 dependencies = [
+ "clap",
+ "eyre",
  "openvm-cuda-common",
  "serde",
  "serde_yaml",
