@@ -23,6 +23,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   guest-lib-tests-cuda:
@@ -114,7 +115,7 @@ jobs:
       - name: Check CUDA status and set environment variables
         run: |
           nvcc --version
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3 OPENVM_SKIP_DEBUG=1" >> $GITHUB_ENV
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
 
       - name: Run guest library tests

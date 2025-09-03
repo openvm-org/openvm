@@ -23,6 +23,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   riscv-test-vector:
@@ -84,4 +85,4 @@ jobs:
           else
             TEST_NAME=test_rv32im_riscv_vector_runtime
           fi
-          OPENVM_SKIP_DEBUG=1 cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
+          cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME

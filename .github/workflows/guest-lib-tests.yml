@@ -23,6 +23,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   integration-tests:
@@ -78,4 +79,4 @@ jobs:
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          OPENVM_SKIP_DEBUG=1 cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1
+          cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

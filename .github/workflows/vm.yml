@@ -19,6 +19,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   tests:
@@ -56,10 +57,10 @@ jobs:
       - name: Run vm crate tests
         working-directory: crates/vm
         run: |
-          OPENVM_SKIP_DEBUG=1 cargo nextest run ${{ env.NEXTEST_ARGS }}
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run vm crate tests with basic memory
         if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/vm
         run: |
-          OPENVM_SKIP_DEBUG=1 cargo nextest run --cargo-profile=fast --features parallel,basic-memory
+          cargo nextest run --cargo-profile=fast --features parallel,basic-memory
