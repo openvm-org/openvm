@@ -122,9 +122,8 @@ fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Resu
 }
 
 pub fn read_from_file_json<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
-    let ret: T = File::open(&path)
-        .and_then(|file| serde_json::from_reader(file).map_err(|e| e.into()))
-        .map_err(|e| read_error(&path, e.into()))?;
+    let file = File::open(&path).map_err(|e| read_error(&path, e.into()))?;
+    let ret: T = serde_json::from_reader(file).map_err(|e| read_error(&path, e.into()))?;
     Ok(ret)
 }
 
@@ -132,9 +131,8 @@ pub fn write_to_file_json<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Res
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
     }
-    File::create(&path)
-        .and_then(|file| serde_json::to_writer_pretty(file, &data).map_err(|e| e.into()))
-        .map_err(|e| write_error(&path, e.into()))?;
+    let file = File::create(&path).map_err(|e| write_error(&path, e.into()))?;
+    serde_json::to_writer_pretty(file, &data).map_err(|e| write_error(&path, e.into()))?;
     Ok(())
 }
 
