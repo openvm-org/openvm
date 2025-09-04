@@ -55,19 +55,19 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_call;
 
-            if exec_state.exit_code.is_err() {
+            if ::core::intrinsics::unlikely(exec_state.exit_code.is_err()) {
                 exec_state.pc = pc;
                 exec_state.instret = instret;
                 return;
             }
-            if #ctx_type::should_suspend(pc, instret, exec_state) {
+            if ::core::intrinsics::unlikely(#ctx_type::should_suspend(pc, instret, exec_state)) {
                 exec_state.pc = pc;
                 exec_state.instret = instret;
                 return;
             }
 
             let next_handler = interpreter.get_handler(pc);
-            if next_handler.is_none() {
+            if ::core::intrinsics::unlikely(next_handler.is_none()) {
                 exec_state.pc = pc;
                 exec_state.instret = instret;
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
