@@ -481,14 +481,14 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        if Ctx::should_suspend(vm_state) {
+        let mut pc = vm_state.pc;
+        let mut instret = vm_state.instret;
+        if Ctx::should_suspend(pc, instret, vm_state) {
             break;
         }
         let pc_index = get_pc_index(vm_state.pc);
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
-            let mut pc = vm_state.pc;
-            let mut instret = vm_state.instret;
             unsafe { (inst.handler)(inst.pre_compute, &mut pc, &mut instret, vm_state) };
             vm_state.pc = pc;
             vm_state.instret = instret;

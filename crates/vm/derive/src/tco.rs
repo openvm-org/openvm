@@ -60,7 +60,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
                 exec_state.instret = instret;
                 return;
             }
-            if #ctx_type::should_suspend(exec_state) {
+            if #ctx_type::should_suspend(pc, instret, exec_state) {
                 exec_state.pc = pc;
                 exec_state.instret = instret;
                 return;

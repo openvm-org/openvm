@@ -195,10 +195,14 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+    fn should_suspend<F>(
+        _pc: u32,
+        instret: u64,
+        vm_state: &mut VmExecState<F, GuestMemory, Self>,
+    ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
-        vm_state.ctx.check_and_segment(vm_state.instret);
+        vm_state.ctx.check_and_segment(instret);
         false
     }
 
