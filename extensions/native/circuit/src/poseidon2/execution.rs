@@ -300,6 +300,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -316,6 +317,7 @@ unsafe fn execute_pos2_e1_impl<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_pos2_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -340,6 +342,7 @@ unsafe fn execute_pos2_e2_impl<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -356,6 +359,7 @@ unsafe fn execute_verify_batch_e1_impl<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_verify_batch_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

@@ -164,6 +164,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLe
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: &[u8],
     pc: &mut u32,
@@ -175,6 +176,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLes
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: &[u8],
     pc: &mut u32,

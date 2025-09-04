@@ -557,9 +557,10 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
-    vm_state.instret = *instret + 1;
-    vm_state.pc = *pc;
+    *instret += 1;
     vm_state.exit_code = Ok(Some(pre_compute.exit_code));
+    vm_state.vm_state.pc = *pc;
+    vm_state.vm_state.instret = *instret;
 }
 
 #[cfg(feature = "tco")]
@@ -573,8 +574,6 @@ unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTr
     let mut pc_mut = pc;
     let mut instret_mut = instret;
     terminate_execute_e12_impl(pre_compute, &mut pc_mut, &mut instret_mut, vm_state);
-    vm_state.vm_state.pc = pc_mut;
-    vm_state.vm_state.instret = instret_mut;
 }
 
 #[cfg(feature = "tco")]

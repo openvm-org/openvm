@@ -155,6 +155,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &[u8],
     pc: &mut u32,
@@ -166,6 +167,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &[u8],
     pc: &mut u32,

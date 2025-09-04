@@ -269,6 +269,7 @@ unsafe fn execute_e12_impl<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -286,6 +287,7 @@ unsafe fn execute_e1_impl<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,

@@ -164,6 +164,7 @@ where
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     pc: &mut u32,
@@ -175,6 +176,7 @@ unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CE
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
     pre_compute: &[u8],
     pc: &mut u32,
@@ -186,6 +188,7 @@ unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_C
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_hint_storew<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -201,6 +204,7 @@ unsafe fn execute_e1_hint_storew<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_loadw<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -219,6 +223,7 @@ unsafe fn execute_e2_loadw<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_storew<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -237,6 +242,7 @@ unsafe fn execute_e2_storew<
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_hint_storew<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
