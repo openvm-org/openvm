@@ -275,7 +275,7 @@ unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     execute_jal_e12_impl(&pre_compute.data, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -288,7 +288,7 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_range_check_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

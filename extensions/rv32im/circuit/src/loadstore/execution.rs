@@ -257,7 +257,7 @@ unsafe fn execute_e12_impl<
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -276,7 +276,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, T, OP, ENABLED>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
