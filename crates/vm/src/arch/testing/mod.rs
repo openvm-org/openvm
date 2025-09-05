@@ -29,6 +29,7 @@ pub const BITWISE_OP_LOOKUP_BUS: BusIndex = 9;
 pub const BYTE_XOR_BUS: BusIndex = 10;
 pub const RANGE_TUPLE_CHECKER_BUS: BusIndex = 11;
 pub const MEMORY_MERKLE_BUS: BusIndex = 12;
+pub const MEMCPY_BUS: BusIndex = 13;
 
 pub const RANGE_CHECKER_BUS: BusIndex = 4;
 

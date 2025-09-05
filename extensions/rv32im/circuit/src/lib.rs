@@ -8,6 +8,7 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::{Executor, PreflightExecutor, VmConfig};
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     engine::StarkEngine,
@@ -81,6 +82,8 @@ pub struct Rv32IConfig {
     pub base: Rv32I,
     #[extension]
     pub io: Rv32Io,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 // Default implementation uses no init file
@@ -105,6 +108,7 @@ impl Default for Rv32IConfig {
             system,
             base: Default::default(),
             io: Default::default(),
+            memcpy: Memcpy,
         }
     }
 }
@@ -116,6 +120,7 @@ impl Rv32IConfig {
             system,
             base: Default::default(),
             io: Default::default(),
+            memcpy: Memcpy,
         }
     }
 
@@ -127,6 +132,7 @@ impl Rv32IConfig {
             system,
             base: Default::default(),
             io: Default::default(),
+            memcpy: Memcpy,
         }
     }
 }
@@ -173,6 +179,7 @@ where
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.base, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&MemcpyCpuProverExt, &config.memcpy, inventory)?;
         Ok(chip_complex)
     }
 }

@@ -205,6 +205,11 @@
 	.attribute	4, 16
 	.attribute	5, "rv32im"
 	.file	"musl_memcpy.c"
+
+	# Define memcpy_loop macro for custom instruction (U-type)
+	.macro memcpy_loop shift
+		.word 0x00000072 | (\shift << 12)  # opcode 0x72 + shift in immediate field (bits 12-31)
+	.endm
 	.globl	memcpy
 	.p2align	2
 	.type	memcpy,@function
@@ -250,32 +255,8 @@ memcpy:
 	sb	a6, 2(a3)
 	addi	a2, a2, -3
 	addi	a3, a4, 16
-	li	a4, 16
 .LBBmemcpy0_9:
-	lw	a6, -12(a3)
-	srli	a5, a5, 24
-	slli	a7, a6, 8
-	lw	t0, -8(a3)
-	or	a5, a7, a5
-	sw	a5, 0(a1)
-	srli	a5, a6, 24
-	slli	a6, t0, 8
-	lw	a7, -4(a3)
-	or	a5, a6, a5
-	sw	a5, 4(a1)
-	srli	a6, t0, 24
-	slli	t0, a7, 8
-	lw	a5, 0(a3)
-	or	a6, t0, a6
-	sw	a6, 8(a1)
-	srli	a6, a7, 24
-	slli	a7, a5, 8
-	or	a6, a7, a6
-	sw	a6, 12(a1)
-	addi	a1, a1, 16
-	addi	a2, a2, -16
-	addi	a3, a3, 16
-	bltu	a4, a2, .LBBmemcpy0_9
+	memcpy_loop 1
 	addi	a4, a3, -13
 	j	.LBBmemcpy0_25
 .LBBmemcpy0_11:
@@ -286,20 +267,8 @@ memcpy:
 .LBBmemcpy0_12:
 	li	a1, 16
 	bltu	a2, a1, .LBBmemcpy0_15
-	li	a1, 15
 .LBBmemcpy0_14:
-	lw	a5, 0(a4)
-	lw	a6, 4(a4)
-	lw	a7, 8(a4)
-	lw	t0, 12(a4)
-	sw	a5, 0(a3)
-	sw	a6, 4(a3)
-	sw	a7, 8(a3)
-	sw	t0, 12(a3)
-	addi	a4, a4, 16
-	addi	a2, a2, -16
-	addi	a3, a3, 16
-	bltu	a1, a2, .LBBmemcpy0_14
+	memcpy_loop 0
 .LBBmemcpy0_15:
 	andi	a1, a2, 8
 	beqz	a1, .LBBmemcpy0_17
@@ -323,32 +292,8 @@ memcpy:
 	sb	a5, 0(a3)
 	addi	a2, a2, -1
 	addi	a3, a4, 16
-	li	a4, 18
 .LBBmemcpy0_20:
-	lw	a6, -12(a3)
-	srli	a5, a5, 8
-	slli	a7, a6, 24
-	lw	t0, -8(a3)
-	or	a5, a7, a5
-	sw	a5, 0(a1)
-	srli	a5, a6, 8
-	slli	a6, t0, 24
-	lw	a7, -4(a3)
-	or	a5, a6, a5
-	sw	a5, 4(a1)
-	srli	a6, t0, 8
-	slli	t0, a7, 24
-	lw	a5, 0(a3)
-	or	a6, t0, a6
-	sw	a6, 8(a1)
-	srli	a6, a7, 8
-	slli	a7, a5, 24
-	or	a6, a7, a6
-	sw	a6, 12(a1)
-	addi	a1, a1, 16
-	addi	a2, a2, -16
-	addi	a3, a3, 16
-	bltu	a4, a2, .LBBmemcpy0_20
+	memcpy_loop 3
 	addi	a4, a3, -15
 	j	.LBBmemcpy0_25
 .LBBmemcpy0_22:
@@ -359,32 +304,8 @@ memcpy:
 	sb	a6, 1(a3)
 	addi	a2, a2, -2
 	addi	a3, a4, 16
-	li	a4, 17
 .LBBmemcpy0_23:
-	lw	a6, -12(a3)
-	srli	a5, a5, 16
-	slli	a7, a6, 16
-	lw	t0, -8(a3)
-	or	a5, a7, a5
-	sw	a5, 0(a1)
-	srli	a5, a6, 16
-	slli	a6, t0, 16
-	lw	a7, -4(a3)
-	or	a5, a6, a5
-	sw	a5, 4(a1)
-	srli	a6, t0, 16
-	slli	t0, a7, 16
-	lw	a5, 0(a3)
-	or	a6, t0, a6
-	sw	a6, 8(a1)
-	srli	a6, a7, 16
-	slli	a7, a5, 16
-	or	a6, a7, a6
-	sw	a6, 12(a1)
-	addi	a1, a1, 16
-	addi	a2, a2, -16
-	addi	a3, a3, 16
-	bltu	a4, a2, .LBBmemcpy0_23
+	memcpy_loop 2
 	addi	a4, a3, -14
 .LBBmemcpy0_25:
 	mv	a3, a1

@@ -9,6 +9,7 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::VmConfig;
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -59,6 +60,8 @@ pub struct Rv32ModularConfig {
     pub io: Rv32Io,
     #[extension]
     pub modular: ModularExtension,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 impl InitFileGenerator for Rv32ModularConfig {
@@ -78,6 +81,7 @@ impl Rv32ModularConfig {
             mul: Default::default(),
             io: Default::default(),
             modular: ModularExtension::new(moduli),
+            memcpy: Memcpy,
         }
     }
 }
@@ -143,6 +147,11 @@ where
         VmProverExtension::<E, _, _>::extend_prover(
             &AlgebraCpuProverExt,
             &config.modular,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &MemcpyCpuProverExt,
+            &config.memcpy,
             inventory,
         )?;
         Ok(chip_complex)

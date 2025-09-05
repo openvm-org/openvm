@@ -9,6 +9,7 @@ mod tests {
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_circuit::{Rv32IBuilder, Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
@@ -46,7 +47,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         change_rv32m_insn_to_nop(&mut exe);
         air_test_with_min_segments(Rv32IBuilder, config, exe, vec![], min_segments);
@@ -63,7 +65,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension),
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
         Ok(())
@@ -84,7 +87,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension)
-                .with_extension(Rv32MTranspilerExtension),
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
         Ok(())
@@ -99,7 +103,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
         air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
@@ -115,7 +120,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         // stdin will be read after reading kv_store
         let stdin = vec![[0, 1, 2].map(F::from_canonical_u8).to_vec()];
@@ -138,7 +144,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         #[derive(serde::Serialize)]
@@ -169,7 +176,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let executor = VmExecutor::new(config.clone())?;
@@ -211,7 +219,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ImBuilder, config, exe);
         Ok(())
@@ -226,7 +235,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
 
         let executor = VmExecutor::new(config)?;
@@ -253,7 +263,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ImBuilder, config, exe);
         Ok(())
@@ -273,7 +284,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Rv32ImBuilder, config, exe);
         Ok(())
@@ -289,7 +301,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
@@ -315,7 +328,8 @@ mod tests {
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )
         .unwrap();
         air_test(Rv32ImBuilder, config, exe);
