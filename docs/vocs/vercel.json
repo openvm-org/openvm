@@ -79,15 +79,15 @@
       "rewrites": [
         {
           "source": "/docs/openvm/",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/index.html"
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/index.html"
         },
         {
           "source": "/docs/openvm/:path*/",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/:path*/index.html"
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/:path*/index.html"
         }, 
         {
           "source": "/docs/openvm/:path*",
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/:path*"
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/:path*"
         },
         {
           "source": "/(static.files|fonts)/:path*",
@@ -98,19 +98,19 @@
               "value": ".*/openvm.*"
             }
           ],
-          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/static/$1/:path*"
+          "destination": "https://openvm-crate-docs-openvm-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0/$1/:path*"
         },
         {
           "source": "/docs/stark-backend/",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/index.html"
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/index.html"
         },
         {
           "source": "/docs/stark-backend/:path*/",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/:path*/index.html"
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/:path*/index.html"
         },
         {
           "source": "/docs/stark-backend/:path*",
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/:path*"
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/:path*"
         },
         {
           "source": "/(static.files|fonts)/:path*",
@@ -121,7 +121,7 @@
               "value": ".*/stark-backend.*"
             }
           ],
-          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/static/$1/:path*"
+          "destination": "https://openvm-crate-docs-stark-backend-us-east-1.s3.us-east-1.amazonaws.com/v1.2.0/$1/:path*"
         }
       ]
   }
