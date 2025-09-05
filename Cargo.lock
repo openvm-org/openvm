@@ -2340,6 +2340,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "67773048316103656a637612c4a62477603b777d91d9c62ff2290f9cde178fdb"
+dependencies = [
+ "ctor-proc-macro",
+ "dtor",
+]
+
+[[package]]
+name = "ctor-proc-macro"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
+
+[[package]]
 name = "cuda-config"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2707,6 +2723,21 @@ dependencies = [
  "quote",
  "syn 2.0.106",
 ]
+
+[[package]]
+name = "dtor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e58a0764cddb55ab28955347b45be00ade43d4d6f3ba4bf3dc354e4ec9432934"
+dependencies = [
+ "dtor-proc-macro",
+]
+
+[[package]]
+name = "dtor-proc-macro"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f678cf4a922c215c63e0de95eb1ff08a958a81d47e485cf9da1e27bf6305cfa5"
 
 [[package]]
 name = "dunce"
@@ -5428,8 +5459,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=2de074e837e94ca085efd0b6fa2820052d78c79d#2de074e837e94ca085efd0b6fa2820052d78c79d"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5460,8 +5491,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=2de074e837e94ca085efd0b6fa2820052d78c79d#2de074e837e94ca085efd0b6fa2820052d78c79d"
 dependencies = [
  "cc",
  "glob",
@@ -5469,10 +5500,11 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=2de074e837e94ca085efd0b6fa2820052d78c79d#2de074e837e94ca085efd0b6fa2820052d78c79d"
 dependencies = [
  "bytesize",
+ "ctor",
  "lazy_static",
  "metrics",
  "openvm-cuda-builder",
@@ -6201,13 +6233,14 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=2de074e837e94ca085efd0b6fa2820052d78c79d#2de074e837e94ca085efd0b6fa2820052d78c79d"
 dependencies = [
  "bitcode",
  "cfg-if",
  "derivative",
  "derive-new 0.7.0",
+ "eyre",
  "itertools 0.14.0",
  "metrics",
  "mimalloc",
@@ -6222,6 +6255,7 @@ dependencies = [
  "rayon",
  "rustc-hash 2.1.1",
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tikv-jemallocator",
  "tracing",
@@ -6229,8 +6263,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.0-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.0-rc.4#5eac9a65a88f1f8909b787e360923239ca0ab63c"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=2de074e837e94ca085efd0b6fa2820052d78c79d#2de074e837e94ca085efd0b6fa2820052d78c79d"
 dependencies = [
  "dashmap",
  "derivative",
