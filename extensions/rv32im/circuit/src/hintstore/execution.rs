@@ -192,7 +192,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     num_words
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
@@ -205,7 +205,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT
     execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

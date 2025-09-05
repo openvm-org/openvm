@@ -107,7 +107,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -120,7 +120,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

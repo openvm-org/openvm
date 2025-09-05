@@ -189,7 +189,7 @@ unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_C
     execute_e12_storew::<_, _, NUM_CELLS>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e1_hint_storew<
     F: PrimeField32,
@@ -246,7 +246,7 @@ unsafe fn execute_e2_storew<
     execute_e12_storew::<_, _, NUM_CELLS>(&pre_compute.data, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e2_hint_storew<
     F: PrimeField32,

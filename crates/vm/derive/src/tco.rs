@@ -4,7 +4,7 @@ use syn::{parse_macro_input, ItemFn};
 
 /// Implementation of the TCO handler generation logic.
 /// This is called from the proc macro attribute in lib.rs.
-pub fn tco_impl(item: TokenStream) -> TokenStream {
+pub fn tco_impl(item: TokenStream, can_exit: bool) -> TokenStream {
     // Parse the input function
     let input_fn = parse_macro_input!(item as ItemFn);
 
@@ -35,6 +35,18 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut instret, &mut pc, arg, exec_state) }
     };
 
+    // Generate the exit check code conditionally
+    let exit_check = if can_exit {
+        quote! {
+            if ::core::intrinsics::unlikely(exec_state.exit_code.is_err()) {
+                exec_state.set_instret_and_pc(instret, pc);
+                return;
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     // Generate the TCO handler function
     let handler_fn = quote! {
         #[inline(never)]
@@ -56,10 +68,8 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_call;
 
-            if ::core::intrinsics::unlikely(exec_state.exit_code.is_err()) {
-                exec_state.set_instret_and_pc(instret, pc);
-                return;
-            }
+            #exit_check
+
             if ::core::intrinsics::unlikely(#ctx_type::should_suspend(instret, pc, arg, exec_state)) {
                 exec_state.set_instret_and_pc(instret, pc);
                 return;
