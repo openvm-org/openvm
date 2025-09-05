@@ -198,6 +198,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     fn should_suspend<F>(
         _pc: u32,
         instret: u64,
+        _instret_end: u64,
         vm_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every

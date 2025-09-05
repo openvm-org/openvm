@@ -32,6 +32,8 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+const U64_MAX: u64 = u64::MAX;
+
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
 ///
@@ -78,7 +80,7 @@ struct TerminatePreCompute {
 }
 
 macro_rules! run {
-    ($span:literal, $interpreter:ident, $exec_state:ident, $ctx:ident) => {{
+    ($span:literal, $interpreter:ident, $instret_end:ident, $exec_state:ident, $ctx:ident) => {{
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
@@ -91,7 +93,11 @@ macro_rules! run {
             #[cfg(not(feature = "tco"))]
             unsafe {
                 tracing::debug!("execute_trampoline");
-                execute_trampoline(&mut $exec_state, &$interpreter.pre_compute_insns);
+                execute_trampoline(
+                    $instret_end,
+                    &mut $exec_state,
+                    &$interpreter.pre_compute_insns,
+                );
             }
             #[cfg(feature = "tco")]
             {
@@ -106,7 +112,7 @@ macro_rules! run {
                 // - it is the responsibility of each Executor to ensure handler is safe given a
                 //   valid VM state
                 unsafe {
-                    handler($interpreter, pc, instret, &mut $exec_state);
+                    handler($interpreter, pc, instret, $instret_end, &mut $exec_state);
                 }
 
                 if $exec_state
@@ -348,7 +354,8 @@ where
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
-        run!("execute_e1", self, exec_state, ExecutionCtx);
+        let instret_end = exec_state.ctx.instret_end;
+        run!("execute_e1", self, instret_end, exec_state, ExecutionCtx);
         if num_insns.is_some() {
             check_exit_code(exec_state.exit_code)?;
         } else {
@@ -395,7 +402,7 @@ where
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
         // Start execution
-        run!("execute_metered", self, exec_state, MeteredCtx);
+        run!("execute_metered", self, U64_MAX, exec_state, MeteredCtx);
         check_termination(exec_state.exit_code)?;
         let VmExecState { vm_state, ctx, .. } = exec_state;
         Ok((ctx.into_segments(), vm_state))
@@ -435,7 +442,13 @@ where
     ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
         // Start execution
-        run!("execute_metered_cost", self, exec_state, MeteredCostCtx);
+        run!(
+            "execute_metered_cost",
+            self,
+            U64_MAX,
+            exec_state,
+            MeteredCostCtx
+        );
         check_exit_code(exec_state.exit_code)?;
         let VmExecState { ctx, vm_state, .. } = exec_state;
         let cost = ctx.cost;
@@ -473,6 +486,7 @@ fn split_pre_compute_buf<'a, F>(
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[inline(always)]
 unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
+    instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
@@ -483,13 +497,21 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     {
         let mut pc = vm_state.pc;
         let mut instret = vm_state.instret;
-        if Ctx::should_suspend(pc, instret, vm_state) {
+        if Ctx::should_suspend(pc, instret, instret_end, vm_state) {
             break;
         }
         let pc_index = get_pc_index(vm_state.pc);
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
-            unsafe { (inst.handler)(inst.pre_compute, &mut pc, &mut instret, vm_state) };
+            unsafe {
+                (inst.handler)(
+                    inst.pre_compute,
+                    &mut pc,
+                    &mut instret,
+                    instret_end,
+                    vm_state,
+                )
+            };
             vm_state.pc = pc;
             vm_state.instret = instret;
         } else {
@@ -554,6 +576,7 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
@@ -568,12 +591,19 @@ unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTr
     interpreter: &InterpretedInstance<F, CTX>,
     pc: u32,
     instret: u64,
+    instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(pc);
     let mut pc_mut = pc;
     let mut instret_mut = instret;
-    terminate_execute_e12_impl(pre_compute, &mut pc_mut, &mut instret_mut, vm_state);
+    terminate_execute_e12_impl(
+        pre_compute,
+        &mut pc_mut,
+        &mut instret_mut,
+        instret_end,
+        vm_state,
+    );
 }
 
 #[cfg(feature = "tco")]
@@ -581,6 +611,7 @@ unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     _: &InterpretedInstance<F, CTX>,
     pc: u32,
     instret: u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     vm_state.vm_state.pc = pc;
@@ -657,7 +688,7 @@ where
     Ctx: ExecutionCtxTrait,
     E: Executor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, vm_state| {
+    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, vm_state| {
         vm_state.exit_code = Err(ExecutionError::Unreachable(*pc));
     };
 
@@ -713,7 +744,7 @@ where
     Ctx: MeteredExecutionCtxTrait,
     E: MeteredExecutor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, vm_state| {
+    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, vm_state| {
         vm_state.exit_code = Err(ExecutionError::Unreachable(*pc));
     };
     repeat_n(&None, get_pc_index(program.pc_base))

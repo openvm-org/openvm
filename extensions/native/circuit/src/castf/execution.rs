@@ -148,6 +148,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &CastFPreCompute = pre_compute.borrow();
@@ -160,6 +161,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<CastFPreCompute> = pre_compute.borrow();

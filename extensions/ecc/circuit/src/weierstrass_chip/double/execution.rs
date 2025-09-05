@@ -222,6 +222,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
     }
 }
 
+#[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -307,6 +308,7 @@ unsafe fn execute_e1_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
@@ -331,6 +333,7 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();

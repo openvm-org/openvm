@@ -93,6 +93,7 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 
@@ -108,6 +109,7 @@ pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
     pc: u32,
     instret: u64,
+    instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

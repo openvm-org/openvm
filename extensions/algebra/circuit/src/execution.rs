@@ -362,6 +362,8 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         )
     }
 }
+
+#[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -402,6 +404,7 @@ unsafe fn execute_e12_impl<
     *instret += 1;
 }
 
+#[inline(always)]
 unsafe fn execute_e12_generic_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -441,6 +444,7 @@ unsafe fn execute_e12_generic_impl<
     *instret += 1;
 }
 
+#[inline(always)]
 unsafe fn execute_e12_setup_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -509,6 +513,7 @@ unsafe fn execute_e1_setup_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
@@ -527,6 +532,7 @@ unsafe fn execute_e2_setup_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
@@ -555,6 +561,7 @@ unsafe fn execute_e1_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
@@ -580,6 +587,7 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
@@ -606,6 +614,7 @@ unsafe fn execute_e1_generic_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
@@ -624,6 +633,7 @@ unsafe fn execute_e2_generic_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();

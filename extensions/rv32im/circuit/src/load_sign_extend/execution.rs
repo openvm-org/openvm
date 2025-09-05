@@ -226,6 +226,7 @@ unsafe fn execute_e1_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
@@ -243,6 +244,7 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = pre_compute.borrow();

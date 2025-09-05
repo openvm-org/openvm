@@ -56,6 +56,7 @@ impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
         Ok(execute_e1_impl::<_, _>)
     }
 }
+
 impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()
@@ -95,6 +96,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
     }
 }
 
+#[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &ShaPreCompute,
     pc: &mut u32,
@@ -145,17 +147,20 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShaPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, true>(pre_compute, pc, instret, vm_state);
 }
+
 #[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
+    _instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShaPreCompute> = pre_compute.borrow();

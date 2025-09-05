@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub struct ExecutionCtx {
-    instret_end: u64,
+    pub instret_end: u64,
 }
 
 impl ExecutionCtx {
@@ -27,8 +27,9 @@ impl ExecutionCtxTrait for ExecutionCtx {
     fn should_suspend<F>(
         _pc: u32,
         instret: u64,
-        vm_state: &mut VmExecState<F, GuestMemory, Self>,
+        instret_end: u64,
+        _vm_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        instret >= vm_state.ctx.instret_end
+        instret >= instret_end
     }
 }
