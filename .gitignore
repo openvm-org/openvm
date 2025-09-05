@@ -33,6 +33,7 @@ guest.syms
 
 # Javascript
 **/node_modules/
+**/dist/
 
 # Profiling
 **/flamegraph.svg

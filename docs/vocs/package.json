@@ -1,29 +1,29 @@
 {
-	"name": "OpenVM Docs",
-	"private": true,
-	"version": "0.0.0",
-	"type": "module",
-	"scripts": {
-		"dev": "vocs dev",
-		"build": "vocs build",
-		"preview": "vocs preview",
-		"vercel-build": "cp -rL docs/snippets/examples docs/snippets/examples-tmp && rm -rf docs/snippets/examples && mv docs/snippets/examples-tmp docs/snippets/examples && cp -rL docs/snippets/examples_sdk docs/snippets/examples_sdk-tmp && rm -rf docs/snippets/examples_sdk && mv docs/snippets/examples_sdk-tmp docs/snippets/examples_sdk && cp -rL docs/snippets/examples_cli docs/snippets/examples_cli-tmp && rm -rf docs/snippets/examples_cli && mv docs/snippets/examples_cli-tmp docs/snippets/examples_cli && cp -rL docs/snippets/examples_sdk_toml docs/snippets/examples_sdk_toml-tmp && rm -rf docs/snippets/examples_sdk_toml && mv docs/snippets/examples_sdk_toml-tmp docs/snippets/examples_sdk_toml && pnpm build"
-	},
-	"dependencies": {
-		"katex": "^0.16.22",
-		"react": "^19.1.1",
-		"react-dom": "^19.1.1",
-		"rehype-katex": "^7.0.1",
-		"remark-math": "^6.0.0",
-		"remark-mdx-disable-explicit-jsx": "^0.1.0",
-		"vocs": "^1.0.13"
-	},
-	"devDependencies": {
-		"@types/node": "^24.3.0",
-		"@types/react": "^19.1.10",
-		"glob": "^11.0.3",
-		"patch-package": "^8.0.0",
-		"postinstall-postinstall": "^2.1.0",
-		"typescript": "^5.9.2"
-	}
+  "name": "@openvm/docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vocs dev",
+    "build": "vocs build",
+    "preview": "vocs preview",
+    "vercel-build": "for SYMLINK_DIR in docs/snippets/examples docs/snippets/examples_cli docs/snippets/examples_sdk docs/snippets/examples_sdk_guest docs/snippets/examples_sdk_toml; do cp -rL $SYMLINK_DIR $SYMLINK_DIR-tmp && rm -rf $SYMLINK_DIR && mv $SYMLINK_DIR-tmp $SYMLINK_DIR; done && pnpm build"
+  },
+  "dependencies": {
+    "katex": "^0.16.22",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "remark-mdx-disable-explicit-jsx": "^0.1.0",
+    "vocs": "^1.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "glob": "^11.0.3",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0",
+    "typescript": "^5.9.2"
+  }
 }

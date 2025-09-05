@@ -236,8 +236,7 @@ __global__ void fri_reduced_opening_tracegen(
         );
         RowSlice row(trace + idx, height);
         if (local_idx == header.length) {
-            auto wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(
-                wl_start
+            auto wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start
             )[header.length - 1];
             step.fill_instruction1_row(row, common_rec, header, wl_rec.result);
         } else if (local_idx == header.length + 1) {
@@ -247,9 +246,9 @@ __global__ void fri_reduced_opening_tracegen(
                 reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start)[local_idx];
             Fp *prev_result = nullptr;
             if (local_idx > 0) {
-                auto prev_wl_rec = reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(
-                    wl_start
-                )[local_idx - 1];
+                auto prev_wl_rec =
+                    reinterpret_cast<FriReducedOpeningWorkloadRowRecord<Fp> *>(wl_start
+                    )[local_idx - 1];
                 prev_result = prev_wl_rec.result;
             }
             Fp *prev_data = header.is_init ? nullptr : reinterpret_cast<Fp *>(prev_data_start);
@@ -274,7 +273,7 @@ extern "C" int _fri_reduced_opening_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     fri_reduced_opening_tracegen<<<grid, block>>>(
         d_trace,
         height,

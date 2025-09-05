@@ -23,6 +23,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   integration-tests:
@@ -70,12 +71,6 @@ jobs:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
-      - name: Check CUDA status and set environment variables
-        if: contains(matrix.platform.runner, 'gpu')
-        run: |
-          nvcc --version
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
@@ -84,4 +79,4 @@ jobs:
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1
+          cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

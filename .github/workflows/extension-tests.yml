@@ -21,6 +21,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   extension-tests:
@@ -74,7 +75,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
-          cargo nextest run ${{ env.CIRCUIT_TEST_FILTER }} --cargo-profile=fast ${{ env.FEATURE_ARGS }} $TEST_THREADS --no-tests=pass
+          cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass
 
         # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
@@ -92,4 +93,4 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-02-14
-          cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+          cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass

@@ -10,6 +10,11 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/docs.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name for S3 bucket"
+        required: true
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -22,7 +27,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=64cpu-linux-arm64
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32
     steps:
       - uses: actions/checkout@v5
       - name: Set up Rust toolchain
@@ -32,7 +37,7 @@ jobs:
         run: cargo check
 
       - name: Build documentation
-        run: cargo +nightly doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
+        run: cargo +nightly doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --features "cuda"
 
       # We only want the index page to display workspace crates, so we build
       # separately and copy over the index as a hack
@@ -62,3 +67,10 @@ jobs:
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
         run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.ref_name }}/
+
+      - name: Sync tagged version S3 bucket
+        working-directory: target/doc
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
+        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.event.inputs.tag }}/

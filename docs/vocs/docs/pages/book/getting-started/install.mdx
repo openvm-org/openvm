@@ -101,7 +101,7 @@ With this version of the CLI, the `prove app` and `prove stark` commands will ut
 
 You will need all of the common prerequisites listed [above](#installation-prerequisites). In addition, you will need to have a machine with
 - Nvidia GPU drivers [installed](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/index.html#)
-- CUDA toolkit [installed](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#)
+- CUDA toolkit [installed](https://docs.nvidia.com/cuda/archive/12.9.0/cuda-installation-guide-linux/index.html)
 
 For machines running Ubuntu 24.04, you can install Nvidia drivers using
 
@@ -121,8 +121,8 @@ nvidia-smi
 CUDA toolkit can be installed using the following command, assuming the keyring above has already been installed:
 
 ```bash [Ubuntu 24.04]
-sudo apt-get install -y cuda-toolkit
-export PATH="/usr/local/cuda/bin:$PATH"
+sudo apt-get install -y cuda-toolkit-12-9
+export PATH="/usr/local/cuda-12.9/bin:$PATH"
 ```
 
 To check that CUDA toolkit is installed, run
@@ -130,13 +130,12 @@ To check that CUDA toolkit is installed, run
 nvcc --version
 ```
 
-The OpenVM CLI has been tested with CUDA toolkit version 12.8, and we recommend using CUDA toolkit version 12.8 or higher.
+The OpenVM CLI has been tested with CUDA toolkit version 12.9, and this is the version we recommend installing. The CLI has **not** yet been tested with CUDA toolkit version 13.0.
 
 Post-installation, ensure that you set the proper [path variables for CUDA](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/#environment-setup):
 ```bash
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.9/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
 ```
-Note that `/usr/local/cuda` is a symlink for the latest version of CUDA installed.
 
 ### Option 1: Install Via Git URL (Recommended)
 

@@ -80,8 +80,8 @@ generates a smart contract verifier for EVM chains. Upon a successful run, the c
 - `halo2/src/[OPENVM_VERSION]/verifier.bytecode.json`
 - `params/`
 
-to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and 
-`OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will 
+to `~/.openvm/`, where `~` is the directory specified by environment variable `$HOME` and
+`OPENVM_VERSION` is the version of OpenVM. Every command that requires these files will
 look for them in this directory. The smart contract verifier is also available via the
 [OpenVM Solidity SDK](/book/writing-apps/solidity-sdk) for released versions of OpenVM.
 
@@ -120,6 +120,45 @@ Note that `cargo openvm setup --evm` downloads auxiliary files for halo2 KZG par
 :::warning
 If the `$HOME` environment variable is not set, this command may fail. This command requires a large amount of compute and memory (~70 GB) and can take ~7mins on a `m6a.16xlarge` instance.
 :::
+
+:::info
+Users who wish to download pre-generated files instead of running `cargo openvm setup --evm` locally may download them using the following script:
+:::
+
+<details>
+<summary> Click here to view the download script</summary>
+```bash
+#!/bin/bash
+
+# Download ~/.openvm setup artifacts
+HALO2_DIR="halo2/src/v1.4"
+mkdir -p ~/.openvm
+mkdir -p ~/.openvm/$HALO2_DIR
+mkdir -p ~/.openvm/$HALO2_DIR/interfaces
+mkdir -p ~/.openvm/params
+
+BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0"
+
+for file in "agg_stark.pk" "agg_stark.vk" "agg_halo2.pk" "root.asm"; do
+    URL="$BASE_URL/$file"
+    LOCAL=~/.openvm/$file
+    wget "$URL" -O "$LOCAL" || curl -L "$URL" -o "$LOCAL"
+done
+
+for file in "Halo2Verifier.sol" "interfaces/IOpenVmHalo2Verifier.sol" "OpenVmHalo2Verifier.sol" "verifier.bytecode.json"; do
+    URL="$BASE_URL/$HALO2_DIR/$file"
+    LOCAL=~/.openvm/$HALO2_DIR/$file
+    wget "$URL" -O "$LOCAL" || curl -L "$URL" -o "$LOCAL"
+done
+
+for k in {10..23}; do
+    file="kzg_bn254_${k}.srs"
+    URL="$BASE_URL/params/$file"
+    LOCAL=~/.openvm/params/$file
+    wget "$URL" -O "$LOCAL" || curl -L "$URL" -o "$LOCAL"
+done
+```
+</details>
 
 ## Proof Generation
 

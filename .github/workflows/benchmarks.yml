@@ -73,7 +73,7 @@ jobs:
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
@@ -178,7 +178,7 @@ jobs:
       ##########################################################################
       # Download individual result .md files from S3 and combine them          #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
@@ -298,7 +298,7 @@ jobs:
       ##########################################################################
       # Update benchmark-results branch with summary                           #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: benchmark-results
 
