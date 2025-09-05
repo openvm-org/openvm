@@ -86,9 +86,9 @@ pub enum StaticProgramError {
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute, pc, instret,
-/// exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data corresponding to a
-/// single instruction. The contents of `pre_compute` are determined from the program code as
-/// specified by the [Executor] and [MeteredExecutor] traits.
+/// instret_end, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
+/// corresponding to a single instruction. The contents of `pre_compute` are determined from the
+/// program code as specified by the [Executor] and [MeteredExecutor] traits.
 pub type ExecuteFunc<F, CTX> = unsafe fn(
     pre_compute: &[u8],
     pc: &mut u32,
@@ -103,7 +103,7 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
-/// - `pc` and `instret` are passed as separate arguments for efficiency
+/// - `pc`, `instret`, `instret_end` are passed as separate arguments for efficiency
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
