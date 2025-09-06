@@ -501,7 +501,7 @@ unsafe fn execute_e12_setup_impl<
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
@@ -525,7 +525,7 @@ unsafe fn execute_e1_setup_impl<
     );
 }
 
-#[create_tco_handler]
+#[create_tco_handler(can_exit = true)]
 #[inline(always)]
 unsafe fn execute_e2_setup_impl<
     F: PrimeField32,

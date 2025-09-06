@@ -835,7 +835,14 @@ fn parse_executor_type(
 pub fn create_tco_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(feature = "tco")]
     {
-        tco::tco_impl(item)
+        // Parse the attribute to check for can_exit flag
+        let can_exit = if _attr.is_empty() {
+            false
+        } else {
+            let attr_str = _attr.to_string();
+            attr_str.contains("can_exit") && attr_str.contains("true")
+        };
+        tco::tco_impl(item, can_exit)
     }
     #[cfg(not(feature = "tco"))]
     {
