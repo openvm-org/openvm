@@ -151,66 +151,77 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &HintStorePreCompute,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
     let num_words = if IS_HINT_STOREW {
         1
     } else {
-        let num_words_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+        let num_words_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
         u32::from_le_bytes(num_words_limbs)
     };
     debug_assert_ne!(num_words, 0);
 
-    if vm_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        vm_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
+    if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        exec_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: *pc });
         return 0;
     }
 
     for word_index in 0..num_words {
         let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-            vm_state
+            exec_state
                 .streams
                 .hint_stream
                 .pop_front()
                 .unwrap()
                 .as_canonical_u32() as u8
         });
-        vm_state.vm_write(
+        exec_state.vm_write(
             RV32_MEMORY_AS,
             mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
             &data,
         );
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
     num_words
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &HintStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const IS_HINT_STOREW: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
-    let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, vm_state);
-    vm_state
+    let height_delta =
+        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, instret, pc, exec_state);
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height_delta);
 }

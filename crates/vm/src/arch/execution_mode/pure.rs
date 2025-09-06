@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub struct ExecutionCtx {
-    instret_end: u64,
+    pub instret_end: u64,
 }
 
 impl ExecutionCtx {
@@ -22,8 +22,14 @@ impl ExecutionCtx {
 impl ExecutionCtxTrait for ExecutionCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
+
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
-        vm_state.instret >= vm_state.ctx.instret_end
+    fn should_suspend<F>(
+        instret: u64,
+        _pc: u32,
+        instret_end: u64,
+        _exec_state: &mut VmExecState<F, GuestMemory, Self>,
+    ) -> bool {
+        instret >= instret_end
     }
 }

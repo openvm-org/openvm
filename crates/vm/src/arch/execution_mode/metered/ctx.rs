@@ -125,11 +125,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64) {
+    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) {
         let threshold = self
             .segmentation_ctx
             .instret_last_segment_check
-            .wrapping_add(self.segmentation_ctx.segment_check_insns);
+            .wrapping_add(segment_check_insns);
         debug_assert!(
             threshold >= self.segmentation_ctx.instret_last_segment_check,
             "overflow in segment check threshold calculation"
@@ -195,23 +195,30 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+    fn should_suspend<F>(
+        instret: u64,
+        _pc: u32,
+        segment_check_insns: u64,
+        exec_state: &mut VmExecState<F, GuestMemory, Self>,
+    ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
-        vm_state.ctx.check_and_segment(vm_state.instret);
+        exec_state
+            .ctx
+            .check_and_segment(instret, segment_check_insns);
         false
     }
 
     #[inline(always)]
-    fn on_terminate<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) {
-        vm_state
+    fn on_terminate<F>(instret: u64, _pc: u32, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+        exec_state
             .ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut vm_state.ctx.trace_heights);
-        vm_state
+            .lazy_update_boundary_heights(&mut exec_state.ctx.trace_heights);
+        exec_state
             .ctx
             .segmentation_ctx
-            .segment(vm_state.instret, &vm_state.ctx.trace_heights);
+            .segment(instret, &exec_state.ctx.trace_heights);
     }
 }
 

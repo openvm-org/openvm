@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -150,22 +153,30 @@ where
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, vm_state);
+    execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
-    let height = execute_e12_impl(&pre_compute.data, vm_state);
-    vm_state
+    let height = execute_e12_impl(&pre_compute.data, instret, pc, exec_state);
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
@@ -173,24 +184,26 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &FriReducedOpeningPreCompute,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
+    let alpha = exec_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
 
-    let [length]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
+    let [length]: [F; 1] = exec_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
     let length = length.as_canonical_u32() as usize;
 
-    let [a_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.a_ptr_ptr);
-    let [b_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.b_ptr_ptr);
+    let [a_ptr]: [F; 1] = exec_state.vm_read(AS::Native as u32, pre_compute.a_ptr_ptr);
+    let [b_ptr]: [F; 1] = exec_state.vm_read(AS::Native as u32, pre_compute.b_ptr_ptr);
 
-    let [is_init_read]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.is_init_ptr);
+    let [is_init_read]: [F; 1] = exec_state.vm_read(AS::Native as u32, pre_compute.is_init_ptr);
     let is_init = is_init_read.as_canonical_u32();
 
-    let [hint_id_f]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.hint_id_ptr);
+    let [hint_id_f]: [F; 1] = exec_state.host_read(AS::Native as u32, pre_compute.hint_id_ptr);
     let hint_id = hint_id_f.as_canonical_u32() as usize;
 
     let data = if is_init == 0 {
-        let hint_steam = &mut vm_state.streams.hint_space[hint_id];
+        let hint_steam = &mut exec_state.streams.hint_space[hint_id];
         hint_steam.drain(0..length).collect()
     } else {
         vec![]
@@ -201,13 +214,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     for i in 0..length {
         let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
         let [a]: [F; 1] = if is_init == 0 {
-            vm_state.vm_write(AS::Native as u32, a_ptr_i, &[data[i]]);
+            exec_state.vm_write(AS::Native as u32, a_ptr_i, &[data[i]]);
             [data[i]]
         } else {
-            vm_state.vm_read(AS::Native as u32, a_ptr_i)
+            exec_state.vm_read(AS::Native as u32, a_ptr_i)
         };
         let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
-        let b = vm_state.vm_read(AS::Native as u32, b_ptr_i);
+        let b = exec_state.vm_read(AS::Native as u32, b_ptr_i);
 
         as_and_bs.push((a, b));
     }
@@ -221,10 +234,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         );
     }
 
-    vm_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
+    exec_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 
     length as u32 + 2
 }

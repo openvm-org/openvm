@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use getset::{CopyGetters, MutGetters};
 use openvm_instructions::exe::SparseMemoryImage;
 use rand::{rngs::StdRng, SeedableRng};
 use tracing::instrument;
@@ -11,14 +12,17 @@ use super::{create_memory_image, ExecutionError, Streams};
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
-    arch::{execution_mode::ExecutionCtxTrait, SystemConfig},
+    arch::{execution_mode::ExecutionCtxTrait, SystemConfig, VmStateMut},
     system::memory::online::GuestMemory,
 };
 
 /// Represents the core state of a VM.
+#[derive(derive_new::new, CopyGetters, MutGetters)]
 pub struct VmState<F, MEM = GuestMemory> {
-    pub instret: u64,
-    pub pc: u32,
+    #[getset(get_copy = "pub", get_mut = "pub")]
+    instret: u64,
+    #[getset(get_copy = "pub", get_mut = "pub")]
+    pc: u32,
     pub memory: MEM,
     pub streams: Streams<F>,
     pub rng: StdRng,
@@ -32,7 +36,7 @@ pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
 impl<F: Clone, MEM> VmState<F, MEM> {
     /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
-    pub fn new(
+    pub fn new_with_defaults(
         instret: u64,
         pc: u32,
         memory: MEM,
@@ -51,6 +55,26 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             metrics: VmMetrics::default(),
         }
     }
+
+    #[inline(always)]
+    pub fn set_instret_and_pc(&mut self, instret: u64, pc: u32) {
+        self.instret = instret;
+        self.pc = pc;
+    }
+
+    #[inline(always)]
+    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
+        VmStateMut {
+            pc: &mut self.pc,
+            memory: &mut self.memory,
+            streams: &mut self.streams,
+            rng: &mut self.rng,
+            custom_pvs: &mut self.custom_pvs,
+            ctx,
+            #[cfg(feature = "metrics")]
+            metrics: &mut self.metrics,
+        }
+    }
 }
 
 impl<F: Clone> VmState<F, GuestMemory> {
@@ -67,7 +91,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         } else {
             0
         };
-        VmState::new(
+        VmState::new_with_defaults(
             0,
             pc_start,
             memory,

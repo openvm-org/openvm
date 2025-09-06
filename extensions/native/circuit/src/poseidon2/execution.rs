@@ -1,4 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
+use std::{
+    borrow::{Borrow, BorrowMut},
+    mem::size_of,
+};
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives::AlignedBytesBorrow;
@@ -297,6 +300,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -304,13 +308,17 @@ unsafe fn execute_pos2_e1_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
-    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, vm_state);
+    execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_pos2_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -318,44 +326,68 @@ unsafe fn execute_pos2_e2_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
-    let height =
-        execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(&pre_compute.data, vm_state);
-    vm_state
+    let height = execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(
+        &pre_compute.data,
+        instret,
+        pc,
+        exec_state,
+    );
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
     // NOTE: using optimistic execution
-    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, vm_state);
+    execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(
+        pre_compute,
+        instret,
+        pc,
+        exec_state,
+    );
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_verify_batch_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
     // NOTE: using optimistic execution
-    let height =
-        execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(&pre_compute.data, vm_state);
-    vm_state
+    let height = execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(
+        &pre_compute.data,
+        instret,
+        pc,
+        exec_state,
+    );
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
@@ -368,23 +400,26 @@ unsafe fn execute_pos2_e12_impl<
     const IS_PERM: bool,
 >(
     pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
 
-    let [output_pointer]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.output_register);
+    let [output_pointer]: [F; 1] =
+        exec_state.vm_read(AS::Native as u32, pre_compute.output_register);
     let [input_pointer_1]: [F; 1] =
-        vm_state.vm_read(AS::Native as u32, pre_compute.input_register_1);
+        exec_state.vm_read(AS::Native as u32, pre_compute.input_register_1);
     let [input_pointer_2] = if IS_PERM {
         [input_pointer_1 + F::from_canonical_usize(CHUNK)]
     } else {
-        vm_state.vm_read(AS::Native as u32, pre_compute.input_register_2)
+        exec_state.vm_read(AS::Native as u32, pre_compute.input_register_2)
     };
 
     let data_1: [F; CHUNK] =
-        vm_state.vm_read(AS::Native as u32, input_pointer_1.as_canonical_u32());
+        exec_state.vm_read(AS::Native as u32, input_pointer_1.as_canonical_u32());
     let data_2: [F; CHUNK] =
-        vm_state.vm_read(AS::Native as u32, input_pointer_2.as_canonical_u32());
+        exec_state.vm_read(AS::Native as u32, input_pointer_2.as_canonical_u32());
 
     let p2_input = std::array::from_fn(|i| {
         if i < CHUNK {
@@ -396,21 +431,21 @@ unsafe fn execute_pos2_e12_impl<
     let output = subchip.permute(p2_input);
     let output_pointer_u32 = output_pointer.as_canonical_u32();
 
-    vm_state.vm_write::<F, CHUNK>(
+    exec_state.vm_write::<F, CHUNK>(
         AS::Native as u32,
         output_pointer_u32,
         &std::array::from_fn(|i| output[i]),
     );
     if IS_PERM {
-        vm_state.vm_write::<F, CHUNK>(
+        exec_state.vm_write::<F, CHUNK>(
             AS::Native as u32,
             output_pointer_u32 + CHUNK as u32,
             &std::array::from_fn(|i| output[i + CHUNK]),
         );
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 
     1
 }
@@ -423,29 +458,34 @@ unsafe fn execute_verify_batch_e12_impl<
     const OPTIMISTIC: bool,
 >(
     pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS>,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let subchip = pre_compute.subchip;
     let opened_element_size = pre_compute.opened_element_size;
 
-    let [proof_id]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.proof_id_ptr);
-    let [dim_base_pointer]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.dim_register);
+    let [proof_id]: [F; 1] = exec_state.host_read(AS::Native as u32, pre_compute.proof_id_ptr);
+    let [dim_base_pointer]: [F; 1] =
+        exec_state.vm_read(AS::Native as u32, pre_compute.dim_register);
     let dim_base_pointer_u32 = dim_base_pointer.as_canonical_u32();
     let [opened_base_pointer]: [F; 1] =
-        vm_state.vm_read(AS::Native as u32, pre_compute.opened_register);
+        exec_state.vm_read(AS::Native as u32, pre_compute.opened_register);
     let opened_base_pointer_u32 = opened_base_pointer.as_canonical_u32();
     let [opened_length]: [F; 1] =
-        vm_state.vm_read(AS::Native as u32, pre_compute.opened_length_register);
+        exec_state.vm_read(AS::Native as u32, pre_compute.opened_length_register);
     let [index_base_pointer]: [F; 1] =
-        vm_state.vm_read(AS::Native as u32, pre_compute.index_register);
+        exec_state.vm_read(AS::Native as u32, pre_compute.index_register);
     let index_base_pointer_u32 = index_base_pointer.as_canonical_u32();
-    let [commit_pointer]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.commit_register);
-    let commit: [F; CHUNK] = vm_state.vm_read(AS::Native as u32, commit_pointer.as_canonical_u32());
+    let [commit_pointer]: [F; 1] =
+        exec_state.vm_read(AS::Native as u32, pre_compute.commit_register);
+    let commit: [F; CHUNK] =
+        exec_state.vm_read(AS::Native as u32, commit_pointer.as_canonical_u32());
 
     let opened_length = opened_length.as_canonical_u32() as usize;
 
     let initial_log_height = {
-        let [height]: [F; 1] = vm_state.host_read(AS::Native as u32, dim_base_pointer_u32);
+        let [height]: [F; 1] = exec_state.host_read(AS::Native as u32, dim_base_pointer_u32);
         height.as_canonical_u32()
     };
 
@@ -457,7 +497,7 @@ unsafe fn execute_verify_batch_e12_impl<
     let mut root = [F::ZERO; CHUNK];
     let sibling_proof: Vec<[F; CHUNK]> = {
         let proof_idx = proof_id.as_canonical_u32() as usize;
-        vm_state.streams.hint_space[proof_idx]
+        exec_state.streams.hint_space[proof_idx]
             .par_chunks(CHUNK)
             .map(|c| c.try_into().unwrap())
             .collect()
@@ -465,7 +505,7 @@ unsafe fn execute_verify_batch_e12_impl<
 
     while log_height >= 0 {
         if opened_index < opened_length
-            && vm_state.host_read::<F, 1>(
+            && exec_state.host_read::<F, 1>(
                 AS::Native as u32,
                 dim_base_pointer_u32 + opened_index as u32,
             )[0] == F::from_canonical_u32(log_height as u32)
@@ -488,7 +528,7 @@ unsafe fn execute_verify_batch_e12_impl<
                         } else {
                             opened_index += 1;
                             if opened_index == opened_length
-                                || vm_state.host_read::<F, 1>(
+                                || exec_state.host_read::<F, 1>(
                                     AS::Native as u32,
                                     dim_base_pointer_u32 + opened_index as u32,
                                 )[0] != F::from_canonical_u32(log_height as u32)
@@ -496,7 +536,7 @@ unsafe fn execute_verify_batch_e12_impl<
                                 break;
                             }
                         }
-                        let [new_row_pointer, row_len]: [F; 2] = vm_state.vm_read(
+                        let [new_row_pointer, row_len]: [F; 2] = exec_state.vm_read(
                             AS::Native as u32,
                             opened_base_pointer_u32 + 2 * opened_index as u32,
                         );
@@ -504,7 +544,7 @@ unsafe fn execute_verify_batch_e12_impl<
                         row_end = row_pointer
                             + (opened_element_size * row_len).as_canonical_u32() as usize;
                     }
-                    let [value]: [F; 1] = vm_state.vm_read(AS::Native as u32, row_pointer as u32);
+                    let [value]: [F; 1] = exec_state.vm_read(AS::Native as u32, row_pointer as u32);
                     cells_len += 1;
                     *chunk_elem = value;
                     row_pointer += 1;
@@ -522,12 +562,12 @@ unsafe fn execute_verify_batch_e12_impl<
             }
 
             let final_opened_index = opened_index - 1;
-            let [height_check]: [F; 1] = vm_state.host_read(
+            let [height_check]: [F; 1] = exec_state.host_read(
                 AS::Native as u32,
                 dim_base_pointer_u32 + initial_opened_index as u32,
             );
             assert_eq!(height_check, F::from_canonical_u32(log_height as u32));
-            let [height_check]: [F; 1] = vm_state.host_read(
+            let [height_check]: [F; 1] = exec_state.host_read(
                 AS::Native as u32,
                 dim_base_pointer_u32 + final_opened_index as u32,
             );
@@ -548,7 +588,7 @@ unsafe fn execute_verify_batch_e12_impl<
         }
 
         if log_height != 0 {
-            let [sibling_is_on_right]: [F; 1] = vm_state.vm_read(
+            let [sibling_is_on_right]: [F; 1] = exec_state.vm_read(
                 AS::Native as u32,
                 index_base_pointer_u32 + sibling_index as u32,
             );
@@ -573,8 +613,8 @@ unsafe fn execute_verify_batch_e12_impl<
         assert_eq!(commit, root);
     }
 
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
 
     height
 }
