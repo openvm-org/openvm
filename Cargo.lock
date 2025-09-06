@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#c20af224d881df929268ba24e191e9a29a6b5ca8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt-const-call-once#94be702d92019f5151ddb90094d3071e0242738d"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#c20af224d881df929268ba24e191e9a29a6b5ca8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt-const-call-once#94be702d92019f5151ddb90094d3071e0242738d"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#c20af224d881df929268ba24e191e9a29a6b5ca8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt-const-call-once#94be702d92019f5151ddb90094d3071e0242738d"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6243,7 +6243,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#c20af224d881df929268ba24e191e9a29a6b5ca8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt-const-call-once#94be702d92019f5151ddb90094d3071e0242738d"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6273,7 +6273,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#c20af224d881df929268ba24e191e9a29a6b5ca8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt-const-call-once#94be702d92019f5151ddb90094d3071e0242738d"
 dependencies = [
  "dashmap",
  "derivative",
