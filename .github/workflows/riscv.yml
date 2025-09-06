@@ -55,6 +55,7 @@ jobs:
         run: |
           nvcc --version
           echo "FEATURE_ARGS=--features=cuda,touchemall" >> $GITHUB_ENV
+          echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
       - name: Download and install risc64-elf-gcc
         if: contains(matrix.platform.image, 'x64')
