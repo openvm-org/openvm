@@ -74,7 +74,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     {
         use std::iter::zip;
 
-        let pc = state.pc;
+        let pc = state.pc();
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
 

@@ -514,13 +514,6 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
             exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
         }
     }
-    if exec_state
-        .exit_code
-        .as_ref()
-        .is_ok_and(|exit_code| exit_code.is_some())
-    {
-        Ctx::on_terminate(pc, instret, exec_state);
-    }
     // Update the execution state with the final PC and instruction count
     exec_state.set_instret_and_pc(instret, pc);
 }
