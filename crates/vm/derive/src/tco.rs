@@ -30,9 +30,9 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     // Build the function call with all the generics
     let generic_args = build_generic_args(generics);
     let execute_call = if generic_args.is_empty() {
-        quote! { #fn_name(pre_compute, &mut pc, &mut instret, instret_end, exec_state) }
+        quote! { #fn_name(pre_compute, &mut pc, &mut instret, arg, exec_state) }
     } else {
-        quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut pc, &mut instret, instret_end, exec_state) }
+        quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut pc, &mut instret, arg, exec_state) }
     };
 
     // Generate the TCO handler function
@@ -42,7 +42,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             interpreter: &::openvm_circuit::arch::interpreter::InterpretedInstance<#f_type, #ctx_type>,
             mut pc: u32,
             mut instret: u64,
-            instret_end: u64,
+            arg: u64,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,
@@ -60,7 +60,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
                 exec_state.set_instret_and_pc(instret, pc);
                 return;
             }
-            if ::core::intrinsics::unlikely(#ctx_type::should_suspend(pc, instret, instret_end, exec_state)) {
+            if ::core::intrinsics::unlikely(#ctx_type::should_suspend(pc, instret, arg, exec_state)) {
                 exec_state.set_instret_and_pc(instret, pc);
                 return;
             }
@@ -76,7 +76,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             // NOTE: `become` is a keyword that requires Rust Nightly.
             // It is part of the explicit tail calls RFC: <https://github.com/rust-lang/rust/issues/112788>
             // which is still incomplete.
-            become next_handler(interpreter, pc, instret, instret_end, exec_state)
+            become next_handler(interpreter, pc, instret, arg, exec_state)
         }
     };
 

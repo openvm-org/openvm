@@ -86,14 +86,18 @@ pub enum StaticProgramError {
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute, pc, instret,
-/// instret_end, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
+/// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
+/// `arg` is a runtime constant that we want to keep in register:
+/// - For pure execution it is `instret_end`
+/// - For metered cost execution it is the `max_execution_cost`
+/// - For metered execution it is `segment_check_insns`
 pub type ExecuteFunc<F, CTX> = unsafe fn(
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
-    instret_end: u64,
+    arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 
@@ -104,12 +108,17 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
 /// - `pc`, `instret`, `instret_end` are passed as separate arguments for efficiency
+///
+/// `arg` is a runtime constant that we want to keep in register:
+/// - For pure execution it is `instret_end`
+/// - For metered cost execution it is the `max_execution_cost`
+/// - For metered execution it is `segment_check_insns`
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
     pc: u32,
     instret: u64,
-    instret_end: u64,
+    arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

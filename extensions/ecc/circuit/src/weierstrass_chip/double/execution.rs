@@ -333,7 +333,7 @@ unsafe fn execute_e2_impl<
     pre_compute: &[u8],
     pc: &mut u32,
     instret: &mut u64,
-    _instret_end: u64,
+    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();

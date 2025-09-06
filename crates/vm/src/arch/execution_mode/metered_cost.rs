@@ -127,10 +127,10 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     fn should_suspend<F>(
         _pc: u32,
         _instret: u64,
-        _instret_end: u64,
+        max_execution_cost: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        exec_state.ctx.cost > exec_state.ctx.max_execution_cost
+        exec_state.ctx.cost > max_execution_cost
     }
 }
 

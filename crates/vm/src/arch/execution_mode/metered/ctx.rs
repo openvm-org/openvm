@@ -125,11 +125,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64) {
+    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) {
         let threshold = self
             .segmentation_ctx
             .instret_last_segment_check
-            .wrapping_add(self.segmentation_ctx.segment_check_insns);
+            .wrapping_add(segment_check_insns);
         debug_assert!(
             threshold >= self.segmentation_ctx.instret_last_segment_check,
             "overflow in segment check threshold calculation"
@@ -198,12 +198,14 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     fn should_suspend<F>(
         _pc: u32,
         instret: u64,
-        _instret_end: u64,
+        segment_check_insns: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
-        exec_state.ctx.check_and_segment(instret);
+        exec_state
+            .ctx
+            .check_and_segment(instret, segment_check_insns);
         false
     }
 

@@ -16,7 +16,7 @@ pub trait ExecutionCtxTrait: Sized {
     fn should_suspend<F>(
         pc: u32,
         instret: u64,
-        _instret_end: u64,
+        _arg: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool;
 
