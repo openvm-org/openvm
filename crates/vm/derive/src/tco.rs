@@ -57,20 +57,17 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
             #execute_call;
 
             if ::core::intrinsics::unlikely(exec_state.exit_code.is_err()) {
-                exec_state.pc = pc;
-                exec_state.instret = instret;
+                exec_state.set_instret_and_pc(instret, pc);
                 return;
             }
             if ::core::intrinsics::unlikely(#ctx_type::should_suspend(pc, instret, instret_end, exec_state)) {
-                exec_state.pc = pc;
-                exec_state.instret = instret;
+                exec_state.set_instret_and_pc(instret, pc);
                 return;
             }
 
             let next_handler = interpreter.get_handler(pc);
             if ::core::intrinsics::unlikely(next_handler.is_none()) {
-                exec_state.pc = pc;
-                exec_state.instret = instret;
+                exec_state.set_instret_and_pc(instret, pc);
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
                 return;
             }

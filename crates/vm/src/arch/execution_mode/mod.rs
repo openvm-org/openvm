@@ -20,7 +20,12 @@ pub trait ExecutionCtxTrait: Sized {
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool;
 
-    fn on_terminate<F>(_exec_state: &mut VmExecState<F, GuestMemory, Self>) {}
+    fn on_terminate<F>(
+        _pc: u32,
+        _instret: u64,
+        _exec_state: &mut VmExecState<F, GuestMemory, Self>,
+    ) {
+    }
 }
 
 pub trait MeteredExecutionCtxTrait: ExecutionCtxTrait {

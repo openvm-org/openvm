@@ -131,7 +131,7 @@ where
             num_insns,
             trace_heights,
         } = segment;
-        assert_eq!(state.as_ref().unwrap().instret, instret_start);
+        assert_eq!(state.as_ref().unwrap().instret(), instret_start);
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {

@@ -84,26 +84,32 @@ macro_rules! run {
         #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         #[cfg(feature = "metrics")]
-        let start_instret = $exec_state.instret;
+        let start_instret = $exec_state.instret();
 
         info_span!($span).in_scope(|| -> Result<(), ExecutionError> {
             // SAFETY:
             // - it is the responsibility of each Executor to ensure that pre_compute_insts contains
             //   valid function pointers and pre-computed data
             #[cfg(not(feature = "tco"))]
-            unsafe {
-                tracing::debug!("execute_trampoline");
-                execute_trampoline(
-                    $instret_end,
-                    &mut $exec_state,
-                    &$interpreter.pre_compute_insns,
-                );
+            {
+                let pc = $exec_state.pc();
+                let instret = $exec_state.instret();
+                unsafe {
+                    tracing::debug!("execute_trampoline");
+                    execute_trampoline(
+                        pc,
+                        instret,
+                        $instret_end,
+                        &mut $exec_state,
+                        &$interpreter.pre_compute_insns,
+                    );
+                }
             }
             #[cfg(feature = "tco")]
             {
                 tracing::debug!("execute_tco");
-                let pc = $exec_state.pc;
-                let instret = $exec_state.instret;
+                let pc = $exec_state.pc();
+                let instret = $exec_state.instret();
                 let handler = $interpreter
                     .get_handler(pc)
                     .ok_or(ExecutionError::PcOutOfBounds(pc))?;
@@ -114,14 +120,6 @@ macro_rules! run {
                 unsafe {
                     handler($interpreter, pc, instret, $instret_end, &mut $exec_state);
                 }
-
-                if $exec_state
-                    .exit_code
-                    .as_ref()
-                    .is_ok_and(|exit_code| exit_code.is_some())
-                {
-                    $ctx::on_terminate(&mut $exec_state);
-                }
             }
             Ok(())
         })?;
@@ -129,7 +127,7 @@ macro_rules! run {
         #[cfg(feature = "metrics")]
         {
             let elapsed = start.elapsed();
-            let insns = $exec_state.instret - start_instret;
+            let insns = $exec_state.instret() - start_instret;
             tracing::info!("instructions_executed={insns}");
             metrics::counter!(concat!($span, "_insns")).absolute(insns);
             metrics::gauge!(concat!($span, "_insn_mi/s"))
@@ -486,6 +484,8 @@ fn split_pre_compute_buf<'a, F>(
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[inline(always)]
 unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
+    mut pc: u32,
+    mut instret: u64,
     instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
@@ -495,12 +495,10 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        let mut pc = exec_state.pc;
-        let mut instret = exec_state.instret;
         if Ctx::should_suspend(pc, instret, instret_end, exec_state) {
             break;
         }
-        let pc_index = get_pc_index(exec_state.pc);
+        let pc_index = get_pc_index(pc);
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
             unsafe {
@@ -512,10 +510,8 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
                     exec_state,
                 )
             };
-            exec_state.pc = pc;
-            exec_state.instret = instret;
         } else {
-            exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(exec_state.pc));
+            exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
         }
     }
     if exec_state
@@ -523,8 +519,10 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_some())
     {
-        Ctx::on_terminate(exec_state);
+        Ctx::on_terminate(pc, instret, exec_state);
     }
+    // Update the execution state with the final PC and instruction count
+    exec_state.set_instret_and_pc(instret, pc);
 }
 
 #[inline(always)]
@@ -582,8 +580,8 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
     *instret += 1;
     exec_state.exit_code = Ok(Some(pre_compute.exit_code));
-    exec_state.vm_state.pc = *pc;
-    exec_state.vm_state.instret = *instret;
+    exec_state.set_instret_and_pc(*instret, *pc);
+    CTX::on_terminate(*pc, *instret, exec_state);
 }
 
 #[cfg(feature = "tco")]
@@ -606,8 +604,7 @@ unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    exec_state.vm_state.pc = pc;
-    exec_state.vm_state.instret = instret;
+    exec_state.set_instret_and_pc(instret, pc);
     exec_state.exit_code = Err(ExecutionError::Unreachable(pc));
 }
 

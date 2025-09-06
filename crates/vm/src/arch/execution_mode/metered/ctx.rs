@@ -208,7 +208,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+    fn on_terminate<F>(_pc: u32, instret: u64, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
         exec_state
             .ctx
             .memory_ctx
@@ -216,7 +216,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .segmentation_ctx
-            .segment(exec_state.instret, &exec_state.ctx.trace_heights);
+            .segment(instret, &exec_state.ctx.trace_heights);
     }
 }
 
