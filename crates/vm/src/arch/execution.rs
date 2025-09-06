@@ -85,7 +85,7 @@ pub enum StaticProgramError {
     ExecutorNotFound { opcode: VmOpcode },
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, pc, instret,
+/// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
 /// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
@@ -95,8 +95,8 @@ pub enum StaticProgramError {
 /// - For metered execution it is `segment_check_insns`
 pub type ExecuteFunc<F, CTX> = unsafe fn(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
@@ -116,8 +116,8 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
-    pc: u32,
     instret: u64,
+    pc: u32,
     arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );

@@ -132,8 +132,8 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MultiPreCompute,
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
@@ -153,21 +153,21 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MultiPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, pc, instret, exec_state);
+    execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -175,5 +175,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, pc, instret, exec_state);
+    execute_e12_impl(&pre_compute.data, instret, pc, exec_state);
 }

@@ -25,8 +25,8 @@ impl ExecutionCtxTrait for ExecutionCtx {
 
     #[inline(always)]
     fn should_suspend<F>(
-        _pc: u32,
         instret: u64,
+        _pc: u32,
         instret_end: u64,
         _exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {

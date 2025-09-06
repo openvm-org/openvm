@@ -56,11 +56,13 @@ impl<F: Clone, MEM> VmState<F, MEM> {
         }
     }
 
+    #[inline(always)]
     pub fn set_instret_and_pc(&mut self, instret: u64, pc: u32) {
         self.instret = instret;
         self.pc = pc;
     }
 
+    #[inline(always)]
     pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,

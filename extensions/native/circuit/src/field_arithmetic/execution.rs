@@ -228,8 +228,8 @@ unsafe fn execute_e12_impl<
     const OPCODE: u8,
 >(
     pre_compute: &FieldArithmeticPreCompute,
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read values based on the adapter logic
@@ -278,13 +278,13 @@ unsafe fn execute_e1_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, pc, instret, exec_state);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
@@ -297,8 +297,8 @@ unsafe fn execute_e2_impl<
     const OPCODE: u8,
 >(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -308,8 +308,8 @@ unsafe fn execute_e2_impl<
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(
         &pre_compute.data,
-        pc,
         instret,
+        pc,
         exec_state,
     );
 }

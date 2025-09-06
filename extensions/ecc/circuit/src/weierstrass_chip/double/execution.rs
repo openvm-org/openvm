@@ -232,8 +232,8 @@ unsafe fn execute_e12_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &EcDoublePreCompute,
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
@@ -306,16 +306,16 @@ unsafe fn execute_e1_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         pre_compute,
-        pc,
         instret,
+        pc,
         exec_state,
     );
 }
@@ -331,8 +331,8 @@ unsafe fn execute_e2_impl<
     const IS_SETUP: bool,
 >(
     pre_compute: &[u8],
-    pc: &mut u32,
     instret: &mut u64,
+    pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
@@ -342,8 +342,8 @@ unsafe fn execute_e2_impl<
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(
         &e2_pre_compute.data,
-        pc,
         instret,
+        pc,
         exec_state,
     );
 }

@@ -196,8 +196,8 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
 
     #[inline(always)]
     fn should_suspend<F>(
-        _pc: u32,
         instret: u64,
+        _pc: u32,
         segment_check_insns: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
@@ -210,7 +210,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn on_terminate<F>(_pc: u32, instret: u64, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+    fn on_terminate<F>(instret: u64, _pc: u32, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
         exec_state
             .ctx
             .memory_ctx
