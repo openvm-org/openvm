@@ -28,7 +28,7 @@ impl ExecutionCtxTrait for ExecutionCtx {
         _pc: u32,
         instret: u64,
         instret_end: u64,
-        _vm_state: &mut VmExecState<F, GuestMemory, Self>,
+        _exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
         instret >= instret_end
     }

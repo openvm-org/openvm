@@ -230,18 +230,18 @@ unsafe fn execute_e12_impl<
     pre_compute: &FieldArithmeticPreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read values based on the adapter logic
     let b_val = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(pre_compute.e, pre_compute.b_or_imm)[0]
+        exec_state.vm_read::<F, 1>(pre_compute.e, pre_compute.b_or_imm)[0]
     };
     let c_val = if B_IS_IMM {
         transmute_u32_to_field(&pre_compute.c_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(pre_compute.f, pre_compute.c_or_imm)[0]
+        exec_state.vm_read::<F, 1>(pre_compute.f, pre_compute.c_or_imm)[0]
     };
 
     let a_val = match OPCODE {
@@ -251,7 +251,7 @@ unsafe fn execute_e12_impl<
         3 => {
             // DIV
             if c_val.is_zero() {
-                vm_state.exit_code = Err(ExecutionError::Fail {
+                exec_state.exit_code = Err(ExecutionError::Fail {
                     pc: *pc,
                     msg: "DivF divide by zero",
                 });
@@ -262,7 +262,7 @@ unsafe fn execute_e12_impl<
         _ => panic!("Invalid field arithmetic opcode: {OPCODE}"),
     };
 
-    vm_state.vm_write::<F, 1>(AS::Native as u32, pre_compute.a, &[a_val]);
+    exec_state.vm_write::<F, 1>(AS::Native as u32, pre_compute.a, &[a_val]);
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
@@ -281,10 +281,10 @@ unsafe fn execute_e1_impl<
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, pc, instret, vm_state);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -300,16 +300,16 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(
         &pre_compute.data,
         pc,
         instret,
-        vm_state,
+        exec_state,
     );
 }

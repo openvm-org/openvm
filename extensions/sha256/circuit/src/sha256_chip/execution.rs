@@ -101,18 +101,18 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     pre_compute: &ShaPreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let dst = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
-    let src = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
-    let len = vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+    let dst = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.a as u32);
+    let src = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+    let len = exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
     let dst_u32 = u32::from_le_bytes(dst);
     let src_u32 = u32::from_le_bytes(src);
     let len_u32 = u32::from_le_bytes(len);
 
     let (output, height) = if IS_E1 {
         // SAFETY: RV32_MEMORY_AS is memory address space of type u8
-        let message = vm_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
+        let message = exec_state.vm_read_slice(RV32_MEMORY_AS, src_u32, len_u32 as usize);
         let output = sha256_solve(message);
         (output, 0)
     } else {
@@ -122,7 +122,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
             // Reads happen on the first 4 rows of each block
             for row in 0..SHA256_NUM_READ_ROWS {
                 let read_idx = block_idx * SHA256_NUM_READ_ROWS + row;
-                let row_input: [u8; SHA256_READ_SIZE] = vm_state.vm_read(
+                let row_input: [u8; SHA256_READ_SIZE] = exec_state.vm_read(
                     RV32_MEMORY_AS,
                     src_u32 + (read_idx * SHA256_READ_SIZE) as u32,
                 );
@@ -133,7 +133,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
         let height = num_blocks * SHA256_ROWS_PER_BLOCK as u32;
         (output, height)
     };
-    vm_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
+    exec_state.vm_write(RV32_MEMORY_AS, dst_u32, &output);
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
@@ -148,10 +148,10 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShaPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, true>(pre_compute, pc, instret, vm_state);
+    execute_e12_impl::<F, CTX, true>(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -161,11 +161,11 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShaPreCompute> = pre_compute.borrow();
-    let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, pc, instret, vm_state);
-    vm_state
+    let height = execute_e12_impl::<F, CTX, false>(&pre_compute.data, pc, instret, exec_state);
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }

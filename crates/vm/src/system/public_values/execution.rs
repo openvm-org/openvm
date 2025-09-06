@@ -165,24 +165,24 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
     pre_compute: &PublicValuesPreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
     let value = if B_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
+        exec_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
     };
     let index = if C_IS_IMM {
         transmute_u32_to_field(&pre_compute.c_or_imm)
     } else {
-        vm_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.c_or_imm)[0]
+        exec_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.c_or_imm)[0]
     };
 
     let idx: usize = index.as_canonical_u32() as usize;
     {
-        let custom_pvs = &mut vm_state.vm_state.custom_pvs;
+        let custom_pvs = &mut exec_state.vm_state.custom_pvs;
 
         if custom_pvs[idx].is_none() {
             custom_pvs[idx] = Some(value);
@@ -203,12 +203,12 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
     let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, pc, instret, vm_state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -218,13 +218,13 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: MeteredExecutionCtxTrait,
 {
     let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, pc, instret, vm_state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, pc, instret, exec_state);
 }

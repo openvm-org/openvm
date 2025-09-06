@@ -635,7 +635,7 @@ unsafe fn execute_e1_impl<
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = pre_compute.borrow();
 
@@ -643,7 +643,7 @@ unsafe fn execute_e1_impl<
         pre_compute,
         pc,
         instret,
-        vm_state,
+        exec_state,
     );
 }
 
@@ -661,18 +661,18 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
         pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
         &pre_compute.data,
         pc,
         instret,
-        vm_state,
+        exec_state,
     );
 }
 
@@ -688,18 +688,18 @@ unsafe fn execute_e12_impl<
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
-        .map(|addr| u32::from_le_bytes(vm_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+        .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
 
     // Read memory values
     let [b, c]: [[u8; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + TOTAL_READ_SIZE - 1 < (1 << POINTER_MAX_BITS));
         from_fn::<_, NUM_LANES, _>(|i| {
-            vm_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
+            exec_state.vm_read::<_, LANE_SIZE>(RV32_MEMORY_AS, address + (i * LANE_SIZE) as u32)
         })
         .concat()
         .try_into()
@@ -719,7 +719,7 @@ unsafe fn execute_e12_impl<
     write_data[0] = (b == c) as u8;
 
     // Write result to register
-    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
+    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &write_data);
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;

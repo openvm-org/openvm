@@ -158,10 +158,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     pre_compute: &FieldExtensionPreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let y: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
-    let z: [F; EXT_DEG] = vm_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.c);
+    let y: [F; EXT_DEG] = exec_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
+    let z: [F; EXT_DEG] = exec_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.c);
 
     let x = match OPCODE {
         0 => FieldExtension::add(y, z),      // FE4ADD
@@ -171,7 +171,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
         _ => panic!("Invalid field extension opcode: {OPCODE}"),
     };
 
-    vm_state.vm_write(AS::Native as u32, pre_compute.a, &x);
+    exec_state.vm_write(AS::Native as u32, pre_compute.a, &x);
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
@@ -184,10 +184,10 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE:
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExtensionPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OPCODE>(pre_compute, pc, instret, vm_state);
+    execute_e12_impl::<F, CTX, OPCODE>(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -197,11 +197,11 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExtensionPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OPCODE>(&pre_compute.data, pc, instret, vm_state);
+    execute_e12_impl::<F, CTX, OPCODE>(&pre_compute.data, pc, instret, exec_state);
 }

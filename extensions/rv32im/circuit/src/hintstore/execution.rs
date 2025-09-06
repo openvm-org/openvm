@@ -153,34 +153,34 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     pre_compute: &HintStorePreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
-    let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
     let num_words = if IS_HINT_STOREW {
         1
     } else {
-        let num_words_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+        let num_words_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
         u32::from_le_bytes(num_words_limbs)
     };
     debug_assert_ne!(num_words, 0);
 
-    if vm_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        vm_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: *pc });
+    if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
+        exec_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: *pc });
         return 0;
     }
 
     for word_index in 0..num_words {
         let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-            vm_state
+            exec_state
                 .streams
                 .hint_stream
                 .pop_front()
                 .unwrap()
                 .as_canonical_u32() as u8
         });
-        vm_state.vm_write(
+        exec_state.vm_write(
             RV32_MEMORY_AS,
             mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
             &data,
@@ -199,10 +199,10 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &HintStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, pc, instret, vm_state);
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -216,12 +216,12 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
     let height_delta =
-        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, pc, instret, vm_state);
-    vm_state
+        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, pc, instret, exec_state);
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height_delta);
 }

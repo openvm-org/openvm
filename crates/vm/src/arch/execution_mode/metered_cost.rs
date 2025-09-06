@@ -128,9 +128,9 @@ impl ExecutionCtxTrait for MeteredCostCtx {
         _pc: u32,
         _instret: u64,
         _instret_end: u64,
-        vm_state: &mut VmExecState<F, GuestMemory, Self>,
+        exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        vm_state.ctx.cost > vm_state.ctx.max_execution_cost
+        exec_state.ctx.cost > exec_state.ctx.max_execution_cost
     }
 }
 

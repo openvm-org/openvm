@@ -487,20 +487,20 @@ fn split_pre_compute_buf<'a, F>(
 #[inline(always)]
 unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, Ctx>,
+    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
     fn_ptrs: &[PreComputeInstruction<F, Ctx>],
 ) {
-    while vm_state
+    while exec_state
         .exit_code
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        let mut pc = vm_state.pc;
-        let mut instret = vm_state.instret;
-        if Ctx::should_suspend(pc, instret, instret_end, vm_state) {
+        let mut pc = exec_state.pc;
+        let mut instret = exec_state.instret;
+        if Ctx::should_suspend(pc, instret, instret_end, exec_state) {
             break;
         }
-        let pc_index = get_pc_index(vm_state.pc);
+        let pc_index = get_pc_index(exec_state.pc);
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
             unsafe {
@@ -509,21 +509,21 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
                     &mut pc,
                     &mut instret,
                     instret_end,
-                    vm_state,
+                    exec_state,
                 )
             };
-            vm_state.pc = pc;
-            vm_state.instret = instret;
+            exec_state.pc = pc;
+            exec_state.instret = instret;
         } else {
-            vm_state.exit_code = Err(ExecutionError::PcOutOfBounds(vm_state.pc));
+            exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(exec_state.pc));
         }
     }
-    if vm_state
+    if exec_state
         .exit_code
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_some())
     {
-        Ctx::on_terminate(vm_state);
+        Ctx::on_terminate(exec_state);
     }
 }
 
@@ -577,13 +577,13 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute = pre_compute.borrow();
     *instret += 1;
-    vm_state.exit_code = Ok(Some(pre_compute.exit_code));
-    vm_state.vm_state.pc = *pc;
-    vm_state.vm_state.instret = *instret;
+    exec_state.exit_code = Ok(Some(pre_compute.exit_code));
+    exec_state.vm_state.pc = *pc;
+    exec_state.vm_state.instret = *instret;
 }
 
 #[cfg(feature = "tco")]
@@ -592,10 +592,10 @@ unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTr
     mut pc: u32,
     mut instret: u64,
     instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(pc);
-    terminate_execute_e12_impl(pre_compute, &mut pc, &mut instret, instret_end, vm_state);
+    terminate_execute_e12_impl(pre_compute, &mut pc, &mut instret, instret_end, exec_state);
 }
 
 #[cfg(feature = "tco")]
@@ -604,11 +604,11 @@ unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     pc: u32,
     instret: u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    vm_state.vm_state.pc = pc;
-    vm_state.vm_state.instret = instret;
-    vm_state.exit_code = Err(ExecutionError::Unreachable(pc));
+    exec_state.vm_state.pc = pc;
+    exec_state.vm_state.instret = instret;
+    exec_state.exit_code = Err(ExecutionError::Unreachable(pc));
 }
 
 fn get_pre_compute_max_size<F, E: Executor<F>>(
@@ -680,8 +680,8 @@ where
     Ctx: ExecutionCtxTrait,
     E: Executor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, vm_state| {
-        vm_state.exit_code = Err(ExecutionError::Unreachable(*pc));
+    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, exec_state| {
+        exec_state.exit_code = Err(ExecutionError::Unreachable(*pc));
     };
 
     repeat_n(&None, get_pc_index(program.pc_base))
@@ -736,8 +736,8 @@ where
     Ctx: MeteredExecutionCtxTrait,
     E: MeteredExecutor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, vm_state| {
-        vm_state.exit_code = Err(ExecutionError::Unreachable(*pc));
+    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, pc, _, _, exec_state| {
+        exec_state.exit_code = Err(ExecutionError::Unreachable(*pc));
     };
     repeat_n(&None, get_pc_index(program.pc_base))
         .chain(program.instructions_and_debug_infos.iter())

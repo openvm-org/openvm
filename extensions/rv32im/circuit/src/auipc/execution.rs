@@ -124,10 +124,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &AuiPcPreCompute,
     pc: &mut u32,
     instret: &mut u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rd = run_auipc(*pc, pre_compute.imm);
-    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
@@ -140,10 +140,10 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &AuiPcPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, pc, instret, vm_state);
+    execute_e12_impl(pre_compute, pc, instret, exec_state);
 }
 
 #[create_tco_handler]
@@ -153,11 +153,11 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pc: &mut u32,
     instret: &mut u64,
     _instret_end: u64,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<AuiPcPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, pc, instret, vm_state);
+    execute_e12_impl(&pre_compute.data, pc, instret, exec_state);
 }

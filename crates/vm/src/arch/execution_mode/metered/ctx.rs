@@ -199,24 +199,24 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         _pc: u32,
         instret: u64,
         _instret_end: u64,
-        vm_state: &mut VmExecState<F, GuestMemory, Self>,
+        exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
-        vm_state.ctx.check_and_segment(instret);
+        exec_state.ctx.check_and_segment(instret);
         false
     }
 
     #[inline(always)]
-    fn on_terminate<F>(vm_state: &mut VmExecState<F, GuestMemory, Self>) {
-        vm_state
+    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+        exec_state
             .ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut vm_state.ctx.trace_heights);
-        vm_state
+            .lazy_update_boundary_heights(&mut exec_state.ctx.trace_heights);
+        exec_state
             .ctx
             .segmentation_ctx
-            .segment(vm_state.instret, &vm_state.ctx.trace_heights);
+            .segment(exec_state.instret, &exec_state.ctx.trace_heights);
     }
 }
 
