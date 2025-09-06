@@ -589,21 +589,13 @@ unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[cfg(feature = "tco")]
 unsafe fn terminate_execute_e12_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
     interpreter: &InterpretedInstance<F, CTX>,
-    pc: u32,
-    instret: u64,
+    mut pc: u32,
+    mut instret: u64,
     instret_end: u64,
     vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(pc);
-    let mut pc_mut = pc;
-    let mut instret_mut = instret;
-    terminate_execute_e12_impl(
-        pre_compute,
-        &mut pc_mut,
-        &mut instret_mut,
-        instret_end,
-        vm_state,
-    );
+    terminate_execute_e12_impl(pre_compute, &mut pc, &mut instret, instret_end, vm_state);
 }
 
 #[cfg(feature = "tco")]
