@@ -1,0 +1,121 @@
+| Summary | Proof Time (s) | Parallel Proof Time (s) |
+|:---|---:|---:|
+| Total | <span style='color: green'>(-0 [-2.3%])</span> 1 | <span style='color: green'>(-0 [-2.3%])</span> 1 |
+| fibonacci_program | <span style='color: green'>(-0 [-2.4%])</span> 0.99 | <span style='color: green'>(-0 [-2.4%])</span> 0.99 |
+
+
+| fibonacci_program |||||
+|:---|---:|---:|---:|---:|
+|metric|avg|sum|max|min|
+| `total_proof_time_ms ` | <span style='color: green'>(-24 [-2.4%])</span> 990 | <span style='color: green'>(-24 [-2.4%])</span> 990 | <span style='color: green'>(-24 [-2.4%])</span> 990 | <span style='color: green'>(-24 [-2.4%])</span> 990 |
+| `main_cells_used     ` |  1,060,232 |  1,060,232 |  1,060,232 |  1,060,232 |
+| `total_cells_used    ` |  9,707,634 |  9,707,634 |  9,707,634 |  9,707,634 |
+| `execute_metered_time_ms` |  10 | -          | -          | -          |
+| `execute_metered_insn_mi/s` | <span style='color: green'>(-1 [-0.9%])</span> 145.24 | -          | <span style='color: green'>(-1 [-0.9%])</span> 145.24 | <span style='color: green'>(-1 [-0.9%])</span> 145.24 |
+| `execute_preflight_insns` |  1,500,210 |  1,500,210 |  1,500,210 |  1,500,210 |
+| `execute_preflight_time_ms` | <span style='color: green'>(-3 [-6.5%])</span> 43 | <span style='color: green'>(-3 [-6.5%])</span> 43 | <span style='color: green'>(-3 [-6.5%])</span> 43 | <span style='color: green'>(-3 [-6.5%])</span> 43 |
+| `execute_preflight_insn_mi/s` | <span style='color: red'>(+2 [+6.4%])</span> 36.15 | -          | <span style='color: red'>(+2 [+6.4%])</span> 36.15 | <span style='color: red'>(+2 [+6.4%])</span> 36.15 |
+| `trace_gen_time_ms   ` | <span style='color: green'>(-98 [-33.3%])</span> 196 | <span style='color: green'>(-98 [-33.3%])</span> 196 | <span style='color: green'>(-98 [-33.3%])</span> 196 | <span style='color: green'>(-98 [-33.3%])</span> 196 |
+| `memory_finalize_time_ms` | <span style='color: green'>(+0 [NaN%])</span> 0 | <span style='color: green'>(+0 [NaN%])</span> 0 | <span style='color: green'>(+0 [NaN%])</span> 0 | <span style='color: green'>(+0 [NaN%])</span> 0 |
+| `stark_prove_excluding_trace_time_ms` | <span style='color: green'>(-6 [-1.1%])</span> 541 | <span style='color: green'>(-6 [-1.1%])</span> 541 | <span style='color: green'>(-6 [-1.1%])</span> 541 | <span style='color: green'>(-6 [-1.1%])</span> 541 |
+| `main_trace_commit_time_ms` | <span style='color: red'>(+1 [+1.4%])</span> 74 | <span style='color: red'>(+1 [+1.4%])</span> 74 | <span style='color: red'>(+1 [+1.4%])</span> 74 | <span style='color: red'>(+1 [+1.4%])</span> 74 |
+| `generate_perm_trace_time_ms` | <span style='color: green'>(-4 [-9.3%])</span> 39 | <span style='color: green'>(-4 [-9.3%])</span> 39 | <span style='color: green'>(-4 [-9.3%])</span> 39 | <span style='color: green'>(-4 [-9.3%])</span> 39 |
+| `perm_trace_commit_time_ms` | <span style='color: green'>(-4 [-3.6%])</span> 97.39 | <span style='color: green'>(-4 [-3.6%])</span> 97.39 | <span style='color: green'>(-4 [-3.6%])</span> 97.39 | <span style='color: green'>(-4 [-3.6%])</span> 97.39 |
+| `quotient_poly_compute_time_ms` | <span style='color: red'>(+1 [+1.3%])</span> 62.81 | <span style='color: red'>(+1 [+1.3%])</span> 62.81 | <span style='color: red'>(+1 [+1.3%])</span> 62.81 | <span style='color: red'>(+1 [+1.3%])</span> 62.81 |
+| `quotient_poly_commit_time_ms` | <span style='color: red'>(+0 [+1.6%])</span> 22.91 | <span style='color: red'>(+0 [+1.6%])</span> 22.91 | <span style='color: red'>(+0 [+1.6%])</span> 22.91 | <span style='color: red'>(+0 [+1.6%])</span> 22.91 |
+| `pcs_opening_time_ms ` |  242 |  242 |  242 |  242 |
+
+
+
+<details>
+<summary>Detailed Metrics</summary>
+
+|  | memory_to_vec_partition_time_ms | keygen_time_ms | app proof_time_ms |
+| --- | --- | --- |
+|  | 58 | 329 | 1,156 | 
+
+| group | prove_segment_time_ms | memory_to_vec_partition_time_ms | fri.log_blowup | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fibonacci_program | 990 | 41 | 1 | 10 | 1,500,210 | 145.24 | 141 | 
+
+| group | air_name | quotient_deg | interactions | constraints |
+| --- | --- | --- | --- | --- |
+| fibonacci_program | AccessAdapterAir<16> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<2> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<32> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<4> | 2 | 5 | 12 | 
+| fibonacci_program | AccessAdapterAir<8> | 2 | 5 | 12 | 
+| fibonacci_program | BitwiseOperationLookupAir<8> | 2 | 2 | 4 | 
+| fibonacci_program | MemoryMerkleAir<8> | 2 | 4 | 39 | 
+| fibonacci_program | PersistentBoundaryAir<8> | 2 | 3 | 7 | 
+| fibonacci_program | PhantomAir | 2 | 3 | 5 | 
+| fibonacci_program | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 2 | 1 | 286 | 
+| fibonacci_program | ProgramAir | 1 | 1 | 4 | 
+| fibonacci_program | RangeTupleCheckerAir<2> | 1 | 1 | 4 | 
+| fibonacci_program | Rv32HintStoreAir | 2 | 18 | 28 | 
+| fibonacci_program | VariableRangeCheckerAir | 1 | 1 | 4 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 2 | 20 | 37 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 2 | 18 | 40 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, ShiftCoreAir<4, 8> | 2 | 24 | 91 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 2 | 11 | 20 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 2 | 13 | 35 | 
+| fibonacci_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 2 | 10 | 18 | 
+| fibonacci_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 2 | 16 | 20 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadSignExtendCoreAir<4, 8> | 2 | 18 | 33 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 2 | 17 | 40 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, DivRemCoreAir<4, 8> | 2 | 25 | 84 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, MulHCoreAir<4, 8> | 2 | 24 | 31 | 
+| fibonacci_program | VmAirWrapper<Rv32MultAdapterAir, MultiplicationCoreAir<4, 8> | 2 | 19 | 19 | 
+| fibonacci_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 2 | 12 | 14 | 
+| fibonacci_program | VmConnectorAir | 2 | 5 | 11 | 
+
+| group | air_name | segment | rows | prep_cols | perm_cols | main_cols | cells |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fibonacci_program | AccessAdapterAir<8> | 0 | 128 |  | 16 | 17 | 4,224 | 
+| fibonacci_program | BitwiseOperationLookupAir<8> | 0 | 65,536 | 3 | 8 | 2 | 655,360 | 
+| fibonacci_program | MemoryMerkleAir<8> | 0 | 512 |  | 16 | 32 | 24,576 | 
+| fibonacci_program | PersistentBoundaryAir<8> | 0 | 128 |  | 12 | 20 | 4,096 | 
+| fibonacci_program | PhantomAir | 0 | 1 |  | 12 | 6 | 18 | 
+| fibonacci_program | Poseidon2PeripheryAir<BabyBearParameters>, 1> | 0 | 256 |  | 8 | 300 | 78,848 | 
+| fibonacci_program | ProgramAir | 0 | 8,192 |  | 8 | 10 | 147,456 | 
+| fibonacci_program | RangeTupleCheckerAir<2> | 0 | 524,288 | 2 | 8 | 1 | 4,718,592 | 
+| fibonacci_program | Rv32HintStoreAir | 0 | 4 |  | 44 | 32 | 304 | 
+| fibonacci_program | VariableRangeCheckerAir | 0 | 262,144 | 2 | 8 | 1 | 2,359,296 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, BaseAluCoreAir<4, 8> | 0 | 1,048,576 |  | 52 | 36 | 92,274,688 | 
+| fibonacci_program | VmAirWrapper<Rv32BaseAluAdapterAir, LessThanCoreAir<4, 8> | 0 | 524,288 |  | 40 | 37 | 40,370,176 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchEqualCoreAir<4> | 0 | 262,144 |  | 28 | 26 | 14,155,776 | 
+| fibonacci_program | VmAirWrapper<Rv32BranchAdapterAir, BranchLessThanCoreAir<4, 8> | 0 | 8 |  | 32 | 32 | 512 | 
+| fibonacci_program | VmAirWrapper<Rv32CondRdWriteAdapterAir, Rv32JalLuiCoreAir> | 0 | 131,072 |  | 28 | 18 | 6,029,312 | 
+| fibonacci_program | VmAirWrapper<Rv32JalrAdapterAir, Rv32JalrCoreAir> | 0 | 16 |  | 36 | 28 | 1,024 | 
+| fibonacci_program | VmAirWrapper<Rv32LoadStoreAdapterAir, LoadStoreCoreAir<4> | 0 | 128 |  | 52 | 41 | 11,904 | 
+| fibonacci_program | VmAirWrapper<Rv32RdWriteAdapterAir, Rv32AuipcCoreAir> | 0 | 16 |  | 28 | 20 | 768 | 
+| fibonacci_program | VmConnectorAir | 0 | 2 | 1 | 16 | 5 | 42 | 
+
+| group | segment | trace_gen_time_ms | total_proof_time_ms | total_cells_used | total_cells | system_trace_gen_time_ms | stark_prove_excluding_trace_time_ms | single_trace_gen_time_ms | quotient_poly_compute_time_ms | quotient_poly_commit_time_ms | query phase_time_ms | perm_trace_commit_time_ms | pcs_opening_time_ms | partially_prove_time_ms | open_time_ms | memory_finalize_time_ms | main_trace_commit_time_ms | main_cells_used | generate_perm_trace_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | evaluate matrix_time_ms | eval_and_commit_quotient_time_ms | build fri inputs_time_ms | OpeningProverGpu::open_time_ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fibonacci_program | 0 | 196 | 990 | 9,707,634 | 160,836,972 | 196 | 541 | 0 | 62.81 | 22.91 | 5 | 97.39 | 242 | 137 | 242 | 0 | 74 | 1,060,232 | 39 | 43 | 1,500,210 | 36.15 | 20 | 86 | 1 | 242 | 
+
+| group | segment | trace_height_constraint | weighted_sum | threshold |
+| --- | --- | --- | --- | --- |
+| fibonacci_program | 0 | 0 | 3,932,510 | 2,013,265,921 | 
+| fibonacci_program | 0 | 1 | 10,749,336 | 2,013,265,921 | 
+| fibonacci_program | 0 | 2 | 1,966,255 | 2,013,265,921 | 
+| fibonacci_program | 0 | 3 | 10,749,404 | 2,013,265,921 | 
+| fibonacci_program | 0 | 4 | 1,664 | 2,013,265,921 | 
+| fibonacci_program | 0 | 5 | 640 | 2,013,265,921 | 
+| fibonacci_program | 0 | 6 | 7,209,084 | 2,013,265,921 | 
+| fibonacci_program | 0 | 7 |  | 2,013,265,921 | 
+| fibonacci_program | 0 | 8 | 35,534,845 | 2,013,265,921 | 
+
+</details>
+
+
+Commit: https://github.com/openvm-org/openvm/commit/2cf19a18ff05edfaf2b1a396ebf6f19cac6fa8bd
+
+Max Segment Length: 1048476
+
+Instance Type: g6.2xlarge
+
+Memory Allocator: jemalloc
+
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/17558234954)
