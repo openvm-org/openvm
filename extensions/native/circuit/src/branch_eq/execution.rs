@@ -111,7 +111,7 @@ where
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_tco_handler, a_is_imm, b_is_imm, is_bne)
+        dispatch!(execute_e1_handler, a_is_imm, b_is_imm, is_bne)
     }
 
     #[inline(always)]
@@ -119,6 +119,7 @@ where
         size_of::<NativeBranchEqualPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -130,7 +131,7 @@ where
 
         let (a_is_imm, b_is_imm, is_bne) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_impl, a_is_imm, b_is_imm, is_bne)
+        dispatch!(execute_e1_handler, a_is_imm, b_is_imm, is_bne)
     }
 }
 
@@ -143,6 +144,7 @@ where
         size_of::<E2PreCompute<NativeBranchEqualPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
@@ -157,7 +159,7 @@ where
         let (a_is_imm, b_is_imm, is_bne) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_impl, a_is_imm, b_is_imm, is_bne)
+        dispatch!(execute_e2_handler, a_is_imm, b_is_imm, is_bne)
     }
 
     #[cfg(feature = "tco")]
@@ -174,7 +176,7 @@ where
         let (a_is_imm, b_is_imm, is_bne) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_tco_handler, a_is_imm, b_is_imm, is_bne)
+        dispatch!(execute_e2_handler, a_is_imm, b_is_imm, is_bne)
     }
 }
 
@@ -209,7 +211,7 @@ unsafe fn execute_e12_impl<
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -228,7 +230,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

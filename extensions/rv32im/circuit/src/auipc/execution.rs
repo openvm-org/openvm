@@ -49,6 +49,7 @@ where
         size_of::<AuiPcPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -73,7 +74,7 @@ where
     {
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_tco_handler)
+        Ok(execute_e1_handler)
     }
 }
 
@@ -85,6 +86,7 @@ where
         size_of::<E2PreCompute<AuiPcPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -115,7 +117,7 @@ where
         let data: &mut E2PreCompute<AuiPcPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_tco_handler)
+        Ok(execute_e2_handler)
     }
 }
 
@@ -133,7 +135,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -146,7 +148,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

@@ -61,6 +61,7 @@ impl<F: PrimeField32> Executor<F> for KeccakVmExecutor {
         size_of::<KeccakPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -87,7 +88,7 @@ impl<F: PrimeField32> Executor<F> for KeccakVmExecutor {
     {
         let data: &mut KeccakPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_tco_handler)
+        Ok(execute_e1_handler)
     }
 }
 
@@ -96,6 +97,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
         size_of::<E2PreCompute<KeccakPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -126,7 +128,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for KeccakVmExecutor {
         let data: &mut E2PreCompute<KeccakPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_tco_handler::<_, _>)
+        Ok(execute_e2_handler::<_, _>)
     }
 }
 
@@ -171,7 +173,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
     height
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -184,7 +186,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl::<F, CTX, true>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

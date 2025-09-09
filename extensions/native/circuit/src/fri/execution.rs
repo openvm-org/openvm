@@ -83,7 +83,7 @@ where
 
         self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        let fn_ptr = execute_e1_tco_handler;
+        let fn_ptr = execute_e1_handler;
         Ok(fn_ptr)
     }
 
@@ -92,6 +92,7 @@ where
         size_of::<FriReducedOpeningPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -117,6 +118,7 @@ where
         size_of::<E2PreCompute<FriReducedOpeningPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
@@ -147,12 +149,12 @@ where
 
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        let fn_ptr = execute_e2_tco_handler;
+        let fn_ptr = execute_e2_handler;
         Ok(fn_ptr)
     }
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -165,7 +167,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

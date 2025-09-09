@@ -63,6 +63,7 @@ where
         size_of::<JalLuiPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         _pc: u32,
@@ -71,7 +72,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
-        dispatch!(execute_e1_impl, is_jal, enabled)
+        dispatch!(execute_e1_handler, is_jal, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -86,7 +87,7 @@ where
     {
         let data: &mut JalLuiPreCompute = data.borrow_mut();
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
-        dispatch!(execute_e1_tco_handler, is_jal, enabled)
+        dispatch!(execute_e1_handler, is_jal, enabled)
     }
 }
 
@@ -98,6 +99,7 @@ where
         size_of::<E2PreCompute<JalLuiPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -111,7 +113,7 @@ where
         let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
-        dispatch!(execute_e2_impl, is_jal, enabled)
+        dispatch!(execute_e2_handler, is_jal, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -128,7 +130,7 @@ where
         let data: &mut E2PreCompute<JalLuiPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
-        dispatch!(execute_e2_tco_handler, is_jal, enabled)
+        dispatch!(execute_e2_handler, is_jal, enabled)
     }
 }
 
@@ -166,7 +168,7 @@ unsafe fn execute_e12_impl<
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -184,7 +186,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

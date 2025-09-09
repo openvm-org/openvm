@@ -88,7 +88,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_tco_handler, opcode)
+        dispatch!(execute_e1_handler, opcode)
     }
 
     #[inline(always)]
@@ -96,6 +96,7 @@ where
         size_of::<FieldExtensionPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -107,7 +108,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_impl, opcode)
+        dispatch!(execute_e1_handler, opcode)
     }
 }
 
@@ -120,6 +121,7 @@ where
         size_of::<E2PreCompute<FieldExtensionPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
@@ -133,7 +135,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_impl, opcode)
+        dispatch!(execute_e2_handler, opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -149,7 +151,7 @@ where
 
         let opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_tco_handler, opcode)
+        dispatch!(execute_e2_handler, opcode)
     }
 }
 
@@ -177,7 +179,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
@@ -190,7 +192,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE:
     execute_e12_impl::<F, CTX, OPCODE>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],

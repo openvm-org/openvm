@@ -49,6 +49,7 @@ impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
         size_of::<LessThanPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -60,7 +61,7 @@ impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
     {
         let data: &mut LessThanPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_impl, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -75,7 +76,7 @@ impl<F: PrimeField32> Executor<F> for Rv32LessThan256Executor {
     {
         let data: &mut LessThanPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_tco_handler, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 }
 
@@ -84,6 +85,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32LessThan256Executor {
         size_of::<E2PreCompute<LessThanPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -97,7 +99,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32LessThan256Executor {
         let data: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_impl, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -114,7 +116,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32LessThan256Executor {
         let data: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_tco_handler, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 }
 
@@ -145,7 +147,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &[u8],
@@ -158,7 +160,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256
     execute_e12_impl::<F, CTX, IS_U256>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &[u8],

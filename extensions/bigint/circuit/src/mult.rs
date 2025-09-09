@@ -40,6 +40,7 @@ impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Executor {
         size_of::<MultPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -66,7 +67,7 @@ impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Executor {
     {
         let data: &mut MultPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_tco_handler)
+        Ok(execute_e1_handler)
     }
 }
 
@@ -75,6 +76,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Executor {
         size_of::<E2PreCompute<MultPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -105,7 +107,7 @@ impl<F: PrimeField32> MeteredExecutor<F> for Rv32Multiplication256Executor {
         let data: &mut E2PreCompute<MultPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_tco_handler)
+        Ok(execute_e2_handler)
     }
 }
 
@@ -130,7 +132,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
@@ -143,7 +145,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],

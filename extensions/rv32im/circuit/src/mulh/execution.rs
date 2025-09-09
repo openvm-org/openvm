@@ -62,6 +62,7 @@ where
         size_of::<MulHPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -71,7 +72,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
-        dispatch!(execute_e1_impl, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -86,7 +87,7 @@ where
     {
         let pre_compute: &mut MulHPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
-        dispatch!(execute_e1_tco_handler, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 }
 
@@ -99,6 +100,7 @@ where
         size_of::<E2PreCompute<MulHPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -112,7 +114,7 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_impl, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -129,7 +131,7 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_tco_handler, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 }
 
@@ -151,7 +153,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOper
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],
@@ -164,7 +166,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOpera
     execute_e12_impl::<F, CTX, OP>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],

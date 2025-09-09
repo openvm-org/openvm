@@ -4,7 +4,7 @@ use syn::{parse_macro_input, ItemFn};
 
 /// Implementation of the TCO handler generation logic.
 /// This is called from the proc macro attribute in lib.rs.
-pub fn tco_impl(item: TokenStream, can_exit: bool) -> TokenStream {
+pub fn tco_impl(item: TokenStream) -> TokenStream {
     // Parse the input function
     let input_fn = parse_macro_input!(item as ItemFn);
 
@@ -12,16 +12,24 @@ pub fn tco_impl(item: TokenStream, can_exit: bool) -> TokenStream {
     let fn_name = &input_fn.sig.ident;
     let generics = &input_fn.sig.generics;
     let where_clause = &generics.where_clause;
+    
+    // Check if function returns Result
+    let returns_result = match &input_fn.sig.output {
+        syn::ReturnType::Type(_, ty) => {
+            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().map_or(false, |seg| seg.ident == "Result"))
+        }
+        _ => false,
+    };
 
     // Extract the first two generic type parameters (F and CTX)
     let (f_type, ctx_type) = extract_f_and_ctx_types(generics);
     // Derive new function name:
-    // If original ends with `_impl`, replace with `_tco_handler`, else append suffix.
+    // If original ends with `_impl`, replace with `_handler`, else append suffix.
     let new_name_str = fn_name
         .to_string()
         .strip_suffix("_impl")
-        .map(|base| format!("{base}_tco_handler"))
-        .unwrap_or_else(|| format!("{fn_name}_tco_handler"));
+        .map(|base| format!("{base}_handler"))
+        .unwrap_or_else(|| format!("{fn_name}_handler"));
     let handler_name = format_ident!("{}", new_name_str);
 
     // Build the generic parameters for the handler, preserving all original generics
@@ -35,16 +43,24 @@ pub fn tco_impl(item: TokenStream, can_exit: bool) -> TokenStream {
         quote! { #fn_name::<#(#generic_args),*>(pre_compute, &mut instret, &mut pc, arg, exec_state) }
     };
 
-    // Generate the exit check code conditionally
-    let exit_check = if can_exit {
-        quote! {
-            if ::core::intrinsics::unlikely(exec_state.exit_code.is_err()) {
-                exec_state.set_instret_and_pc(instret, pc);
-                return;
-            }
-        }
+    // Generate the execute and exit check code based on return type
+    let (execute_stmt, exit_check) = if returns_result {
+        (
+            quote! {
+                let __ret = { #execute_call };
+                if let ::core::result::Result::Err(e) = __ret {
+                    exec_state.set_instret_and_pc(instret, pc);
+                    exec_state.exit_code = ::core::result::Result::Err(e);
+                    return;
+                }
+            },
+            quote! {}
+        )
     } else {
-        quote! {}
+        (
+            quote! { #execute_call; },
+            quote! {}
+        )
     };
 
     // Generate the TCO handler function
@@ -66,7 +82,7 @@ pub fn tco_impl(item: TokenStream, can_exit: bool) -> TokenStream {
             use ::openvm_circuit::arch::ExecutionError;
 
             let pre_compute = interpreter.get_pre_compute(pc);
-            #execute_call;
+            #execute_stmt
 
             #exit_check
 
