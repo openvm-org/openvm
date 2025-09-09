@@ -60,7 +60,7 @@ pub fn handler_name_from_fn(fn_name: &Ident) -> Ident {
 pub fn returns_result_type(input_fn: &ItemFn) -> bool {
     match &input_fn.sig.output {
         syn::ReturnType::Type(_, ty) => {
-            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().map_or(false, |seg| seg.ident == "Result"))
+            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().is_some_and(|seg| seg.ident == "Result"))
         }
         _ => false,
     }
