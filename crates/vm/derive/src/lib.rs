@@ -5,16 +5,15 @@ extern crate proc_macro;
 
 use itertools::{multiunzip, Itertools};
 use proc_macro::TokenStream;
-#[cfg(not(feature = "tco"))]
-use quote::format_ident;
 use quote::{quote, ToTokens};
-#[cfg(not(feature = "tco"))]
-use syn::{parse_macro_input, ItemFn};
 use syn::{
     parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields,
     GenericParam, Ident, Meta, Token,
 };
 
+mod common;
+#[cfg(not(feature = "tco"))]
+mod nontco;
 #[cfg(feature = "tco")]
 mod tco;
 
@@ -889,114 +888,6 @@ pub fn create_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
     #[cfg(not(feature = "tco"))]
     {
-        nontco_impl(item)
+        nontco::nontco_impl(item)
     }
-}
-
-// ===============================
-//  Non-TCO generator
-// ===============================
-
-#[cfg(not(feature = "tco"))]
-fn nontco_impl(item: TokenStream) -> TokenStream {
-    let input_fn = parse_macro_input!(item as ItemFn);
-
-    let fn_name = &input_fn.sig.ident;
-    let generics = &input_fn.sig.generics;
-    let where_clause = &generics.where_clause;
-
-    // Check if function returns Result
-    let returns_result = match &input_fn.sig.output {
-        syn::ReturnType::Type(_, ty) => {
-            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().is_some_and(|seg| seg.ident == "Result"))
-        }
-        _ => false,
-    };
-
-    // Extract first two type params (F, CTX)
-    let mut ty_params = generics.params.iter().filter_map(|p| {
-        if let syn::GenericParam::Type(t) = p {
-            Some(t.ident.clone())
-        } else {
-            None
-        }
-    });
-    let f_type = ty_params
-        .next()
-        .expect("Function must have at least one type parameter (F)");
-    let ctx_type = ty_params
-        .next()
-        .expect("Function must have at least two type parameters (F and CTX)");
-
-    // foo_impl -> foo_handler; else foo_handler
-    let handler_name = {
-        let base = fn_name.to_string();
-        let new = base
-            .strip_suffix("_impl")
-            .map(|b| format!("{b}_handler"))
-            .unwrap_or_else(|| format!("{base}_handler"));
-        format_ident!("{new}")
-    };
-
-    // Build generic args list
-    let generic_args = generics.params.iter().map(|p| match p {
-        syn::GenericParam::Type(t) => {
-            let id = &t.ident;
-            quote! { #id }
-        }
-        syn::GenericParam::Lifetime(l) => {
-            let lt = &l.lifetime;
-            quote! { #lt }
-        }
-        syn::GenericParam::Const(c) => {
-            let id = &c.ident;
-            quote! { #id }
-        }
-    });
-
-    let execute_call = if generics.params.is_empty() {
-        quote! { #fn_name(pre_compute, instret, pc, arg, exec_state) }
-    } else {
-        quote! { #fn_name::<#(#generic_args),*>(pre_compute, instret, pc, arg, exec_state) }
-    };
-
-    let handler_body = if returns_result {
-        quote! {
-            // Call original impl and wire errors into exit_code.
-            let __ret = { #execute_call };
-            if let ::core::result::Result::Err(e) = __ret {
-                exec_state.set_instret_and_pc(*instret, *pc);
-                exec_state.exit_code = ::core::result::Result::Err(e);
-                return;
-            }
-        }
-    } else {
-        quote! {
-            #execute_call;
-        }
-    };
-
-    let handler_fn = quote! {
-        #[inline(always)]
-        unsafe fn #handler_name #generics (
-            pre_compute: &[u8],
-            instret: &mut u64,
-            pc: &mut u32,
-            arg: u64,
-            exec_state: &mut ::openvm_circuit::arch::VmExecState<
-                #f_type,
-                ::openvm_circuit::system::memory::online::GuestMemory,
-                #ctx_type,
-            >,
-        )
-        #where_clause
-        {
-            #handler_body
-        }
-    };
-
-    TokenStream::from(quote! {
-        #input_fn
-        #handler_fn
-    })
 }

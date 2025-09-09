@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::{parse_macro_input, ItemFn};
+
+use crate::common::{build_generic_args, extract_f_and_ctx_types, handler_name_from_fn};
 
 /// Implementation of the TCO handler generation logic.
 /// This is called from the proc macro attribute in lib.rs.
@@ -25,12 +27,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     let (f_type, ctx_type) = extract_f_and_ctx_types(generics);
     // Derive new function name:
     // If original ends with `_impl`, replace with `_handler`, else append suffix.
-    let new_name_str = fn_name
-        .to_string()
-        .strip_suffix("_impl")
-        .map(|base| format!("{base}_handler"))
-        .unwrap_or_else(|| format!("{fn_name}_handler"));
-    let handler_name = format_ident!("{}", new_name_str);
+    let handler_name = handler_name_from_fn(fn_name);
 
     // Build the generic parameters for the handler, preserving all original generics
     let handler_generics = generics.clone();
@@ -111,46 +108,4 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(output)
-}
-
-fn extract_f_and_ctx_types(generics: &syn::Generics) -> (syn::Ident, syn::Ident) {
-    let mut type_params = generics.params.iter().filter_map(|param| {
-        if let syn::GenericParam::Type(type_param) = param {
-            Some(&type_param.ident)
-        } else {
-            None
-        }
-    });
-
-    let f_type = type_params
-        .next()
-        .expect("Function must have at least one type parameter (F)")
-        .clone();
-    let ctx_type = type_params
-        .next()
-        .expect("Function must have at least two type parameters (F and CTX)")
-        .clone();
-
-    (f_type, ctx_type)
-}
-
-fn build_generic_args(generics: &syn::Generics) -> Vec<proc_macro2::TokenStream> {
-    generics
-        .params
-        .iter()
-        .map(|param| match param {
-            syn::GenericParam::Type(type_param) => {
-                let ident = &type_param.ident;
-                quote! { #ident }
-            }
-            syn::GenericParam::Lifetime(lifetime) => {
-                let lifetime = &lifetime.lifetime;
-                quote! { #lifetime }
-            }
-            syn::GenericParam::Const(const_param) => {
-                let ident = &const_param.ident;
-                quote! { #ident }
-            }
-        })
-        .collect()
 }
