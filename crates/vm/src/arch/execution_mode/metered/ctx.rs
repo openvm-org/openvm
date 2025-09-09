@@ -208,12 +208,22 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             .ctx
             .check_and_segment(instret, segment_check_insns);
         if did_segment {
+            let num_fs = exec_state.vm_state.streams.hint_stream.len()
+                + exec_state
+                    .vm_state
+                    .streams
+                    .input_stream
+                    .iter()
+                    .map(|x| x.len())
+                    .sum::<usize>()
+                + exec_state.vm_state.streams.hint_space.len();
             let num_pages = exec_state.ctx.memory_ctx.global_page_access_count;
             let segment_idx = exec_state.ctx.segmentation_ctx.segments.len() - 1;
             tracing::info!(
-                "Segment idx: {}, Memory size: {}bits",
+                "Segment idx: {}, Memory size: {}bytes, stream size {}bytes",
                 segment_idx,
-                num_pages * (1 << PAGE_BITS)
+                num_pages * (1 << PAGE_BITS),
+                num_fs * 4
             );
         }
         false
