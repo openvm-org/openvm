@@ -505,6 +505,7 @@ fn split_pre_compute_buf<'a, F>(
 ///
 /// # Safety
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
+#[cfg(not(feature = "tco"))]
 #[inline(always)]
 unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     mut instret: u64,

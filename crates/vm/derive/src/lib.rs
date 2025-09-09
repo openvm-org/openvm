@@ -1,10 +1,8 @@
-//! Proc-macros for OpenVM circuit executors and helpers.
-
 extern crate alloc;
 extern crate proc_macro;
 
 use itertools::{multiunzip, Itertools};
-use proc_macro::TokenStream;
+use proc_macro::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
     parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields,
@@ -16,10 +14,6 @@ mod common;
 mod nontco;
 #[cfg(feature = "tco")]
 mod tco;
-
-// ===============================
-//  Derives: PreflightExecutor
-// ===============================
 
 #[proc_macro_derive(PreflightExecutor)]
 pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
@@ -57,7 +51,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 _ => panic!("Only unnamed fields are supported"),
             };
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate.
+            // crate. Assume F is already generic of the field.
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
                 syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> },
@@ -113,7 +107,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
             for predicate in where_predicates {
                 where_clause.predicates.push(predicate);
             }
-            // Don't use ty_generics here because it might have extra "F"
+            // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
             quote! {
                 impl #impl_generics ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> for #name #ty_generics #where_clause {
@@ -140,10 +134,6 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-// ===============================
-//  Derives: Executor
-// ===============================
-
 #[proc_macro_derive(Executor)]
 pub fn executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -165,14 +155,15 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 _ => panic!("Only unnamed fields are supported"),
             };
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate.
+            // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
 
-            // Generate handler method only when tco feature is enabled in the derive macro crate
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
             #[cfg(feature = "tco")]
             let handler = quote! {
                 fn handler<Ctx>(
@@ -241,29 +232,29 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     &default_ty_generic
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate.
-            let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(variants.iter().map(|(variant_name, field)| {
-                    let field_ty = &field.ty;
-                    let pre_compute_size_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
-                    };
-                    let pre_compute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
-                    };
-                    let handler_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::handler(x, pc, instruction, data)
-                    };
-                    let where_predicate = syn::parse_quote! {
-                        #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
-                    };
-                    (pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
-                }));
+            // crate. Assume F is already generic of the field.
+            let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                let pre_compute_size_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
+                };
+                let pre_compute_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
+                };
+                let handler_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::handler(x, pc, instruction, data)
+                };
+                let where_predicate = syn::parse_quote! {
+                    #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
+                };
+                (pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
+            }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
                 where_clause.predicates.push(predicate);
             }
-            // Generate handler method only when tco feature is enabled in the derive macro crate
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
             #[cfg(feature = "tco")]
             let handler = quote! {
                 fn handler<Ctx>(
@@ -318,10 +309,6 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-// ===============================
-//  Derives: MeteredExecutor
-// ===============================
-
 #[proc_macro_derive(MeteredExecutor)]
 pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -350,8 +337,8 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::MeteredExecutor<F> });
 
-            // Generate metered_handler method only when tco feature is enabled in the derive macro
-            // crate
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
             #[cfg(feature = "tco")]
             let metered_handler = quote! {
                 fn metered_handler<Ctx>(
@@ -421,24 +408,23 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     &default_ty_generic
                 });
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate.
-            let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-                multiunzip(variants.iter().map(|(variant_name, field)| {
-                    let field_ty = &field.ty;
-                    let pre_compute_size_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
-                    };
-                    let metered_pre_compute_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
-                    };
-                    let metered_handler_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
-                    };
-                    let where_predicate = syn::parse_quote! {
-                        #field_ty: ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>
-                    };
-                    (pre_compute_size_arm, metered_pre_compute_arm, metered_handler_arm, where_predicate)
-                }));
+            // crate. Assume F is already generic of the field.
+            let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
+                let field_ty = &field.ty;
+                let pre_compute_size_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute_size(x)
+                };
+                let metered_pre_compute_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_pre_compute(x, chip_idx, pc, instruction, data)
+                };
+                let metered_handler_arm = quote! {
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>>::metered_handler(x, chip_idx, pc, instruction, data)
+                };
+                let where_predicate = syn::parse_quote! {
+                    #field_ty: ::openvm_circuit::arch::MeteredExecutor<#first_ty_generic>
+                };
+                (pre_compute_size_arm, metered_pre_compute_arm, metered_handler_arm, where_predicate)
+            }));
             let where_clause = new_generics.make_where_clause();
             for predicate in where_predicates {
                 where_clause.predicates.push(predicate);
@@ -446,8 +432,8 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
-            // Generate metered_handler method only when tco feature is enabled in the derive macro
-            // crate
+            // We use the macro's feature to decide whether to generate the impl or not. This avoids
+            // the target crate needing the "tco" feature defined.
             #[cfg(feature = "tco")]
             let metered_handler = quote! {
                 fn metered_handler<Ctx>(
@@ -501,10 +487,6 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
         Data::Union(_) => unimplemented!("Unions are not supported"),
     }
 }
-
-// ===============================
-//  Derive: AnyEnum
-// ===============================
 
 /// Derives `AnyEnum` trait on an enum type.
 /// By default an enum arm will just return `self` as `&dyn Any`.
@@ -582,10 +564,6 @@ pub fn any_enum_derive(input: TokenStream) -> TokenStream {
     }
 }
 
-// ===============================
-//  Derive: VmConfig
-// ===============================
-
 #[proc_macro_derive(VmConfig, attributes(config, extension))]
 pub fn vm_generic_config_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
@@ -606,15 +584,9 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let gen_name_with_uppercase_idents = |ident: &Ident| {
         let mut name = ident.to_string().chars().collect::<Vec<_>>();
         assert!(name[0].is_lowercase(), "Field name must not be capitalized");
-        let res_lower = Ident::new(
-            &name.iter().collect::<String>(),
-            proc_macro2::Span::call_site(),
-        );
+        let res_lower = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
         name[0] = name[0].to_ascii_uppercase();
-        let res_upper = Ident::new(
-            &name.iter().collect::<String>(),
-            proc_macro2::Span::call_site(),
-        );
+        let res_upper = Ident::new(&name.iter().collect::<String>(), Span::call_site().into());
         (res_lower, res_upper)
     };
 
@@ -837,10 +809,6 @@ fn parse_executor_type(
     }
 }
 
-// ===============================
-//  Attribute: create_handler
-// ===============================
-
 /// An attribute procedural macro for creating TCO (Tail Call Optimization) handlers.
 ///
 /// This macro generates a handler function that wraps an execute implementation
@@ -851,35 +819,25 @@ fn parse_executor_type(
 ///
 /// Place this attribute above a function definition:
 /// ```
-/// #[create_handler]
+/// #[create_tco_handler]
 /// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
 ///     pre_compute: &[u8],
 ///     state: &mut VmExecState<F, GuestMemory, CTX>,
-/// ) -> Result<(), ExecutionError>
-/// where
+/// ) where
 ///     CTX: ExecutionCtxTrait,
 /// {
 ///     // function body
 /// }
 /// ```
 ///
-/// This will generate a TCO handler function with the same generics and where clauses,
-/// plus a non-TCO handler when the `tco` feature is not enabled.
-///
-/// # Error handling
-///
-/// Your original function must return `Result<(), ExecutionError>`.
-/// If it returns `Err(e)`, the generated handler will:
-/// 1. Persist `(instret, pc)` via `exec_state.set_instret_and_pc(instret, pc)`.
-/// 2. Set `exec_state.exit_code = Err(e)`.
-/// 3. Return early from the handler.
+/// This will generate a TCO handler function with the same generics and where clauses.
 ///
 /// # Safety
 ///
 /// Do not use this macro if your function wants to terminate execution without error with a
-/// specific error code outside of the `Result` channel. The handler generated by this macro
-/// assumes that execution should continue unless your function returns an error. Use the `Err`
-/// variant to request termination.
+/// specific error code. The handler generated by this macro assumes that execution should continue
+/// unless the execute_impl returns an error. This is done for performance to skip an exit code
+/// check.
 #[proc_macro_attribute]
 pub fn create_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(feature = "tco")]

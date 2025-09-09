@@ -25,6 +25,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
 
     // Extract the first two generic type parameters (F and CTX)
     let (f_type, ctx_type) = extract_f_and_ctx_types(generics);
+
     // Derive new function name:
     // If original ends with `_impl`, replace with `_handler`, else append suffix.
     let handler_name = handler_name_from_fn(fn_name);
