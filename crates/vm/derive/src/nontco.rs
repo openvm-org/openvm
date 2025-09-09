@@ -2,7 +2,9 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
-use crate::common::{build_generic_args, extract_f_and_ctx_types, handler_name_from_fn};
+use crate::common::{
+    build_generic_args, extract_f_and_ctx_types, handler_name_from_fn, returns_result_type,
+};
 
 /// Implementation of the non-TCO handler generation logic.
 /// This is called from the proc macro attribute in lib.rs.
@@ -16,12 +18,7 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
     let where_clause = &generics.where_clause;
 
     // Check if function returns Result
-    let returns_result = match &input_fn.sig.output {
-        syn::ReturnType::Type(_, ty) => {
-            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().is_some_and(|seg| seg.ident == "Result"))
-        }
-        _ => false,
-    };
+    let returns_result = returns_result_type(&input_fn);
 
     // Extract the first two generic type parameters (F and CTX)
     let (f_type, ctx_type) = extract_f_and_ctx_types(generics);

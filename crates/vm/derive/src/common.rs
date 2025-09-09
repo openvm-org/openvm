@@ -1,5 +1,5 @@
 use quote::{format_ident, quote};
-use syn::Ident;
+use syn::{Ident, ItemFn};
 
 /// Extract the first two generic type parameters (F and CTX) from function generics
 pub fn extract_f_and_ctx_types(generics: &syn::Generics) -> (syn::Ident, syn::Ident) {
@@ -54,4 +54,14 @@ pub fn handler_name_from_fn(fn_name: &Ident) -> Ident {
         .map(|base| format!("{base}_handler"))
         .unwrap_or_else(|| format!("{fn_name}_handler"));
     format_ident!("{}", new_name_str)
+}
+
+/// Check if function returns Result type
+pub fn returns_result_type(input_fn: &ItemFn) -> bool {
+    match &input_fn.sig.output {
+        syn::ReturnType::Type(_, ty) => {
+            matches!(**ty, syn::Type::Path(ref path) if path.path.segments.last().map_or(false, |seg| seg.ident == "Result"))
+        }
+        _ => false,
+    }
 }
