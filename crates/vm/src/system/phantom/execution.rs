@@ -197,7 +197,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let sub_executor = &*pre_compute.sub_executor;
-    if let Err(e) = execute_impl(
+    execute_impl(
         PhantomStateMut {
             pc,
             memory: &mut exec_state.vm_state.memory,
@@ -206,9 +206,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         },
         &pre_compute.operands,
         sub_executor,
-    ) {
-        return Err(e);
-    }
+    )?;
     *pc += DEFAULT_PC_STEP;
     *instret += 1;
 
