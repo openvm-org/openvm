@@ -125,7 +125,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) {
+    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) -> bool {
         let threshold = self
             .segmentation_ctx
             .instret_last_segment_check
@@ -135,7 +135,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             "overflow in segment check threshold calculation"
         );
         if instret < threshold {
-            return;
+            return false;
         }
 
         self.memory_ctx
@@ -149,6 +149,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if did_segment {
             self.reset_segment();
         }
+        did_segment
     }
 
     #[allow(dead_code)]
@@ -195,7 +196,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(
+    fn should_suspend<F: Clone>(
         instret: u64,
         _pc: u32,
         segment_check_insns: u64,
@@ -203,9 +204,18 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     ) -> bool {
         // E2 always runs until termination. Here we use the function as a hook called every
         // instruction.
-        exec_state
+        let did_segment = exec_state
             .ctx
             .check_and_segment(instret, segment_check_insns);
+        if did_segment {
+            let num_pages = exec_state.ctx.memory_ctx.global_page_access_count;
+            let segment_idx = exec_state.ctx.segmentation_ctx.segments.len() - 1;
+            tracing::info!(
+                "Segment idx: {}, Memory size: {}bits",
+                segment_idx,
+                num_pages * (1 << PAGE_BITS)
+            );
+        }
         false
     }
 

@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Represents the core state of a VM.
-#[derive(derive_new::new, CopyGetters, MutGetters)]
+#[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
 pub struct VmState<F, MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     instret: u64,

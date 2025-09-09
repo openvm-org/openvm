@@ -13,7 +13,7 @@ pub use pure::ExecutionCtx;
 pub trait ExecutionCtxTrait: Sized {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32);
 
-    fn should_suspend<F>(
+    fn should_suspend<F: Clone>(
         instret: u64,
         pc: u32,
         _arg: u64,
