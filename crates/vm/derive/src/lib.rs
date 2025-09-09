@@ -5,16 +5,15 @@ extern crate proc_macro;
 
 use itertools::{multiunzip, Itertools};
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{
-    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct,
-    Field, Fields, GenericParam, Ident, Meta, Token,
-};
-
 #[cfg(not(feature = "tco"))]
 use quote::format_ident;
+use quote::{quote, ToTokens};
 #[cfg(not(feature = "tco"))]
 use syn::{parse_macro_input, ItemFn};
+use syn::{
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DataStruct, Field, Fields,
+    GenericParam, Ident, Meta, Token,
+};
 
 #[cfg(feature = "tco")]
 mod tco;
@@ -58,7 +57,8 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
                 syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> },
@@ -94,7 +94,8 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                     (variant_name, field)
                 })
                 .collect::<Vec<_>>();
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let (execute_arms, get_opcode_name_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
@@ -164,15 +165,15 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
 
-            // We use the macro's feature to decide whether to generate the impl or not. This avoids
-            // the target crate needing the "tco" feature defined.
+            // Generate handler method only when tco feature is enabled in the derive macro crate
             #[cfg(feature = "tco")]
             let handler = quote! {
                 fn handler<Ctx>(
@@ -240,7 +241,8 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     new_generics.params.push(syn::parse_quote! { F });
                     &default_ty_generic
                 });
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
@@ -262,8 +264,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             for predicate in where_predicates {
                 where_clause.predicates.push(predicate);
             }
-            // We use the macro's feature to decide whether to generate the impl or not. This avoids
-            // the target crate needing the "tco" feature defined.
+            // Generate handler method only when tco feature is enabled in the derive macro crate
             #[cfg(feature = "tco")]
             let handler = quote! {
                 fn handler<Ctx>(
@@ -342,15 +343,16 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 }
                 _ => panic!("Only unnamed fields are supported"),
             };
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
                 .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::MeteredExecutor<F> });
 
-            // We use the macro's feature to decide whether to generate the impl or not. This avoids
-            // the target crate needing the "tco" feature defined.
+            // Generate metered_handler method only when tco feature is enabled in the derive macro
+            // crate
             #[cfg(feature = "tco")]
             let metered_handler = quote! {
                 fn metered_handler<Ctx>(
@@ -419,7 +421,8 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     new_generics.params.push(syn::parse_quote! { F });
                     &default_ty_generic
                 });
-            // Use full path ::openvm_circuit... so it can be used either within or outside the vm crate.
+            // Use full path ::openvm_circuit... so it can be used either within or outside the vm
+            // crate.
             let (pre_compute_size_arms, metered_pre_compute_arms, _metered_handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
@@ -444,8 +447,8 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
-            // We use the macro's feature to decide whether to generate the impl or not. This avoids
-            // the target crate needing the "tco" feature defined.
+            // Generate metered_handler method only when tco feature is enabled in the derive macro
+            // crate
             #[cfg(feature = "tco")]
             let metered_handler = quote! {
                 fn metered_handler<Ctx>(

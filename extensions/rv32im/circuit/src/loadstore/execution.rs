@@ -145,12 +145,7 @@ where
         let pre_compute: &mut LoadStorePreCompute = data.borrow_mut();
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(
-            execute_e1_handler,
-            local_opcode,
-            enabled,
-            is_native_store
-        )
+        dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
     }
 }
 
@@ -195,12 +190,7 @@ where
         pre_compute.chip_idx = chip_idx as u32;
         let (local_opcode, enabled, is_native_store) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(
-            execute_e2_handler,
-            local_opcode,
-            enabled,
-            is_native_store
-        )
+        dispatch!(execute_e2_handler, local_opcode, enabled, is_native_store)
     }
 }
 

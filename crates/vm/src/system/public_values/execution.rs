@@ -10,6 +10,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
+#[cfg(not(feature = "tco"))]
+use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
 use crate::{
@@ -21,8 +23,6 @@ use crate::{
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
-#[cfg(not(feature = "tco"))]
-use crate::arch::ExecuteFunc;
 
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]

@@ -12,7 +12,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     let fn_name = &input_fn.sig.ident;
     let generics = &input_fn.sig.generics;
     let where_clause = &generics.where_clause;
-    
+
     // Check if function returns Result
     let returns_result = match &input_fn.sig.output {
         syn::ReturnType::Type(_, ty) => {
@@ -54,13 +54,10 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
                     return;
                 }
             },
-            quote! {}
+            quote! {},
         )
     } else {
-        (
-            quote! { #execute_call; },
-            quote! {}
-        )
+        (quote! { #execute_call; }, quote! {})
     };
 
     // Generate the TCO handler function

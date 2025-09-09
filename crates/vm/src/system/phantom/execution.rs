@@ -10,6 +10,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
+#[cfg(not(feature = "tco"))]
+use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
 use crate::{
@@ -21,8 +23,6 @@ use crate::{
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
-#[cfg(not(feature = "tco"))]
-use crate::arch::ExecuteFunc;
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
