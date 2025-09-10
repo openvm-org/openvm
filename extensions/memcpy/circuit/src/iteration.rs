@@ -598,7 +598,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
             .par_iter_mut()
             .zip(sizes.par_iter())
             .enumerate()
-            .for_each(|(row_idx, (chunk, &num_rows))| {
+            .for_each(|(_row_idx, (chunk, &num_rows))| {
                 let record: MemcpyIterRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,
@@ -914,26 +914,24 @@ impl<F: PrimeField32> MeteredExecutor<F> for MemcpyIterExecutor {
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MemcpyIterPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
     let shift = pre_compute.c;
     let mut height = 1;
     // Read dest and source from registers
     let (dest, source) = if shift == 0 {
         (
-            exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
-            exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A4_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A4_REGISTER_PTR as u32),
         )
     } else {
         (
-            exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A1_REGISTER_PTR as u32),
-            exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A1_REGISTER_PTR as u32),
+            vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A3_REGISTER_PTR as u32),
         )
     };
     // Read length from a2 register
-    let len = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A2_REGISTER_PTR as u32);
+    let len = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A2_REGISTER_PTR as u32);
 
     let mut dest = u32::from_le_bytes(dest);
     let mut source = u32::from_le_bytes(source) - 12 * (shift != 0) as u32;
@@ -953,13 +951,13 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut prev_data = if shift == 0 {
         [0; 4]
     } else {
-        exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
+        vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
     };
 
     // Run iterations
     while len - shift as u32 > 15 {
         for i in 0..4 {
-            let data = exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
+            let data = vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
             let write_data: [u8; 4] = array::from_fn(|i| {
                 if i < 4 - shift as usize {
                     data[i + shift as usize]
@@ -967,7 +965,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
                     prev_data[i - (4 - shift as usize)]
                 }
             });
-            exec_state.vm_write(RV32_MEMORY_AS, dest + 4 * i, &write_data);
+            vm_state.vm_write(RV32_MEMORY_AS, dest + 4 * i, &write_data);
             prev_data = data;
         }
         len -= 16;
@@ -978,33 +976,33 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     // Write the result back to memory
     if shift == 0 {
-        exec_state.vm_write(
+        vm_state.vm_write(
             RV32_REGISTER_AS,
             A3_REGISTER_PTR as u32,
             &dest.to_le_bytes(),
         );
-        exec_state.vm_write(
+        vm_state.vm_write(
             RV32_REGISTER_AS,
             A4_REGISTER_PTR as u32,
             &source.to_le_bytes(),
         );
     } else {
         source += 12;
-        exec_state.vm_write(
+        vm_state.vm_write(
             RV32_REGISTER_AS,
             A1_REGISTER_PTR as u32,
             &dest.to_le_bytes(),
         );
-        exec_state.vm_write(
+        vm_state.vm_write(
             RV32_REGISTER_AS,
             A3_REGISTER_PTR as u32,
             &source.to_le_bytes(),
         );
     };
-    exec_state.vm_write(RV32_REGISTER_AS, A2_REGISTER_PTR as u32, &len.to_le_bytes());
+    vm_state.vm_write(RV32_REGISTER_AS, A2_REGISTER_PTR as u32, &len.to_le_bytes());
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    *vm_state.pc_mut() = vm_state.pc().wrapping_add(DEFAULT_PC_STEP);
+    *vm_state.instret_mut() = vm_state.instret() + 1;
     height
 }
 
@@ -1012,11 +1010,13 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     instret: &mut u64,
     pc: &mut u32,
-    _instret_end: u64,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    _arg: u64,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MemcpyIterPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX>(pre_compute, instret, pc, exec_state);
+    let height = execute_e12_impl::<F, CTX>(pre_compute, vm_state);
+    *instret += height as u64;
+    *pc = vm_state.pc();
 }
 
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
@@ -1024,11 +1024,13 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     instret: &mut u64,
     pc: &mut u32,
     _arg: u64,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MemcpyIterPreCompute> = pre_compute.borrow();
-    let height = execute_e12_impl::<F, CTX>(&pre_compute.data, instret, pc, exec_state);
-    exec_state
+    let height = execute_e12_impl::<F, CTX>(&pre_compute.data, vm_state);
+    *instret += height as u64;
+    *pc = vm_state.pc();
+    vm_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
