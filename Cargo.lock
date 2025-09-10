@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#7016cfad47cf4efd92c4db96b565fb0c9c6f3529"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#b19ae3a03206dc78ba7d80ab7787ea17d0a34c92"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#7016cfad47cf4efd92c4db96b565fb0c9c6f3529"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#b19ae3a03206dc78ba7d80ab7787ea17d0a34c92"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#7016cfad47cf4efd92c4db96b565fb0c9c6f3529"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#b19ae3a03206dc78ba7d80ab7787ea17d0a34c92"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6245,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#7016cfad47cf4efd92c4db96b565fb0c9c6f3529"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#b19ae3a03206dc78ba7d80ab7787ea17d0a34c92"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6275,7 +6275,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#7016cfad47cf4efd92c4db96b565fb0c9c6f3529"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fntt#b19ae3a03206dc78ba7d80ab7787ea17d0a34c92"
 dependencies = [
  "dashmap",
  "derivative",
