@@ -31,7 +31,7 @@ jobs:
       matrix:
         platform:
           - { runner: "64cpu-linux-arm64", image: "arm64-rust-riscv-dev-32gb" }
-          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64-cuda12-9" }
+          - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
 
     runs-on:
       - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
