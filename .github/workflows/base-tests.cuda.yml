@@ -27,7 +27,7 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/family=g6+g6e/image=ubuntu24-gpu-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia
 
     steps:
       - uses: runs-on/action@v2
