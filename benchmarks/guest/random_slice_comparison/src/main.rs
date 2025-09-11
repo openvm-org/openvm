@@ -4,7 +4,7 @@ extern "C" {
     fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 }
 
-const N: usize = 65_536;
+const N: usize = 32_768;
 
 fn main() {
     let mut a: [u128; N] = [u128::MAX - 1; N];
@@ -24,9 +24,9 @@ fn main() {
         total_res += res.signum();
     }
 
-    let indices = [N - 1, N - 5, N - 10, N - 50, N - 100, N - 5000, N - 10000];
+    let indices = [N - 1, N - 10, N - 100, N - 10000];
 
-    // a > b case
+    // not equal case
     for i in 0..indices.len() {
         let idx = indices[i];
         a[idx] = u128::MAX;
@@ -38,21 +38,6 @@ fn main() {
             )
         };
         a[idx] = u128::MAX - 1;
-        total_res += res.signum();
-    }
-
-    // a < b case
-    for i in 0..indices.len() {
-        let idx = indices[i];
-        b[idx] = u128::MAX;
-        let res = unsafe {
-            memcmp(
-                a.as_mut_ptr() as *const u8,
-                b.as_mut_ptr() as *const u8,
-                N * size_of::<u128>(),
-            )
-        };
-        b[idx] = u128::MAX - 1;
         total_res += res.signum();
     }
 
