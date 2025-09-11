@@ -48,6 +48,12 @@ fn run_clang_tidy_single(
     .arg("-D__CUDACC__")
     .arg(format!("-I{}/include", cuda_path));
 
+    // Check if CCCL directory exists (CUDA 13.0+)
+    let cccl_path = PathBuf::from(cuda_path).join("include").join("cccl");
+    if cccl_path.exists() {
+        cmd.arg(format!("-I{}", cccl_path.display()));
+    }
+
     for include in includes {
         cmd.arg(format!("-I{}", include));
     }
