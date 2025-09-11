@@ -99,6 +99,7 @@ jobs:
           nvcc --version
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+          echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
       - name: Run extension tests
         env:

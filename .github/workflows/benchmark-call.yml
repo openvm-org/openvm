@@ -223,6 +223,7 @@ jobs:
           MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
           OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
           echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
+          echo "VPMM_PAGES=2048" >> $GITHUB_ENV # 4GB
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
