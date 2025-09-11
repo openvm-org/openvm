@@ -23,7 +23,6 @@ env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
   OPENVM_SKIP_DEBUG: "1"
-  LD_LIBRARY_PATH: /usr/local/cuda/lib64
 
 jobs:
   tests-cuda:
@@ -45,7 +44,8 @@ jobs:
       - name: Check CUDA status and set environment variables
         run: |
           nvcc --version
-          echo $LD_LIBRARY_PATH
+          # clear any stark-backend cache on cuda 12
+          cargo clean
           ls -l /usr/local/cuda*
           echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=1" >> $GITHUB_ENV
 
