@@ -128,7 +128,7 @@ extern "C" int _rv32_load_sign_extend_tracegen(
 ) {
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadSignExtendCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     rv32_load_sign_extend_tracegen<<<grid, block>>>(
         d_trace,
