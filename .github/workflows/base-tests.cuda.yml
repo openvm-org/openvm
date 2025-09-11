@@ -23,6 +23,7 @@ env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
   OPENVM_SKIP_DEBUG: "1"
+  LD_LIBRARY_PATH: /usr/local/cuda/lib64
 
 jobs:
   tests-cuda:
