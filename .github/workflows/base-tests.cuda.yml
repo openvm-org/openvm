@@ -44,6 +44,8 @@ jobs:
       - name: Check CUDA status and set environment variables
         run: |
           nvcc --version
+          echo $LD_LIBRARY_PATH
+          ls -l /usr/local/cuda*
           echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=1" >> $GITHUB_ENV
 
       - name: Run tests for primitives
