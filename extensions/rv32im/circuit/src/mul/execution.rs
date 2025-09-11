@@ -132,38 +132,48 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &MultiPreCompute,
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
-        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
+        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2: [u8; RV32_REGISTER_NUM_LIMBS] =
-        vm_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
+        exec_state.vm_read(RV32_REGISTER_AS, pre_compute.c as u32);
     let rs1 = u32::from_le_bytes(rs1);
     let rs2 = u32::from_le_bytes(rs2);
     let rd = rs1.wrapping_mul(rs2);
-    vm_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
 
-    vm_state.pc += DEFAULT_PC_STEP;
-    vm_state.instret += 1;
+    *pc += DEFAULT_PC_STEP;
+    *instret += 1;
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MultiPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, vm_state);
+    execute_e12_impl(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    vm_state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MultiPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, vm_state);
+    execute_e12_impl(&pre_compute.data, instret, pc, exec_state);
 }

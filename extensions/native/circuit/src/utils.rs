@@ -115,7 +115,8 @@ pub mod test_utils {
         let output =
             vm.execute_preflight(&mut preflight_interpreter, state, None, &trace_heights)?;
         assert_eq!(
-            output.to_state.instret, num_insns,
+            output.to_state.instret(),
+            num_insns,
             "metered execution insn count doesn't match preflight execution"
         );
         Ok((output, vm))

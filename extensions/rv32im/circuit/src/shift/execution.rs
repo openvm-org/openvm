@@ -149,6 +149,7 @@ where
     }
 }
 
+#[inline(always)]
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -156,26 +157,29 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
-    state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let rs2 = if IS_IMM {
         pre_compute.c.to_le_bytes()
     } else {
-        state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
+        exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c)
     };
     let rs2 = u32::from_le_bytes(rs2);
 
     // Execute the shift operation
     let rd = <OP as ShiftOp>::compute(rs1, rs2);
     // Write the result back to memory
-    state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    state.instret += 1;
-    state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+    *instret += 1;
+    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
@@ -183,13 +187,17 @@ unsafe fn execute_e1_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
-    state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
 }
 
 #[create_tco_handler]
+#[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
@@ -197,11 +205,16 @@ unsafe fn execute_e2_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
-    state: &mut VmExecState<F, GuestMemory, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
-    state.ctx.on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, state);
+    exec_state
+        .ctx
+        .on_height_change(pre_compute.chip_idx as usize, 1);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, instret, pc, exec_state);
 }
 
 trait ShiftOp {

@@ -15,7 +15,7 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
-        VmExecutor, VmInstance, VmState, PUBLIC_VALUES_AIR_ID,
+        VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{
@@ -956,11 +956,11 @@ fn test_vm_execute_metered_cost_native_chips() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (cost, VmState { instret, .. }) = instance
+    let (cost, vm_state) = instance
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(instret, instructions.len() as u64);
+    assert_eq!(vm_state.instret(), instructions.len() as u64);
     assert!(cost > 0);
 }
 
@@ -993,16 +993,11 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (
-        cost1,
-        VmState {
-            instret: instret1, ..
-        },
-    ) = instance1
+    let (cost1, vm_state1) = instance1
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(instret1, instructions.len() as u64);
+    assert_eq!(vm_state1.instret(), instructions.len() as u64);
 
     let executor_idx_to_air_idx2 = vm.executor_idx_to_air_idx();
     let instance2 = vm
@@ -1010,15 +1005,10 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
     let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
-    let (
-        cost2,
-        VmState {
-            instret: instret2, ..
-        },
-    ) = instance2
+    let (cost2, vm_state2) = instance2
         .execute_metered_cost(vec![], ctx2)
         .expect("Failed to execute");
 
-    assert_eq!(instret2, 1);
+    assert_eq!(vm_state2.instret(), 1);
     assert!(cost2 < cost1);
 }

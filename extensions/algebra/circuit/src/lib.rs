@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", feature(core_intrinsics))]
 
 use derive_more::derive::{Deref, DerefMut};
 use openvm_circuit_derive::PreflightExecutor;
