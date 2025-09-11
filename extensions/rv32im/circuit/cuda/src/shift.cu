@@ -24,7 +24,7 @@ struct ShiftRecord {
     Rv32ShiftCoreRecord core;
 };
 
-__launch_bounds__(256, 2) __global__ void rv32_shift_tracegen(
+__global__ void rv32_shift_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -69,7 +69,7 @@ extern "C" int _rv32_shift_tracegen(
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     rv32_shift_tracegen<<<grid, block>>>(
         d_trace,
