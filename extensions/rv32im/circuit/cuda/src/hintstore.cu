@@ -189,7 +189,7 @@ extern "C" int _hintstore_tracegen(
     uint32_t timestamp_max_bits
 ) {
     assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 256);
 
     hintstore_tracegen<<<grid, block>>>(
         d_trace,
