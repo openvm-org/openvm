@@ -56,17 +56,16 @@ __global__ void rv32_shift_tracegen(
 }
 
 extern "C" int _rv32_shift_tracegen(
-    Fp *d_trace,
+    Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
     DeviceBufferConstView<ShiftRecord> d_records,
-    uint32_t *d_range_checker,
+    uint32_t *__restrict__ d_range_checker,
     uint32_t range_checker_num_bins,
-    uint32_t *d_bitwise_lookup,
+    uint32_t *__restrict__ d_bitwise_lookup,
     uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
-    cudaDeviceSynchronize();
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
@@ -83,6 +82,5 @@ extern "C" int _rv32_shift_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
-    cudaDeviceSynchronize();
     return cudaGetLastError();
 }
