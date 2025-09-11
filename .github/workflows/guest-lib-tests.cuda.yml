@@ -34,7 +34,7 @@ jobs:
           - { names: "ruint k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=test-gpu-nvidia/cpu=8+32/family=g6+g5+g6e
 
     steps:
       - uses: runs-on/action@v2
