@@ -90,7 +90,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
     let memory = GuestMemory::new(AddressMap::from_mem_config(&vm_config.memory_config));
     vm.transport_init_memory_to_device(&memory);
     vm.load_program(committed_exe.get_committed_trace());
-    let from_state = VmState::new(
+    let from_state = VmState::new_with_defaults(
         0,
         0,
         memory,

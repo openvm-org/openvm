@@ -51,3 +51,6 @@ scripts/generate_clangd.sh
 ```
 
 to generate a local `.clangd` config file. This file cannot be committed to the repository as it includes local paths.
+
+> [!NOTE]
+> Several lints and analyzers are run on every pull request, including `cargo fmt` and `cargo clippy` for Rust code and `clang-tidy` for CUDA code. It is probably worthwhile installing these tools on your device to save development time.

@@ -66,7 +66,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 {
     #[cfg(any(debug_assertions, feature = "perf-metrics"))]
     {
-        let pc = state.pc;
+        let pc = state.pc();
         state.metrics.update_backtrace(pc);
     }
 
@@ -74,7 +74,7 @@ pub fn update_instruction_metrics<F, RA, Executor>(
     {
         use std::iter::zip;
 
-        let pc = state.pc;
+        let pc = state.pc();
         let opcode = pc_entry.insn.opcode;
         let opcode_name = executor.get_opcode_name(opcode.as_usize());
 
