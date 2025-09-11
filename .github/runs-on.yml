@@ -18,3 +18,4 @@ runners:
     preinstall: |
       nvidia-smi
       nvidia-smi -L
+      echo 'CUDA_ARCH=75,86,89' >> $GITHUB_ENV
