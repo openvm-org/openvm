@@ -188,6 +188,7 @@ extern "C" int _hintstore_tracegen(
     uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
+    cudaDeviceSynchronize();
     assert(width == sizeof(Rv32HintStoreCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
 
@@ -204,5 +205,6 @@ extern "C" int _hintstore_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
+    cudaDeviceSynchronize();
     return cudaGetLastError();
 }

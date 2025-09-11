@@ -126,6 +126,7 @@ extern "C" int _rv32_load_sign_extend_tracegen(
     uint32_t range_checker_num_bins,
     uint32_t timestamp_max_bits
 ) {
+    cudaDeviceSynchronize();
     assert((height & (height - 1)) == 0);
     assert(width == sizeof(Rv32LoadSignExtendCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -140,5 +141,6 @@ extern "C" int _rv32_load_sign_extend_tracegen(
         range_checker_num_bins,
         timestamp_max_bits
     );
+    cudaDeviceSynchronize();
     return cudaGetLastError();
 }

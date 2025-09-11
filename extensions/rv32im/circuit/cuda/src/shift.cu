@@ -66,6 +66,7 @@ extern "C" int _rv32_shift_tracegen(
     uint32_t bitwise_num_bits,
     uint32_t timestamp_max_bits
 ) {
+    cudaDeviceSynchronize();
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
@@ -82,5 +83,6 @@ extern "C" int _rv32_shift_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
+    cudaDeviceSynchronize();
     return cudaGetLastError();
 }
