@@ -4,25 +4,56 @@ extern "C" {
     fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 }
 
-const N: usize = 100_000;
+const N: usize = 65_536;
 
 fn main() {
-    let mut a: [u8; N] = [20; N];
-    let mut b: [u8; N] = [20; N];
+    let mut a: [u128; N] = [u128::MAX - 1; N];
+    let mut b: [u128; N] = [u128::MAX - 1; N];
 
-    let indices = [
-        66228, 93081, 58212, 28452, 60127, 51663, 42909, 93461, 44209, 29007,
-    ];
+    let mut total_res: i32 = 0;
 
-    let mut total_res = 0;
+    // equal case
+    {
+        let res = unsafe {
+            memcmp(
+                a.as_mut_ptr() as *const u8,
+                b.as_mut_ptr() as *const u8,
+                N * size_of::<u128>(),
+            )
+        };
+        total_res += res.signum();
+    }
 
+    let indices = [N - 1, N - 5, N - 10, N - 50, N - 100, N - 5000, N - 10000];
+
+    // a > b case
     for i in 0..indices.len() {
         let idx = indices[i];
-        a[idx] = 21;
-        let res = unsafe { memcmp(a.as_ptr(), b.as_ptr(), N) };
-        a[idx] = 20;
+        a[idx] = u128::MAX;
+        let res = unsafe {
+            memcmp(
+                a.as_mut_ptr() as *const u8,
+                b.as_mut_ptr() as *const u8,
+                N * size_of::<u128>(),
+            )
+        };
+        a[idx] = u128::MAX - 1;
+        total_res += res.signum();
+    }
 
-        total_res += res;
+    // a < b case
+    for i in 0..indices.len() {
+        let idx = indices[i];
+        b[idx] = u128::MAX;
+        let res = unsafe {
+            memcmp(
+                a.as_mut_ptr() as *const u8,
+                b.as_mut_ptr() as *const u8,
+                N * size_of::<u128>(),
+            )
+        };
+        b[idx] = u128::MAX - 1;
+        total_res += res.signum();
     }
 
     reveal_u32(total_res as u32, 0);
