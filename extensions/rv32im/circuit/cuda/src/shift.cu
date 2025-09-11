@@ -69,7 +69,7 @@ extern "C" int _rv32_shift_tracegen(
     assert((height & (height - 1)) == 0);
     assert(height >= d_records.len());
     assert(width == sizeof(ShiftCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height, 256);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     rv32_shift_tracegen<<<grid, block>>>(
         d_trace,
