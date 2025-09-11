@@ -39,20 +39,18 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
     };
 
     // Generate the execute and exit check code based on return type
-    let (execute_stmt, exit_check) = if returns_result {
-        (
-            quote! {
-                let __ret = { #execute_call };
-                if let ::core::result::Result::Err(e) = __ret {
-                    exec_state.set_instret_and_pc(instret, pc);
-                    exec_state.exit_code = ::core::result::Result::Err(e);
-                    return;
-                }
-            },
-            quote! {},
-        )
+    let execute_stmt = if returns_result {
+        quote! {
+            // Call original impl and wire errors into exit_code.
+            let __ret = { #execute_call };
+            if let ::core::result::Result::Err(e) = __ret {
+                exec_state.set_instret_and_pc(instret, pc);
+                exec_state.exit_code = ::core::result::Result::Err(e);
+                return;
+            }
+        }
     } else {
-        (quote! { #execute_call; }, quote! {})
+        quote! { #execute_call; }
     };
 
     // Generate the TCO handler function
@@ -75,8 +73,6 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
 
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_stmt
-
-            #exit_check
 
             if ::core::intrinsics::unlikely(#ctx_type::should_suspend(instret, pc, arg, exec_state)) {
                 exec_state.set_instret_and_pc(instret, pc);
