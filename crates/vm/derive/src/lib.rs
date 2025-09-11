@@ -9,6 +9,9 @@ use syn::{
     GenericParam, Ident, Meta, Token,
 };
 
+mod common;
+#[cfg(not(feature = "tco"))]
+mod nontco;
 #[cfg(feature = "tco")]
 mod tco;
 
@@ -48,7 +51,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 _ => panic!("Only unnamed fields are supported"),
             };
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate.
+            // crate. Assume F is already generic of the field.
             let where_clause = new_generics.make_where_clause();
             where_clause.predicates.push(
                 syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::PreflightExecutor<#field_ty_generic, RA> },
@@ -85,7 +88,7 @@ pub fn preflight_executor_derive(input: TokenStream) -> TokenStream {
                 })
                 .collect::<Vec<_>>();
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate. Assume F is already generic of the field.
+            // crate.
             let (execute_arms, get_opcode_name_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>) =
                 multiunzip(variants.iter().map(|(variant_name, field)| {
                     let field_ty = &field.ty;
@@ -183,6 +186,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     fn pre_compute_size(&self) -> usize {
                         self.0.pre_compute_size()
                     }
+                    #[cfg(not(feature = "tco"))]
                     #[inline(always)]
                     fn pre_compute<Ctx>(
                         &self,
@@ -281,6 +285,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    #[cfg(not(feature = "tco"))]
                     #[inline(always)]
                     fn pre_compute<Ctx>(
                         &self,
@@ -325,7 +330,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                 _ => panic!("Only unnamed fields are supported"),
             };
             // Use full path ::openvm_circuit... so it can be used either within or outside the vm
-            // crate. Assume F is already generic of the field.
+            // crate.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
             where_clause
@@ -357,6 +362,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     fn metered_pre_compute_size(&self) -> usize {
                         self.0.metered_pre_compute_size()
                     }
+                    #[cfg(not(feature = "tco"))]
                     #[inline(always)]
                     fn metered_pre_compute<Ctx>(
                         &self,
@@ -457,6 +463,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                         }
                     }
 
+                    #[cfg(not(feature = "tco"))]
                     #[inline(always)]
                     fn metered_pre_compute<Ctx>(
                         &self,
@@ -832,13 +839,13 @@ fn parse_executor_type(
 /// unless the execute_impl returns an error. This is done for performance to skip an exit code
 /// check.
 #[proc_macro_attribute]
-pub fn create_tco_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn create_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(feature = "tco")]
     {
         tco::tco_impl(item)
     }
     #[cfg(not(feature = "tco"))]
     {
-        item
+        nontco::nontco_impl(item)
     }
 }

@@ -177,6 +177,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
         )
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -203,8 +204,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError> {
         dispatch1!(
-            execute_pos2_e1_tco_handler,
-            execute_verify_batch_e1_tco_handler,
+            execute_pos2_e1_handler,
+            execute_verify_batch_e1_handler,
             self,
             inst.opcode,
             pc,
@@ -258,6 +259,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
         )
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
@@ -287,8 +289,8 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
         data: &mut [u8],
     ) -> Result<Handler<F, Ctx>, StaticProgramError> {
         dispatch2!(
-            execute_pos2_e2_tco_handler,
-            execute_verify_batch_e2_tco_handler,
+            execute_pos2_e2_handler,
+            execute_verify_batch_e2_handler,
             self,
             inst.opcode,
             chip_idx,
@@ -299,7 +301,7 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> MeteredExecutor<F>
     }
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e1_impl<
     F: PrimeField32,
@@ -317,7 +319,7 @@ unsafe fn execute_pos2_e1_impl<
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_pos2_e2_impl<
     F: PrimeField32,
@@ -343,7 +345,7 @@ unsafe fn execute_pos2_e2_impl<
         .on_height_change(pre_compute.chip_idx as usize, height);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_verify_batch_e1_impl<
     F: PrimeField32,
@@ -366,7 +368,7 @@ unsafe fn execute_verify_batch_e1_impl<
     );
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_verify_batch_e2_impl<
     F: PrimeField32,

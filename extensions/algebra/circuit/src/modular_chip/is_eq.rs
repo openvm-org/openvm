@@ -548,6 +548,7 @@ where
         std::mem::size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
@@ -557,7 +558,7 @@ where
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_impl, is_setup)
+        dispatch!(execute_e1_handler, is_setup)
     }
 
     #[cfg(feature = "tco")]
@@ -573,7 +574,7 @@ where
         let pre_compute: &mut ModularIsEqualPreCompute<TOTAL_READ_SIZE> = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_tco_handler, is_setup)
+        dispatch!(execute_e1_handler, is_setup)
     }
 }
 
@@ -587,6 +588,7 @@ where
         std::mem::size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
@@ -600,7 +602,7 @@ where
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_impl, is_setup)
+        dispatch!(execute_e2_handler, is_setup)
     }
 
     #[cfg(feature = "tco")]
@@ -617,11 +619,11 @@ where
 
         let is_setup = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_tco_handler, is_setup)
+        dispatch!(execute_e2_handler, is_setup)
     }
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -647,7 +649,7 @@ unsafe fn execute_e1_impl<
     );
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

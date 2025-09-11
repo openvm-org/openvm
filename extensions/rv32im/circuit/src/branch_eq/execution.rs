@@ -72,6 +72,7 @@ where
         size_of::<BranchEqualPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -81,7 +82,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_impl, is_bne)
+        dispatch!(execute_e1_handler, is_bne)
     }
 
     #[cfg(feature = "tco")]
@@ -96,7 +97,7 @@ where
     {
         let data: &mut BranchEqualPreCompute = data.borrow_mut();
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_tco_handler, is_bne)
+        dispatch!(execute_e1_handler, is_bne)
     }
 }
 
@@ -108,6 +109,7 @@ where
         size_of::<E2PreCompute<BranchEqualPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -121,7 +123,7 @@ where
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_impl, is_bne)
+        dispatch!(execute_e2_handler, is_bne)
     }
 
     #[cfg(feature = "tco")]
@@ -138,7 +140,7 @@ where
         let data: &mut E2PreCompute<BranchEqualPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let is_bne = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_tco_handler, is_bne)
+        dispatch!(execute_e2_handler, is_bne)
     }
 }
 
@@ -159,7 +161,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
@@ -172,7 +174,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: 
     execute_e12_impl::<F, CTX, IS_NE>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],

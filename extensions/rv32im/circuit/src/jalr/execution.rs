@@ -62,6 +62,7 @@ where
     fn pre_compute_size(&self) -> usize {
         size_of::<JalrPreCompute>()
     }
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -71,7 +72,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_impl, enabled)
+        dispatch!(execute_e1_handler, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -86,7 +87,7 @@ where
     {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
-        dispatch!(execute_e1_tco_handler, enabled)
+        dispatch!(execute_e1_handler, enabled)
     }
 }
 
@@ -98,6 +99,7 @@ where
         size_of::<E2PreCompute<JalrPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -111,7 +113,7 @@ where
         let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_impl, enabled)
+        dispatch!(execute_e2_handler, enabled)
     }
 
     #[cfg(feature = "tco")]
@@ -128,7 +130,7 @@ where
         let data: &mut E2PreCompute<JalrPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let enabled = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        dispatch!(execute_e2_tco_handler, enabled)
+        dispatch!(execute_e2_handler, enabled)
     }
 }
 
@@ -154,7 +156,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &[u8],
@@ -167,7 +169,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED
     execute_e12_impl::<F, CTX, ENABLED>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &[u8],

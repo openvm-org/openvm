@@ -87,6 +87,7 @@ where
         size_of::<BaseAluPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -99,7 +100,7 @@ where
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_impl, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -115,7 +116,7 @@ where
         let data: &mut BaseAluPreCompute = data.borrow_mut();
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_tco_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
@@ -129,6 +130,7 @@ where
         size_of::<E2PreCompute<BaseAluPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -143,7 +145,7 @@ where
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_impl, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -161,7 +163,7 @@ where
         data.chip_idx = chip_idx as u32;
         let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_tco_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
     }
 }
 
@@ -192,7 +194,7 @@ unsafe fn execute_e12_impl<
     *instret += 1;
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -210,7 +212,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

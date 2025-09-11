@@ -30,7 +30,7 @@ pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
-pub use openvm_circuit_derive::create_tco_handler;
+pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;
 pub use state::*;

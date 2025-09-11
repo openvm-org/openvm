@@ -81,6 +81,7 @@ where
         size_of::<ShiftPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
@@ -90,7 +91,7 @@ where
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        dispatch!(execute_e1_impl, is_imm, shift_opcode)
+        dispatch!(execute_e1_handler, is_imm, shift_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -106,7 +107,7 @@ where
         let data: &mut ShiftPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        dispatch!(execute_e1_tco_handler, is_imm, shift_opcode)
+        dispatch!(execute_e1_handler, is_imm, shift_opcode)
     }
 }
 
@@ -119,6 +120,7 @@ where
         size_of::<E2PreCompute<ShiftPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
         chip_idx: usize,
@@ -130,7 +132,7 @@ where
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        dispatch!(execute_e2_impl, is_imm, shift_opcode)
+        dispatch!(execute_e2_handler, is_imm, shift_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -145,7 +147,7 @@ where
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
         // `d` is always expected to be RV32_REGISTER_AS.
-        dispatch!(execute_e2_tco_handler, is_imm, shift_opcode)
+        dispatch!(execute_e2_handler, is_imm, shift_opcode)
     }
 }
 
@@ -178,7 +180,7 @@ unsafe fn execute_e12_impl<
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -196,7 +198,7 @@ unsafe fn execute_e1_impl<
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,

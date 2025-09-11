@@ -153,7 +153,7 @@ where
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-        #[cfg_attr(feature = "tco", allow(unused_variables))]
+        #[cfg(not(feature = "tco"))]
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
@@ -256,7 +256,7 @@ where
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-        #[cfg_attr(feature = "tco", allow(unused_variables))]
+        #[cfg(not(feature = "tco"))]
         let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
@@ -505,6 +505,7 @@ fn split_pre_compute_buf<'a, F>(
 ///
 /// # Safety
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
+#[cfg(not(feature = "tco"))]
 #[inline(always)]
 unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     mut instret: u64,
@@ -675,6 +676,7 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
     None
 }
 
+#[cfg(not(feature = "tco"))]
 fn get_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,
@@ -730,6 +732,7 @@ where
         .collect::<Result<Vec<_>, _>>()
 }
 
+#[cfg(not(feature = "tco"))]
 fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,

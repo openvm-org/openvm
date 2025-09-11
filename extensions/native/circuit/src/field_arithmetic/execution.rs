@@ -152,7 +152,7 @@ where
 
         let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_tco_handler, local_opcode, a_is_imm, b_is_imm)
+        dispatch!(execute_e1_handler, local_opcode, a_is_imm, b_is_imm)
     }
 
     #[inline(always)]
@@ -160,6 +160,7 @@ where
         size_of::<FieldArithmeticPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
@@ -171,7 +172,7 @@ where
 
         let (a_is_imm, b_is_imm, local_opcode) = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_impl, local_opcode, a_is_imm, b_is_imm)
+        dispatch!(execute_e1_handler, local_opcode, a_is_imm, b_is_imm)
     }
 }
 
@@ -184,6 +185,7 @@ where
         size_of::<E2PreCompute<FieldArithmeticPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     #[inline(always)]
     fn metered_pre_compute<Ctx: MeteredExecutionCtxTrait>(
         &self,
@@ -198,7 +200,7 @@ where
         let (a_is_imm, b_is_imm, local_opcode) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_impl, local_opcode, a_is_imm, b_is_imm)
+        dispatch!(execute_e2_handler, local_opcode, a_is_imm, b_is_imm)
     }
 
     #[cfg(feature = "tco")]
@@ -215,7 +217,7 @@ where
         let (a_is_imm, b_is_imm, local_opcode) =
             self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
 
-        dispatch!(execute_e2_tco_handler, local_opcode, a_is_imm, b_is_imm)
+        dispatch!(execute_e2_handler, local_opcode, a_is_imm, b_is_imm)
     }
 }
 
@@ -231,7 +233,7 @@ unsafe fn execute_e12_impl<
     instret: &mut u64,
     pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     // Read values based on the adapter logic
     let b_val = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.b_or_imm)
@@ -251,11 +253,11 @@ unsafe fn execute_e12_impl<
         3 => {
             // DIV
             if c_val.is_zero() {
-                exec_state.exit_code = Err(ExecutionError::Fail {
+                let err = ExecutionError::Fail {
                     pc: *pc,
                     msg: "DivF divide by zero",
-                });
-                return;
+                };
+                return Err(err);
             }
             b_val * c_val.inverse()
         }
@@ -266,9 +268,11 @@ unsafe fn execute_e12_impl<
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
+
+    Ok(())
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -282,12 +286,12 @@ unsafe fn execute_e1_impl<
     pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, instret, pc, exec_state)
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
@@ -301,7 +305,7 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
@@ -311,5 +315,5 @@ unsafe fn execute_e2_impl<
         instret,
         pc,
         exec_state,
-    );
+    )
 }

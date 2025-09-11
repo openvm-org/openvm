@@ -129,6 +129,7 @@ pub type Handler<F, CTX> = unsafe fn(
 pub trait Executor<F> {
     fn pre_compute_size(&self) -> usize;
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -160,6 +161,7 @@ pub trait Executor<F> {
 pub trait MeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         air_idx: usize,

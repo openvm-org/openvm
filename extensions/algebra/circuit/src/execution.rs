@@ -259,6 +259,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         std::mem::size_of::<FieldExpressionPreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -272,9 +273,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(
-            execute_e1_impl,
-            execute_e1_generic_impl,
-            execute_e1_setup_impl,
+            execute_e1_handler,
+            execute_e1_generic_handler,
+            execute_e1_setup_handler,
             pre_compute,
             op
         )
@@ -294,9 +295,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, pre_compute)?;
 
         dispatch!(
-            execute_e1_tco_handler,
-            execute_e1_generic_tco_handler,
-            execute_e1_setup_tco_handler,
+            execute_e1_handler,
+            execute_e1_generic_handler,
+            execute_e1_setup_handler,
             pre_compute,
             op
         )
@@ -311,6 +312,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         std::mem::size_of::<E2PreCompute<FieldExpressionPreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -328,9 +330,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
 
         dispatch!(
-            execute_e2_impl,
-            execute_e2_generic_impl,
-            execute_e2_setup_impl,
+            execute_e2_handler,
+            execute_e2_generic_handler,
+            execute_e2_setup_handler,
             pre_compute_pure,
             op
         )
@@ -354,9 +356,9 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2
         let op = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
 
         dispatch!(
-            execute_e2_tco_handler,
-            execute_e2_generic_tco_handler,
-            execute_e2_setup_tco_handler,
+            execute_e2_handler,
+            execute_e2_generic_handler,
+            execute_e2_setup_handler,
             pre_compute_pure,
             op
         )
@@ -456,7 +458,7 @@ unsafe fn execute_e12_setup_impl<
     instret: &mut u64,
     pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     // Read the first input (which should be the prime)
     let rs_vals = pre_compute
         .rs_addrs
@@ -474,11 +476,11 @@ unsafe fn execute_e12_setup_impl<
     };
 
     if input_prime != pre_compute.expr.prime {
-        exec_state.exit_code = Err(ExecutionError::Fail {
+        let err = ExecutionError::Fail {
             pc: *pc,
             msg: "ModularSetup: mismatched prime",
-        });
-        return;
+        };
+        return Err(err);
     }
 
     let read_data_dyn: DynArray<u8> = read_data.into();
@@ -499,9 +501,11 @@ unsafe fn execute_e12_setup_impl<
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
+
+    Ok(())
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_setup_impl<
     F: PrimeField32,
@@ -515,17 +519,12 @@ unsafe fn execute_e1_setup_impl<
     pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
-    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(
-        pre_compute,
-        instret,
-        pc,
-        exec_state,
-    );
+    execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, instret, pc, exec_state)
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_setup_impl<
     F: PrimeField32,
@@ -539,7 +538,7 @@ unsafe fn execute_e2_setup_impl<
     pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
@@ -549,10 +548,10 @@ unsafe fn execute_e2_setup_impl<
         instret,
         pc,
         exec_state,
-    );
+    )
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -578,7 +577,7 @@ unsafe fn execute_e1_impl<
     );
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
@@ -607,7 +606,7 @@ unsafe fn execute_e2_impl<
     );
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_generic_impl<
     F: PrimeField32,
@@ -626,7 +625,7 @@ unsafe fn execute_e1_generic_impl<
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, instret, pc, exec_state);
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_generic_impl<
     F: PrimeField32,

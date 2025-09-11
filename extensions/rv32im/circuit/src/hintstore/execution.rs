@@ -78,6 +78,7 @@ where
         size_of::<HintStorePreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx: ExecutionCtxTrait>(
         &self,
         pc: u32,
@@ -86,7 +87,7 @@ where
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_impl, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -101,7 +102,7 @@ where
     {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_tco_handler, local_opcode)
+        dispatch!(execute_e1_handler, local_opcode)
     }
 }
 
@@ -113,6 +114,7 @@ where
         size_of::<E2PreCompute<HintStorePreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -126,7 +128,7 @@ where
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_impl, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 
     #[cfg(feature = "tco")]
@@ -143,7 +145,7 @@ where
         let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_tco_handler, local_opcode)
+        dispatch!(execute_e2_handler, local_opcode)
     }
 }
 
@@ -154,7 +156,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     instret: &mut u64,
     pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> u32 {
+) -> Result<u32, ExecutionError> {
     let mem_ptr_limbs = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
     let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
 
@@ -167,8 +169,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     debug_assert_ne!(num_words, 0);
 
     if exec_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        exec_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: *pc });
-        return 0;
+        let err = ExecutionError::HintOutOfBounds { pc: *pc };
+        return Err(err);
     }
 
     for word_index in 0..num_words {
@@ -189,10 +191,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
-    num_words
+    Ok(num_words)
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
     pre_compute: &[u8],
@@ -200,12 +202,13 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT
     pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &HintStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, instret, pc, exec_state)?;
+    Ok(())
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
@@ -217,11 +220,12 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
     let height_delta =
-        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, instret, pc, exec_state);
+        execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, instret, pc, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height_delta);
+    Ok(())
 }

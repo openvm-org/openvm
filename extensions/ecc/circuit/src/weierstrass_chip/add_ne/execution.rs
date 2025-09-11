@@ -180,6 +180,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         std::mem::size_of::<EcAddNePreCompute>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn pre_compute<Ctx>(
         &self,
         pc: u32,
@@ -192,7 +193,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_impl, pre_compute, is_setup)
+        dispatch!(execute_e1_handler, pre_compute, is_setup)
     }
 
     #[cfg(feature = "tco")]
@@ -208,7 +209,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
         let pre_compute: &mut EcAddNePreCompute = data.borrow_mut();
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute)?;
 
-        dispatch!(execute_e1_tco_handler, pre_compute, is_setup)
+        dispatch!(execute_e1_handler, pre_compute, is_setup)
     }
 }
 
@@ -220,6 +221,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
         std::mem::size_of::<E2PreCompute<EcAddNePreCompute>>()
     }
 
+    #[cfg(not(feature = "tco"))]
     fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
@@ -235,7 +237,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 
         let pre_compute_pure = &mut pre_compute.data;
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
-        dispatch!(execute_e2_impl, pre_compute_pure, is_setup)
+        dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
 
     #[cfg(feature = "tco")]
@@ -254,7 +256,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecu
 
         let pre_compute_pure = &mut pre_compute.data;
         let is_setup = self.pre_compute_impl(pc, inst, pre_compute_pure)?;
-        dispatch!(execute_e2_tco_handler, pre_compute_pure, is_setup)
+        dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
 }
 
@@ -271,7 +273,7 @@ unsafe fn execute_e12_impl<
     instret: &mut u64,
     pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     // Read register values
     let rs_vals = pre_compute
         .rs_addrs
@@ -286,11 +288,11 @@ unsafe fn execute_e12_impl<
     if IS_SETUP {
         let input_prime = BigUint::from_bytes_le(read_data[0][..BLOCKS / 2].as_flattened());
         if input_prime != pre_compute.expr.prime {
-            exec_state.exit_code = Err(ExecutionError::Fail {
+            let err = ExecutionError::Fail {
                 pc: *pc,
                 msg: "EcAddNe: mismatched prime",
-            });
-            return;
+            };
+            return Err(err);
         }
     }
 
@@ -316,9 +318,11 @@ unsafe fn execute_e12_impl<
 
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
+
+    Ok(())
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
     F: PrimeField32,
@@ -333,17 +337,17 @@ unsafe fn execute_e1_impl<
     pc: &mut u32,
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &EcAddNePreCompute = pre_compute.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, FIELD_TYPE, IS_SETUP>(
         pre_compute,
         instret,
         pc,
         exec_state,
-    );
+    )
 }
 
-#[create_tco_handler]
+#[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
     F: PrimeField32,
@@ -358,7 +362,7 @@ unsafe fn execute_e2_impl<
     pc: &mut u32,
     _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> = pre_compute.borrow();
     exec_state
         .ctx
@@ -368,5 +372,5 @@ unsafe fn execute_e2_impl<
         instret,
         pc,
         exec_state,
-    );
+    )
 }
