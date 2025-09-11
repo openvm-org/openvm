@@ -24,7 +24,7 @@ struct ShiftRecord {
     Rv32ShiftCoreRecord core;
 };
 
-__global__ void rv32_shift_tracegen(
+__launch_bounds__(256, 2) __global__ void rv32_shift_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
