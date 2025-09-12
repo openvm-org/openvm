@@ -3,7 +3,7 @@ version = "0.0.0"
 edition = "2021"
 
 [workspace]
-members = ["base64_json", "bincode", "bubblesort", "ecrecover", "factorial_iterative_u256", "fibonacci", "fibonacci_iterative", "fibonacci_recursive", "keccak256", "keccak256_iter", "kitchen-sink", "pairing", "quicksort", "regex", "revm_snailtracer", "revm_transfer", "rkyv", "sha256", "sha256_iter"]
+members = ["base64_json", "bincode", "bubblesort", "ecrecover", "factorial_iterative_u256", "fibonacci", "fibonacci_iterative", "fibonacci_recursive", "keccak256", "keccak256_iter", "kitchen-sink", "pairing", "quicksort", "regex", "revm_snailtracer", "revm_transfer", "rkyv", "sha256", "sha256_iter", "slice_comparison"]
 resolver = "2"
 
 [workspace.dependencies]
