@@ -207,9 +207,55 @@
 	.file	"musl_memcpy.c"
 
 	# Define memcpy_loop macro for custom instruction (U-type)
-	.macro memcpy_loop shift
-		.word 0x00000072 | (\shift << 12)  # opcode 0x72 + shift in immediate field (bits 12-31)
-	.endm
+	    .macro memcpy_loop shift
+1:
+        li      t0, 16
+        bltu    a2, t0, 3f           # if (len < 16) break
+
+        # Fast path only if both src and dst 4-byte aligned
+        or      t2, a3, a4
+        andi    t2, t2, 3
+        bnez    t2, 2f                # if either misaligned, use bytewise
+
+        # 16B via four lw/sw (RV32IM requires aligned lw/sw)
+        lw      t3,  0(a4)
+        lw      t4,  4(a4)
+        lw      t5,  8(a4)
+        lw      t6, 12(a4)
+        sw      t3,  0(a3)
+        sw      t4,  4(a3)
+        sw      t5,  8(a3)
+        sw      t6, 12(a3)
+        addi    a4, a4, 16
+        addi    a3, a3, 16
+        addi    a2, a2, -16
+        j       1b
+
+2:      # Fallback: alignment-safe bytewise 16B copy
+        lb      t1, 0(a4);  sb t1, 0(a3)
+        lb      t1, 1(a4);  sb t1, 1(a3)
+        lb      t1, 2(a4);  sb t1, 2(a3)
+        lb      t1, 3(a4);  sb t1, 3(a3)
+        lb      t1, 4(a4);  sb t1, 4(a3)
+        lb      t1, 5(a4);  sb t1, 5(a3)
+        lb      t1, 6(a4);  sb t1, 6(a3)
+        lb      t1, 7(a4);  sb t1, 7(a3)
+        lb      t1, 8(a4);  sb t1, 8(a3)
+        lb      t1, 9(a4);  sb t1, 9(a3)
+        lb      t1,10(a4);  sb t1,10(a3)
+        lb      t1,11(a4);  sb t1,11(a3)
+        lb      t1,12(a4);  sb t1,12(a3)
+        lb      t1,13(a4);  sb t1,13(a3)
+        lb      t1,14(a4);  sb t1,14(a3)
+        lb      t1,15(a4);  sb t1,15(a3)
+        addi    a4, a4, 16
+        addi    a3, a3, 16
+        addi    a2, a2, -16
+        j       1b
+
+3:
+    .endm
+
 	.globl	memcpy
 	.p2align	2
 	.type	memcpy,@function

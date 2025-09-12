@@ -7,7 +7,10 @@ pub use bus::*;
 pub use extension::*;
 pub use iteration::*;
 pub use loops::*;
-use openvm_circuit::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::{GuestMemory, TracingMemory}};
+use openvm_circuit::system::memory::{
+    merkle::public_values::PUBLIC_VALUES_AS,
+    online::{GuestMemory, TracingMemory},
+};
 use openvm_instructions::riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS};
 
 // ==== Do not change these constants! ====
@@ -18,7 +21,6 @@ pub const A1_REGISTER_PTR: usize = 11 * 4;
 pub const A2_REGISTER_PTR: usize = 12 * 4;
 pub const A3_REGISTER_PTR: usize = 13 * 4;
 pub const A4_REGISTER_PTR: usize = 14 * 4;
-
 
 // TODO: These are duplicated from extensions/rv32im/circuit/src/adapters/mod.rs
 // to prevent cyclic dependencies. Fix this.

@@ -11,11 +11,25 @@ memcpy_loop shift
 
 Where `shift` is an immediate value (0, 1, 2, or 3) representing the byte alignment shift.
 
+### RISC-V Encoding
+- **Opcode**: `0x73` (custom opcode)
+- **Funct3**: `0x0` (custom funct3)
+- **Immediate**: 12-bit signed immediate for shift value
+- **Format**: I-type instruction
 
 ### Usage
 The `memcpy_loop` instruction is designed to replace repetitive shift-handling code in memcpy implementations. Instead of having separate code blocks for each shift value, you can use a single instruction:
 
 ```assembly
+# Instead of this repetitive code:
+.Lshift_1:
+    lw      a5, 0(a4)
+    sb      a5, 0(a3)
+    srli    a1, a5, 8
+    sb      a1, 1(a3)
+    # ... more shift handling code
+
+# You can use:
 memcpy_loop 1    # Handles shift=1 case
 ```
 
@@ -80,4 +94,5 @@ The extension provides:
 
 # References
 
-- Official Keccak [spec summary](https://keccak.team/keccak_specs_summary.html)
+- [OpenVM Documentation](../../docs/README.md)
+- [RISC-V Instruction Set Manual](https://riscv.org/technical/specifications/)
