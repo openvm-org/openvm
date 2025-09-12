@@ -340,4 +340,24 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_memcmp() -> Result<()> {
+        let config = test_rv32im_config();
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "memcmp",
+            ["std"],
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension),
+        )?;
+        air_test(Rv32ImBuilder, config, exe);
+        Ok(())
+    }
 }
