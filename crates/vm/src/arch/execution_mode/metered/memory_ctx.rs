@@ -14,6 +14,11 @@ impl BitSet {
         }
     }
 
+    pub fn num_of_ones(&self) -> usize {
+        let num_ones: u32 = self.words.iter().map(|x| x.count_ones()).sum();
+        num_ones as usize
+    }
+
     #[inline(always)]
     pub fn insert(&mut self, index: usize) -> bool {
         let word_index = index >> 6;
@@ -99,6 +104,7 @@ impl BitSet {
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
+    pub global_page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
     min_block_size_bits: Vec<u8>,
     pub boundary_idx: usize,
@@ -108,6 +114,7 @@ pub struct MemoryCtx<const PAGE_BITS: usize> {
     chunk: u32,
     chunk_bits: u32,
     page_access_count: usize,
+    pub global_page_access_count: usize,
     // Note: 32 is the maximum access adapter size.
     addr_space_access_count: Vec<usize>,
 }
@@ -123,6 +130,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         Self {
             // Address height already considers `chunk_bits`.
             page_indices: BitSet::new(1 << (merkle_height.saturating_sub(PAGE_BITS))),
+            global_page_indices: BitSet::new(1 << (merkle_height.saturating_sub(PAGE_BITS))),
             min_block_size_bits: config.memory_config.min_block_size_bits(),
             boundary_idx: config.memory_boundary_air_id(),
             merkle_tree_index: config.memory_merkle_air_id(),
@@ -132,6 +140,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_access_count: 0,
+            global_page_access_count: 0,
             addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
         }
     }
@@ -178,6 +187,9 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         let end_page_id = ((end_block_id - 1) >> PAGE_BITS) + 1;
 
         for page_id in start_page_id..end_page_id {
+            if self.global_page_indices.insert(page_id as usize) {
+                self.global_page_access_count += 1;
+            }
             if self.page_indices.insert(page_id as usize) {
                 self.page_access_count += 1;
                 // SAFETY: address_space passed is usually a hardcoded constant or derived from an
