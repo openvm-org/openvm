@@ -1,8 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use openvm::io::reveal_u32;
-
 extern "C" {
     fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 }
@@ -14,13 +12,13 @@ openvm::entry!(main);
 fn main() {
     // test equal arrays
     {
-        let mut a: [u32; N] = [1; N];
-        let mut b: [u32; N] = [1; N];
+        let a: [u32; N] = [1; N];
+        let b: [u32; N] = [1; N];
 
         let res = unsafe {
             memcmp(
-                a.as_mut_ptr() as *const u8,
-                b.as_mut_ptr() as *const u8,
+                a.as_ptr() as *const u8,
+                b.as_ptr() as *const u8,
                 N * size_of::<u32>(),
             )
         };
@@ -46,7 +44,7 @@ fn main() {
 
     {
         let mut a: [u32; N] = [1; N];
-        let mut b: [u32; N] = [1; N];
+        let b: [u32; N] = [1; N];
 
         a[N - 1] = 100;
 
@@ -64,7 +62,7 @@ fn main() {
     // test varied n parameter
     {
         let mut a: [u32; N] = [1; N];
-        let mut b: [u32; N] = [1; N];
+        let b: [u32; N] = [1; N];
 
         a[N - 1] = 100;
 
@@ -82,7 +80,7 @@ fn main() {
     // test incorrect size parameter
     {
         let mut a: [u32; N] = [1; N];
-        let mut b: [u32; N] = [1; N];
+        let b: [u32; N] = [1; N];
 
         a[N - 1] = 100;
 
@@ -98,24 +96,18 @@ fn main() {
     }
 
     {
-        let mut a: [u32; N] = [1; N];
+        let a: [u32; N] = [1; N];
         let mut b: [u32; N] = [7; N];
 
-        let res = unsafe {
-            memcmp(
-                a.as_ptr() as *const u8,
-                b.as_ptr() as *const u8,
-                0 * size_of::<u32>(),
-            )
-        };
+        let res = unsafe { memcmp(a.as_ptr() as *const u8, b.as_ptr() as *const u8, 0) };
 
         assert_eq!(res.signum(), 0);
     }
 
     // test other data types (u128, i64, strings)
     {
-        let mut a: [u128; N] = [1; N];
-        let mut b: [u128; N] = [7; N];
+        let a: [u128; N] = [1; N];
+        let b: [u128; N] = [7; N];
 
         let res = unsafe {
             memcmp(
@@ -129,8 +121,8 @@ fn main() {
     }
 
     {
-        let mut a: [i64; N] = [7; N];
-        let mut b: [i64; N] = [1; N];
+        let a: [i64; N] = [7; N];
+        let b: [i64; N] = [1; N];
 
         let res = unsafe {
             memcmp(
@@ -147,7 +139,7 @@ fn main() {
         let a = "aaa";
         let b = "aab";
 
-        let res = unsafe { memcmp(a.as_ptr() as *const u8, b.as_ptr() as *const u8, a.len()) };
+        let res = unsafe { memcmp(a.as_ptr(), b.as_ptr(), a.len()) };
 
         assert_eq!(res.signum(), -1);
     }
@@ -196,7 +188,7 @@ fn main() {
 
     {
         for pos in [0, 1, N / 2, N - 1] {
-            let mut a: [u8; N] = [5; N];
+            let a: [u8; N] = [5; N];
             let mut b: [u8; N] = [5; N];
             b[pos] = 6;
 
