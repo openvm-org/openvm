@@ -97,7 +97,7 @@ fn main() {
 
     {
         let a: [u32; N] = [1; N];
-        let mut b: [u32; N] = [7; N];
+        let b: [u32; N] = [7; N];
 
         let res = unsafe { memcmp(a.as_ptr() as *const u8, b.as_ptr() as *const u8, 0) };
 
@@ -147,7 +147,7 @@ fn main() {
     // test memory on the heap
     {
         let mut a: Vec<u8> = vec![1; N];
-        let mut b: Vec<u8> = vec![1; N];
+        let b: Vec<u8> = vec![1; N];
         a[N - 1] = 2;
 
         let res = unsafe { memcmp(a.as_ptr(), b.as_ptr(), N) };
