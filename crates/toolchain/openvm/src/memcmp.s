@@ -28,7 +28,7 @@
 	.type	memcmp,@function
 memcmp:
 	addi	sp, sp, -16
-	li	a3, 32
+	li	a3, 8
 	bltu	a2, a3, .LBBmemcmp0_53
 	andi	a3, a1, 3
 	beqz	a3, .LBBmemcmp0_4
