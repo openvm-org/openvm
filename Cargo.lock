@@ -4385,6 +4385,7 @@ dependencies = [
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",
@@ -5137,6 +5138,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-rv32-adapters",
@@ -5196,6 +5198,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-instructions",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -5235,6 +5238,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
  "openvm-native-circuit",
  "openvm-native-recursion",
  "openvm-pairing-circuit",
@@ -5318,6 +5323,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-rv32-adapters",
  "openvm-rv32im-circuit",
  "openvm-rv32im-transpiler",
@@ -5582,6 +5588,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sdk",
  "openvm-stark-sdk",
@@ -5628,6 +5635,7 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-circuit",
  "openvm-instructions",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -5678,6 +5686,7 @@ dependencies = [
  "openvm-keccak256-circuit",
  "openvm-keccak256-guest",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -5703,6 +5712,7 @@ dependencies = [
  "openvm-cuda-common",
  "openvm-instructions",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-circuit",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -5738,6 +5748,57 @@ name = "openvm-macros-common"
 version = "1.4.1-rc.0"
 dependencies = [
  "syn 2.0.106",
+]
+
+[[package]]
+name = "openvm-memcpy-circuit"
+version = "1.4.1-rc.0"
+dependencies = [
+ "derive-new 0.6.0",
+ "derive_more 1.0.0",
+ "openvm-circuit",
+ "openvm-circuit-derive",
+ "openvm-circuit-primitives",
+ "openvm-circuit-primitives-derive",
+ "openvm-instructions",
+ "openvm-memcpy-transpiler",
+ "openvm-rv32im-transpiler",
+ "openvm-stark-backend",
+ "serde",
+ "strum",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-memcpy-integration-tests"
+version = "1.4.1-rc.0"
+dependencies = [
+ "eyre",
+ "openvm",
+ "openvm-circuit",
+ "openvm-circuit-primitives",
+ "openvm-instructions",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+ "rand 0.8.5",
+ "serde",
+ "strum",
+ "test-case",
+ "tracing",
+]
+
+[[package]]
+name = "openvm-memcpy-transpiler"
+version = "1.4.1-rc.0"
+dependencies = [
+ "openvm-instructions",
+ "openvm-instructions-derive",
+ "openvm-stark-backend",
+ "openvm-transpiler",
+ "rrs-lib",
+ "strum",
 ]
 
 [[package]]
@@ -5891,6 +5952,8 @@ dependencies = [
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
  "openvm-pairing",
  "openvm-pairing-circuit",
  "openvm-pairing-guest",
@@ -5924,6 +5987,7 @@ dependencies = [
  "openvm-ecc-circuit",
  "openvm-ecc-guest",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-mod-circuit-builder",
  "openvm-pairing-guest",
  "openvm-pairing-transpiler",
@@ -6045,6 +6109,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-rv32im-transpiler",
  "openvm-stark-backend",
  "openvm-stark-sdk",
@@ -6071,6 +6136,7 @@ dependencies = [
  "openvm",
  "openvm-circuit",
  "openvm-instructions",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-circuit",
  "openvm-rv32im-guest",
  "openvm-rv32im-transpiler",
@@ -6140,6 +6206,8 @@ dependencies = [
  "openvm-ecc-transpiler",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
+ "openvm-memcpy-circuit",
+ "openvm-memcpy-transpiler",
  "openvm-native-circuit",
  "openvm-native-compiler",
  "openvm-native-recursion",
@@ -6174,6 +6242,7 @@ dependencies = [
  "eyre",
  "openvm-circuit",
  "openvm-instructions",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sha256-circuit",
  "openvm-sha256-guest",
@@ -6211,6 +6280,7 @@ dependencies = [
  "openvm-cuda-builder",
  "openvm-cuda-common",
  "openvm-instructions",
+ "openvm-memcpy-circuit",
  "openvm-rv32im-circuit",
  "openvm-sha256-air",
  "openvm-sha256-transpiler",
@@ -6415,6 +6485,7 @@ dependencies = [
  "openvm-ecc-guest",
  "openvm-ecc-sw-macros",
  "openvm-ecc-transpiler",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-sha256-circuit",
  "openvm-sha256-transpiler",
@@ -7928,6 +7999,7 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-circuit",
  "openvm-instructions",
+ "openvm-memcpy-transpiler",
  "openvm-rv32im-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",

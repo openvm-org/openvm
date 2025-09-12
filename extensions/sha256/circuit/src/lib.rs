@@ -12,6 +12,7 @@ use openvm_circuit::{
     system::{SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
 use openvm_circuit_derive::VmConfig;
+use openvm_memcpy_circuit::{Memcpy, MemcpyCpuProverExt, MemcpyExecutor};
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
@@ -55,6 +56,8 @@ pub struct Sha256Rv32Config {
     pub io: Rv32Io,
     #[extension]
     pub sha256: Sha256,
+    #[extension]
+    pub memcpy: Memcpy,
 }
 
 impl Default for Sha256Rv32Config {
@@ -65,6 +68,7 @@ impl Default for Sha256Rv32Config {
             rv32m: Rv32M::default(),
             io: Rv32Io,
             sha256: Sha256,
+            memcpy: Memcpy,
         }
     }
 }
@@ -100,6 +104,7 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2CpuProverExt, &config.sha256, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&MemcpyCpuProverExt, &config.memcpy, inventory)?;
         Ok(chip_complex)
     }
 }
