@@ -1,3 +1,24 @@
+// This was compiled into assembly with from glibc's memcmp implementation at https://elixir.bootlin.com/glibc/glibc-2.42.9000/source/string/memcmp.c: 
+// 
+// clang-14 -target riscv32 -march=rv32im -O2 -fno-builtin -ffreestanding \
+//  	-D"size_t=unsigned" \
+//  	-D"__THROW=" \
+//		-D"op_t=unsigned long" \
+//		-D"OPSIZ=4" \
+//		-D"OP_T_THRES=16" \
+// 		-D"libc_hidden_builtin_def(x)=" \
+//		-D"libc_hidden_def(x)=" \
+//		-D"strong_alias(x,y)=" \
+//		-D"weak_alias(x,y)=" \
+//		-D"__BYTE_ORDER=1234" \
+//		-D"__LITTLE_ENDIAN=1234" \
+//		-S glibc_memcmp_no_includes.c -o src/memcmp.s
+// 
+// Then labels were renamed to not conflict with these steps:
+// * Replace "rv32i2p0_m2p0" to rv32im
+// * Replace all .LBB0_X instances and replace to .LBBmemcmp0_X
+// * Replace .Lfunc_end0 to .Lmemcmpfunc_end0
+// * Replace .Lfunc_end0-memcmp to .Lmemcmpfunc_end0-memcmp
 	.text
 	.attribute	4, 16
 	.attribute	5, "rv32im"
