@@ -77,31 +77,28 @@ extern "C" int _system_poseidon2_tracegen(
 // Reduces the records, removing duplicates and storing the number of times
 // each occurs in d_counts. The number of records after reduction is stored
 // into host pointer num_records.
-extern "C" int _system_poseidon2_deduplicate_records(
+extern "C" int _system_poseidon2_deduplicate_records_get_temp_bytes(
     Fp *d_records,
     uint32_t *d_counts,
-    size_t *num_records
+    size_t num_records,
+    size_t *d_num_records,
+    size_t *h_temp_bytes_out
 ) {
-    auto [grid, block] = kernel_launch_params(*num_records);
+    auto [grid, block] = kernel_launch_params(num_records);
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
-    size_t *d_num_records;
 
     // We want to sort and reduce the raw records, keeping track of how many
-    // each occurs in d_counts. To prepare for reduce we need to a) allocate
-    // d_num_records, b) fill d_counts with 1s, and c) group keys together
-    // using sort.
-    cudaMallocAsync(&d_num_records, sizeof(size_t), cudaStreamPerThread);
-    cudaMemcpyAsync(
-        d_num_records, num_records, sizeof(size_t), cudaMemcpyHostToDevice, cudaStreamPerThread
-    );
-    fill_buffer<uint32_t><<<grid, block, 0, cudaStreamPerThread>>>(d_counts, 1, *num_records);
+    // each occurs in d_counts. To prepare for reduce we need to a) fill 
+    // d_counts with 1s, and b) group keys together using sort - reduce.
+
+    fill_buffer<uint32_t><<<grid, block>>>(d_counts, 1, num_records);
 
     size_t sort_storage_bytes = 0;
     cub::DeviceMergeSort::SortKeys(
         nullptr,
         sort_storage_bytes,
         d_records_fp16,
-        *num_records,
+        num_records,
         Fp16CompareOp(),
         cudaStreamPerThread
     );
@@ -116,14 +113,24 @@ extern "C" int _system_poseidon2_deduplicate_records(
         d_counts,
         d_num_records,
         std::plus(),
-        *num_records,
+        num_records,
         cudaStreamPerThread
     );
 
-    size_t temp_storage_bytes = std::max(sort_storage_bytes, reduce_storage_bytes);
-    void *d_temp_storage = nullptr;
-    cudaMallocAsync(&d_temp_storage, temp_storage_bytes, cudaStreamPerThread);
+    *h_temp_bytes_out = std::max(sort_storage_bytes, reduce_storage_bytes);
+    return cudaGetLastError();
+}
 
+extern "C" int _system_poseidon2_deduplicate_records(
+    Fp *d_records,
+    uint32_t *d_counts,
+    size_t num_records,
+    size_t *d_num_records,
+    void *d_temp_storage,
+    size_t temp_storage_bytes
+) {
+    FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
+    
     // TODO: We currently can't use DeviceRadixSort since each key is 64 bytes
     // which causes Fp16Decomposer usage to exceed shared memory. We need to
     // investigate better ways to sort, as merge sort is comparison-based.
@@ -131,7 +138,7 @@ extern "C" int _system_poseidon2_deduplicate_records(
         d_temp_storage,
         temp_storage_bytes,
         d_records_fp16,
-        *num_records,
+        num_records,
         Fp16CompareOp(),
         cudaStreamPerThread
     );
@@ -148,14 +155,9 @@ extern "C" int _system_poseidon2_deduplicate_records(
         d_counts,
         d_num_records,
         std::plus(),
-        *num_records,
+        num_records,
         cudaStreamPerThread
     );
 
-    cudaMemcpyAsync(
-        num_records, d_num_records, sizeof(size_t), cudaMemcpyDeviceToHost, cudaStreamPerThread
-    );
-    cudaFreeAsync(d_num_records, cudaStreamPerThread);
-    cudaFreeAsync(d_temp_storage, cudaStreamPerThread);
     return cudaGetLastError();
 }

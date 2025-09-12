@@ -6,7 +6,10 @@ use openvm_circuit::{
     system::poseidon2::columns::Poseidon2PeripheryCols, utils::next_power_of_two_or_zero,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, prover_backend::GpuBackend};
-use openvm_cuda_common::{copy::MemCopyD2H, d_buffer::DeviceBuffer};
+use openvm_cuda_common::{
+    copy::{MemCopyD2H, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+};
 use openvm_stark_backend::{
     prover::{hal::MatrixDimensions, types::AirProvingContext},
     Chip,
@@ -60,8 +63,27 @@ impl<RA, const SBOX_REGISTERS: usize> Chip<RA, GpuBackend> for Poseidon2ChipGPU<
         let mut num_records = self.idx.to_host().unwrap()[0] as usize;
         let counts = DeviceBuffer::<u32>::with_capacity(num_records);
         unsafe {
-            poseidon2::deduplicate_records(&self.records, &counts, &mut num_records)
-                .expect("Failed to deduplicate records");
+            let d_num_records = [num_records].to_device().unwrap();
+            let mut temp_bytes = 0;
+            poseidon2::deduplicate_records_get_temp_bytes(
+                &self.records,
+                &counts,
+                num_records,
+                &d_num_records,
+                &mut temp_bytes,
+            )
+            .expect("Failed to get temp bytes");
+            let d_temp_storage = DeviceBuffer::<u8>::with_capacity(temp_bytes);
+            poseidon2::deduplicate_records(
+                &self.records,
+                &counts,
+                num_records,
+                &d_num_records,
+                &d_temp_storage,
+                temp_bytes,
+            )
+            .expect("Failed to deduplicate records");
+            num_records = *d_num_records.to_host().unwrap().first().unwrap();
         }
         #[cfg(feature = "metrics")]
         self.current_trace_height
