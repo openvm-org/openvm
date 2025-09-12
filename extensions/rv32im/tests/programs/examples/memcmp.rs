@@ -144,8 +144,8 @@ fn main() {
     }
 
     {
-        let a = "abc";
-        let b = "abd";
+        let a = "aaa";
+        let b = "aab";
 
         let res = unsafe { memcmp(a.as_ptr() as *const u8, b.as_ptr() as *const u8, a.len()) };
 
