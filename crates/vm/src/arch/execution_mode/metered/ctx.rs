@@ -116,11 +116,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     fn reset_segment(&mut self) {
         self.memory_ctx.clear();
-        for (i, &is_constant) in self.is_trace_height_constant.iter().enumerate() {
-            if !is_constant {
-                self.trace_heights[i] = 0;
-            }
-        }
         // Add merkle height contributions for all registers
         self.memory_ctx.add_register_merkle_heights();
     }
@@ -143,7 +138,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             .lazy_update_boundary_heights(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
             instret,
-            &self.trace_heights,
+            &mut self.trace_heights,
             &self.is_trace_height_constant,
         );
 
