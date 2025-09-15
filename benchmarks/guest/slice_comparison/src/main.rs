@@ -1,5 +1,8 @@
 use openvm::io::reveal_u32;
 
+/*
+this memcmp will be linked with the memcmp.s assembly implementation by the global_asm! macro defined in crates/toolchain/openvm/src/lib.rs
+*/
 extern "C" {
     fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32;
 }
