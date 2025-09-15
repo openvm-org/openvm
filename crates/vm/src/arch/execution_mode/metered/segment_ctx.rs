@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 10000;
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
 pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
@@ -171,8 +171,7 @@ impl SegmentationCtx {
             if !is_constant && height > self.segmentation_limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
-                    "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
-                    self.segments.len(),
+                    "instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     instret,
                     i,
                     air_name,
@@ -186,8 +185,7 @@ impl SegmentationCtx {
         let total_cells = self.calculate_total_cells(trace_heights);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
-                "Segment {:2} | instret {:9} | total cells ({:10}) > max ({:10})",
-                self.segments.len(),
+                "instret {:9} | total cells ({:10}) > max ({:10})",
                 instret,
                 total_cells,
                 self.segmentation_limits.max_cells
@@ -198,8 +196,7 @@ impl SegmentationCtx {
         let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
-                "Segment {:2} | instret {:9} | total interactions ({:11}) > max ({:11})",
-                self.segments.len(),
+                "instret {:9} | total interactions ({:11}) > max ({:11})",
                 instret,
                 total_interactions,
                 self.segmentation_limits.max_interactions
@@ -255,6 +252,12 @@ impl SegmentationCtx {
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
         self.checkpoint_instret = 0;
 
+        tracing::info!(
+            "Segment {:2} | instret {:9} | {} instructions",
+            self.segments.len(),
+            instret_start,
+            segment_instret - instret_start
+        );
         self.segments.push(Segment {
             instret_start,
             num_insns: segment_instret - instret_start,
@@ -299,6 +302,12 @@ impl SegmentationCtx {
 
         debug_assert!(num_insns > 0, "Segment should contain at least one cycle");
 
+        tracing::info!(
+            "Segment {:2} | instret {:9} | {} instructions [FINAL]",
+            self.segments.len(),
+            instret_start,
+            num_insns
+        );
         self.segments.push(Segment {
             instret_start,
             num_insns,
