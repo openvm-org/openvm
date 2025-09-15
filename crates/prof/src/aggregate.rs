@@ -523,5 +523,4 @@ pub const VM_METRIC_NAMES: &[&str] = &[
     "quotient_poly_compute_time_ms",
     "quotient_poly_commit_time_ms",
     "pcs_opening_time_ms",
-    "quotient_global_or_local",
 ];
