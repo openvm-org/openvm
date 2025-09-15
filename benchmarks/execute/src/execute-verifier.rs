@@ -332,7 +332,7 @@ fn execute_verifier(
         }
         ExecutionMode::Metered => {
             tracing::info!("Running metered execute...");
-            let ctx = vm.build_metered_ctx();
+            let ctx = vm.build_metered_ctx(exe);
             let interpreter = vm.metered_interpreter(exe)?;
             interpreter.execute_metered(input_stream, ctx)?;
         }

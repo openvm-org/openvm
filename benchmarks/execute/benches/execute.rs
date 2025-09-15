@@ -86,7 +86,6 @@ const APP_PROGRAMS: &[&str] = &[
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
-static METERED_CTX: OnceLock<(MeteredCtx, Vec<usize>)> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 
@@ -231,17 +230,6 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(elf, transpiler)?)
 }
 
-fn metering_setup() -> &'static (MeteredCtx, Vec<usize>) {
-    METERED_CTX.get_or_init(|| {
-        let config = ExecuteConfig::default();
-        let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
-        let ctx = vm.build_metered_ctx();
-        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-        (ctx, executor_idx_to_air_idx)
-    })
-}
-
 fn metered_cost_setup() -> &'static (MeteredCostCtx, Vec<usize>) {
     METERED_COST_CTX.get_or_init(|| {
         let config = ExecuteConfig::default();
@@ -280,9 +268,14 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
             let exe = load_program_executable(program).expect("Failed to load program executable");
-            let (ctx, executor_idx_to_air_idx) = metering_setup();
+            let config = ExecuteConfig::default();
+            let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+            let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
+            let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+            let ctx = vm.build_metered_ctx(&exe);
             let interpreter = executor()
-                .metered_instance(&exe, executor_idx_to_air_idx)
+                .metered_instance(&exe, &executor_idx_to_air_idx)
                 .unwrap();
             (interpreter, vec![], ctx.clone())
         })
@@ -403,7 +396,7 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier(program);
-            let ctx = vm.build_metered_ctx();
+            let ctx = vm.build_metered_ctx(&leaf_exe);
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             let interpreter = vm
                 .executor()
@@ -459,7 +452,7 @@ fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) 
     bencher
         .with_inputs(|| {
             let (vm, internal_exe, input_stream) = setup_internal_verifier(program);
-            let ctx = vm.build_metered_ctx();
+            let ctx = vm.build_metered_ctx(&internal_exe);
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
             let interpreter = vm
                 .executor()

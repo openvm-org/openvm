@@ -114,7 +114,7 @@ where
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
-    let metered_ctx = vm.build_metered_ctx();
+    let metered_ctx = vm.build_metered_ctx(&exe);
     let (segments, _) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx)?;

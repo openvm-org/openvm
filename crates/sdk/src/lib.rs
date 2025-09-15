@@ -375,7 +375,7 @@ where
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
-        let ctx = vm.build_metered_ctx();
+        let ctx = vm.build_metered_ctx(&exe);
         let interpreter = vm
             .metered_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;

@@ -919,7 +919,7 @@ fn test_single_segment_executor_no_segmentation() {
 
     let exe = VmExe::new(Program::from_instructions(&instructions));
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-    let metered_ctx = vm.build_metered_ctx();
+    let metered_ctx = vm.build_metered_ctx(&exe);
     vm.executor()
         .metered_instance(&exe, &executor_idx_to_air_idx)
         .unwrap()

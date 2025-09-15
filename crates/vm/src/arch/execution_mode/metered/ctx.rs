@@ -1,5 +1,6 @@
 use std::num::NonZero;
 
+use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 
 use super::{
@@ -152,17 +153,20 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[allow(dead_code)]
-    pub fn print_heights(&self) {
-        println!("{:>10} {:<30}", "Height", "Air Name");
-        println!("{}", "-".repeat(42));
-        for (i, height) in self.trace_heights.iter().enumerate() {
-            let air_name = self
-                .segmentation_ctx
-                .air_names
-                .get(i)
-                .map(|s| s.as_str())
-                .unwrap_or("Unknown");
-            println!("{:>10} {:<30}", height, air_name);
+    pub fn print_segment(&self) {
+        println!("{}", "-".repeat(80));
+        println!("Segment {}", self.segmentation_ctx.segments.len() - 1);
+        println!("{}", "-".repeat(80));
+        println!("{:>10} {:>10} {:<30}", "Width", "Height", "Air Name");
+        println!("{}", "-".repeat(80));
+        for ((&width, &height), air_name) in self
+            .segmentation_ctx
+            .widths
+            .iter()
+            .zip_eq(self.trace_heights.iter())
+            .zip_eq(self.segmentation_ctx.air_names.iter())
+        {
+            println!("{:>10} {:>10} {:<30}", width, height, air_name.as_str());
         }
     }
 }

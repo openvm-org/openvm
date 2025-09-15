@@ -31,7 +31,7 @@ fn verify_native_max_trace_heights(
     for leaf_input in leaf_inputs {
         let exe = leaf_prover.exe().clone();
         let vm = &mut leaf_prover.vm;
-        let metered_ctx = vm.build_metered_ctx();
+        let metered_ctx = vm.build_metered_ctx(&exe);
         let (segments, _) = vm
             .metered_interpreter(&exe)?
             .execute_metered(leaf_input.write_to_stream(), metered_ctx)?;
