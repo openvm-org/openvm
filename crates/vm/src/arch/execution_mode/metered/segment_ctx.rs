@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 10000;
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
 pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
@@ -40,7 +40,7 @@ impl Default for SegmentationLimits {
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
     pub(crate) air_names: Vec<String>,
-    widths: Vec<usize>,
+    pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
     pub instret_last_segment_check: u64,
@@ -152,13 +152,18 @@ impl SegmentationCtx {
             return false;
         }
 
-        for (i, (height, is_constant)) in trace_heights
+        let trace_heights_padded = trace_heights
+            .iter()
+            .map(|&height| height.next_power_of_two())
+            .collect::<Vec<_>>();
+
+        for (i, (&height, is_constant)) in trace_heights_padded
             .iter()
             .zip(is_trace_height_constant.iter())
             .enumerate()
         {
             // Only segment if the height is not constant and exceeds the maximum height
-            if !is_constant && *height > self.segmentation_limits.max_trace_height {
+            if !is_constant && height > self.segmentation_limits.max_trace_height {
                 let air_name = &self.air_names[i];
                 tracing::info!(
                     "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
@@ -173,7 +178,7 @@ impl SegmentationCtx {
             }
         }
 
-        let total_cells = self.calculate_total_cells(trace_heights);
+        let total_cells = self.calculate_total_cells(&trace_heights_padded);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "Segment {:2} | instret {:9} | total cells ({:10}) > max ({:10})",
@@ -185,6 +190,7 @@ impl SegmentationCtx {
             return true;
         }
 
+        // We use unpadded trace heights to calculate interactions
         let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
