@@ -780,8 +780,11 @@ where
     }
 
     /// Convenience method to construct a [MeteredCtx] using data from the stored proving key.
-    pub fn build_metered_ctx(&self) -> MeteredCtx {
-        let (constant_trace_heights, air_names, widths, interactions): (
+    pub fn build_metered_ctx(&self, exe: &VmExe<Val<E::SC>>) -> MeteredCtx {
+        let config = self.config().as_ref();
+        let program_len = exe.program.num_defined_instructions();
+
+        let (mut constant_trace_heights, air_names, widths, interactions): (
             Vec<_>,
             Vec<_>,
             Vec<_>,
@@ -803,6 +806,13 @@ where
                 (constant_trace_height, air_names, width, num_interactions)
             })
             .multiunzip();
+
+        // Program trace is the same for all segments
+        constant_trace_heights[PROGRAM_AIR_ID] = Some(program_len);
+        if config.has_public_values_chip() {
+            // Public values chip is only present when there's a single segment
+            constant_trace_heights[PUBLIC_VALUES_AIR_ID] = Some(config.num_public_values);
+        }
 
         self.executor().build_metered_ctx(
             &constant_trace_heights,
@@ -975,7 +985,7 @@ where
         let input = input.into();
         self.reset_state(input.clone());
         let vm = &mut self.vm;
-        let metered_ctx = vm.build_metered_ctx();
+        let metered_ctx = vm.build_metered_ctx(&self.exe);
         let metered_interpreter = vm.metered_interpreter(&self.exe)?;
         let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
