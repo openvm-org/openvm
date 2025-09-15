@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=9c1d4063d990bbd8712ff60429aa39459666d11e#9c1d4063d990bbd8712ff60429aa39459666d11e"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=0da90d9e25450989dba89d01da31670ff6eed840#0da90d9e25450989dba89d01da31670ff6eed840"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=9c1d4063d990bbd8712ff60429aa39459666d11e#9c1d4063d990bbd8712ff60429aa39459666d11e"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=0da90d9e25450989dba89d01da31670ff6eed840#0da90d9e25450989dba89d01da31670ff6eed840"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=9c1d4063d990bbd8712ff60429aa39459666d11e#9c1d4063d990bbd8712ff60429aa39459666d11e"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=0da90d9e25450989dba89d01da31670ff6eed840#0da90d9e25450989dba89d01da31670ff6eed840"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6245,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=9c1d4063d990bbd8712ff60429aa39459666d11e#9c1d4063d990bbd8712ff60429aa39459666d11e"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=0da90d9e25450989dba89d01da31670ff6eed840#0da90d9e25450989dba89d01da31670ff6eed840"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6275,7 +6275,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=9c1d4063d990bbd8712ff60429aa39459666d11e#9c1d4063d990bbd8712ff60429aa39459666d11e"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=0da90d9e25450989dba89d01da31670ff6eed840#0da90d9e25450989dba89d01da31670ff6eed840"
 dependencies = [
  "dashmap",
  "derivative",
