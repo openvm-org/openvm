@@ -111,6 +111,7 @@ impl SegmentationCtx {
     }
 
     /// Calculate the total cells used based on trace heights and widths
+    #[allow(dead_code)]
     #[inline(always)]
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
         debug_assert_eq!(trace_heights.len(), self.widths.len());
@@ -162,31 +163,31 @@ impl SegmentationCtx {
             return false;
         }
 
-        let padded_height = trace_heights
+        let mut total_cells = 0;
+        for (i, ((padded_height, width), is_constant)) in trace_heights
             .iter()
             .map(|&height| height.next_power_of_two())
-            .collect::<Vec<_>>();
-        for (i, (&height, is_constant)) in padded_height
-            .iter()
+            .zip(self.widths.iter())
             .zip(is_trace_height_constant.iter())
             .enumerate()
         {
-            // Only segment if the height is not constant and exceeds the maximum height
-            if !is_constant && height > self.segmentation_limits.max_trace_height {
+            // Only segment if the height is not constant and exceeds the maximum height after
+            // padding
+            if !is_constant && padded_height > self.segmentation_limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
                     "instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
                     instret,
                     i,
                     air_name,
-                    height,
+                    padded_height,
                     self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
+            total_cells += padded_height as usize * width;
         }
 
-        let total_cells = self.calculate_total_cells(&padded_height);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "instret {:9} | total cells ({:10}) > max ({:10})",
