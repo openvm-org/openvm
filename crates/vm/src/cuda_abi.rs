@@ -127,10 +127,21 @@ pub mod poseidon2 {
             sbox_regs: usize,
         ) -> i32;
 
+        fn _system_poseidon2_deduplicate_records_get_temp_bytes(
+            d_records: *mut F,
+            d_counts: *mut u32,
+            num_records: usize,
+            d_num_records: *mut usize,
+            h_temp_bytes_out: *mut usize,
+        ) -> i32;
+
         fn _system_poseidon2_deduplicate_records(
             d_records: *mut F,
             d_counts: *mut u32,
-            num_records: *mut usize,
+            num_records: usize,
+            d_num_records: *mut usize,
+            d_temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
         ) -> i32;
     }
 
@@ -154,15 +165,37 @@ pub mod poseidon2 {
         ))
     }
 
+    pub unsafe fn deduplicate_records_get_temp_bytes(
+        d_records: &DeviceBuffer<F>,
+        d_counts: &DeviceBuffer<u32>,
+        num_records: usize,
+        d_num_records: &DeviceBuffer<usize>,
+        h_temp_bytes_out: &mut usize,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_system_poseidon2_deduplicate_records_get_temp_bytes(
+            d_records.as_mut_ptr(),
+            d_counts.as_mut_ptr(),
+            num_records,
+            d_num_records.as_mut_ptr(),
+            h_temp_bytes_out,
+        ))
+    }
+
     pub unsafe fn deduplicate_records(
         d_records: &DeviceBuffer<F>,
         d_counts: &DeviceBuffer<u32>,
-        num_records: &mut usize,
+        num_records: usize,
+        d_num_records: &DeviceBuffer<usize>,
+        d_temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_system_poseidon2_deduplicate_records(
             d_records.as_mut_ptr(),
             d_counts.as_mut_ptr(),
-            num_records as *mut usize,
+            num_records,
+            d_num_records.as_mut_ptr(),
+            d_temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
         ))
     }
 }
