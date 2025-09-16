@@ -201,6 +201,15 @@ where
         })
     }
 
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+        VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        )
+    }
+
     /// # Safety
     /// - This function assumes that the `pc` is within program bounds - this should be the case if
     ///   the pc is checked to be in bounds before jumping to it.
@@ -381,12 +390,7 @@ where
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
 
@@ -405,9 +409,27 @@ where
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
-        let instret = exec_state.instret();
-        let pc = exec_state.pc();
-        let segmentation_check_insns = exec_state.ctx.segmentation_ctx.segment_check_insns;
+        loop {
+            exec_state = self.execute_metered_from_state_until_suspension(exec_state)?;
+            // The execution has terminated.
+            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+                break;
+            }
+            if exec_state.exit_code.is_err() {
+                return Err(exec_state.exit_code.unwrap_err());
+            }
+        }
+        check_termination(exec_state.exit_code)?;
+        let VmExecState { vm_state, ctx, .. } = exec_state;
+        Ok((ctx.into_segments(), vm_state))
+    }
+    pub fn execute_metered_from_state_until_suspension(
+        &self,
+        mut from_state: VmExecState<F, GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        let instret = from_state.instret();
+        let pc = from_state.pc();
+        let segmentation_check_insns = from_state.ctx.segmentation_ctx.segment_check_insns;
         // Start execution
         run!(
             "execute_metered",
@@ -415,12 +437,10 @@ where
             instret,
             pc,
             segmentation_check_insns,
-            exec_state,
+            from_state,
             MeteredCtx
         );
-        check_termination(exec_state.exit_code)?;
-        let VmExecState { vm_state, ctx, .. } = exec_state;
-        Ok((ctx.into_segments(), vm_state))
+        Ok(from_state)
     }
 }
 
@@ -437,12 +457,7 @@ where
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCostCtx,
     ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        );
+        let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_cost_from_state(vm_state, ctx)
     }
 

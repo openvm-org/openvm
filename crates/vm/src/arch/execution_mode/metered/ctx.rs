@@ -23,6 +23,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
+    pub segment_suspend: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -75,6 +76,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
+            segment_suspend: false,
         };
         if !config.continuation_enabled {
             // force single segment
@@ -106,6 +108,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self
     }
 
+    pub fn with_segment_suspend(mut self, segment_suspend: bool) -> Self {
+        self.segment_suspend = segment_suspend;
+        self
+    }
+
     pub fn segments(&self) -> &[Segment] {
         &self.segmentation_ctx.segments
     }
@@ -121,7 +128,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) {
+    pub fn check_and_segment(&mut self, instret: u64, segment_check_insns: u64) -> bool {
         let threshold = self
             .segmentation_ctx
             .instret_last_segment_check
@@ -131,7 +138,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             "overflow in segment check threshold calculation"
         );
         if instret < threshold {
-            return;
+            return false;
         }
 
         self.memory_ctx
@@ -145,6 +152,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if did_segment {
             self.reset_segment();
         }
+        did_segment
     }
 
     #[allow(dead_code)]
@@ -200,12 +208,11 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         segment_check_insns: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        // E2 always runs until termination. Here we use the function as a hook called every
-        // instruction.
+        // If `segment_suspend` is set, suspend every segment. Otherwise, execute until termination.
         exec_state
             .ctx
-            .check_and_segment(instret, segment_check_insns);
-        false
+            .check_and_segment(instret, segment_check_insns)
+            && exec_state.ctx.segment_suspend
     }
 
     #[inline(always)]

@@ -8,7 +8,10 @@ use eyre::Result;
 use openvm_build::GuestOptions;
 use openvm_circuit::{
     self,
-    arch::{instructions::exe::VmExe, ContinuationVmProof, ExecutionError, VirtualMachineError},
+    arch::{
+        instructions::exe::VmExe, ContinuationVmProof, ExecutionError, VirtualMachine,
+        VirtualMachineError, VmExecState,
+    },
     utils::test_system_config,
 };
 use openvm_continuations::verifier::{
@@ -19,15 +22,16 @@ use openvm_native_circuit::{execute_program_with_config, NativeConfig, NativeCpu
 use openvm_native_compiler::{conversion::CompilerOptions, prelude::*};
 use openvm_sdk::{
     codec::{Decode, Encode},
-    config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmConfig},
+    config::{AggregationConfig, AppConfig, SdkSystemConfig, SdkVmBuilder, SdkVmConfig},
     prover::verify_app_proof,
-    Sdk, StdIn,
+    DefaultStarkEngine, Sdk, StdIn,
 };
 use openvm_stark_sdk::{
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         setup_tracing, FriParameters,
     },
+    engine::StarkFriEngine,
     openvm_stark_backend::p3_field::FieldAlgebra,
     p3_baby_bear::BabyBear,
 };
@@ -262,6 +266,35 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
             execution_result
         );
     }
+    Ok(())
+}
+
+#[test]
+fn test_metered_execution_suspension() -> eyre::Result<()> {
+    setup_tracing();
+    let app_log_blowup = 1;
+    let app_config = small_test_app_config(app_log_blowup);
+    let exe = app_exe_for_test();
+
+    let engine = DefaultStarkEngine::new(app_config.app_fri_params.fri_params);
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, SdkVmBuilder, app_config.app_vm_config)?;
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let interpreter = vm
+        .executor()
+        .metered_instance(&exe, &executor_idx_to_air_idx)?;
+    let metered_ctx = vm.build_metered_ctx(&exe).with_segment_suspend(true);
+    let vm_state = interpreter.create_initial_vm_state(vec![]);
+    let mut vm_exec_state = VmExecState::new(vm_state, metered_ctx);
+    vm_exec_state = interpreter.execute_metered_from_state_until_suspension(vm_exec_state)?;
+    assert!(
+        vm_exec_state.exit_code.is_ok(),
+        "Execution exits with an error: {:?}",
+        vm_exec_state.exit_code
+    );
+    assert!(
+        vm_exec_state.exit_code?.is_none(),
+        "Expect more than 1 segment but the execution terminates."
+    );
     Ok(())
 }
 
