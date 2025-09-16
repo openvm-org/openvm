@@ -1,0 +1,10 @@
+[package]
+name = "openvm-slice-comparison-program"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+openvm = { workspace = true, features = ["std"] }
+
+[features]
+default = []

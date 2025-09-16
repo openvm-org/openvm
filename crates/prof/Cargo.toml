@@ -10,7 +10,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
+serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 eyre.workspace = true
