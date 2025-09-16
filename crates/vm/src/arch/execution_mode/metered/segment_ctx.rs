@@ -260,7 +260,7 @@ impl SegmentationCtx {
             .zip(is_trace_height_constant.iter())
         {
             if !is_trace_height_constant {
-                *trace_height -= segment_height;
+                *trace_height = trace_height.checked_sub(segment_height).unwrap();
             }
         }
     }
