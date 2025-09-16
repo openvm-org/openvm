@@ -110,38 +110,6 @@ impl SegmentationCtx {
         self.segmentation_limits.max_interactions = max_interactions;
     }
 
-    /// Calculate the total cells used based on trace heights and widths
-    #[allow(dead_code)]
-    #[inline(always)]
-    fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
-        debug_assert_eq!(trace_heights.len(), self.widths.len());
-
-        // SAFETY: Length equality is asserted during initialization
-        let widths_slice = unsafe { self.widths.get_unchecked(..trace_heights.len()) };
-
-        trace_heights
-            .iter()
-            .zip(widths_slice)
-            .map(|(&height, &width)| height as usize * width)
-            .sum()
-    }
-
-    /// Calculate the total interactions based on trace heights and interaction counts
-    #[inline(always)]
-    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
-        debug_assert_eq!(trace_heights.len(), self.interactions.len());
-
-        // SAFETY: Length equality is asserted during initialization
-        let interactions_slice = unsafe { self.interactions.get_unchecked(..trace_heights.len()) };
-
-        trace_heights
-            .iter()
-            .zip(interactions_slice)
-            // We add 1 for the zero messages from the padding rows
-            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
-            .sum()
-    }
-
     #[inline(always)]
     fn should_segment(
         &self,
@@ -151,6 +119,8 @@ impl SegmentationCtx {
     ) -> bool {
         debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.air_names.len());
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
 
         let instret_start = self
             .segments
@@ -198,8 +168,13 @@ impl SegmentationCtx {
             return true;
         }
 
-        // We use unpadded height for interactions
-        let total_interactions = self.calculate_total_interactions(trace_heights);
+        // All padding rows contribute a single message to the interactions (+1) since
+        // we assume chips don't send/receive with nonzero multiplicity on padding rows.
+        let total_interactions: usize = trace_heights
+            .iter()
+            .zip(self.interactions.iter())
+            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
+            .sum();
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
                 "instret {:9} | total interactions ({:11}) > max ({:11})",
