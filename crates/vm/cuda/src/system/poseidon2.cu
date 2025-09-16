@@ -74,9 +74,8 @@ extern "C" int _system_poseidon2_tracegen(
     return cudaGetLastError();
 }
 
-// Reduces the records, removing duplicates and storing the number of times
-// each occurs in d_counts. The number of records after reduction is stored
-// into host pointer num_records.
+// Prepares d_num_records for use with sort reduce and stores the temporary buffer
+// size necessary for both cub functions (i.e. sort and reduce).
 extern "C" int _system_poseidon2_deduplicate_records_get_temp_bytes(
     Fp *d_records,
     uint32_t *d_counts,
@@ -88,9 +87,9 @@ extern "C" int _system_poseidon2_deduplicate_records_get_temp_bytes(
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
 
     // We want to sort and reduce the raw records, keeping track of how many
-    // each occurs in d_counts. To prepare for reduce we need to a) fill 
-    // d_counts with 1s, and b) group keys together using sort - reduce.
-
+    // each occurs in d_counts. To prepare for reduce we need to a) fill
+    // d_counts with 1s, and b) group keys together using sort. Note we do
+    // b) in the kernel below.
     fill_buffer<uint32_t><<<grid, block>>>(d_counts, 1, num_records);
 
     size_t sort_storage_bytes = 0;
@@ -121,6 +120,10 @@ extern "C" int _system_poseidon2_deduplicate_records_get_temp_bytes(
     return cudaGetLastError();
 }
 
+// Reduces the records, removing duplicates and storing the number of times
+// each occurs in d_counts. The number of records after reduction is stored
+// into host pointer num_records. The value of temp_storage_bytes should be
+// computed using _system_poseidon2_deduplicate_records_get_temp_bytes.
 extern "C" int _system_poseidon2_deduplicate_records(
     Fp *d_records,
     uint32_t *d_counts,
@@ -130,7 +133,7 @@ extern "C" int _system_poseidon2_deduplicate_records(
     size_t temp_storage_bytes
 ) {
     FpArray<16> *d_records_fp16 = reinterpret_cast<FpArray<16> *>(d_records);
-    
+
     // TODO: We currently can't use DeviceRadixSort since each key is 64 bytes
     // which causes Fp16Decomposer usage to exceed shared memory. We need to
     // investigate better ways to sort, as merge sort is comparison-based.
