@@ -55,6 +55,7 @@ use openvm_stark_sdk::{
     openvm_stark_backend::{
         self,
         config::{StarkGenericConfig, Val},
+        keygen::types::MultiStarkProvingKey,
         p3_field::PrimeField32,
         proof::Proof,
         prover::{
@@ -84,6 +85,7 @@ const APP_PROGRAMS: &[&str] = &[
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
+static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 
@@ -228,11 +230,22 @@ fn load_program_executable(program: &str) -> Result<VmExe<BabyBear>> {
     Ok(VmExe::from_elf(elf, transpiler)?)
 }
 
+fn vm_proving_key() -> &'static MultiStarkProvingKey<SC> {
+    VM_PROVING_KEY.get_or_init(|| {
+        let config = ExecuteConfig::default();
+        let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+        let circuit = config.create_airs().expect("Failed to create AIRs");
+        circuit.keygen(&engine)
+    })
+}
+
 fn metered_cost_setup() -> &'static (MeteredCostCtx, Vec<usize>) {
     METERED_COST_CTX.get_or_init(|| {
         let config = ExecuteConfig::default();
         let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-        let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
+        let pk = vm_proving_key();
+        let d_pk = engine.device().transport_pk_to_device(pk);
+        let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk).unwrap();
         let ctx = vm.build_metered_cost_ctx();
         let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
         (ctx, executor_idx_to_air_idx)
@@ -268,7 +281,9 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             let exe = load_program_executable(program).expect("Failed to load program executable");
             let config = ExecuteConfig::default();
             let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-            let (vm, _) = VirtualMachine::new_with_keygen(engine, ExecuteBuilder, config).unwrap();
+            let pk = vm_proving_key();
+            let d_pk = engine.device().transport_pk_to_device(pk);
+            let vm = VirtualMachine::new(engine, ExecuteBuilder, config, d_pk).unwrap();
             let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
 
             let ctx = vm.build_metered_ctx(&exe);
