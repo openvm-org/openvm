@@ -14,6 +14,15 @@
 //		-D"__LITTLE_ENDIAN=1234" \
 //		-S glibc_memcmp_no_includes.c -o src/memcmp.s
 // 
+// Added the -D flags to replace the definitions at glibc's memcmp implementation to be able to compile
+// with the following justifications:
+// 	* -D"__THROW=" : because __THROW expands to nothing in C
+// 	* -D"op_t=unsigned long": because we are using rv32 machine and op_t is defined to the the biggest type supported by a single load & store.
+// 	* -D"OPSIZ=4" : unsigned long has size 4 in 32-bit machine
+// 	* -D"OP_T_THRES=16" : chosen as default threshold - tried 8 and 32 but it performed slightly worse on the Reth-benchmark
+// 	* -D"libc_hidden_builtin_def(x)=", -D"libc_hidden_def(x)=", -D"strong_alias(x,y)=", -D"weak_alias(x,y)="  : defined to be nothing because we don't need it
+// 	* -D"__BYTE_ORDER=1234", -D"__LITTLE_ENDIAN=1234": because rv32 is little endian 
+// 
 // Then labels were renamed to not conflict with these steps:
 // * Replace "rv32i2p0_m2p0" to rv32im
 // * Replace all .LBB0_X instances and replace to .LBBmemcmp0_X
