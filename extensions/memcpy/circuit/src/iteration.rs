@@ -93,6 +93,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for MemcpyIterAir {}
 impl<F: Field> PartitionedBaseAir<F> for MemcpyIterAir {}
 
 impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
+    // assertions for AIR constraints
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (prev, local) = (main.row_slice(0), main.row_slice(1));
@@ -377,6 +378,8 @@ impl<'a> CustomBorrow<'a, MemcpyIterRecordMut<'a>, MemcpyIterLayout> for [u8] {
     unsafe fn extract_layout(&self) -> MemcpyIterLayout {
         let header: &MemcpyIterRecordHeader = self.borrow();
         let num_rows = ((header.len - header.shift as u32) >> 4) as usize + 1;
+        MultiRowLayout::new(MemcpyIterMetadata { num_rows });
+        let num_rows = ((header.len - header.shift as u32) >> 4) as usize + 1;
         MultiRowLayout::new(MemcpyIterMetadata { num_rows })
     }
 }
@@ -420,7 +423,7 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
         debug_assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
-        let shift = c.as_canonical_u32() as u8;
+        let shift = c.as_canonical_u32() as u8; // written into c slot
         debug_assert!([0, 1, 2, 3].contains(&shift));
 
         let mut dest = read_rv32_register(
@@ -440,17 +443,25 @@ where
             } as u32,
         );
         let mut len = read_rv32_register(state.memory.data(), A2_REGISTER_PTR as u32);
+        debug_assert!(
+            shift == 0 || (dest % 4 == 0),
+            "dest must be 4-byte aligned in MEMCPY_LOOP"
+        );
+        debug_assert!(len >= shift as u32);
 
         // Create a record sized to the exact number of 16-byte iterations (header + iterations)
         // This calculation must match extract_layout and fill_trace
 
-        // FIX 1: prevent underflow when len < shift
-        let effective_len = len.saturating_sub(shift as u32);
+        let effective_len = len.saturating_sub(shift as u32); // n >= 16 + shift
         let num_iters = (effective_len >> 4) as usize;
-        eprintln!("num_iters = {:?}", num_iters);
-        // eprintln!("state.pc = {:?}", state.pc);
-        // eprintln!("state.memory.timestamp = {:?}", state.memory.timestamp);
-        // eprintln!("state.memory.data() = {:?}", state.memory.data());
+        // eprintln!(
+        //     "PREFLIGHT: len={}, shift={}, effective_len={}, num_iters={}, allocated_rows={}",
+        //     len,
+        //     shift,
+        //     effective_len,
+        //     num_iters,
+        //     num_iters + 1
+        // );
         let record: MemcpyIterRecordMut<'_> =
             state.ctx.alloc(MultiRowLayout::new(MemcpyIterMetadata {
                 //allocating based on number of rows needed
@@ -464,15 +475,16 @@ where
         record.inner.dest = dest;
         record.inner.source = source;
         record.inner.len = len;
-        eprintln!(
-            "shift = {:?}, len = {:?}, source = {:?}, source%16 = {:?}, dest = {:?}, dest%16 = {:?}",  
-            shift, len, source, source % 16, dest, dest % 16
-        );
+        // eprintln!(
+        //     "shift = {:?}, len = {:?}, source = {:?}, source%16 = {:?}, dest = {:?}, dest%16 = {:?}",
+        //     shift, len, source, source % 16, dest, dest % 16
+        // );
 
         // Fill record.var for the first row of iteration trace
         // FIX 2: read source-4 (the word ending at s[-1]); zero if out-of-bounds.
         if shift != 0 {
             if source >= 4 {
+                // read the previous word from memory
                 record.var[0].data[3] = tracing_read(
                     state.memory,
                     RV32_MEMORY_AS,
@@ -494,13 +506,14 @@ where
                     source + 4 * i as u32,
                     &mut record.var[idx].read_aux[i].prev_timestamp,
                 );
+                //use shifted data, to construct the write data for each given word
                 let write_data: [u8; MEMCPY_LOOP_NUM_LIMBS] = array::from_fn(|j| {
                     if j < shift as usize {
                         if i > 0 {
-                            // First s bytes come from previous 4-byte word tail
+                            // First s bytes come from previous 4-byte word tail, take from previous word, in our 16 byte chunk
                             record.var[idx].data[i - 1][j + (4 - shift as usize)]
                         } else {
-                            // For i == 0, take from previous chunk's last word tail
+                            // For i == 0, take from previous chunk's last word tail; otherwise, take last word of previous chunk
                             record.var[idx - 1].data[3][j + (4 - shift as usize)]
                         }
                     } else {
@@ -570,7 +583,7 @@ where
         debug_assert_eq!(record.inner.len, u32::from_le_bytes(len_data));
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
+        eprintln!("PREFLIGHT: done");
         Ok(())
     }
 }
@@ -936,6 +949,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 ) -> u32 {
     let shift = pre_compute.c;
     let mut height = 1;
+    eprintln!("RUNTIME: Starting with height={}, shift={}", height, shift);
     // Read dest and source from registers
     let (dest, source) = if shift == 0 {
         (
@@ -954,6 +968,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut dest = u32::from_le_bytes(dest);
     let mut source = u32::from_le_bytes(source) - 12 * (shift != 0) as u32;
     let mut len = u32::from_le_bytes(len);
+
+    eprintln!(
+        "RUNTIME: Initial values: dest={}, source={}, len={}",
+        dest, source, len
+    );
 
     // Check address ranges are valid
     debug_assert!(dest < (1 << POINTER_MAX_BITS));
@@ -994,28 +1013,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         height += 1;
     }
 
-    // Handle remaining bytes (len in [0, 15]) so that total `copy_len == original len`.
-    if len > 0 {
-        let remaining_words = ((len + 3) >> 2) as usize;
-        for i in 0..remaining_words.min(4) {
-            let data = vm_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i as u32);
-            let write_data: [u8; 4] = array::from_fn(|j| {
-                if j < shift as usize {
-                    prev_data[j + (4 - shift as usize)]
-                } else {
-                    data[j - shift as usize]
-                }
-            });
-            vm_state.vm_write(RV32_MEMORY_AS, dest + 4 * i as u32, &write_data);
-            prev_data = data;
-        }
-        // Advance pointers to reflect bytes written
-        let advanced = (remaining_words as u32) << 2;
-        source += advanced;
-        dest += advanced;
-        len = 0;
-        height += 1;
-    }
+    // Note: remaining bytes (len in [0, 15]) are handled by surrounding code,
+    // not by this executor. The height calculation must match the trace exactly.
 
     // Write the result back to memory
     if shift == 0 {
@@ -1046,6 +1045,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
     *vm_state.pc_mut() = vm_state.pc().wrapping_add(DEFAULT_PC_STEP);
     *vm_state.instret_mut() = vm_state.instret() + 1;
+    eprintln!("RUNTIME: Returning height={}", height);
     height
 }
 

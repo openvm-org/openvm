@@ -7,4 +7,5 @@ edition.workspace = true
 openvm = { workspace = true, features = ["std"] }
 
 [features]
-default = []
+default = ["custom-memcpy"]
+custom-memcpy = []
