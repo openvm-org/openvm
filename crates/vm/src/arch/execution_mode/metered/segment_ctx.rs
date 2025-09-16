@@ -162,7 +162,11 @@ impl SegmentationCtx {
             return false;
         }
 
-        for (i, (&height, is_constant)) in trace_heights
+        let padded_height = trace_heights
+            .iter()
+            .map(|&height| height.next_power_of_two())
+            .collect::<Vec<_>>();
+        for (i, (&height, is_constant)) in padded_height
             .iter()
             .zip(is_trace_height_constant.iter())
             .enumerate()
@@ -182,7 +186,7 @@ impl SegmentationCtx {
             }
         }
 
-        let total_cells = self.calculate_total_cells(trace_heights);
+        let total_cells = self.calculate_total_cells(&padded_height);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
                 "instret {:9} | total cells ({:10}) > max ({:10})",
@@ -193,6 +197,7 @@ impl SegmentationCtx {
             return true;
         }
 
+        // We use unpadded height for interactions
         let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
