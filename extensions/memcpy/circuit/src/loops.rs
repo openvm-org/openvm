@@ -60,6 +60,10 @@ pub struct MemcpyLoopCols<T> {
     pub write_aux: [MemoryBaseAuxCols<T>; 3],
     pub source_minus_twelve_carry: T,
     pub to_source_minus_twelve_carry: T,
+    // When true, indicates we should saturate (clamp) source-12 to 0 (zero-padding case)
+    pub is_source_small: T,
+    // When true, indicates we should saturate (clamp) to_source-12 to 0 (zero-padding case)
+    pub is_to_source_small: T,
 }
 
 pub const NUM_MEMCPY_LOOP_COLS: usize = size_of::<MemcpyLoopCols<u8>>();
@@ -124,6 +128,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         local.shift.iter().for_each(|x| builder.assert_bool(*x));
         builder.assert_bool(local.source_minus_twelve_carry);
         builder.assert_bool(local.to_source_minus_twelve_carry);
+        builder.assert_bool(local.is_source_small);
+        builder.assert_bool(local.is_to_source_small);
 
         let mut shift_zero_when = builder.when(is_shift_zero.clone());
         shift_zero_when.assert_zero(local.source_minus_twelve_carry);
@@ -184,6 +190,8 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         // dest, to_dest, source - 12 * is_shift_non_zero, to_source - 12 * is_shift_non_zero
         let dest_u16_limbs = u8_word_to_u16(local.dest);
         let to_dest_u16_limbs = u8_word_to_u16(local.to_dest);
+        // Limb computation for (source - 12 * is_shift_non_zero), with zero-padding when low limb < 12
+        // If is_source_small is true, we clamp subtraction to 0 by setting carry appropriately.
         let source_u16_limbs = [
             local.source[0]
                 + local.source[1] * AB::F::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS)
@@ -356,17 +364,19 @@ impl MemcpyLoopChip {
         let to_source = source + num_copies;
 
         let word_to_u16 = |data: u32| [data & 0x0ffff, data >> 16];
-        debug_assert!(source >= 12 * (shift != 0) as u32);
-        debug_assert!(to_source >= 12 * (shift != 0) as u32);
+
+        // Relax: allow small sources; zero-pad semantics like iteration.rs
         debug_assert!(dest % 4 == 0);
         debug_assert!(to_dest % 4 == 0);
         debug_assert!(source % 4 == 0);
         debug_assert!(to_source % 4 == 0);
+        let safe_source = source.saturating_sub(12 * (shift != 0) as u32);
+        let safe_to_source = to_source.saturating_sub(12 * (shift != 0) as u32);
         let range_check_data = [
             word_to_u16(dest),
-            word_to_u16(source - 12 * (shift != 0) as u32),
+            word_to_u16(safe_source),
             word_to_u16(to_dest),
-            word_to_u16(to_source - 12 * (shift != 0) as u32),
+            word_to_u16(safe_to_source),
         ];
 
         range_check_data.iter().for_each(|data| {
@@ -437,19 +447,19 @@ impl MemcpyLoopChip {
             cols.source_minus_twelve_carry = F::from_bool((record.source & 0x0ffff) < 12);
             cols.to_source_minus_twelve_carry = F::from_bool((to_source & 0x0ffff) < 12);
 
-            // tracing::info!("timestamp: {:?}, pc: {:?}, dest: {:?}, source: {:?}, len: {:?}, shift: {:?}, is_valid: {:?}, to_timestamp: {:?}, to_dest: {:?}, to_source: {:?}, to_len: {:?}, write_aux: {:?}", 
-            //                 cols.from_state.timestamp.as_canonical_u32(), 
-            //                 cols.from_state.pc.as_canonical_u32(), 
-            //                 u32::from_le_bytes(cols.dest.map(|x| x.as_canonical_u32() as u8)), 
-            //                 u32::from_le_bytes(cols.source.map(|x| x.as_canonical_u32() as u8)), 
-            //                 u32::from_le_bytes(cols.len.map(|x| x.as_canonical_u32() as u8)), 
-            //                 cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32(), 
-            //                 cols.is_valid.as_canonical_u32(), 
-            //                 cols.to_timestamp.as_canonical_u32(), 
-            //                 u32::from_le_bytes(cols.to_dest.map(|x| x.as_canonical_u32() as u8)), 
-            //                 u32::from_le_bytes(cols.to_source.map(|x| x.as_canonical_u32() as u8)), 
-            //                 cols.to_len.as_canonical_u32(), 
-            //                 cols.write_aux.map(|x| x.prev_timestamp.as_canonical_u32()).to_vec());
+            tracing::info!("timestamp: {:?}, pc: {:?}, dest: {:?}, source: {:?}, len: {:?}, shift: {:?}, is_valid: {:?}, to_timestamp: {:?}, to_dest: {:?}, to_source: {:?}, to_len: {:?}, write_aux: {:?}",
+                            cols.from_state.timestamp.as_canonical_u32(),
+                            cols.from_state.pc.as_canonical_u32(),
+                            u32::from_le_bytes(cols.dest.map(|x| x.as_canonical_u32() as u8)),
+                            u32::from_le_bytes(cols.source.map(|x| x.as_canonical_u32() as u8)),
+                            u32::from_le_bytes(cols.len.map(|x| x.as_canonical_u32() as u8)),
+                            cols.shift[1].as_canonical_u32() * 2 + cols.shift[0].as_canonical_u32(),
+                            cols.is_valid.as_canonical_u32(),
+                            cols.to_timestamp.as_canonical_u32(),
+                            u32::from_le_bytes(cols.to_dest.map(|x| x.as_canonical_u32() as u8)),
+                            u32::from_le_bytes(cols.to_source.map(|x| x.as_canonical_u32() as u8)),
+                            cols.to_len.as_canonical_u32(),
+                            cols.write_aux.map(|x| x.prev_timestamp.as_canonical_u32()).to_vec());
         }
         RowMajorMatrix::new(rows, NUM_MEMCPY_LOOP_COLS)
     }
