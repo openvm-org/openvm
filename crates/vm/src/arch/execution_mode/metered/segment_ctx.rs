@@ -110,6 +110,18 @@ impl SegmentationCtx {
         self.segmentation_limits.max_interactions = max_interactions;
     }
 
+    /// Calculate the total cells used based on trace heights and widths
+    #[inline(always)]
+    fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+
+        trace_heights
+            .iter()
+            .zip(self.widths.iter())
+            .map(|(&height, &width)| height.next_power_of_two() as usize * width)
+            .sum()
+    }
+
     #[inline(always)]
     fn should_segment(
         &self,
@@ -233,11 +245,7 @@ impl SegmentationCtx {
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
         self.checkpoint_instret = 0;
 
-        let total_cells: usize = segment_heights
-            .iter()
-            .zip(self.widths.iter())
-            .map(|(height, width)| height.next_power_of_two() as usize * width)
-            .sum();
+        let total_cells = self.calculate_total_cells(&segment_heights);
         tracing::info!(
             "Segment {:2} | instret {:9} | {} instructions | {} cells",
             self.segments.len(),
@@ -289,11 +297,13 @@ impl SegmentationCtx {
 
         debug_assert!(num_insns > 0, "Segment should contain at least one cycle");
 
+        let total_cells = self.calculate_total_cells(trace_heights);
         tracing::info!(
-            "Segment {:2} | instret {:9} | {} instructions [FINAL]",
+            "Segment {:2} | instret {:9} | {} instructions | {} cells [FINAL]",
             self.segments.len(),
             instret_start,
-            num_insns
+            num_insns,
+            total_cells
         );
         self.segments.push(Segment {
             instret_start,
