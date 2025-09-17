@@ -217,7 +217,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .segmentation_ctx
-            .segment(instret, &exec_state.ctx.trace_heights);
+            .create_final_segment(instret, &exec_state.ctx.trace_heights);
     }
 }
 

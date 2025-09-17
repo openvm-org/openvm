@@ -110,6 +110,18 @@ impl SegmentationCtx {
         self.segmentation_limits.max_interactions = max_interactions;
     }
 
+    /// Calculate the maximum trace height and corresponding air name
+    #[inline(always)]
+    fn calculate_max_trace_height_with_name(&self, trace_heights: &[u32]) -> (u32, &str) {
+        trace_heights
+            .iter()
+            .enumerate()
+            .map(|(i, &height)| (height.next_power_of_two(), i))
+            .max_by_key(|(height, _)| *height)
+            .map(|(height, idx)| (height, self.air_names[idx].as_str()))
+            .unwrap_or((0, "unknown"))
+    }
+
     /// Calculate the total cells used based on trace heights and widths
     #[inline(always)]
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
@@ -119,6 +131,20 @@ impl SegmentationCtx {
             .iter()
             .zip(self.widths.iter())
             .map(|(&height, &width)| height.next_power_of_two() as usize * width)
+            .sum()
+    }
+
+    /// Calculate the total interactions based on trace heights
+    /// All padding rows contribute a single message to the interactions (+1) since
+    /// we assume chips don't send/receive with nonzero multiplicity on padding rows.
+    #[inline(always)]
+    fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
+
+        trace_heights
+            .iter()
+            .zip(self.interactions.iter())
+            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
             .sum()
     }
 
@@ -158,7 +184,7 @@ impl SegmentationCtx {
             if !is_constant && padded_height > self.segmentation_limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
-                    "instret {:10} | chip {} ({}) height ({:8}) > max ({:8})",
+                    "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     i,
                     air_name,
@@ -180,16 +206,10 @@ impl SegmentationCtx {
             return true;
         }
 
-        // All padding rows contribute a single message to the interactions (+1) since
-        // we assume chips don't send/receive with nonzero multiplicity on padding rows.
-        let total_interactions: usize = trace_heights
-            .iter()
-            .zip(self.interactions.iter())
-            .map(|(&height, &interactions)| (height + 1) as usize * interactions)
-            .sum();
+        let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
-                "instret {:10} | total interactions ({:11}) > max ({:11})",
+                "instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
                 self.segmentation_limits.max_interactions
@@ -245,19 +265,8 @@ impl SegmentationCtx {
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
         self.checkpoint_instret = 0;
 
-        let total_cells = self.calculate_total_cells(&segment_heights);
-        tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells",
-            self.segments.len(),
-            instret_start,
-            segment_instret - instret_start,
-            total_cells
-        );
-        self.segments.push(Segment {
-            instret_start,
-            num_insns: segment_instret - instret_start,
-            trace_heights: segment_heights,
-        });
+        let num_insns = segment_instret - instret_start;
+        self.create_segment::<false>(instret_start, num_insns, segment_heights);
     }
 
     /// Resets trace heights by subtracting segment heights
@@ -286,29 +295,63 @@ impl SegmentationCtx {
         self.checkpoint_instret = instret;
     }
 
-    /// Try segment if there is at least one cycle
+    /// Try segment if there is at least one instruction
     #[inline(always)]
-    pub fn segment(&mut self, instret: u64, trace_heights: &[u32]) {
+    pub fn create_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
+
         let num_insns = instret - instret_start;
+        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+    }
 
-        debug_assert!(num_insns > 0, "Segment should contain at least one cycle");
-
-        let total_cells = self.calculate_total_cells(trace_heights);
-        tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells [FINAL]",
-            self.segments.len(),
-            instret_start,
-            num_insns,
-            total_cells
+    /// Push a new segment with logging
+    #[inline(always)]
+    fn create_segment<const IS_FINAL: bool>(
+        &mut self,
+        instret_start: u64,
+        num_insns: u64,
+        trace_heights: Vec<u32>,
+    ) {
+        debug_assert!(
+            num_insns > 0,
+            "Segment should contain at least one instruction"
         );
+
+        self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
         self.segments.push(Segment {
             instret_start,
             num_insns,
-            trace_heights: trace_heights.to_vec(),
+            trace_heights,
         });
+    }
+
+    /// Log segment information
+    #[inline(always)]
+    fn log_segment_info<const IS_FINAL: bool>(
+        &self,
+        instret_start: u64,
+        num_insns: u64,
+        trace_heights: &[u32],
+    ) {
+        let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
+        let total_cells = self.calculate_total_cells(trace_heights);
+        let total_interactions = self.calculate_total_interactions(trace_heights);
+
+        let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
+
+        tracing::info!(
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells | {:10} interactions | {:8} max height ({}){}",
+            self.segments.len(),
+            instret_start,
+            num_insns,
+            total_cells,
+            total_interactions,
+            max_trace_height,
+            air_name,
+            final_marker
+        );
     }
 }
