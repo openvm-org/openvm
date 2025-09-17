@@ -425,11 +425,11 @@ where
     }
     pub fn execute_metered_from_state_until_suspension(
         &self,
-        mut from_state: VmExecState<F, GuestMemory, MeteredCtx>,
+        mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
     ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
-        let instret = from_state.instret();
-        let pc = from_state.pc();
-        let segmentation_check_insns = from_state.ctx.segmentation_ctx.segment_check_insns;
+        let instret = exec_state.instret();
+        let pc = exec_state.pc();
+        let segmentation_check_insns = exec_state.ctx.segmentation_ctx.segment_check_insns;
         // Start execution
         run!(
             "execute_metered",
@@ -437,10 +437,10 @@ where
             instret,
             pc,
             segmentation_check_insns,
-            from_state,
+            exec_state,
             MeteredCtx
         );
-        Ok(from_state)
+        Ok(exec_state)
     }
 }
 

@@ -23,7 +23,7 @@ pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    pub segment_suspend: bool,
+    pub suspend_on_segment: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -76,7 +76,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
-            segment_suspend: false,
+            suspend_on_segment: false,
         };
         if !config.continuation_enabled {
             // force single segment
@@ -109,7 +109,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     pub fn with_segment_suspend(mut self, segment_suspend: bool) -> Self {
-        self.segment_suspend = segment_suspend;
+        self.suspend_on_segment = segment_suspend;
         self
     }
 
@@ -212,7 +212,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .check_and_segment(instret, segment_check_insns)
-            && exec_state.ctx.segment_suspend
+            && exec_state.ctx.suspend_on_segment
     }
 
     #[inline(always)]
