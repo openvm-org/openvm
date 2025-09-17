@@ -3,6 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
+use eyre::eyre;
 use getset::{CopyGetters, MutGetters};
 use openvm_instructions::exe::SparseMemoryImage;
 use rand::{rngs::StdRng, SeedableRng};
@@ -17,7 +18,7 @@ use crate::{
 };
 
 /// Represents the core state of a VM.
-#[derive(derive_new::new, CopyGetters, MutGetters)]
+#[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
 pub struct VmState<F, MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     instret: u64,
@@ -135,6 +136,25 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
             ctx,
             exit_code: Ok(None),
         }
+    }
+
+    /// Try to clone VmExecState. Return an error if `exit_code` is an error because `ExecutionEror`
+    /// cannot be cloned.
+    pub fn try_clone(&self) -> eyre::Result<Self>
+    where
+        VmState<F, MEM>: Clone,
+        CTX: Clone,
+    {
+        if self.exit_code.is_err() {
+            return Err(eyre!(
+                "failed to clone VmExecState because exit_code is an error"
+            ));
+        }
+        Ok(Self {
+            vm_state: self.vm_state.clone(),
+            exit_code: Ok(*self.exit_code.as_ref().unwrap()),
+            ctx: self.ctx.clone(),
+        })
     }
 }
 

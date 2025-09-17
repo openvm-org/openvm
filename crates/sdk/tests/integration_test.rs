@@ -291,10 +291,35 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
         "Execution exits with an error: {:?}",
         vm_exec_state.exit_code
     );
+
+    // Benchmark VmExecState clone.
+    unsafe {
+        vm_exec_state.memory.write(2, 100, [16u8; 1]);
+    }
+    let start = std::time::Instant::now();
+    let mut state_vec = vec![];
+    let n = 10;
+    for _ in 0..n {
+        state_vec.push(vm_exec_state.try_clone()?);
+    }
+    let dur = start.elapsed();
+    println!("Vm State clone average time: {}us", dur.as_micros() / n);
+
     assert!(
         vm_exec_state.exit_code?.is_none(),
         "Expect more than 1 segment but the execution terminates."
     );
+    // Avoid compiler from optimizing out the VmExecState clone.
+    {
+        let values: Vec<_> = unsafe {
+            state_vec
+                .iter()
+                .map(|state| state.vm_state.memory.read::<u8, 1>(2, 100))
+                .collect()
+        };
+        println!("Values at address space 2, ptr: 100: {:?}", values);
+    }
+
     Ok(())
 }
 
