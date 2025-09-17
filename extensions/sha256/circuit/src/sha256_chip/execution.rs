@@ -170,6 +170,11 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
+
+    // We don't use this result, so for most CTX implementations this does nothing.
+    // However, for MeteredCtx this forces a segment check since its implementation
+    // of should_suspend performs one as a side effect.
+    CTX::should_suspend(*instret, *pc, 0, exec_state);
 }
 
 impl Sha256VmExecutor {
