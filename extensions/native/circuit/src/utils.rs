@@ -1,7 +1,7 @@
 pub(crate) const CASTF_MAX_BITS: usize = 30;
 
 pub(crate) const fn const_max(a: usize, b: usize) -> usize {
-    [a, b][(a < b) as usize]
+    if a < b { b } else { a }
 }
 
 /// Testing framework
