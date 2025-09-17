@@ -233,11 +233,17 @@ impl SegmentationCtx {
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
         self.checkpoint_instret = 0;
 
+        let total_cells: usize = segment_heights
+            .iter()
+            .zip(self.widths.iter())
+            .map(|(height, width)| height.next_power_of_two() as usize * width)
+            .sum();
         tracing::info!(
-            "Segment {:2} | instret {:9} | {} instructions",
+            "Segment {:2} | instret {:9} | {} instructions | {} cells",
             self.segments.len(),
             instret_start,
-            segment_instret - instret_start
+            segment_instret - instret_start,
+            total_cells
         );
         self.segments.push(Segment {
             instret_start,
