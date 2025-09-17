@@ -158,7 +158,7 @@ impl SegmentationCtx {
             if !is_constant && padded_height > self.segmentation_limits.max_trace_height {
                 let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
-                    "instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
+                    "instret {:10} | chip {} ({}) height ({:8}) > max ({:8})",
                     instret,
                     i,
                     air_name,
@@ -172,7 +172,7 @@ impl SegmentationCtx {
 
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
-                "instret {:9} | total cells ({:10}) > max ({:10})",
+                "instret {:10} | total cells ({:10}) > max ({:10})",
                 instret,
                 total_cells,
                 self.segmentation_limits.max_cells
@@ -189,7 +189,7 @@ impl SegmentationCtx {
             .sum();
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
-                "instret {:9} | total interactions ({:11}) > max ({:11})",
+                "instret {:10} | total interactions ({:11}) > max ({:11})",
                 instret,
                 total_interactions,
                 self.segmentation_limits.max_interactions
@@ -247,7 +247,7 @@ impl SegmentationCtx {
 
         let total_cells = self.calculate_total_cells(&segment_heights);
         tracing::info!(
-            "Segment {:2} | instret {:9} | {} instructions | {} cells",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells",
             self.segments.len(),
             instret_start,
             segment_instret - instret_start,
@@ -299,7 +299,7 @@ impl SegmentationCtx {
 
         let total_cells = self.calculate_total_cells(trace_heights);
         tracing::info!(
-            "Segment {:2} | instret {:9} | {} instructions | {} cells [FINAL]",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells [FINAL]",
             self.segments.len(),
             instret_start,
             num_insns,
