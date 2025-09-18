@@ -114,6 +114,7 @@ openvm-transpiler.workspace = true
 openvm-bigint-transpiler.workspace = true
 openvm-bigint-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
+openvm-memcpy-transpiler.workspace = true
 openvm-toolchain-tests = { workspace = true }
 eyre.workspace = true
 

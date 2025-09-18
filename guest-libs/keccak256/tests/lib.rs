@@ -5,6 +5,7 @@ mod tests {
     use openvm_instructions::exe::VmExe;
     use openvm_keccak256_circuit::{Keccak256Rv32Builder, Keccak256Rv32Config};
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
+    use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
     };
@@ -25,7 +26,8 @@ mod tests {
                 .with_extension(Keccak256TranspilerExtension)
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
-                .with_extension(Rv32IoTranspilerExtension),
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
         )?;
         air_test(Keccak256Rv32Builder, config, openvm_exe);
         Ok(())
