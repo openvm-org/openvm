@@ -428,8 +428,8 @@ where
     ///
     /// This function resumes and continues execution of a guest virtual machine until either it:
     /// - Hits a suspension trigger (e.g. out of gas or a specific halt condition). ATTENTION: when
-    /// a suspension is triggered, the VM state is not at the boundary of the last segment. Instead,
-    /// the VM state is slightly after the segment boundary.
+    ///   a suspension is triggered, the VM state is not at the boundary of the last segment.
+    ///   Instead, the VM state is slightly after the segment boundary.
     /// - Completes its run based on the instructions or context provided.
     ///
     /// # Parameters

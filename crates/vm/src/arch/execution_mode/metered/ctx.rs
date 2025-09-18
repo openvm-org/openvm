@@ -1,5 +1,6 @@
 use std::num::NonZero;
 
+use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
 
@@ -17,13 +18,14 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
-    pub suspend_on_segment: bool,
+    #[getset(get = "pub", set = "pub", set_with = "pub")]
+    suspend_on_segment: bool,
 }
 
 impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
@@ -105,11 +107,6 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     pub fn with_max_interactions(mut self, max_interactions: usize) -> Self {
         self.segmentation_ctx.set_max_interactions(max_interactions);
-        self
-    }
-
-    pub fn with_segment_suspend(mut self, segment_suspend: bool) -> Self {
-        self.suspend_on_segment = segment_suspend;
         self
     }
 
