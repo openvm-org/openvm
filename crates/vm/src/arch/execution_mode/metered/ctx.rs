@@ -208,7 +208,9 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         segment_check_insns: u64,
         exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        // If `segment_suspend` is set, suspend every segment. Otherwise, execute until termination.
+        // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
+        // be after the segment boundary because the segment happens in the previous checkpoint).
+        // Otherwise, execute until termination.
         exec_state
             .ctx
             .check_and_segment(instret, segment_check_insns)

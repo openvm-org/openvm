@@ -410,7 +410,7 @@ where
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {
-            exec_state = self.execute_metered_from_state_until_suspension(exec_state)?;
+            exec_state = self.execute_metered_until_suspension(exec_state)?;
             // The execution has terminated.
             if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
                 break;
@@ -423,7 +423,27 @@ where
         let VmExecState { vm_state, ctx, .. } = exec_state;
         Ok((ctx.into_segments(), vm_state))
     }
-    pub fn execute_metered_from_state_until_suspension(
+    /// Executes a metered virtual machine operation starting from a given execution state until
+    /// suspension.
+    ///
+    /// This function resumes and continues execution of a guest virtual machine until either it:
+    /// - Hits a suspension trigger (e.g. out of gas or a specific halt condition). ATTENTION: when
+    /// a suspension is triggered, the VM state is not at the boundary of the last segment. Instead,
+    /// the VM state is slightly after the segment boundary.
+    /// - Completes its run based on the instructions or context provided.
+    ///
+    /// # Parameters
+    /// - `self`: The reference to the current executor or VM context.
+    /// - `exec_state`: A mutable `VmExecState<F, GuestMemory, MeteredCtx>` which represents the
+    ///   execution state of the virtual machine, including its program counter (`pc`), instruction
+    ///   retirement (`instret`), and execution context (`MeteredCtx`).
+    ///
+    /// # Returns
+    /// - `Ok(VmExecState<F, GuestMemory, MeteredCtx>)`: The execution state after suspension or
+    ///   normal completion.
+    /// - `Err(ExecutionError)`: If there is an error during execution, such as an invalid state or
+    ///   run-time error.
+    pub fn execute_metered_until_suspension(
         &self,
         mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
     ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
