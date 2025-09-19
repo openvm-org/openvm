@@ -2,7 +2,7 @@
 
 [![Telegram Chat][tg-badge]][tg-url] [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/openvm-org/openvm)
 
-[**Install**](https://book.openvm.dev/getting-started/install.html)
+[**Install**](https://book.openvm.dev/getting-started/install)
 | [Book](https://book.openvm.dev)
 | [Contributor Docs](./docs)
 | [Rustdocs](https://docs.openvm.dev/openvm)
