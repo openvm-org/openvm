@@ -271,7 +271,7 @@ __global__ void rv32_div_rem_tracegen(
 extern "C" int _rv32_div_rem_tracegen(
     Fp *d_trace,
     size_t height,
-    uint32_t width,
+    size_t width,
     DeviceBufferConstView<Rv32DivRemRecord> d_records,
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
