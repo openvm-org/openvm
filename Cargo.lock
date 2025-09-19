@@ -5458,8 +5458,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#e7c34cca883db8a1061d00f61460209fc3965c53"
+version = "1.2.1-rc.2"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5490,8 +5490,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#e7c34cca883db8a1061d00f61460209fc3965c53"
+version = "1.2.1-rc.2"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
 dependencies = [
  "cc",
  "glob",
@@ -5499,8 +5499,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#e7c34cca883db8a1061d00f61460209fc3965c53"
+version = "1.2.1-rc.2"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6244,8 +6244,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#e7c34cca883db8a1061d00f61460209fc3965c53"
+version = "1.2.1-rc.2"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6274,8 +6274,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.1#e7c34cca883db8a1061d00f61460209fc3965c53"
+version = "1.2.1-rc.2"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
 dependencies = [
  "dashmap",
  "derivative",
