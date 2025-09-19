@@ -285,7 +285,7 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
     let metered_ctx = vm.build_metered_ctx(&exe).with_suspend_on_segment(true);
     let vm_state = interpreter.create_initial_vm_state(vec![]);
     let mut vm_exec_state = VmExecState::new(vm_state, metered_ctx);
-    vm_exec_state = interpreter.execute_metered_until_suspension(vm_exec_state)?;
+    vm_exec_state = interpreter.execute_metered_until_suspend(vm_exec_state)?;
     assert!(
         vm_exec_state.exit_code.is_ok(),
         "Execution exits with an error: {:?}",

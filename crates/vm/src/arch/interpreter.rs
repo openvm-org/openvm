@@ -410,7 +410,7 @@ where
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {
-            exec_state = self.execute_metered_until_suspension(exec_state)?;
+            exec_state = self.execute_metered_until_suspend(exec_state)?;
             // The execution has terminated.
             if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
                 break;
@@ -443,7 +443,7 @@ where
     ///   normal completion.
     /// - `Err(ExecutionError)`: If there is an error during execution, such as an invalid state or
     ///   run-time error.
-    pub fn execute_metered_until_suspension(
+    pub fn execute_metered_until_suspend(
         &self,
         mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
     ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
