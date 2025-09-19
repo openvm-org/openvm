@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#7b61cafd30fc3e6ddd66adf788ae45d65f4cf859"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#dc3237239e49350ff1381115f75ce954be1216c9"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#7b61cafd30fc3e6ddd66adf788ae45d65f4cf859"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#dc3237239e49350ff1381115f75ce954be1216c9"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#7b61cafd30fc3e6ddd66adf788ae45d65f4cf859"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#dc3237239e49350ff1381115f75ce954be1216c9"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6245,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#7b61cafd30fc3e6ddd66adf788ae45d65f4cf859"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#dc3237239e49350ff1381115f75ce954be1216c9"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6275,7 +6275,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#7b61cafd30fc3e6ddd66adf788ae45d65f4cf859"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#dc3237239e49350ff1381115f75ce954be1216c9"
 dependencies = [
  "dashmap",
  "derivative",
