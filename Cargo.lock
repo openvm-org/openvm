@@ -5459,6 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.1"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#99e1aab58385a1450dcb00be916261eea4f23608"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5490,6 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.1"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#99e1aab58385a1450dcb00be916261eea4f23608"
 dependencies = [
  "cc",
  "glob",
@@ -5498,6 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.1"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#99e1aab58385a1450dcb00be916261eea4f23608"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6242,6 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.1"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#99e1aab58385a1450dcb00be916261eea4f23608"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6271,6 +6275,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.1"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#99e1aab58385a1450dcb00be916261eea4f23608"
 dependencies = [
  "dashmap",
  "derivative",
