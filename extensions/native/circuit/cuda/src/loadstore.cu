@@ -58,7 +58,7 @@ template <uint32_t NUM_CELLS> struct NativeLoadStoreWrapper {
 template <uint32_t NUM_CELLS>
 __global__ void native_loadstore_tracegen(
     Fp *trace,
-    uint32_t height,
+    size_t height,
     uint32_t width,
     DeviceBufferConstView<NativeLoadStoreRecord<Fp, NUM_CELLS>> records,
     uint32_t *range_checker_ptr,
@@ -89,7 +89,7 @@ __global__ void native_loadstore_tracegen(
 
 extern "C" int _native_loadstore_tracegen(
     Fp *d_trace,
-    uint32_t height,
+    size_t height,
     uint32_t width,
     DeviceRawBufferConstView d_records,
     uint32_t *d_range_checker,
