@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#c30d86d5256811ee8e2868d7c1fecfb328ec023f"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#c30d86d5256811ee8e2868d7c1fecfb328ec023f"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#c30d86d5256811ee8e2868d7c1fecfb328ec023f"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6245,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#c30d86d5256811ee8e2868d7c1fecfb328ec023f"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6275,7 +6275,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.2"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.2#e7be3805691cc0980cb139d2efda72f6ce5bab24"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Funiversal-babybear#c30d86d5256811ee8e2868d7c1fecfb328ec023f"
 dependencies = [
  "dashmap",
  "derivative",
