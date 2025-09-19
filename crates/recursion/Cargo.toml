@@ -1,0 +1,15 @@
+[package]
+name = "recursion-circuit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description = "Recursion circuit for v2"
+
+[dependencies]
+p3-air = { workspace = true }
+p3-field = { workspace = true }
+
+[dev-dependencies]
+
+[features]
+default = []
