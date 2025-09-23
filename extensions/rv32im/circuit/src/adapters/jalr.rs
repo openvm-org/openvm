@@ -214,6 +214,14 @@ where
         if enabled.is_one() {
             record.rd_ptr = a.as_canonical_u32();
 
+            // Check if 1810 branch was hit
+            if std::path::Path::new("./1810_hit").exists() {
+                println!("Rv32JalrAdapterExecutor::write - 1810 hit detected! Writing to register pointer {}", record.rd_ptr);
+                if record.rd_ptr == 40 {
+                    println!("Rv32JalrAdapterExecutor::write - Writing to register 10 (pointer 40) from Jalr adapter! Data: {:?}", data);
+                }
+            }
+
             tracing_write(
                 memory,
                 RV32_REGISTER_AS,

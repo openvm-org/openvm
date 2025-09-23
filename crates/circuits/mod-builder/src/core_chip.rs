@@ -396,7 +396,21 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
-        let (mut adapter_record, mut core_record) = state.ctx.alloc(self.get_record_layout());
+
+        let (mut adapter_record, mut core_record) = if instruction.opcode.as_usize() == 1810 {
+            // Create a dummy file to track when this branch is hit
+            if let Err(e) = std::fs::write("./1810_hit", "Branch hit") {
+                eprintln!("Failed to write debug file: {}", e);
+            }
+
+            let record_layout = self.get_record_layout();
+           println!("allocating record for opcode 1810");
+           let a = state.ctx.alloc(record_layout);
+           println!("allocated record for opcode 1810");
+           a
+        } else {
+            state.ctx.alloc(self.get_record_layout())
+        };
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 

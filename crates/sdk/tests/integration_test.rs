@@ -1,7 +1,5 @@
 use std::{
-    borrow::Borrow,
-    path::PathBuf,
-    sync::{Arc, OnceLock},
+    borrow::Borrow, fs::read, path::PathBuf, sync::{Arc, OnceLock}
 };
 
 use eyre::Result;
@@ -142,6 +140,70 @@ fn small_test_app_config(app_log_blowup: usize) -> AppConfig<SdkVmConfig> {
             ..Default::default()
         },
     }
+}
+
+#[test]
+fn test_cargo_openvm_prove_stark_equivalent() -> eyre::Result<()> {
+    // This test replicates what `cargo openvm prove stark` does internally using the SDK
+    // Following the exact pattern from crates/cli/src/commands/prove.rs
+    
+    use std::path::PathBuf;
+    use openvm_sdk::{
+        fs::read_object_from_file,
+        keygen::AppProvingKey,
+        config::{SdkVmConfig, AggregationTreeConfig},
+        types::VersionedVmStarkProof,
+    };
+    use openvm_circuit::arch::instructions::exe::VmExe;
+    use openvm_sdk::F;
+    
+    // Setup paths - using test directory files
+    let mut test_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    test_dir.push("tests");
+    let app_pk_path = test_dir.join("app.pk");
+    let exe_path = test_dir.join("scroll-zkvm-batch-circuit.vmexe");
+    let input_path = test_dir.join("input.json");
+    
+    // 1. Load app_pk (equivalent to load_app_pk in CLI)
+    println!("Loading app proving key from: {}", app_pk_path.display());
+    let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
+    println!("App proving key loaded successfully");
+    
+    // 2. Load exe (equivalent to load_or_build_exe in CLI)
+    println!("Loading VM executable from: {}", exe_path.display());
+    let exe: VmExe<F> = read_object_from_file(&exe_path)?;
+    println!("VM executable loaded successfully");
+    
+    // 3. Load aggregation proving key (exactly like CLI does)
+    let home_dir = std::env::var("HOME").unwrap();
+    let agg_pk_path = format!("{}/.openvm/agg_stark.pk", home_dir);
+    let agg_pk = read_object_from_file(&agg_pk_path).map_err(|e| {
+        eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
+    })?;
+    println!("Aggregation proving key loaded from: {}", agg_pk_path);
+    
+    // 4. Create SDK exactly like CLI (with agg_tree_config)
+    let agg_tree_config = AggregationTreeConfig::default();
+    let sdk = Sdk::new(app_pk.app_config().clone())?
+        .with_agg_tree_config(agg_tree_config)
+        .with_app_pk(app_pk)
+        .with_agg_pk(agg_pk);
+    
+    // 5. Create prover exactly like CLI
+    let mut prover = sdk.prover(exe)?;
+    let app_commit = prover.app_commit();
+    println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
+    println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
+    
+    // 7. Generate STARK proof exactly like CLI
+    println!("Generating STARK proof...");
+    let stark_proof = prover.prove(cargo_openvm::input::read_to_stdin(&Some(cargo_openvm::input::Input::FilePath(input_path))).unwrap())?;
+    println!("STARK proof generation completed!");
+    
+    // 8. Create versioned proof exactly like CLI
+    let stark_proof_bytes = VersionedVmStarkProof::new(stark_proof)?;
+    
+    Ok(())
 }
 
 #[test]

@@ -92,9 +92,21 @@ impl<F: Field> MatrixRecordArena<F> {
     pub fn alloc_buffer(&mut self, num_rows: usize) -> &mut [u8] {
         let start = self.trace_offset;
         self.trace_offset += num_rows * self.width;
+
+        let len = self.trace_buffer.len();
+
         let row_slice = &mut self.trace_buffer[start..self.trace_offset];
         let size = size_of_val(row_slice);
         let ptr = row_slice as *mut [F] as *mut u8;
+
+        if len == 289280 && num_rows == 1 {
+            println!("self.trace_offset: {}", self.trace_offset);
+            println!("self.width: {}", self.width);
+            println!("size: {}", size);
+            println!("ptr: {:p}", ptr);
+            println!("row_slice: {:?}", row_slice);
+            println!("");
+        }
         // SAFETY:
         // - `ptr` is non-null
         // - `size` is correct
@@ -110,6 +122,10 @@ impl<F: Field> MatrixRecordArena<F> {
 impl<F: Field> Arena for MatrixRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         let height = next_power_of_two_or_zero(height);
+        if height * width == 289280 {
+            println!("height: {}", height);
+            println!("width: {}", width);
+        }
         let trace_buffer = F::zero_vec(height * width);
         Self {
             trace_buffer,
@@ -635,6 +651,7 @@ where
 /// (&mut A, &mut C) where `A` and `C` are `Sized`
 pub type EmptyAdapterCoreLayout<F, AS> = AdapterCoreLayout<AdapterCoreEmptyMetadata<F, AS>>;
 
+// check[hrik]
 /// [RecordArena] implementation for [MatrixRecordArena], with [AdapterCoreLayout]
 /// **NOTE**: `A` is the adapter RecordMut type and `C` is the core RecordMut type
 impl<'a, F: Field, A, C, M: AdapterCoreMetadata> RecordArena<'a, AdapterCoreLayout<M>, (A, C)>
@@ -652,8 +669,20 @@ where
         // - adapter_width is guaranteed to be less than the total buffer size
         let (adapter_buffer, core_buffer) = unsafe { buffer.split_at_mut_unchecked(adapter_width) };
 
+        // Check if the debug file exists and print buffer contents if it does
+        if std::path::Path::new("./1810_hit").exists() {
+            println!("Debug: 1810_hit file detected!");
+            println!("Adapter buffer (first 32 bytes): {:?}", 
+                     &adapter_buffer[..adapter_buffer.len().min(32)]);
+            println!("Core buffer (first 32 bytes): {:?}", 
+                     &core_buffer[..core_buffer.len().min(32)]);
+            println!("Adapter buffer length: {}", adapter_buffer.len());
+            println!("Core buffer length: {}", core_buffer.len());
+        }
+
         let adapter_record: A = adapter_buffer.custom_borrow(layout.clone());
         let core_record: C = core_buffer.custom_borrow(layout);
+
 
         (adapter_record, core_record)
     }

@@ -373,6 +373,15 @@ impl<
         // Read register values
         record.rs_vals = from_fn(|i| {
             record.rs_ptrs[i] = if i == 0 { b } else { c }.as_canonical_u32();
+            if record.rs_ptrs[i] == 7634658 {
+                println!("VecHeapAdapterExecutor::read - rs{} read ptr={}", i+1, record.rs_ptrs[i]);
+            }
+            
+            // Check if 1810 branch was hit
+            if std::path::Path::new("./1810_hit").exists() {
+                println!("VecHeapAdapterExecutor::read - 1810 hit detected! rs{} ptr={}", i+1, record.rs_ptrs[i]);
+            }
+            
             u32::from_le_bytes(tracing_read(
                 memory,
                 RV32_REGISTER_AS,
@@ -382,6 +391,9 @@ impl<
         });
 
         record.rd_ptr = a.as_canonical_u32();
+        if record.rd_ptr == 7634658 {
+            println!("VecHeapAdapterExecutor::read - rd read ptr={}", record.rd_ptr);
+        }
         record.rd_val = u32::from_le_bytes(tracing_read(
             memory,
             RV32_REGISTER_AS,
@@ -396,10 +408,17 @@ impl<
                     < (1 << self.pointer_max_bits) as u32
             );
             from_fn(|j| {
+                let mem_ptr = record.rs_vals[i] + (j * READ_SIZE) as u32;
+                if mem_ptr == 7634658 || record.from_pc == 2110144 {
+                    println!("VecHeapAdapterExecutor::read - memory read ptr={mem_ptr} i={i} j={j}");
+                    println!("record.rs_vals[i]={:?}", record.rs_vals);
+                    println!("instruction={:?}", instruction);
+                    println!("from_pc={}", record.from_pc);
+                }
                 tracing_read(
                     memory,
                     RV32_MEMORY_AS,
-                    record.rs_vals[i] + (j * READ_SIZE) as u32,
+                    mem_ptr,
                     &mut record.reads_aux[i][j].prev_timestamp,
                 )
             })

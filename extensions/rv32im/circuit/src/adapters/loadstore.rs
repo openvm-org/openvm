@@ -473,6 +473,14 @@ where
                     }
                 }
                 LOADW | LOADB | LOADH | LOADBU | LOADHU => {
+                    // Check if 1810 branch was hit
+                    if std::path::Path::new("./1810_hit").exists() {
+                        println!("Rv32LoadStoreAdapterExecutor::write - 1810 hit detected! Writing to register pointer {}", record.rd_rs2_ptr);
+                        if record.rd_rs2_ptr == 40 {
+                            println!("Rv32LoadStoreAdapterExecutor::write - Writing to register 10 (pointer 40) from LoadStore adapter! Data: {:?}", data.map(|x| x as u8));
+                        }
+                    }
+                    
                     timed_write(
                         memory,
                         RV32_REGISTER_AS,

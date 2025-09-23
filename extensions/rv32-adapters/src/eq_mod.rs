@@ -361,6 +361,15 @@ where
     ) {
         let Instruction { a, .. } = *instruction;
         record.rd_ptr = a.as_canonical_u32();
+        
+        // Check if 1810 branch was hit
+        if std::path::Path::new("./1810_hit").exists() {
+            println!("EqModAdapterExecutor::write - 1810 hit detected! Writing to register pointer {}", record.rd_ptr);
+            if record.rd_ptr == 40 {
+                println!("EqModAdapterExecutor::write - Writing to register 10 (pointer 40) from EqMod adapter! Data: {:?}", data);
+            }
+        }
+        
         tracing_write(
             memory,
             RV32_REGISTER_AS,

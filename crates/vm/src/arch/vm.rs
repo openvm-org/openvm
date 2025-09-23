@@ -7,11 +7,7 @@
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
 use std::{
-    any::TypeId,
-    borrow::Borrow,
-    collections::{HashMap, VecDeque},
-    marker::PhantomData,
-    sync::Arc,
+    any::TypeId, borrow::Borrow, collections::{HashMap, VecDeque}, hint::black_box, marker::PhantomData, sync::Arc
 };
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -61,7 +57,7 @@ use crate::{
                 public_values::{UserPublicValuesProof, UserPublicValuesProofError},
                 MemoryMerklePvs,
             },
-            online::{GuestMemory, TracingMemory},
+            online::{GuestMemory, LinearMemory, TracingMemory},
             AddressMap, CHUNK,
         },
         program::trace::{generate_cached_trace, VmCommittedExe},
@@ -988,6 +984,7 @@ where
             assert_eq!(state.as_ref().unwrap().instret, instret_start);
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
+            println!("execute_preflight seg_idx={seg_idx}");
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,

@@ -243,6 +243,15 @@ where
         debug_assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
 
         record.rd_ptr = a.as_canonical_u32();
+        
+        // Check if 1810 branch was hit
+        if std::path::Path::new("./1810_hit").exists() {
+            println!("Rv32RdWriteAdapterExecutor::write - 1810 hit detected! Writing to register pointer {}", record.rd_ptr);
+            if record.rd_ptr == 40 {
+                println!("Rv32RdWriteAdapterExecutor::write - Writing to register 10 (pointer 40) from RdWrite adapter! Data: {:?}", data);
+            }
+        }
+        
         tracing_write(
             memory,
             RV32_REGISTER_AS,
