@@ -499,6 +499,7 @@ where
         //     source,
         //     &mut record.var[0].read_aux[2].prev_timestamp,
         // );
+        source = source.saturating_sub(12 * (shift != 0) as u32);
         if shift != 0 {
             if source >= 4 {
                 record.var[0].data[3] = tracing_read(
@@ -576,7 +577,7 @@ where
         let mut dest_data = [0; 4];
         let mut source_data = [0; 4];
         let mut len_data = [0; 4];
-
+        source = source.saturating_add(12 * (shift != 0) as u32);
         tracing_write(
             state.memory,
             RV32_REGISTER_AS,
@@ -1005,6 +1006,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut source = u32::from_le_bytes(source).saturating_sub(12 * (shift != 0) as u32);
     let mut len = u32::from_le_bytes(len);
 
+    let effective_len = len.saturating_sub(shift as u32); // n >= 16 + shift
+    let num_iters = (effective_len >> 4) as u32;
     // Check address ranges are valid
 
     /*
@@ -1034,9 +1037,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     } else {
         [0; 4] // unused when shift == 0
     };
-    let effective_len = len.saturating_sub(shift as u32);
-    let num_iters = (effective_len >> 4) as u32; // number of 16-byte chunks we will process
-                                                 //why is PC not being incremented correctly
+
     eprintln!("num_iters: {:?}", num_iters);
     eprintln!("source: {:?}, dest: {:?}, pc: {:?}", source, dest, *pc);
     for _ in 0..num_iters {
