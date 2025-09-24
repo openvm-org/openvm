@@ -426,6 +426,7 @@ where
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: MemcpyIterExecutor executing MEMCPY_LOOP opcode");
         let Instruction { opcode, c, .. } = instruction;
         debug_assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
         let shift = c.as_canonical_u32() as u8; // written into c slot
@@ -616,8 +617,8 @@ where
         debug_assert_eq!(record.inner.len, u32::from_le_bytes(len_data));
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-        eprintln!("preflight height: {:?}", num_iters + 1);
-        eprintln!("Preflight MemcpyIterExecutor finished");
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: preflight height: {:?}", num_iters + 1);
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: Preflight MemcpyIterExecutor finished");
         Ok(())
     }
 }
