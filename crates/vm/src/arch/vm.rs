@@ -457,6 +457,11 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
+        eprintln!("crates/vm/src/arch/vm.rs::execute_preflight");
+        eprintln!("=== TRACE HEIGHTS PASSED TO EXECUTE_PREFLIGHT ===");
+        for (air_idx, &height) in trace_heights.iter().enumerate() {
+            eprintln!("AIR[{}]: trace_height={}", air_idx, height);
+        }
         debug_assert!(interpreter
             .executor_idx_to_air_idx
             .iter()
@@ -473,6 +478,34 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
+
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+
+        // Debug logging for capacities and AIR mapping
+        eprintln!("=== CAPACITY DEBUG INFO ===");
+        for (air_idx, &(height, width)) in capacities.iter().enumerate() {
+            eprintln!(
+                "AIR[{}]: height={}, width={}, total_elements={}",
+                air_idx,
+                height,
+                width,
+                height * width
+            );
+        }
+
+        eprintln!("=== EXECUTOR TO AIR MAPPING ===");
+        for (executor_idx, &air_idx) in executor_idx_to_air_idx.iter().enumerate() {
+            eprintln!("Executor[{}] -> AIR[{}]", executor_idx, air_idx);
+        }
+        let executor_inventory = &self.executor().inventory;
+
+        // Find all opcodes that map to executor index 14
+        eprintln!("=== OPCODES FOR EXECUTOR[14] ===");
+        for (opcode, &executor_idx) in &executor_inventory.instruction_lookup {
+            if executor_idx == 14 {
+                eprintln!("Opcode {} -> Executor[{}]", opcode, executor_idx);
+            }
+        }
         let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
@@ -1003,7 +1036,6 @@ where
                 &trace_heights,
             )?;
             state = Some(to_state);
-
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
             modify_ctx(seg_idx, &mut ctx);
             let proof = vm.engine.prove(vm.pk(), ctx);

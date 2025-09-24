@@ -263,7 +263,10 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
-
+        eprintln!(
+            "extensions/rv32im/circuit/src/mulh/core.rs::execute: PREFLIGHT: MulH executor allocating record for opcode {}",
+            instruction.opcode
+        );
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);

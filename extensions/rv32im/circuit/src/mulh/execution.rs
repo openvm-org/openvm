@@ -114,6 +114,10 @@ where
         let pre_compute: &mut E2PreCompute<MulHPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
+        eprintln!(
+            "extensions/rv32im/circuit/src/mulh/execution.rs::metered_pre_compute: METERED: MulH executor (chip_idx: {}) executing opcode {}",
+            chip_idx, inst.opcode
+        );
         dispatch!(execute_e2_handler, local_opcode)
     }
 
@@ -162,6 +166,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOpera
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    eprintln!("extensions/rv32im/circuit/src/mulh/execution.rs::execute_e1_impl: PURE: MulH executor executing MULHU opcode via execute_e1_impl");
+
     let pre_compute: &MulHPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, instret, pc, exec_state);
 }
@@ -176,6 +182,8 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Mu
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MulHPreCompute> = pre_compute.borrow();
+    eprintln!("extensions/rv32im/circuit/src/mulh/execution.rs::execute_e2_impl: METERED: MulH executor (chip_idx: {}) executing MULHU opcode, about to call on_height_change",   
+              pre_compute.chip_idx);
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

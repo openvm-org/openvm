@@ -2,58 +2,46 @@ use core::ptr;
 
 openvm::entry!(main);
 
-// Explicitly use the C memcpy function to ensure we're using custom memcpy
-extern "C" {
-    // in rust, u8 is 1 byte of memory
-    fn memcpy(dst: *mut u8, src: *const u8, n: usize) -> *mut u8;
-}
-
-/// Test function that explicitly calls memcpy to verify custom implementation
-pub fn test_custom_memcpy(dst: &mut [u8], src: &[u8], shift: usize) {
+#[no_mangle]
+pub fn append<T>(dst: &mut [T], src: &mut [T], shift: usize) {
     let src_len = src.len();
     let dst_len = dst.len();
 
-    // Bounds checking
-    if shift + src_len > dst_len {
-        return; // Just return on bounds error
-    }
-
     unsafe {
-        let dst_ptr = dst.as_mut_ptr().add(shift);
+        // The call to add is always safe because `Vec` will never
+        // allocate more than `isize::MAX` bytes.
+        let dst_ptr = dst.as_mut_ptr().wrapping_add(shift);
         let src_ptr = src.as_ptr();
+        println!("dst_ptr: {}", dst_ptr as usize); // these have the same pointer destination (basically), in between runs
+        println!("src_ptr: {}", src_ptr as usize);
+        println!("src_len: {}", src_len);
 
-        // This will definitely use our custom memcpy implementation
-        memcpy(dst_ptr, src_ptr, src_len);
+        ptr::copy_nonoverlapping(src_ptr, dst_ptr, src_len);
     }
 }
 
 pub fn main() {
-    let mut a: [u8; 1000] = [1; 1000];
-    for i in 0..1000 {
-        a[i] = 1 as u8;
+    const n: usize = 32;
+
+    let mut a: [u8; 2 * n] = [0; 2 * n];
+    let mut b: [u8; n] = [2; n];
+
+    let shift: usize = 1;
+    for i in 0..n {
+        b[i] = i as u8 + 1 as u8;
     }
-    let mut b: [u8; 500] = [2; 500];
-    for i in 0..500 {
-        b[i] = 2 as u8;
-    }
-
-    let shift: usize = 3;
-
-    // Test the custom memcpy
-    test_custom_memcpy(&mut a, &b, shift);
-
-    for i in 0..1000 {
+    println!("b: {:?}", b);
+    append(&mut a, &mut b, shift);
+    let mut idx = 0;
+    for i in 0..2 * n {
         if i < shift || i >= shift + b.len() {
-            assert_eq!(a[i], 1);
+            assert_eq!(a[i], 0);
         } else {
-            assert_eq!(a[i], 2);
+            assert_eq!(a[i], b[idx]);
+            idx += 1;
         }
     }
 
     println!("a: {:?}", a);
     println!("b: {:?}", b);
 }
-/*
-ok what lolll
-memcpy works (??)
-*/
