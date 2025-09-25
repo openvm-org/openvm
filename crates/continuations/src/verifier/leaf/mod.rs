@@ -49,19 +49,27 @@ impl LeafVmVerifierConfig {
 
         {
             builder.cycle_tracker_start("InitializePcsConst");
+            builder.print_debug(1);
             let pcs = TwoAdicFriPcsVariable {
                 config: const_fri_config(&mut builder, &self.app_fri_params),
             };
+            builder.print_debug(2);
             builder.cycle_tracker_end("InitializePcsConst");
             builder.cycle_tracker_start("ReadProofsFromInput");
             let proofs: Array<C, StarkProofVariable<_>> =
                 <Vec<Proof<BabyBearPoseidon2Config>> as Hintable<C>>::read(&mut builder);
+            builder.print_debug(3);
             // At least 1 proof should be provided.
             builder.assert_nonzero(&proofs.len());
+            builder.print_debug(4);
             builder.cycle_tracker_end("ReadProofsFromInput");
 
+            builder.print_debug(5);
+            builder.cycle_tracker_start("VerifyProofs");
+            builder.print_debug(6);
             builder.cycle_tracker_start("VerifyProofs");
             let pvs = VmVerifierPvs::<Felt<F>>::uninit(&mut builder);
+            builder.print_debug(7);
             builder.range(0, proofs.len()).for_each(|i_vec, builder| {
                 let i = i_vec[0];
                 let proof = builder.get(&proofs, i);
@@ -85,19 +93,25 @@ impl LeafVmVerifierConfig {
                 let proof_memory_pvs = get_memory_pvs(builder, &proof);
                 assert_or_assign_memory_pvs(builder, &pvs.memory, i, &proof_memory_pvs);
             });
+            builder.print_debug(8);
             builder.cycle_tracker_end("VerifyProofs");
             builder.cycle_tracker_start("ExtractPublicValuesCommit");
+            builder.print_debug(9);
             let is_terminate = builder.cast_felt_to_var(pvs.connector.is_terminate);
+            builder.print_debug(10);
             builder.if_eq(is_terminate, F::ONE).then(|builder| {
                 let (pv_commit, expected_memory_root) =
                     self.verify_user_public_values_root(builder);
                 builder.assert_eq::<[_; DIGEST_SIZE]>(pvs.memory.final_root, expected_memory_root);
                 builder.assign(&pvs.public_values_commit, pv_commit);
             });
+            builder.print_debug(11);
             for pv in pvs.flatten() {
                 builder.commit_public_value(pv);
             }
+            builder.print_debug(12);
             builder.cycle_tracker_end("ExtractPublicValuesCommit");
+            builder.print_debug(13);
 
             builder.halt();
         }
