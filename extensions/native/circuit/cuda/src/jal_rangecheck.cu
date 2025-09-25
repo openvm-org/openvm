@@ -68,7 +68,7 @@ struct JalRangeCheck {
             uint32_t b_bits = record.b.asUInt32();
             uint32_t c_bits = record.c.asUInt32();
 
-#ifdef DEBUG
+#ifdef CUDA_DEBUG
             assert(b_bits <= 16);
             assert(c_bits <= 14);
             assert(x < (1 << b_bits));
@@ -130,5 +130,5 @@ extern "C" int _native_jal_rangecheck_tracegen(
         timestamp_max_bits
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -298,5 +298,5 @@ extern "C" int _rv32_div_rem_tracegen(
         range_tuple_checker_sizes,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -445,5 +445,5 @@ extern "C" int _native_poseidon2_tracegen(
     default:
         return cudaErrorInvalidConfiguration;
     }
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

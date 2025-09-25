@@ -196,7 +196,7 @@ extern "C" int _persistent_boundary_tracegen(
         d_poseidon2_buffer_idx,
         poseidon2_capacity
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _volatile_boundary_tracegen(
@@ -223,5 +223,5 @@ extern "C" int _volatile_boundary_tracegen(
         as_max_bits,
         ptr_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

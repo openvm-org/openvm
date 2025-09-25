@@ -213,5 +213,5 @@ extern "C" int _modular_is_equal_tracegen(
         return cudaErrorInvalidValue;
     }
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

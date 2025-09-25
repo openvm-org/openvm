@@ -46,5 +46,5 @@ extern "C" int _phantom_tracegen(
     assert(width == sizeof(PhantomCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     phantom_tracegen<<<grid, block>>>(d_trace, height, width, d_records);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

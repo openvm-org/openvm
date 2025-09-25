@@ -129,5 +129,5 @@ extern "C" int _native_loadstore_tracegen(
         return cudaErrorInvalidValue;
     }
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

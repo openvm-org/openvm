@@ -42,5 +42,5 @@ extern "C" int _program_testing_tracegen(
     assert(width == sizeof(ProgramCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     program_testing_tracegen<<<grid, block>>>(d_trace, height, d_records, num_records);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

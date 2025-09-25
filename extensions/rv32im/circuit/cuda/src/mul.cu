@@ -80,5 +80,5 @@ extern "C" int _mul_tracegen(
         range_tuple_sizes,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

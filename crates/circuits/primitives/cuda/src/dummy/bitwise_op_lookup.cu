@@ -53,5 +53,5 @@ extern "C" int _bitwise_dummy_tracegen(
 ) {
     auto [grid, block] = kernel_launch_params(records.len());
     bitwise_dummy_tracegen<<<grid, block>>>(d_trace, records, bitwise_count, bitwise_num_bits);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

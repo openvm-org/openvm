@@ -69,5 +69,5 @@ extern "C" int _memory_testing_tracegen(
     default:
         assert(false && "Invalid block size");
     }
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -21,5 +21,5 @@ extern "C" int _range_checker_tracegen(
 ) {
     auto [grid, block] = kernel_launch_params(num_bins);
     range_checker_tracegen<<<grid, block>>>(d_count, d_cpu_count, d_trace, num_bins);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

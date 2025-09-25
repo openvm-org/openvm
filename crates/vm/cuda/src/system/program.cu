@@ -55,5 +55,5 @@ extern "C" int _program_cached_tracegen(
     program_cached_tracegen<<<grid, block>>>(
         d_trace, height, width, d_records, pc_base, pc_step, terminate_opcode
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

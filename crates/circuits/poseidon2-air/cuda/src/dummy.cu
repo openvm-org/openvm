@@ -40,5 +40,5 @@ extern "C" int _poseidon2_dummy_tracegen(Fp *output, Fp *inputs, uint32_t sbox_r
     default:
         return cudaErrorInvalidConfiguration;
     }
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

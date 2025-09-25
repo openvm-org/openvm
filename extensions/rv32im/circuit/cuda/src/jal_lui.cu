@@ -96,5 +96,5 @@ extern "C" int _jal_lui_tracegen(
     jal_lui_tracegen<<<grid, block>>>(
         d_trace, height, d_records, d_rc, rc_bins, d_bw, bw_bits, timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

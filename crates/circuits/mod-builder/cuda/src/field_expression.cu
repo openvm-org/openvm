@@ -371,5 +371,5 @@ extern "C" int _field_expression_tracegen(
         workspace_per_thread
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

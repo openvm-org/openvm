@@ -204,5 +204,5 @@ extern "C" int _hintstore_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -301,7 +301,7 @@ extern "C" int _keccak256_p3_tracegen(
     auto threads = div_ceil(height, NUM_ROUNDS);
     auto [grid, block] = kernel_launch_params(threads, 256);
     p3_inner_tracegen<<<grid, block>>>(trace, height, total_num_blocks, threads, states);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _keccak256_tracegen(
@@ -343,5 +343,5 @@ extern "C" int _keccak256_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

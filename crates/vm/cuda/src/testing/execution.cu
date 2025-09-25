@@ -50,5 +50,5 @@ extern "C" int _execution_testing_tracegen(
     assert(width == sizeof(DummyExecutionInteractionCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     execution_testing_tracegen<<<grid, block>>>(d_trace, height, d_records);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -120,5 +120,5 @@ extern "C" int _field_arithmetic_tracegen(
         d_trace, height, d_records, d_range_checker, range_checker_bins, timestamp_max_bits
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

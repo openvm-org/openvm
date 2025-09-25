@@ -63,5 +63,5 @@ extern "C" int _beq_tracegen(
 
     auto [grid, block] = kernel_launch_params(height);
     beq_tracegen<<<grid, block>>>(d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

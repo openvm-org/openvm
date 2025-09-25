@@ -93,5 +93,5 @@ extern "C" int _public_values_tracegen(
         max_degree,
         k
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

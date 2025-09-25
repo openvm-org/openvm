@@ -41,7 +41,7 @@ __global__ void cukernel_isequal_array_tracegen(
 extern "C" int _isequal_tracegen(Fp *output, Fp *inputs_x, Fp *inputs_y, uint32_t n) {
     auto [grid, block] = kernel_launch_params(n);
     cukernel_isequal_tracegen<<<grid, block>>>(output, inputs_x, inputs_y, n);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _isequal_array_tracegen(
@@ -53,5 +53,5 @@ extern "C" int _isequal_array_tracegen(
 ) {
     auto [grid, block] = kernel_launch_params(n);
     cukernel_isequal_array_tracegen<<<grid, block>>>(output, inputs_x, inputs_y, array_len, n);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

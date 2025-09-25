@@ -13,5 +13,5 @@ __global__ void cukernel_iszero_tracegen(Fp *output, Fp *inputs, uint32_t n) {
 extern "C" int _iszero_tracegen(Fp *output, Fp *inputs, uint32_t n) {
     auto [grid, block] = kernel_launch_params(n);
     cukernel_iszero_tracegen<<<grid, block>>>(output, inputs, n);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

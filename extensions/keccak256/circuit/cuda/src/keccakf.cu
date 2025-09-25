@@ -243,5 +243,5 @@ extern "C" int _keccakf_kernel(
         bitwise_lookup_ptr,
         bitwise_num_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

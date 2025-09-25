@@ -125,7 +125,7 @@ extern "C" int _assert_less_than_tracegen(
     cukernel_assert_less_than_tracegen<<<grid, block>>>(
         trace, trace_height, (uint2 *)pairs, max_bits, aux_len, rc_count, rc_num_bins
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _less_than_tracegen(
@@ -141,7 +141,7 @@ extern "C" int _less_than_tracegen(
     cukernel_less_than_tracegen<<<grid, block>>>(
         trace, trace_height, (uint2 *)pairs, max_bits, aux_len, rc_count, rc_num_bins
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _less_than_array_tracegen(
@@ -158,5 +158,5 @@ extern "C" int _less_than_array_tracegen(
     cukernel_less_than_array_tracegen<<<grid, block>>>(
         trace, trace_height, pairs, max_bits, array_len, aux_len, rc_count, rc_num_bins
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

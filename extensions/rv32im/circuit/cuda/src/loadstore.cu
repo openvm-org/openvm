@@ -217,5 +217,5 @@ extern "C" int _rv32_load_store_tracegen(
         range_checker_num_bins,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

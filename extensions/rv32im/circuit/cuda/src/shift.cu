@@ -82,5 +82,5 @@ extern "C" int _rv32_shift_tracegen(
         bitwise_num_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -1,4 +1,5 @@
 #include "fp.h"
+#include "launcher.cuh"
 
 __global__ void cukernel_fibair_tracegen(Fp *output, uint32_t a, uint32_t b, uint32_t n) {
     if (blockIdx.x != 0 || threadIdx.x != 0)
@@ -19,5 +20,5 @@ extern "C" int _fibair_tracegen(Fp *output, uint32_t a, uint32_t b, uint32_t n) 
     dim3 grid(1);
     dim3 block(1);
     cukernel_fibair_tracegen<<<grid, block>>>(output, a, b, n);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

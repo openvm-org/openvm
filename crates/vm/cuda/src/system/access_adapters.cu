@@ -153,7 +153,7 @@ __global__ void access_adapters_tracegen(
     if (idx >= num_records) {
         return;
     }
-#ifdef DEBUG
+#ifdef CUDA_DEBUG
     if (idx == 0) {
         assert_widths(d_widths, num_adapters);
     }
@@ -252,5 +252,5 @@ extern "C" int _access_adapters_tracegen(
         range_checker_bins,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

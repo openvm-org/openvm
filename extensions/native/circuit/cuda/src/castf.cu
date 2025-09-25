@@ -97,5 +97,5 @@ extern "C" int _castf_tracegen(
         range_checker_num_bins,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

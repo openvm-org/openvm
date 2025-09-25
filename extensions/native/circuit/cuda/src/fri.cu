@@ -284,5 +284,5 @@ extern "C" int _fri_reduced_opening_tracegen(
         range_checker_num_bins,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

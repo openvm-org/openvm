@@ -48,7 +48,7 @@ struct Encoder {
     __device__ uint32_t width() const { return k; }
 
     __device__ void write_flag_pt(RowSlice pt, uint32_t idx) const {
-#ifdef DEBUG
+#ifdef CUDA_DEBUG
         assert(idx < num_flags);
         assert(this->k > 0);
 #endif

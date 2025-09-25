@@ -370,7 +370,7 @@ extern "C" int launch_sha256_hash_computation(
         d_records, num_records, d_record_offsets, d_block_offsets, d_prev_hashes, total_num_blocks
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int launch_sha256_first_pass_tracegen(
@@ -414,7 +414,7 @@ extern "C" int launch_sha256_first_pass_tracegen(
         timestamp_max_bits
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int launch_sha256_second_pass_dependencies(
@@ -431,7 +431,7 @@ extern "C" int launch_sha256_second_pass_dependencies(
         inner_trace_start, trace_height, total_sha256_blocks
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int launch_sha256_fill_invalid_rows(
@@ -443,5 +443,5 @@ extern "C" int launch_sha256_fill_invalid_rows(
     auto [grid_size, block_size] = kernel_launch_params(invalid_rows, 256);
     sha256_fill_invalid_rows<<<grid_size, block_size>>>(d_trace, trace_height, rows_used);
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

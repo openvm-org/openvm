@@ -34,5 +34,5 @@ extern "C" int _encoder_tracegen(
 
     cukernel_encoder_tracegen<<<grid, block>>>(trace, num_flags, max_degree, reserve_invalid, k);
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

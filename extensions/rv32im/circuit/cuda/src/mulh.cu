@@ -218,5 +218,5 @@ extern "C" int _mulh_tracegen(
         timestamp_max_bits
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

@@ -24,5 +24,5 @@ extern "C" int _bitwise_op_lookup_tracegen(
     uint32_t num_rows = 1 << (2 * num_bits);
     auto [grid, block] = kernel_launch_params(num_rows);
     bitwise_op_lookup_tracegen<<<grid, block>>>(d_count, d_cpu_count, d_trace, num_rows);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

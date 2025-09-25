@@ -492,7 +492,7 @@ extern "C" int _build_merkle_subtree(
         auto [grid, block] = kernel_launch_params(i);
         merkle_tree_compress<<<grid, block, 0, stream>>>(tree + (2 * i - 1), tree + (i - 1), i);
     }
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _restore_merkle_subtree_path(
@@ -505,7 +505,7 @@ extern "C" int _restore_merkle_subtree_path(
     merkle_tree_restore_path<<<1, 1, 0, stream>>>(
         in_out, zero_hash + full_size - remaining_size, remaining_size
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _finalize_merkle_tree(
@@ -516,12 +516,12 @@ extern "C" int _finalize_merkle_tree(
 ) {
     assert((num_roots & (num_roots - 1)) == 0);
     merkle_tree_root<<<1, 1, 0, stream>>>(in, out, num_roots);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 extern "C" int _calculate_zero_hash(digest_t *zero_hash, const size_t size) {
     calculate_zero_hash<<<1, 1>>>(zero_hash, size);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 /// Updates the digests in `subtrees`, replacing them with the new ones,
@@ -626,5 +626,5 @@ extern "C" int _update_merkle_tree(
         poseidon2_capacity
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

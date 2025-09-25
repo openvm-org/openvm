@@ -113,7 +113,7 @@ extern "C" int _alu256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 // Heap branch adapter instantiation for 256-bit operations
@@ -189,7 +189,7 @@ extern "C" int _branch_equal256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 template <typename T> struct LessThan256Cols {
@@ -261,7 +261,7 @@ extern "C" int _less_than256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 template <typename T> struct BranchLessThan256Cols {
@@ -333,7 +333,7 @@ extern "C" int _branch_less_than256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 template <typename T> struct Shift256Cols {
@@ -408,7 +408,7 @@ extern "C" int _shift256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 template <typename T> struct Multiplication256Cols {
@@ -489,5 +489,5 @@ extern "C" int _multiplication256_tracegen(
         pointer_max_bits,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

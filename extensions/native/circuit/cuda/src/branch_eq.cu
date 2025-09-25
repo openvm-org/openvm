@@ -101,5 +101,5 @@ extern "C" int _native_branch_eq_tracegen(
         range_checker_num_bins,
         timestamp_max_bits
     );
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

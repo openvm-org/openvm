@@ -23,7 +23,7 @@ __global__ void cukernel_system_poseidon2_tracegen(
         PoseidonParams::SBOX_REGS,
         PoseidonParams::HALF_FULL_ROUNDS,
         PoseidonParams::PARTIAL_ROUNDS>;
-#ifdef DEBUG
+#ifdef CUDA_DEBUG
     assert(Poseidon2Row::get_total_size() + 1 == trace_width);
 #endif
     if (idx < trace_height) {
@@ -71,7 +71,7 @@ extern "C" int _system_poseidon2_tracegen(
         return cudaErrorInvalidConfiguration;
     }
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 // Prepares d_num_records for use with sort reduce and stores the temporary buffer
@@ -117,7 +117,7 @@ extern "C" int _system_poseidon2_deduplicate_records_get_temp_bytes(
     );
 
     *h_temp_bytes_out = std::max(sort_storage_bytes, reduce_storage_bytes);
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
 
 // Reduces the records, removing duplicates and storing the number of times
@@ -162,5 +162,5 @@ extern "C" int _system_poseidon2_deduplicate_records(
         cudaStreamPerThread
     );
 
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }

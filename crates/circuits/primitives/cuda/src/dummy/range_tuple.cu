@@ -67,5 +67,5 @@ extern "C" int _range_tuple_dummy_tracegen(
     default:
         return -1;
     }
-    return cudaGetLastError();
+    return CHECK_KERNEL();
 }
