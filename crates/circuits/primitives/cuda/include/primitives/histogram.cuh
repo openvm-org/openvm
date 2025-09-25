@@ -1,6 +1,7 @@
 #pragma once
 
 #include "launcher.cuh"
+#include "utils.cuh"
 #include "trace_access.h"
 
 /**
@@ -65,7 +66,7 @@ struct VariableRangeChecker {
     ) {
         size_t range_max_bits = max_bits();
 #ifdef CUDA_DEBUG
-        assert(limbs_len >= div_ceil(bits, range_max_bits));
+        assert(limbs_len >= d_div_ceil(bits, range_max_bits));
 #endif
         uint32_t mask = (1 << range_max_bits) - 1;
         size_t bits_remaining = bits;
