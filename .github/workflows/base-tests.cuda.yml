@@ -45,7 +45,6 @@ jobs:
         run: |
           nvcc --version
           echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=1" >> $GITHUB_ENV
-          echo "CUDA_DEBUG=1" >> $GITHUB_ENV
 
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives
