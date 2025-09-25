@@ -106,8 +106,8 @@ template <uint32_t N> struct RangeTupleChecker {
     }
 
     __device__ void add_count(RowSlice values) {
-#ifdef CUDA_DEBUG
-        assert(values.stride == N);
+#ifdef DEBUG // TODO: change to CUDA_DEBUG and proper assertion
+        assert(values.length == N);
 #endif
         uint32_t idx = 0;
         for (int i = 0; i < N; i++) {
