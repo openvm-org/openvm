@@ -71,7 +71,15 @@ pub struct MemcpyIterCols<T> {
     pub data_4: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub read_aux: [MemoryReadAuxCols<T>; 4],
     pub write_aux: [MemoryWriteAuxCols<T, MEMCPY_LOOP_NUM_LIMBS>; 4],
-}
+} // number of columns is 68
+  // other air constraints not that confident, check myself to see if confident with correctness
+
+/*
+talk about bug in #zk-circuits the same way that previous comment was made
+- after have concrete idea of what the bug is, and why its failing
+- i mean i kinda do tho lol? just making sure that the AIR constraints are correct and make sense
+
+ */
 
 pub const NUM_MEMCPY_ITER_COLS: usize = size_of::<MemcpyIterCols<u8>>();
 
@@ -125,7 +133,13 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let is_not_start = (local.is_boundary + AB::Expr::ONE)
             * (AB::Expr::TWO - local.is_boundary)
             * (AB::F::TWO).inverse();
+
+        let prev_is_not_start = (prev.is_boundary + AB::Expr::ONE)
+            * (AB::Expr::TWO - prev.is_boundary)
+            * (AB::F::TWO).inverse();
+
         let prev_is_not_end = not::<AB::Expr>(
+            // returns 0 if prev.isBoundary == 1, 1 otherwise, since we take the not
             (prev.is_boundary + AB::Expr::ONE) * prev.is_boundary * (AB::F::TWO).inverse(),
         );
 
@@ -202,9 +216,17 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let mut is_valid_not_start_when = builder.when(local.is_valid_not_start);
         is_valid_not_start_when.assert_eq(len.clone(), prev_len - AB::Expr::from_canonical_u32(16));
 
-        // TODO: fix this constraint
-        // is_valid_not_start_when
-        //     .assert_eq(local.source, prev.source + AB::Expr::from_canonical_u32(16));
+        // TODO: fix this constraint? or why is this constraint failing
+
+        /*
+
+        error is if the initial source value is < 12, then -16, we do a saturating sub so its bounded below by 0
+        then, it results in a mismatch of values
+         */
+        is_valid_not_start_when.assert_eq(
+            prev_is_not_start.clone() * local.source,
+            prev_is_not_start.clone() * (prev.source + AB::Expr::from_canonical_u32(16)),
+        );
 
         is_valid_not_start_when.assert_eq(local.dest, prev.dest + AB::Expr::from_canonical_u32(16));
         local
@@ -217,7 +239,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         // make sure if previous row is valid and not end, then local.is_valid = 1
         builder
-            .when(prev_is_not_end - not::<AB::Expr>(prev.is_valid))
+            .when(prev_is_not_end.clone() - not::<AB::Expr>(prev.is_valid))
             .assert_one(local.is_valid);
 
         // if prev.is_valid_start, then timestamp = prev_timestamp + is_shift_non_zero
@@ -461,8 +483,10 @@ where
         // Create a record sized to the exact number of 16-byte iterations (header + iterations)
         // This calculation must match extract_layout and fill_trace
 
-        let effective_len = len.saturating_sub(shift as u32); // n >= 16 + shift
-        let num_iters = (effective_len >> 4) as usize;
+        let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+        let effective_len = len.saturating_sub(head);
+        let num_iters = (effective_len / 16) as usize; // floor((len - head)/16)
+
         // eprintln!(
         //     "PREFLIGHT: len={}, shift={}, effective_len={}, num_iters={}, allocated_rows={}",
         //     len,
@@ -624,6 +648,16 @@ where
     }
 }
 
+/*
+- generate_proving_ctx is what creates trace fill
+- row major matrix, so stored in a vector, row by row
+- look at common_main, is where trace is filled
+
+- print into excel, look in trace
+
+
+- LAST STEP:
+ */
 impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
     fn fill_trace(
         &self,
@@ -699,7 +733,14 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     timestamp - timestamp_delta
                 };
 
-                let mut dest = record.inner.dest + ((num_rows - 1) << 4) as u32;
+                // eprintln!("record.inner.source: {:?}", record.inner.source);
+                // eprintln!(
+                //     "num_rows: {:?}, record.inner.source + ((num_rows - 1) << 4): {:?}",
+                //     num_rows,
+                //     record.inner.source + ((num_rows - 1) << 4) as u32
+                // );
+
+                let mut dest = record.inner.dest + ((num_rows - 1) << 4) as u32; // got rid of -1 here???
                 let mut source = (record.inner.source + ((num_rows - 1) << 4) as u32)
                     .saturating_sub(12 * (record.inner.shift != 0) as u32);
                 let mut len =
@@ -805,6 +846,11 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         cols.timestamp = F::from_canonical_u32(get_timestamp(false));
 
                         dest = dest.saturating_sub(16);
+
+                        if source < 16 {
+                            eprintln!("source: {:?}", source);
+                            eprintln!("cols.is_boundary: {:?}", cols.is_boundary);
+                        }
                         source = source.saturating_sub(16);
                         len += 16;
 
@@ -1006,8 +1052,10 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     let mut source = u32::from_le_bytes(source).saturating_sub(12 * (shift != 0) as u32);
     let mut len = u32::from_le_bytes(len);
 
-    let effective_len = len.saturating_sub(shift as u32); // n >= 16 + shift
-    let num_iters = (effective_len >> 4) as u32;
+    let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+    let effective_len = len.saturating_sub(head);
+    let num_iters = (effective_len / 16) as u32; // floor((len - head)/16)
+
     // Check address ranges are valid
 
     /*
