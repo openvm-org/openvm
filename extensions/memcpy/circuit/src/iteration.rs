@@ -263,6 +263,12 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // Receive message from memcpy bus or send message to it
         // The last data is shift if is_boundary = -1, and 4 if is_boundary = 1
         // This actually receives when is_boundary = -1
+
+        /*
+            data mismatched along memcpy bus, local.source value?
+            we only send if is_boundary = -1 or 1
+            start or end
+        */
         self.memcpy_bus
             .send(
                 local.timestamp
