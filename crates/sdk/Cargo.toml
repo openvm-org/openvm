@@ -62,6 +62,10 @@ rrs-lib.workspace = true
 num-bigint.workspace = true
 cfg-if.workspace = true
 
+[dev-dependencies]
+cargo-openvm = { path = "../cli" }
+
+
 [features]
 default = ["parallel", "jemalloc"]
 evm-prove = [

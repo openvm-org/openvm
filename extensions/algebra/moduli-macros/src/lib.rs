@@ -1162,7 +1162,16 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         }
         #[allow(non_snake_case, non_upper_case_globals)]
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
-            pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
+
+            // #[repr(C, align(#block_size))]
+            // struct AlignedPlaceholder([u8; #limbs]);
+
+            // const MODULUS_BYTES: AlignedPlaceholder = AlignedPlaceholder([#(#modulus_bytes),*]);
+            // Aligned placeholder structs to force proper memory alignment
+            #[repr(C, align(32))]
+            pub struct AlignedU8Array(pub [u8; #total_limbs_cnt]);
+            
+            pub const two_modular_limbs_list: AlignedU8Array = AlignedU8Array([#(#two_modular_limbs_flattened_list),*]);
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
         }
     })
