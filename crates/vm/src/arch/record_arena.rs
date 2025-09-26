@@ -90,8 +90,18 @@ impl<F: Field> MatrixRecordArena<F> {
     }
 
     pub fn alloc_buffer(&mut self, num_rows: usize) -> &mut [u8] {
-        let start = self.trace_offset;
+        let start: usize = self.trace_offset;
+
         self.trace_offset += num_rows * self.width;
+        if start >= self.trace_buffer.len() {
+            eprintln!("crates/vm/src/arch/record_arena.rs::alloc_buffer: start >= self.trace_buffer.len()");
+            eprintln!("start = {:?}", start);
+            eprintln!("self.trace_offset = {:?}", self.trace_offset);
+            eprintln!("self.trace_buffer.len() = {:?}", self.trace_buffer.len());
+            eprintln!("self.width = {:?}", self.width);
+            eprintln!("num_rows = {:?}", num_rows);
+        }
+
         let row_slice = &mut self.trace_buffer[start..self.trace_offset];
         let size = size_of_val(row_slice);
         let ptr = row_slice as *mut [F] as *mut u8;
@@ -111,6 +121,15 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
     fn with_capacity(height: usize, width: usize) -> Self {
         let height = next_power_of_two_or_zero(height);
         let trace_buffer = F::zero_vec(height * width);
+        eprintln!(
+            "crates/vm/src/arch/record_arena.rs::with_capacity: with capacity called, height = {:?}, width = {:?}",
+            height, width
+        );
+        // height * width is wrong?
+        // i think bug is here? on constructor the trace buffer
+        // isn't allocated to be the correct size
+        // eprintln!("height, width = {:?}, {:?}", height, width);
+        // eprintln!("trace_buffer.len() = {:?}", trace_buffer.len());
         Self {
             trace_buffer,
             width,
@@ -133,6 +152,10 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     fn set_capacity(&mut self, trace_height: usize) {
         let size = trace_height * self.width;
         // PERF: use memset
+        // eprintln!("set_capacity called");
+        // eprintln!("size = {:?}", size);
+        // eprintln!("trace_height = {:?}", trace_height);
+        // eprintln!("self.width = {:?}", self.width);
         self.trace_buffer.resize(size, F::ZERO);
     }
 
@@ -145,6 +168,7 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
     }
 
     fn into_matrix(mut self) -> RowMajorMatrix<F> {
+        // eprintln!("into_matrix called");
         let width = self.width();
         assert_eq!(self.trace_offset() % width, 0);
         let rows_used = self.trace_offset() / width;
@@ -158,6 +182,7 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
             let height = self.trace_buffer.len() / width;
             assert!(height.is_power_of_two() || height == 0);
         }
+        // eprintln!("into_matrix done");
         RowMajorMatrix::new(self.trace_buffer, self.width)
     }
 }
@@ -534,7 +559,12 @@ where
     [u8]: CustomBorrow<'a, R, MultiRowLayout<M>>,
 {
     fn alloc(&'a mut self, layout: MultiRowLayout<M>) -> R {
-        let buffer = self.alloc_buffer(layout.metadata.get_num_rows());
+        // alloc override of the alloc function in the trait
+        // eprintln!(
+        //     "layout.metadata.get_num_rows() in alloc override = {:?}",
+        //     layout.metadata.get_num_rows()
+        // );
+        let buffer = self.alloc_buffer(layout.metadata.get_num_rows()); //allocating 2 rows
         let record: R = buffer.custom_borrow(layout);
         record
     }

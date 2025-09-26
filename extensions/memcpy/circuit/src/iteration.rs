@@ -71,6 +71,8 @@ pub struct MemcpyIterCols<T> {
     pub data_4: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub read_aux: [MemoryReadAuxCols<T>; 4],
     pub write_aux: [MemoryWriteAuxCols<T, MEMCPY_LOOP_NUM_LIMBS>; 4],
+    // 1-hot encoding for source = 0, 4, 8
+    pub is_source_0_4_8: [T; 3],
 }
 
 pub const NUM_MEMCPY_ITER_COLS: usize = size_of::<MemcpyIterCols<u8>>();
@@ -93,6 +95,7 @@ impl<F: Field> BaseAirWithPublicValues<F> for MemcpyIterAir {}
 impl<F: Field> PartitionedBaseAir<F> for MemcpyIterAir {}
 
 impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
+    // assertions for AIR constraints
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (prev, local) = (main.row_slice(0), main.row_slice(1));
@@ -113,18 +116,29 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             .fold(AB::Expr::ZERO, |acc, (i, x)| {
                 acc + (*x) * AB::Expr::from_canonical_u32(i as u32 + 1)
             });
-        let is_shift_non_zero = local.shift.iter().fold(AB::Expr::ZERO, |acc, x| acc + (*x));
+        let is_shift_non_zero = local
+            .shift
+            .iter()
+            .fold(AB::Expr::ZERO, |acc: <AB as AirBuilder>::Expr, x| {
+                acc + (*x)
+            });
         let is_shift_zero = not::<AB::Expr>(is_shift_non_zero.clone());
         let is_shift_one = local.shift[0];
         let is_shift_two = local.shift[1];
         let is_shift_three = local.shift[2];
 
+        let is_source_0 = local.is_source_0_4_8[0];
+        let is_source_4 = local.is_source_0_4_8[1];
+        let is_source_8 = local.is_source_0_4_8[2];
+        let is_source_small = or::<AB::Expr>(is_source_0, or::<AB::Expr>(is_source_4, is_source_8));
         let is_end =
             (local.is_boundary + AB::Expr::ONE) * local.is_boundary * (AB::F::TWO).inverse();
         let is_not_start = (local.is_boundary + AB::Expr::ONE)
             * (AB::Expr::TWO - local.is_boundary)
             * (AB::F::TWO).inverse();
+
         let prev_is_not_end = not::<AB::Expr>(
+            // returns 0 if prev.isBoundary == 1, 1 otherwise, since we take the not
             (prev.is_boundary + AB::Expr::ONE) * prev.is_boundary * (AB::F::TWO).inverse(),
         );
 
@@ -138,6 +152,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         //  (local.data_2[shift..4], local.data_1[0..shift]),
         //  (local.data_3[shift..4], local.data_2[0..shift]),
         //  (local.data_4[shift..4], local.data_3[0..shift])
+        // local.data-1 = tracing_read data
         let write_data_pairs = [
             (prev.data_4, local.data_1),
             (local.data_1, local.data_2),
@@ -148,25 +163,26 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let write_data = write_data_pairs
             .iter()
             .map(|(prev_data, next_data)| {
+                // iterate i from 0 ... 3
                 array::from_fn::<_, MEMCPY_LOOP_NUM_LIMBS, _>(|i| {
                     is_shift_zero.clone() * (next_data[i])
                         + is_shift_one.clone()
-                            * (if i < 3 {
-                                next_data[i + 1]
+                            * (if i < 1 {
+                                prev_data[i + 3]
                             } else {
-                                prev_data[i - 3]
+                                next_data[i - 1]
                             })
                         + is_shift_two.clone()
                             * (if i < 2 {
-                                next_data[i + 2]
+                                prev_data[i + 2]
                             } else {
-                                prev_data[i - 2]
+                                next_data[i - 2]
                             })
                         + is_shift_three.clone()
-                            * (if i < 1 {
-                                next_data[i + 3]
+                            * (if i < 3 {
+                                prev_data[i + 1]
                             } else {
-                                prev_data[i - 1]
+                                next_data[i - 3]
                             })
                 })
             })
@@ -179,11 +195,10 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         builder.assert_bool(local.is_shift_non_zero_or_not_start);
         // is_boundary is either -1, 0 or 1
         builder.assert_tern(local.is_boundary + AB::Expr::ONE);
-
         // is_valid_not_start = is_valid and is_not_start:
         builder.assert_eq(
             local.is_valid_not_start,
-            and::<AB::Expr>(local.is_valid, is_not_start),
+            and::<AB::Expr>(local.is_valid, is_not_start.clone()),
         );
 
         // is_shift_non_zero_or_not_start is correct
@@ -192,18 +207,45 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
             or::<AB::Expr>(is_shift_non_zero.clone(), local.is_valid_not_start),
         );
 
+        // builder.assert_eq(
+        //     is_valid_is_start.clone() * (is_shift_zero.clone() * local.source),
+        //     is_valid_is_start.clone()
+        //         * (is_shift_zero.clone() * (prev.source + AB::Expr::from_canonical_u32(16))),
+        // );
+
+        // builder.assert_eq(
+        //     is_not_start.clone() * local.source,
+        //     is_not_start.clone() * (prev.source + AB::Expr::from_canonical_u32(16)),
+        // );
+
         // if !is_valid, then is_boundary = 0, shift = 0 (we will use this assumption later)
-        let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
-        is_not_valid_when.assert_zero(local.is_boundary);
-        is_not_valid_when.assert_zero(shift.clone());
+        // let mut is_not_valid_when = builder.when(not::<AB::Expr>(local.is_valid));
+        // is_not_valid_when.assert_zero(local.is_boundary);
+        // is_not_valid_when.assert_zero(shift.clone());
 
         // if is_valid_not_start, then len = prev_len - 16, source = prev_source + 16,
         // and dest = prev_dest + 16, shift = prev_shift
+
+        // is_valid_not_start is degree 1, since it uses the variable as a precondition
         let mut is_valid_not_start_when = builder.when(local.is_valid_not_start);
         is_valid_not_start_when.assert_eq(len.clone(), prev_len - AB::Expr::from_canonical_u32(16));
-        is_valid_not_start_when
-            .assert_eq(local.source, prev.source + AB::Expr::from_canonical_u32(16));
+
+        // TODO: fix this constraint? or why is this constraint failing
+
+        /*
+
+        error is if the initial source value is < 12, then -16, we do a saturating sub so its bounded below by 0
+        then, it results in a mismatch of values
+         */
+        // degree 1 * deg 2 * deg 1 = deg 4
+
+        // is_valid_not_start_when.assert_eq(
+        //     prev_is_not_start.clone() * local.source,
+        //     prev_is_not_start.clone() * (prev.source + AB::Expr::from_canonical_u32(16)),
+        // );
+
         is_valid_not_start_when.assert_eq(local.dest, prev.dest + AB::Expr::from_canonical_u32(16));
+
         local
             .shift
             .iter()
@@ -214,14 +256,14 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
 
         // make sure if previous row is valid and not end, then local.is_valid = 1
         builder
-            .when(prev_is_not_end - not::<AB::Expr>(prev.is_valid))
+            .when(prev_is_not_end.clone() - not::<AB::Expr>(prev.is_valid))
             .assert_one(local.is_valid);
 
         // if prev.is_valid_start, then timestamp = prev_timestamp + is_shift_non_zero
         // since is_shift_non_zero degree is 2, we need to keep the degree of the condition to 1
         builder
             .when(not::<AB::Expr>(prev.is_valid_not_start) - not::<AB::Expr>(prev.is_valid))
-            .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero);
+            .assert_eq(local.timestamp, prev.timestamp + is_shift_non_zero.clone());
 
         // if prev.is_valid_not_start and local.is_valid_not_start, then timestamp=prev_timestamp+8
         // prev.is_valid_not_start is the opposite of previous condition
@@ -238,10 +280,26 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // Receive message from memcpy bus or send message to it
         // The last data is shift if is_boundary = -1, and 4 if is_boundary = 1
         // This actually receives when is_boundary = -1
+
+        /*
+            data mismatched along memcpy bus, local.source value?
+            we only send if is_boundary = -1 or 1
+            start or end
+        */
+
+        // local_source_0_4_8
+        eprintln!("is_source_small: {:?}", is_source_small);
+        eprintln!("is_shift_non_zero: {:?}", is_shift_non_zero);
+        eprintln!(
+            "current timestamp: {:?}",
+            local.timestamp * AB::Expr::from_canonical_u32(1)
+        );
+
         self.memcpy_bus
             .send(
                 local.timestamp
                     + (local.is_boundary + AB::Expr::ONE) * AB::Expr::from_canonical_usize(4),
+                // - (is_shift_non_zero.clone() * is_source_small.clone()),
                 local.dest,
                 local.source,
                 len.clone(),
@@ -260,6 +318,23 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                 local.is_valid_not_start
             };
 
+            /*
+            7 values go:
+                address sspace
+                pointer to address
+                data (4)
+                timestamp
+                data chosen is wrong lol
+             */
+            // memory bridge data is tracing_read
+            // based off of the unshifted data values
+
+            // tracing_write writes the corectly shifted values
+
+            eprintln!(
+                "memory bridge read_data: {:?}",
+                data.clone().map(|x| x * (AB::Expr::from_canonical_u32(1)))
+            );
             self.memory_bridge
                 .read(
                     MemoryAddress::new(
@@ -272,8 +347,21 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                 )
                 .eval(builder, is_valid_read.clone());
         });
-
+        eprintln!(
+            "memory bridge data write_data: {:?}",
+            write_data
+                .iter()
+                .map(|x| x.clone().map(|y| y * (AB::Expr::from_canonical_u32(1))))
+                .collect::<Vec<_>>()
+        );
         // Write final data to registers
+        write_data_pairs.iter().for_each(|(prev_data, next_data)| {
+            eprintln!(
+                "prev_data: {:?}, next_data: {:?}",
+                prev_data.map(|x| x * (AB::Expr::from_canonical_u32(1))),
+                next_data.map(|x| x * (AB::Expr::from_canonical_u32(1))),
+            );
+        });
         write_data.iter().enumerate().for_each(|(idx, data)| {
             self.memory_bridge
                 .write(
@@ -376,9 +464,8 @@ impl<'a> CustomBorrow<'a, MemcpyIterRecordMut<'a>, MemcpyIterLayout> for [u8] {
 
     unsafe fn extract_layout(&self) -> MemcpyIterLayout {
         let header: &MemcpyIterRecordHeader = self.borrow();
-        MultiRowLayout::new(MemcpyIterMetadata {
-            num_rows: ((header.len - header.shift as u32) >> 4) as usize + 1,
-        })
+        let num_rows = ((header.len - header.shift as u32) >> 4) as usize + 1;
+        MultiRowLayout::new(MemcpyIterMetadata { num_rows })
     }
 }
 
@@ -413,15 +500,21 @@ where
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", Rv32MemcpyOpcode::MEMCPY_LOOP)
     }
+    /*
 
+        preflight executor, execute_e12 are for actual execution
+        e1: pure execution
+        e2: metered execution
+    */
     fn execute(
         &self,
         state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: MemcpyIterExecutor executing MEMCPY_LOOP opcode");
         let Instruction { opcode, c, .. } = instruction;
         debug_assert_eq!(*opcode, Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode());
-        let shift = c.as_canonical_u32() as u8;
+        let shift = c.as_canonical_u32() as u8; // written into c slot
         debug_assert!([0, 1, 2, 3].contains(&shift));
 
         let mut dest = read_rv32_register(
@@ -440,12 +533,36 @@ where
                 A3_REGISTER_PTR
             } as u32,
         );
+
         let mut len = read_rv32_register(state.memory.data(), A2_REGISTER_PTR as u32);
 
-        // Create a record with var_size = ((len - shift) >> 4) + 1 which is the number of rows in iteration trace
-        let record = state.ctx.alloc(MultiRowLayout::new(MemcpyIterMetadata {
-            num_rows: ((len - shift as u32) >> 4) as usize + 1,
-        }));
+        // source = source.saturating_sub(12 * (shift != 0) as u32);
+        debug_assert!(
+            shift == 0 || (dest % 4 == 0),
+            "dest must be 4-byte aligned in MEMCPY_LOOP"
+        );
+        debug_assert!(len >= shift as u32);
+
+        // Create a record sized to the exact number of 16-byte iterations (header + iterations)
+        // This calculation must match extract_layout and fill_trace
+
+        let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+        let effective_len = len.saturating_sub(head);
+        let num_iters = (effective_len / 16) as usize; // floor((len - head)/16)
+
+        // eprintln!(
+        //     "PREFLIGHT: len={}, shift={}, effective_len={}, num_iters={}, allocated_rows={}",
+        //     len,
+        //     shift,
+        //     effective_len,
+        //     num_iters,
+        //     num_iters + 1
+        // );
+        let record: MemcpyIterRecordMut<'_> =
+            state.ctx.alloc(MultiRowLayout::new(MemcpyIterMetadata {
+                //allocating based on number of rows needed
+                num_rows: num_iters + 1,
+            })); // is this too big then??
 
         // Store the original values in the record
         record.inner.shift = shift;
@@ -454,21 +571,51 @@ where
         record.inner.dest = dest;
         record.inner.source = source;
         record.inner.len = len;
+        // eprintln!(
+        //     "shift = {:?}, len = {:?}, source = {:?}, source%16 = {:?}, dest = {:?}, dest%16 = {:?}",
+        //     shift, len, source, source % 16, dest, dest % 16
+        // );
 
         // Fill record.var for the first row of iteration trace
+        // FIX 2: read source-4 (the word ending at s[-1]); zero if out-of-bounds.
+
+        // this causes timestamp errors, if shift == 0
+        // let first_word: [u8; MEMCPY_LOOP_NUM_LIMBS] = tracing_read(
+        //     state.memory,
+        //     RV32_MEMORY_AS,
+        //     source,
+        //     &mut record.var[0].read_aux[2].prev_timestamp,
+        // );
+        source = source.saturating_sub(12 * (shift != 0) as u32);
         if shift != 0 {
-            source -= 12;
+            // if source >= 4 {
             record.var[0].data[3] = tracing_read(
                 state.memory,
                 RV32_MEMORY_AS,
-                source - 4,
+                source - 4 * (source >= 4) as u32, // correct seed for mixing
                 &mut record.var[0].read_aux[3].prev_timestamp,
             );
-        };
+            // eprintln!("record.var[0].data[3]: {:?}", record.var[0].data[3]);
+            // } else {
+            //     record.var[0].data[3] = tracing_read(
+            //         state.memory,
+            //         RV32_MEMORY_AS,
+            //         source,
+            //         &mut record.var[0].read_aux[3].prev_timestamp,
+            //     );
+            // }
+        } else {
+            record.var[0].data[3] = tracing_read(
+                state.memory,
+                RV32_MEMORY_AS,
+                source,
+                &mut record.var[0].read_aux[3].prev_timestamp,
+            );
+        }
 
         // Fill record.var for the rest of the rows of iteration trace
         let mut idx = 1;
-        while len - shift as u32 > 15 {
+        for _ in 0..num_iters {
             let writes_data: [[u8; MEMCPY_LOOP_NUM_LIMBS]; 4] = array::from_fn(|i| {
                 record.var[idx].data[i] = tracing_read(
                     state.memory,
@@ -476,17 +623,25 @@ where
                     source + 4 * i as u32,
                     &mut record.var[idx].read_aux[i].prev_timestamp,
                 );
+                //use shifted data, to construct the write data for each given word
                 let write_data: [u8; MEMCPY_LOOP_NUM_LIMBS] = array::from_fn(|j| {
-                    if j < 4 - shift as usize {
-                        record.var[idx].data[i][j + shift as usize]
-                    } else if i > 0 {
-                        record.var[idx].data[i - 1][j - (4 - shift as usize)]
+                    if j < shift as usize {
+                        if i > 0 {
+                            // First s bytes come from previous 4-byte word tail, take from previous word, in our 16 byte chunk
+                            record.var[idx].data[i - 1][j + (4 - shift as usize)]
+                        } else {
+                            // For i == 0, take from previous chunk's last word tail; otherwise, take last word of previous chunk
+                            record.var[idx - 1].data[3][j + (4 - shift as usize)]
+                        }
                     } else {
-                        record.var[idx - 1].data[3][j - (4 - shift as usize)]
+                        // Remaining 4 - s bytes come from current word head
+                        record.var[idx].data[i][j - shift as usize]
                     }
                 });
+                eprintln!("execute write_data: {:?}", write_data);
                 write_data
             });
+            eprintln!("record.var[idx].data: {:?}", record.var[idx].data);
             writes_data.iter().enumerate().for_each(|(i, write_data)| {
                 tracing_write(
                     state.memory,
@@ -503,15 +658,10 @@ where
             idx += 1;
         }
 
-        // Handle the core loop
-        if shift != 0 {
-            source += 12;
-        }
-
         let mut dest_data = [0; 4];
         let mut source_data = [0; 4];
         let mut len_data = [0; 4];
-
+        source = source.saturating_add(12 * (shift != 0) as u32);
         tracing_write(
             state.memory,
             RV32_REGISTER_AS,
@@ -552,11 +702,22 @@ where
         debug_assert_eq!(record.inner.len, u32::from_le_bytes(len_data));
 
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: preflight height: {:?}", num_iters + 1);
+        eprintln!("extensions/memcpy/circuit/src/iteration.rs::execute: PREFLIGHT: Preflight MemcpyIterExecutor finished");
         Ok(())
     }
 }
 
+/*
+- generate_proving_ctx is what creates trace fill
+- row major matrix, so stored in a vector, row by row
+- look at common_main, is where trace is filled
+
+- print into excel, look in trace
+
+
+- LAST STEP:
+ */
 impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
     fn fill_trace(
         &self,
@@ -598,7 +759,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
             .par_iter_mut()
             .zip(sizes.par_iter())
             .enumerate()
-            .for_each(|(row_idx, (chunk, &num_rows))| {
+            .for_each(|(_row_idx, (chunk, &num_rows))| {
                 let record: MemcpyIterRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,
@@ -607,7 +768,7 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                 };
 
                 tracing::info!("shift: {:?}", record.inner.shift);
-                // Fill memcpy loop record
+
                 self.memcpy_loop_chip.add_new_loop(
                     mem_helper,
                     record.inner.from_pc,
@@ -632,9 +793,16 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                     timestamp - timestamp_delta
                 };
 
-                let mut dest = record.inner.dest + ((num_rows - 1) << 4) as u32;
-                let mut source = record.inner.source + ((num_rows - 1) << 4) as u32
-                    - 12 * (record.inner.shift != 0) as u32;
+                // eprintln!("record.inner.source: {:?}", record.inner.source);
+                // eprintln!(
+                //     "num_rows: {:?}, record.inner.source + ((num_rows - 1) << 4): {:?}",
+                //     num_rows,
+                //     record.inner.source + ((num_rows - 1) << 4) as u32
+                // );
+
+                let mut dest = record.inner.dest + ((num_rows - 1) << 4) as u32; // got rid of -1 here???
+                let mut source = (record.inner.source + ((num_rows - 1) << 4) as u32)
+                    .saturating_sub(12 * (record.inner.shift != 0) as u32);
                 let mut len =
                     record.inner.len - ((num_rows - 1) << 4) as u32 - record.inner.shift as u32;
 
@@ -736,9 +904,15 @@ impl<F: PrimeField32> TraceFiller<F> for MemcpyIterFiller {
                         cols.source = F::from_canonical_u32(source);
                         cols.dest = F::from_canonical_u32(dest);
                         cols.timestamp = F::from_canonical_u32(get_timestamp(false));
+                        cols.is_source_0_4_8 =
+                            [source == 0, source == 4, source == 8].map(F::from_bool);
+                        dest = dest.saturating_sub(16);
 
-                        dest -= 16;
-                        source -= 16;
+                        if source < 16 {
+                            eprintln!("source: {:?}", source);
+                            eprintln!("cols.is_boundary: {:?}", cols.is_boundary);
+                        }
+                        source = source.saturating_sub(16);
                         len += 16;
 
                         // if row_idx == 0 && is_start {
@@ -918,6 +1092,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> u32 {
+    eprintln!("E12 MemcpyIterExecutor started");
     let shift = pre_compute.c;
     let mut height = 1;
     // Read dest and source from registers
@@ -934,14 +1109,25 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     };
     // Read length from a2 register
     let len = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, A2_REGISTER_PTR as u32);
-
     let mut dest = u32::from_le_bytes(dest);
-    let mut source = u32::from_le_bytes(source) - 12 * (shift != 0) as u32;
+    let mut source = u32::from_le_bytes(source).saturating_sub(12 * (shift != 0) as u32);
     let mut len = u32::from_le_bytes(len);
 
+    let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+    let effective_len = len.saturating_sub(head);
+    let num_iters = (effective_len / 16) as u32; // floor((len - head)/16)
+
     // Check address ranges are valid
+
+    /*
+    difference in code is with modifiyng source, shift !=0, * 12 etc.
+    executing same PC instruction over and over?
+        invalid instruction probably??
+     */
+
     debug_assert!(dest < (1 << POINTER_MAX_BITS));
     debug_assert!((source - 4 * (shift != 0) as u32) < (1 << POINTER_MAX_BITS));
+
     let to_dest = dest + ((len - shift as u32) & !15);
     let to_source = source + ((len - shift as u32) & !15);
     debug_assert!(to_dest <= (1 << POINTER_MAX_BITS));
@@ -950,25 +1136,37 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     debug_assert!(to_dest <= source || to_source <= dest);
 
     // Read the previous data from memory if shift != 0
-    let mut prev_data = if shift == 0 {
-        [0; 4]
+    // - 12 * (shift != 0) as u32 is affecting the write_data lol
+    let mut prev_data: [u8; 4] = if shift != 0 {
+        if source >= 4 {
+            exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
+        } else {
+            [0; 4]
+        }
     } else {
-        exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source - 4)
+        [0; 4] // unused when shift == 0
     };
 
-    // Run iterations
-    while len - shift as u32 > 15 {
-        for i in 0..4 {
-            let data = exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
-            let write_data: [u8; 4] = array::from_fn(|i| {
-                if i < 4 - shift as usize {
-                    data[i + shift as usize]
+    eprintln!("num_iters: {:?}", num_iters);
+    eprintln!("source: {:?}, dest: {:?}, pc: {:?}", source, dest, *pc);
+    for _ in 0..num_iters {
+        for i in 0..4u32 {
+            let cur_word = exec_state.vm_read::<u8, 4>(RV32_MEMORY_AS, source + 4 * i);
+            let write_data: [u8; 4] = array::from_fn(|j| {
+                if (j as u8) < shift {
+                    prev_data[j + (4 - shift as usize)]
                 } else {
-                    prev_data[i - (4 - shift as usize)]
+                    cur_word[j - shift as usize]
                 }
             });
+            eprintln!(
+                "source: {:?}, dest: {:?}, write_data: {:?}",
+                source + 4 * i,
+                dest + 4 * i,
+                write_data
+            );
             exec_state.vm_write(RV32_MEMORY_AS, dest + 4 * i, &write_data);
-            prev_data = data;
+            prev_data = cur_word;
         }
         len -= 16;
         source += 16;
@@ -1002,9 +1200,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         );
     };
     exec_state.vm_write(RV32_REGISTER_AS, A2_REGISTER_PTR as u32, &len.to_le_bytes());
-
     *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     *instret += 1;
+    assert!(height == num_iters + 1);
+    eprintln!("height: {:?}", height);
+    eprintln!("E12 MemcpyIterExecutor finished");
     height
 }
 

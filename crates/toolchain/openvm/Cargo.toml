@@ -28,13 +28,15 @@ num-bigint.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["serde"] }
 
 [features]
-default = ["getrandom-unsupported"]
+default = ["getrandom-unsupported", "custom-memcpy"]
 # Defines a custom getrandom backend that always errors. This feature should be enabled if you are sure getrandom is never used but it is pulled in as a compilation dependency.
 getrandom-unsupported = ["dep:getrandom", "dep:getrandom-v02"]
 # The zkVM uses a bump-pointer heap allocator by default which does not free
 # memory. This will use a slower linked-list heap allocator to reclaim memory.
 heap-embedded-alloc = ["openvm-platform/heap-embedded-alloc"]
 std = ["serde/std", "openvm-platform/std"]
+# Enable custom memcpy implementation with specialized instructions
+custom-memcpy = []
 
 [package.metadata.cargo-shear]
 ignored = ["openvm-custom-insn", "getrandom"]
