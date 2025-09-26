@@ -1173,7 +1173,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
             pub struct Aligned<T>(pub T);
 
             pub const two_modular_limbs_list: Aligned<[u8; #total_limbs_cnt]> = Aligned([#(#two_modular_limbs_flattened_list),*]);
-            pub const limb_list_borders: Aligned<[usize; #cnt_limbs_list_len]> = Aligned([#(#limb_list_borders),*]);
+            pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
         }
     })
 }
