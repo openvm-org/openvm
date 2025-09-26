@@ -649,7 +649,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 {
                     use super::openvm_intrinsics_meta_do_not_type_this_by_yourself::{two_modular_limbs_list, limb_list_borders};
-                    let two_modulus_bytes = &two_modular_limbs_list[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
+                    let two_modulus_bytes = &two_modular_limbs_list.0[limb_list_borders[#mod_idx]..limb_list_borders[#mod_idx + 1]];
 
                     // We are going to use the numeric representation of the `rs2` register to distinguish the chip to setup.
                     // The transpiler will transform this instruction, based on whether `rs2` is `x0` or `x1`, into a `SETUP_ADDSUB` or `SETUP_MULDIV` instruction.
