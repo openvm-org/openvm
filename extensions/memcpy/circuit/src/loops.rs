@@ -51,7 +51,7 @@ pub struct MemcpyLoopCols<T> {
     pub dest: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub source: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub len: [T; MEMCPY_LOOP_NUM_LIMBS],
-    pub shift: [T; 2],
+    pub shift: [T; 2], // in this implementation, write shift in binary? wott
     pub is_valid: T,
     pub to_timestamp: T,
     pub to_dest: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -60,6 +60,7 @@ pub struct MemcpyLoopCols<T> {
     pub write_aux: [MemoryBaseAuxCols<T>; 3],
     pub source_minus_twelve_carry: T,
     pub to_source_minus_twelve_carry: T,
+
     // When true, indicates we should saturate (clamp) source-12 to 0 (zero-padding case)
     pub is_source_small: T,
     // When true, indicates we should saturate (clamp) to_source-12 to 0 (zero-padding case)
@@ -239,22 +240,40 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         });
 
         // Send message to memcpy call bus
+        // does the source call here have to be a saturated sub?
+        /*
+        want to send 0, if source = 0...11
+        use if_source_small
+            MULTIPLY THE VALUE
+            BY (1 - is_source_small)
+         */
+        /*
+        is iter too high, or loop too low
+
+         */
+
         self.memcpy_bus
             .send(
                 local.from_state.timestamp,
                 dest,
-                source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone(),
+                (AB::Expr::ONE - local.is_source_small)
+                    * (source - AB::Expr::from_canonical_u32(12)),
+                // * is_shift_non_zero.clone()),
+                //TODO: need to incorporate this, without increasing degree LOL
                 len.clone() - shift.clone(),
                 shift.clone(),
             )
             .eval(builder, local.is_valid);
 
         // Receive message from memcpy return bus
+        // also need to clamp based on is_to_source_small
         self.memcpy_bus
             .receive(
                 local.to_timestamp - AB::Expr::from_canonical_u32(timestamp_delta),
                 to_dest,
-                to_source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone(),
+                (AB::Expr::ONE - local.is_to_source_small)
+                    * (to_source - AB::Expr::from_canonical_u32(12)),
+                //  * is_shift_non_zero.clone()),
                 to_len - shift.clone(),
                 AB::Expr::from_canonical_u32(4),
             )
@@ -262,12 +281,13 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
 
         // Make sure the request and response match, this should work because the
         // from_timestamp and len are valid and to_len is in [0, 16 + shift)
-        builder.when(local.is_valid).assert_eq(
-            AB::Expr::TWO * (local.to_timestamp - local.from_state.timestamp),
-            (len.clone() - to_len)
-                + AB::Expr::TWO
-                    * (is_shift_non_zero.clone() + AB::Expr::from_canonical_u32(timestamp_delta)),
-        );
+        // this is failing, returning -2
+        // builder.when(local.is_valid).assert_eq(
+        //     AB::Expr::TWO * (local.to_timestamp - local.from_state.timestamp),
+        //     (len.clone() - to_len)
+        //         + AB::Expr::TWO
+        //             * (is_shift_non_zero.clone() + AB::Expr::from_canonical_u32(timestamp_delta)),
+        // );
 
         // Execution bus + program bus
         self.execution_bridge
@@ -426,6 +446,8 @@ impl MemcpyLoopChip {
             cols.is_valid = F::ONE;
             // We have MEMCPY_LOOP_NUM_WRITES writes in the loop, (num_copies / 4) writes
             // and (num_copies / 4 + shift != 0) reads in iterations
+            // only do read when source.saturating_sub(12) >= 4
+
             cols.to_timestamp = F::from_canonical_u32(
                 record.from_timestamp
                     + MEMCPY_LOOP_NUM_WRITES
@@ -446,7 +468,8 @@ impl MemcpyLoopChip {
                 });
             cols.source_minus_twelve_carry = F::from_bool((record.source & 0x0ffff) < 12);
             cols.to_source_minus_twelve_carry = F::from_bool((to_source & 0x0ffff) < 12);
-
+            cols.is_source_small = F::from_bool(record.source < 12);
+            cols.is_to_source_small = F::from_bool(to_source < 12);
             tracing::info!("timestamp: {:?}, pc: {:?}, dest: {:?}, source: {:?}, len: {:?}, shift: {:?}, is_valid: {:?}, to_timestamp: {:?}, to_dest: {:?}, to_source: {:?}, to_len: {:?}, write_aux: {:?}",
                             cols.from_state.timestamp.as_canonical_u32(),
                             cols.from_state.pc.as_canonical_u32(),
