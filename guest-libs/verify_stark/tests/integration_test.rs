@@ -33,6 +33,7 @@ fn test_verify_openvm_stark_e2e() -> Result<()> {
         .rv32m(Default::default())
         .io(Default::default())
         .native(Default::default())
+        .memcpy(Default::default())
         .build();
     let fri_params = FriParameters::new_for_testing(LEAF_LOG_BLOWUP);
     let app_config = AppConfig::new_with_leaf_fri_params(fri_params, vm_config.clone(), fri_params);
