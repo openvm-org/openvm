@@ -134,7 +134,7 @@ impl<const NUM: usize> IsLtArraySubAir<NUM> {
                 .assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
             builder.when(marker).assert_one(diff * diff_inv);
         }
-        builder.assert_bool(prefix_sum.clone());
+
         // When condition != 0,
         // - If `x != y`, then `prefix_sum = 1` so marker[i] must be nonzero iff i is the first
         //   index where `x[i] != y[i]`. Constrains that `diff_inv * (y[i] - x[i]) = 1` (`diff_val`
