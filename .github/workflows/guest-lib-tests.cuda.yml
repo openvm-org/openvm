@@ -123,7 +123,7 @@ jobs:
           FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
           COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-          rustup component add rust-src --toolchain nightly-2025-02-14
+          rustup component add rust-src --toolchain nightly-2025-08-02
 
           for crate in ${{ matrix.crates.names }}; do
             crate_changed=$(echo $FILTER_OUTPUTS | jq -r .$crate)

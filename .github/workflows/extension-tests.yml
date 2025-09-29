@@ -92,5 +92,5 @@ jobs:
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
+          rustup component add rust-src --toolchain nightly-2025-08-02
           cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass

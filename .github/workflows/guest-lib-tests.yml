@@ -74,7 +74,7 @@ jobs:
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
+          rustup component add rust-src --toolchain nightly-2025-08-02
           PAIRING_FEATURE_ARGS=""
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
             PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
