@@ -973,7 +973,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
-    let mut max_block_size = 1;
+    let mut max_block_size = 4;
 
     for (mod_idx, item) in items.into_iter().enumerate() {
         let modulus = item.value();
