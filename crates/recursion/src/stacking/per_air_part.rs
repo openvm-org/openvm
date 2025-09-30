@@ -1,5 +1,4 @@
 use core::borrow::{Borrow, BorrowMut};
-use std::path::Prefix;
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -74,7 +73,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyPerAirPartAir {
             AirShapeBusMessage {
                 sort_idx: local.sorted_air_idx,
                 idx: local.air_idx,
-                is_present: local.is_present,
                 hypercube_dim: local.hypercube_dim,
                 has_preprocessed: local.has_preprocessed,
                 num_main_parts: local.num_main_parts,
@@ -119,8 +117,9 @@ pub(crate) fn generate_trace(
     let num_rows = num_valid_rows.next_power_of_two();
     let width = DummyPerAirPartCols::<usize>::width();
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+    let mut j = 0;
 
+    let mut trace = vec![F::ZERO; num_rows * width];
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut DummyPerAirPartCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
@@ -130,14 +129,14 @@ pub(crate) fn generate_trace(
             cols.commit_idx = F::ZERO;
             cols.commit_width = F::from_canonical_usize(preflight.stacked_common_width);
         } else {
-            let avk = &vk.per_air[i];
+            let (air_id, shape) = &preflight.sorted_trace_shapes[j];
+            let avk = &vk.per_air[*air_id];
 
             cols.tidx = F::ZERO;
-            cols.air_idx = F::from_canonical_usize(i);
-            cols.sorted_air_idx = F::from_canonical_usize(i);
-            cols.is_present = F::from_bool(proof.is_optional_air_present[i]);
+            cols.air_idx = F::from_canonical_usize(*air_id);
+            cols.sorted_air_idx = F::from_canonical_usize(j);
             cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
-            cols.hypercube_dim = F::from_canonical_u8(proof.log_heights[i]);
+            cols.hypercube_dim = F::from_canonical_usize(shape.hypercube_dim);
             cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);
             cols.num_interactions =
                 F::from_canonical_usize(avk.symbolic_constraints.interactions.len());

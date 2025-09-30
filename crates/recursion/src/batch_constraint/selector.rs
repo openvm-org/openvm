@@ -10,7 +10,10 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::bus::{AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage};
+use crate::{
+    bus::{AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage},
+    system::Preflight,
+};
 
 #[repr(C)]
 #[derive(AlignedBorrow)]
@@ -62,7 +65,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for BatchConstraintSelectorAir
             AirShapeBusMessage {
                 sort_idx: local.sorted_air_idx,
                 idx: local.air_idx,
-                is_present: local.is_present,
                 hypercube_dim: local.hypercube_dim,
                 has_preprocessed: local.has_preprocessed,
                 num_main_parts: local.num_main_parts,
@@ -83,32 +85,29 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for BatchConstraintSelectorAir
     }
 }
 
-pub(crate) fn generate_trace(vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> RowMajorMatrix<F> {
+pub(crate) fn generate_trace(
+    vk: &MultiStarkVerifyingKeyV2,
+    proof: &Proof,
+    preflight: &Preflight,
+) -> RowMajorMatrix<F> {
     let vk = &vk.inner;
 
-    let num_optional_airs: usize = proof
-        .is_optional_air_present
-        .iter()
-        .map(|x| 1 - *x as usize)
-        .sum();
-
-    let num_valid_rows: usize = vk.per_air.len() - num_optional_airs;
+    let num_valid_rows: usize = preflight.sorted_trace_shapes.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = BatchConstraintSelectorCols::<usize>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
-
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let avk = &vk.per_air[i];
+        let (air_id, trace_shape) = &preflight.sorted_trace_shapes[i];
+        let avk = &vk.per_air[*air_id];
 
         let cols: &mut BatchConstraintSelectorCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
         cols.tidx = F::ZERO;
-        cols.air_idx = F::from_canonical_usize(i);
+        cols.air_idx = F::from_canonical_usize(*air_id);
         cols.sorted_air_idx = F::from_canonical_usize(i);
-        cols.is_present = F::from_bool(proof.is_optional_air_present[i]);
         cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
-        cols.hypercube_dim = F::from_canonical_u8(proof.log_heights[i]);
+        cols.hypercube_dim = F::from_canonical_usize(trace_shape.hypercube_dim);
         cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);
         cols.num_interactions =
             F::from_canonical_usize(avk.symbolic_constraints.interactions.len());
