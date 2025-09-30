@@ -12,9 +12,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
-        StackingModuleMessage, StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage,
-        WhirModuleBus, WhirModuleMessage,
+        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, WhirModuleBus,
+        WhirModuleMessage,
     },
     system::Preflight,
 };

@@ -65,7 +65,7 @@ impl AirModule for BatchConstraintModule {
             },
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(selector::generate_trace(vk, proof))),
+                common_main: Some(Arc::new(selector::generate_trace(vk, proof, preflight))),
                 public_values: vec![],
             },
             AirProofRawInput {
