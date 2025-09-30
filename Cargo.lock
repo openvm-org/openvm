@@ -5376,6 +5376,7 @@ dependencies = [
  "getset",
  "itertools 0.14.0",
  "libc",
+ "libloading",
  "memmap2",
  "metrics",
  "openvm-circuit",
