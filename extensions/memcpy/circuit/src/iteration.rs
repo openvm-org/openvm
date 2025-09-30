@@ -330,7 +330,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                 .eval(builder, is_valid_read.clone());
             eprintln!(
                 "local.source: {:?}, data: {:?}, local.source - AB::Expr::from_canonical_usize(16 - idx * 4): {:?}",
-                local.source
+                local.source * AB::Expr::from_canonical_u32(1),
                 data.clone().map(|x| x * (AB::Expr::from_canonical_u32(1))),
                 local.source - AB::Expr::from_canonical_usize(16 - idx * 4) * AB::Expr::from_canonical_u32(1)
             );
