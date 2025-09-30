@@ -8,6 +8,11 @@ description = "Recursion circuit for v2"
 [dependencies]
 p3-air = { workspace = true }
 p3-field = { workspace = true }
+p3-matrix = { workspace = true }
+stark-backend-v2 = { workspace = true }
+stark-recursion-circuit-derive = { workspace = true }
+openvm-stark-backend = { workspace = true }
+openvm-stark-sdk = { workspace = true }
 
 [dev-dependencies]
 
