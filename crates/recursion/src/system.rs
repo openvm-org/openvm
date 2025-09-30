@@ -1,9 +1,16 @@
-use core::cmp::max;
+use core::{
+    cmp::{Reverse, max},
+    iter::zip,
+};
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
-use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    EF, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    proof::{Proof, TraceShape},
+};
 
 use crate::{
     batch_constraint::BatchConstraintModule,
@@ -89,8 +96,8 @@ pub struct Preflight {
     pub whir_tidx: usize,
 
     pub n_max: usize,
-    pub num_present_airs: usize,
     pub stacked_common_width: usize,
+    pub sorted_trace_shapes: Vec<(usize, TraceShape)>,
 
     pub gkr_input_layer_numerator_claim: EF,
     pub gkr_input_layer_denominator_claim: EF,
@@ -103,42 +110,22 @@ impl Preflight {
             inner: vk,
         } = &vk;
 
-        let num_optional_airs = vk
-            .per_air
-            .iter()
-            .map(|avk| 1 - avk.is_required as usize)
-            .sum::<usize>();
-        let num_present_optional_airs = proof
-            .is_optional_air_present
-            .iter()
-            .map(|b| *b as usize)
-            .sum::<usize>();
+        let l_skip = vk.params.l_skip;
 
-        let num_present_airs = vk.per_air.len() - (num_optional_airs - num_present_optional_airs);
-
-        let mut num_common_cells: u64 = 0;
-        let mut is_optional_air_present = proof.is_optional_air_present.iter();
-        let mut log_heights = proof.log_heights.iter();
+        let mut num_common_cells = 0;
         let mut n_max = 0;
-        for avk in &vk.per_air {
-            let is_present = if avk.is_required {
-                true
-            } else {
-                *is_optional_air_present.next().unwrap()
-            };
-            if is_present {
-                let log_height = if avk.preprocessed_data.is_some() {
-                    avk.preprocessed_data
-                        .as_ref()
-                        .map(|avk| avk.log_height)
-                        .unwrap()
-                } else {
-                    *log_heights.next().unwrap() as usize
-                };
-                n_max = max(n_max, log_height as usize - vk.params.l_skip);
-                num_common_cells += (1 << log_height) * avk.params.width.common_main as u64;
+        let mut sorted_trace_shapes: Vec<(usize, TraceShape)> = vec![];
+        for (air_id, (avk, shape)) in zip(&vk.per_air, &proof.trace_shapes).enumerate() {
+            if let Some(shape) = shape {
+                num_common_cells +=
+                    (1 << (shape.hypercube_dim + l_skip)) * avk.params.width.common_main;
+                n_max = max(n_max, shape.hypercube_dim);
+
+                sorted_trace_shapes.push((air_id, shape.clone()));
             }
         }
+        sorted_trace_shapes.sort_by_key(|(_, shape)| Reverse(shape.hypercube_dim));
+
         let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
 
         Self {
@@ -147,9 +134,9 @@ impl Preflight {
             batch_constraint_tidx: 200,
             stacking_tidx: 300,
             whir_tidx: 400,
-            num_present_airs,
             n_max,
-            stacked_common_width: ((num_common_cells + stack_height - 1) / stack_height) as usize,
+            sorted_trace_shapes,
+            stacked_common_width: ((num_common_cells + stack_height - 1) / stack_height),
             gkr_input_layer_numerator_claim: EF::from_canonical_usize(123),
             gkr_input_layer_denominator_claim: EF::from_canonical_usize(456),
         }
