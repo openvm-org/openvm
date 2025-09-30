@@ -1,3 +1,4 @@
+mod aot;
 mod config;
 /// Instruction execution traits and types.
 /// Execution bus and interface.

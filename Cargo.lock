@@ -841,7 +841,7 @@ dependencies = [
 
 [[package]]
 name = "asm_bridge"
-version = "1.4.1-rc.1"
+version = "1.4.1-rc.2"
 dependencies = [
  "cc",
  "openvm-circuit",
@@ -851,7 +851,7 @@ dependencies = [
 
 [[package]]
 name = "asm_bridge_metered"
-version = "1.4.1-rc.1"
+version = "1.4.1-rc.2"
 dependencies = [
  "cc",
  "openvm-circuit",
