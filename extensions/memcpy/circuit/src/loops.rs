@@ -51,7 +51,9 @@ pub struct MemcpyLoopCols<T> {
     pub dest: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub source: [T; MEMCPY_LOOP_NUM_LIMBS],
     pub len: [T; MEMCPY_LOOP_NUM_LIMBS],
-    pub shift: [T; 2], // in this implementation, write shift in binary? wott
+    pub shift: [T; 3], // in this implementation, write shift in binary? wott
+    // iter needs 3, for one hot encoding
+    // can do same here, since we need is_shift_non_zero to be degree 1
     pub is_valid: T,
     pub to_timestamp: T,
     pub to_dest: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -95,13 +97,6 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         let local = main.row_slice(0);
         let local: &MemcpyLoopCols<AB::Var> = (*local).borrow();
 
-        let mut timestamp_delta: u32 = 0;
-        let mut timestamp_pp = || {
-            timestamp_delta += 1;
-            local.to_timestamp
-                - AB::Expr::from_canonical_u32(MEMCPY_LOOP_NUM_WRITES - (timestamp_delta - 1))
-        };
-
         let from_le_bytes = |data: [AB::Var; 4]| {
             data.iter().rev().fold(AB::Expr::ZERO, |acc, x| {
                 acc * AB::Expr::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS) + *x
@@ -115,8 +110,19 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             ]
         };
 
-        let shift = local.shift[1] * AB::Expr::TWO + local.shift[0];
-        let is_shift_non_zero = or::<AB::Expr>(local.shift[0], local.shift[1]);
+        let shift = local
+            .shift
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (i, x)| {
+                acc + (*x) * AB::Expr::from_canonical_u32(i as u32 + 1)
+            });
+        let is_shift_non_zero = local
+            .shift
+            .iter()
+            .fold(AB::Expr::ZERO, |acc: <AB as AirBuilder>::Expr, x| {
+                acc + (*x)
+            });
         let is_shift_zero = not::<AB::Expr>(is_shift_non_zero.clone());
         let dest = from_le_bytes(local.dest);
         let source = from_le_bytes(local.source);
@@ -124,6 +130,13 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         let to_dest = from_le_bytes(local.to_dest);
         let to_source = from_le_bytes(local.to_source);
         let to_len = local.to_len;
+
+        let mut timestamp_delta: u32 = 0;
+        let mut timestamp_pp = || {
+            timestamp_delta += 1;
+            local.to_timestamp
+                - AB::Expr::from_canonical_u32(MEMCPY_LOOP_NUM_WRITES - (timestamp_delta - 1))
+        };
 
         builder.assert_bool(local.is_valid);
         local.shift.iter().for_each(|x| builder.assert_bool(*x));
@@ -257,9 +270,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
                 local.from_state.timestamp,
                 dest,
                 (AB::Expr::ONE - local.is_source_small)
-                    * (source - AB::Expr::from_canonical_u32(12)),
-                // * is_shift_non_zero.clone()),
-                //TODO: need to incorporate this, without increasing degree LOL
+                    * (source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone()),
                 len.clone() - shift.clone(),
                 shift.clone(),
             )
@@ -272,8 +283,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
                 local.to_timestamp - AB::Expr::from_canonical_u32(timestamp_delta),
                 to_dest,
                 (AB::Expr::ONE - local.is_to_source_small)
-                    * (to_source - AB::Expr::from_canonical_u32(12)),
-                //  * is_shift_non_zero.clone()),
+                    * (to_source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone()),
                 to_len - shift.clone(),
                 AB::Expr::from_canonical_u32(4),
             )
@@ -365,8 +375,7 @@ impl MemcpyLoopChip {
         shift: u8,
         register_aux: [MemoryBaseAuxRecord; 3],
     ) {
-        let mut timestamp =
-            from_timestamp + (((len - shift as u32) & !0x0f) >> 1) + (shift != 0) as u32;
+        let mut timestamp = from_timestamp + (((len - shift as u32) & !0x0f) >> 1) + 1 as u32;
         let write_aux = register_aux
             .iter()
             .map(|aux_record| {
@@ -442,17 +451,14 @@ impl MemcpyLoopChip {
             cols.dest = record.dest.to_le_bytes().map(F::from_canonical_u8);
             cols.source = record.source.to_le_bytes().map(F::from_canonical_u8);
             cols.len = record.len.to_le_bytes().map(F::from_canonical_u8);
-            cols.shift = [shift & 1, shift >> 1].map(F::from_canonical_u8);
+            cols.shift = [shift == 1, shift == 2, shift == 3].map(F::from_bool);
             cols.is_valid = F::ONE;
             // We have MEMCPY_LOOP_NUM_WRITES writes in the loop, (num_copies / 4) writes
             // and (num_copies / 4 + shift != 0) reads in iterations
             // only do read when source.saturating_sub(12) >= 4
 
             cols.to_timestamp = F::from_canonical_u32(
-                record.from_timestamp
-                    + MEMCPY_LOOP_NUM_WRITES
-                    + (num_copies >> 1)
-                    + (shift != 0) as u32,
+                record.from_timestamp + MEMCPY_LOOP_NUM_WRITES + (num_copies >> 1) + 1 as u32,
             );
             cols.to_dest = (record.dest + num_copies)
                 .to_le_bytes()
