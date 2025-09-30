@@ -130,7 +130,6 @@ define_typed_bus!(TranscriptBus, TranscriptBusMessage);
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
     pub idx: T,
-    pub is_present: T,
     pub hypercube_dim: T,
     pub has_preprocessed: T,
     pub num_main_parts: T,
@@ -142,7 +141,6 @@ impl<E, T: Into<E>> BusPayload<E> for AirShapeBusMessage<T> {
         vec![
             self.sort_idx.into(),
             self.idx.into(),
-            self.is_present.into(),
             self.hypercube_dim.into(),
             self.has_preprocessed.into(),
             self.num_main_parts.into(),

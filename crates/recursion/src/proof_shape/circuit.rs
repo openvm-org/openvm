@@ -27,7 +27,6 @@ struct DummyProofShapeCols<T> {
     tidx: T,
     air_idx: T,
     sorted_air_idx: T,
-    is_present: T,
     n_logup: T,
     n_max: T,
     hypercube_dim: T,
@@ -102,7 +101,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
             AirShapeBusMessage {
                 sort_idx: local.sorted_air_idx,
                 idx: local.air_idx,
-                is_present: local.is_present,
                 hypercube_dim: local.hypercube_dim,
                 has_preprocessed: local.has_preprocessed,
                 num_main_parts: local.num_main_parts,
@@ -164,10 +162,13 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     let vk = &vk.inner;
 
-    let num_parts_per_air: Vec<_> = vk
-        .per_air
+    let num_parts_per_air: Vec<_> = preflight
+        .sorted_trace_shapes
         .iter()
-        .map(|avk| 1 + avk.num_cached_mains() + avk.preprocessed_data.is_some() as usize)
+        .map(|&(air_id, _)| {
+            let avk = &vk.per_air[air_id];
+            1 + avk.num_cached_mains() + avk.preprocessed_data.is_some() as usize
+        })
         .collect();
 
     let num_valid_rows = num_parts_per_air.iter().sum::<usize>() + 1;
@@ -178,9 +179,8 @@ pub(crate) fn generate_trace(
 
     let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
 
-    let mut air_idx = 0;
+    let mut j = 0;
     let mut part_idx = 0;
-    let mut present_air_idx = 0;
 
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut DummyProofShapeCols<F> = row.borrow_mut();
@@ -197,14 +197,15 @@ pub(crate) fn generate_trace(
             cols.stacked_width = F::from_canonical_usize(preflight.stacked_common_width);
             cols.n_logup = F::from_canonical_usize(proof.gkr_proof.claims_per_layer.len());
         } else {
-            let avk = &vk.per_air[air_idx];
-            let num_parts = num_parts_per_air[air_idx];
+            let (air_id, shape) = &preflight.sorted_trace_shapes[j];
+            let num_parts = num_parts_per_air[j];
 
-            cols.air_idx = F::from_canonical_usize(air_idx);
-            cols.sorted_air_idx = F::from_canonical_usize(air_idx);
-            cols.is_present = F::from_bool(proof.is_optional_air_present[air_idx]);
+            let avk = &vk.per_air[*air_id];
+
+            cols.air_idx = F::from_canonical_usize(*air_id);
+            cols.sorted_air_idx = F::from_canonical_usize(j);
             cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
-            cols.hypercube_dim = F::from_canonical_u8(proof.log_heights[present_air_idx]);
+            cols.hypercube_dim = F::from_canonical_usize(shape.hypercube_dim);
             cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);
             cols.num_interactions =
                 F::from_canonical_usize(avk.symbolic_constraints.interactions.len());
@@ -214,19 +215,18 @@ pub(crate) fn generate_trace(
                 cols.commit = data.commit;
                 cols.stacked_width = F::from_canonical_usize(data.stacking_width);
             } else if part_idx > 0 {
+                let height = 1 << (shape.hypercube_dim + vk.params.l_skip);
                 let cached_commit_idx = part_idx - 1 - avk.preprocessed_data.is_some() as usize;
-                let num_cells = avk.params.width.cached_mains[cached_commit_idx]
-                    * (1 << proof.log_heights[present_air_idx]);
-                cols.commit = proof.cached_commitments_per_air[air_idx][cached_commit_idx];
+                let num_cells = avk.params.width.cached_mains[cached_commit_idx] * height;
+                cols.commit = shape.cached_commitments[cached_commit_idx];
                 cols.stacked_width =
                     F::from_canonical_usize((num_cells + stack_height - 1) / stack_height);
             }
             cols.width = F::from_canonical_usize(avk.params.width.common_main);
 
             if part_idx == num_parts - 1 {
-                air_idx += 1;
+                j += 1;
                 part_idx = 0;
-                present_air_idx += proof.is_optional_air_present[i] as usize;
             } else {
                 part_idx += 1;
             }
