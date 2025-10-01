@@ -1,42 +1,51 @@
-use crate::arch::SystemConfig;
+use crate::arch::instructions::VmOpcode;
+use crate::{
+    arch::{SystemConfig, VmState},
+    system::memory::online::GuestMemory,
+};
 use libloading::{Library, Symbol};
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, instruction::Instruction};
+use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_stark_backend::p3_field::FieldAlgebra;
+use openvm_stark_sdk::config::fri_params::standard_fri_params_with_100_bits_conjectured_security;
+use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use p3_baby_bear::BabyBearParameters;
 use p3_field::PrimeField32;
+use std::fs::File;
+use std::io::Write;
 use std::{env, env::args, fs, path::PathBuf, process::Command};
+use tracing::subscriber::SetGlobalDefaultError;
+
 pub struct AotInstance<F: PrimeField32> {
     exe: VmExe<F>,
 }
 
 impl<F: PrimeField32> AotInstance<F> {
     pub fn new(exe: &VmExe<F>) -> Self {
-        // let asm_string = Self::compile(exe);
+        let asm_string = Self::compile(exe);
+
+        let _ = File::create("aot_asm.s").expect("Unable to create file");
+        std::fs::write("aot_asm.s", &asm_string).expect("Unable to write file");
 
         let output = Command::new("rustc")
             .args([
                 "--crate-type=staticlib",
                 "--target=x86_64-apple-darwin",
-                "./src/arch/aot/rust_function.rs",
+                "rust_function.rs",
                 "-o",
                 "librust_function_x86.a",
             ])
             .output();
 
         let output = Command::new("as")
-            .args([
-                "-arch",
-                "x86_64",
-                "./src/arch/aot/aot_asm.s",
-                "-o",
-                "./src/arch/aot/aot_asm.o",
-            ])
+            .args(["-arch", "x86_64", "aot_asm.s", "-o", "aot_asm.o"])
             .output();
 
         let output = Command::new("gcc")
             .args([
                 "-arch",
                 "x86_64",
-                "./src/arch/aot/aot_asm.o",
+                "aot_asm.o",
                 "-L.",
                 "-lrust_function_x86",
                 "-o",
@@ -47,10 +56,60 @@ impl<F: PrimeField32> AotInstance<F> {
         Self { exe: exe.clone() }
     }
 
-    // pub fn compile(exe: &VmExe<F>) -> String {
-    //     let mut res = String::new();
-    //     return res;
-    // }
+    pub fn compile(exe: &VmExe<F>) -> String {
+        let mut res = String::new();
+        res += r#"
+.intel_syntax noprefix
+.section    __TEXT,__text,regular,pure_instructions
+.globl  _main
+
+"#;
+        for r in 0u64..32u64 {
+            res += &format!(".comm reg_{r}, 8, 3\n");
+        }
+
+        res += r#"
+.section    __TEXT,__text,regular,pure_instructions
+_main:  
+# can do some initializations here
+
+"#;
+
+        for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
+            res += &format!("pc_{:x}:\n", pc);
+            res += &Self::generate_assembly(instruction);
+            // TODO: remove this debug print
+            res += &format!("\tmov rdi, qword ptr[rip + reg_0]\n");
+            res += &format!("\tcall _print_register\n");
+            res += "\n";
+        }
+
+        res += "execute_end:\n";
+        res += "\tret\n\n";
+
+        return res;
+    }
+
+    pub fn generate_assembly(inst: Instruction<F>) -> String {
+        let opcode = inst.opcode;
+
+        let asm = {
+            // [a:4]_1 = [b:4]_1 + [c:4]_e
+            let a = inst.a;
+            let b = inst.b;
+            let c = inst.c;
+            let e = inst.e;
+
+            let mut res = String::new();
+            res += &format!("\txor rbx, rbx\n");
+            res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
+            res += &format!("\tadd rbx, qword ptr[rip + reg_{c}]\n");
+            res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
+            res
+        };
+
+        return asm;
+    }
 
     pub fn execute(&self) {
         unsafe {
