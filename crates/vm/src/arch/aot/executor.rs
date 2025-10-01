@@ -4,8 +4,10 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 use libloading::{Library, Symbol};
+use openvm_instructions::instruction;
+use openvm_instructions::LocalOpcode;
 use openvm_instructions::{exe::VmExe, instruction::Instruction};
-use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_rv32im_transpiler::{BaseAluOpcode, BranchEqualOpcode};
 use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::config::fri_params::standard_fri_params_with_100_bits_conjectured_security;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -16,6 +18,7 @@ use std::io::Write;
 use std::{env, env::args, fs, path::PathBuf, process::Command};
 use tracing::subscriber::SetGlobalDefaultError;
 
+const DEFAULT_PC_JUMP : u32 = 4;
 pub struct AotInstance<F: PrimeField32> {
     exe: VmExe<F>,
 }
@@ -75,14 +78,47 @@ _main:
 
 "#;
 
-        for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
-            res += &format!("pc_{:x}:\n", pc);
-            res += &Self::generate_assembly(instruction);
-            // TODO: remove this debug print
-            res += &format!("\tmov rdi, qword ptr[rip + reg_0]\n");
-            res += &format!("\tcall _print_register\n");
-            res += "\n";
-        }
+        // TODO: use this loop
+
+        // for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
+        //     res += &format!("pc_{:x}:\n", pc);
+        //     res += &Self::generate_assembly(instruction);
+        //     // TODO: remove this debug print
+        //     res += &format!("\tmov rdi, qword ptr[rip + reg_0]\n");
+        //     res += &format!("\tcall _print_register\n");
+        //     res += "\n";
+        // }
+
+        // TODO: remove these instructions
+        let instruction = Instruction {
+            opcode: BaseAluOpcode::ADD.global_opcode(),
+            a: F::from_canonical_u32(0),
+            b: F::from_canonical_u32(0),
+            c: F::from_canonical_u32(18),
+            d: F::from_canonical_u32(0),
+            e: F::from_canonical_u32(0),
+            f: F::from_canonical_u32(0),
+            g: F::from_canonical_u32(0),
+        };
+
+        res += &format!("pc_{:x}:\n", 0);
+        res += &Self::generate_assembly_add(instruction);
+        res += &format!("\tmov rdi, qword ptr[rip + reg_0]\n");
+        res += &format!("\tcall _print_register\n");
+        res += "\n";
+
+        let instruction = Instruction {
+            opcode: BranchEqualOpcode::BEQ.global_opcode(),
+            a: F::from_canonical_u32(0),
+            b: F::from_canonical_u32(0),
+            c: F::from_canonical_u32(0),
+            d: F::from_canonical_u32(0),
+            e: F::from_canonical_u32(0),
+            f: F::from_canonical_u32(0),
+            g: F::from_canonical_u32(0),
+        };
+
+        res += &Self::generate_assembly_beq(instruction, 4);
 
         res += "execute_end:\n";
         res += "\tret\n\n";
@@ -90,7 +126,7 @@ _main:
         return res;
     }
 
-    pub fn generate_assembly(inst: Instruction<F>) -> String {
+    pub fn generate_assembly_add(inst: Instruction<F>) -> String {
         let opcode = inst.opcode;
 
         let asm = {
@@ -101,14 +137,64 @@ _main:
             let e = inst.e;
 
             let mut res = String::new();
-            res += &format!("\txor rbx, rbx\n");
-            res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
-            res += &format!("\tadd rbx, qword ptr[rip + reg_{c}]\n");
-            res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
+            if e == F::ZERO {
+                res += &format!("\txor rbx, rbx\n");
+                res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
+                res += &format!("\tadd rbx, {c}\n");
+                res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
+            } else {
+                res += &format!("\txor rbx, rbx\n");
+                res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
+                res += &format!("\tadd rbx, qword ptr[rip + reg_{c}]\n");
+                res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
+            }
             res
         };
 
         return asm;
+    }
+
+    pub fn generate_assembly_beq(inst: Instruction<F>, pc: u32) -> String {
+        let asm = {
+            let a = inst.a;
+            let b = inst.b; 
+            let c = inst.c; 
+
+            let mut res = String::new();
+            res += &format!("pc_{:x}\n", pc);
+            res += &format!("\tmov rax, qword ptr[rip + reg_{a}\n");
+            res += &format!("\tmov rbx, qword ptr[rip + reg_{b}\n");
+            res += &format!("\tcmp eax, ebx\n");
+            res += &format!("\tje pc_{:x}_beq_true\n", pc);
+            res += &format!("\tjmp pc_{:x}_beq_done\n", pc); 
+            res += "\n";
+            res += &format!("pc_{:x}_beq_true:\n", pc);
+            res += &format!("\tadd r8, {}\n", c);
+            res += "\n";
+
+            res += &format!("pc_{:x}_beq_done:\n", pc);
+            res += &format!("\tadd r8, {}\n", DEFAULT_PC_JUMP);
+            res += "\n";
+
+            // increment pc 
+            res += &format!("\tadd r8, {}\n", 4);
+            res += "\n";
+            res 
+        }
+        return asm;
+    }
+    
+    // TODO: push & pop other caller saved regs too
+    pub fn push_caller_saved_regs() -> String {
+        let mut res = String::new();
+        res += "\tpush r8";
+        return res;
+    }
+
+    pub fn pop_caller_saved_regs() -> String {
+        let mut res = String::new();
+        res += "\tpop r8";
+        return res;
     }
 
     pub fn execute(&self) {
