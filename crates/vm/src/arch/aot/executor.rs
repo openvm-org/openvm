@@ -3,7 +3,7 @@ use libloading::{Library, Symbol};
 use openvm_instructions::exe::VmExe;
 use p3_baby_bear::BabyBearParameters;
 use p3_field::PrimeField32;
-use std::{env::args, fs, process::Command};
+use std::{env, env::args, fs, path::PathBuf, process::Command};
 pub struct AotInstance<F: PrimeField32> {
     exe: VmExe<F>,
 }
@@ -40,7 +40,7 @@ impl<F: PrimeField32> AotInstance<F> {
                 "-L.",
                 "-lrust_function_x86",
                 "-o",
-                "./src/arch/aot/program",
+                "program",
             ])
             .output();
 
@@ -54,7 +54,7 @@ impl<F: PrimeField32> AotInstance<F> {
 
     pub fn execute(&self) {
         unsafe {
-            let output = Command::new("./program").output();
+            let _ = Command::new("./program").status();
         }
     }
 }
