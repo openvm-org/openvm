@@ -144,12 +144,6 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         let prev_len = prev.len[0]
             + prev.len[1] * AB::Expr::from_canonical_u32(1 << (2 * MEMCPY_LOOP_LIMB_BITS));
 
-        // write_data =
-        //  (local.data_1[shift..4], prev.data_4[0..shift]),
-        //  (local.data_2[shift..4], local.data_1[0..shift]),
-        //  (local.data_3[shift..4], local.data_2[0..shift]),
-        //  (local.data_4[shift..4], local.data_3[0..shift])
-        // local.data-1 = tracing_read data
         let write_data_pairs = [
             (prev.data_4, local.data_1),
             (local.data_1, local.data_2),
@@ -308,11 +302,15 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // Read data from memory
         let read_data = [local.data_1, local.data_2, local.data_3, local.data_4];
 
+        eprintln!(
+            "starting timestamp: {:?}",
+            timestamp * AB::Expr::from_canonical_u32(1)
+        );
         read_data.iter().enumerate().for_each(|(idx, data)| {
             // is valid read of entire 16 block chunk?
             let is_valid_read = if idx == 3 {
                 // will always be a valid read
-                AB::Expr::ONE * (local.is_shift_non_zero_or_not_start)
+                AB::Expr::ONE * (local.is_valid)
             } else {
                 // if idx < 3, its not an entire block read, if its the first block
                 AB::Expr::ONE * (local.is_valid_not_start)
@@ -329,10 +327,12 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
                 )
                 .eval(builder, is_valid_read.clone());
             eprintln!(
-                "local.source: {:?}, data: {:?}, local.source - AB::Expr::from_canonical_usize(16 - idx * 4): {:?}",
+                "local.source: {:?}, data: {:?}, local.source - AB::Expr::from_canonical_usize(16 - idx * 4): {:?}, timestamp_pp: {:?}, is_valid_read: {:?}",
                 local.source * AB::Expr::from_canonical_u32(1),
                 data.clone().map(|x| x * (AB::Expr::from_canonical_u32(1))),
-                local.source - AB::Expr::from_canonical_usize(16 - idx * 4) * AB::Expr::from_canonical_u32(1)
+                local.source - AB::Expr::from_canonical_usize(16 - idx * 4) * AB::Expr::from_canonical_u32(1),
+                timestamp_pp(AB::Expr::ZERO),
+                is_valid_read.clone()
             );
         });
         /*
@@ -359,45 +359,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyIterAir {
         // error seems to be off by one for timestamp again, or off by 17 or 21??
         // timestamps are inconsistent everywhere...
 
-        /*
-           heres the plan:
-           identify everywhere where timeststamps are used; where theyre written to (tracing_read) etc.
-           walk through each component, and take notes about how timestamp is incrementing in each portion
-        */
-
-        /*
-        off by one:
-            between memcpyiter Air and itself
-
-        off by 16:
-            memcpyiter air and itself
-        off by 17:
-            between memoryDummyAir and accessAdapterAir
-
-        off by 21:
-            memcpyiterAir and itself
-            memory dummy and access adapter air
-
-        bruh, seems that everything is wrong... WHATS WRONG WITH THE TIMESTAMPS MAN
-         */
-
-        // eprintln!(
-        //     "memory bridge data write_data: {:?}",
-        //     write_data
-        //         .iter()
-        //         .map(|x| x.clone().map(|y| y * (AB::Expr::from_canonical_u32(1))))
-        //         .collect::<Vec<_>>()
-        // );
-        // Write final data to registers
-        // write_data_pairs.iter().for_each(|(prev_data, next_data)| {
-        //     eprintln!(
-        //         "prev_data: {:?}, next_data: {:?}",
-        //         prev_data.map(|x| x * (AB::Expr::from_canonical_u32(1))),
-        //         next_data.map(|x| x * (AB::Expr::from_canonical_u32(1))),
-        //     );
-        // });
-
-        // is timestamping off, is it pointer is off?
+        // is timestamping off, is it pointer is off, for small source values
         write_data.iter().enumerate().for_each(|(idx, data)| {
             self.memory_bridge
                 .write(
@@ -609,6 +571,7 @@ where
         record.inner.shift = shift;
         record.inner.from_pc = *state.pc;
         record.inner.from_timestamp = state.memory.timestamp;
+        eprintln!("state.memory.timestamp: {:?}", state.memory.timestamp);
         record.inner.dest = dest;
         record.inner.source = source;
         record.inner.len = len;
@@ -631,24 +594,17 @@ where
         // we have saturating sub, which isnt a perfect sub,
         // 0, 4, 20
         // source is tOO SMALL, SO READING SAME DATA TWICE??
-        if shift != 0 {
-            record.var[0].data[3] = tracing_read(
-                state.memory,
-                RV32_MEMORY_AS,
-                source - 4 * (source >= 4) as u32,
-                &mut record.var[0].read_aux[3].prev_timestamp,
-            );
-        } else {
-            record.var[0].data[3] = tracing_read(
-                state.memory,
-                RV32_MEMORY_AS,
-                source - 4 * (source >= 4) as u32, // what happens when we read same memory twice? is it bc not constraining properly? since its the same piece of memory; this error will still happen, if source  < 4? since no "previous" word
-                &mut record.var[0].read_aux[3].prev_timestamp,
-            );
-        }
+
+        record.var[0].data[3] = tracing_read(
+            state.memory,
+            RV32_MEMORY_AS,
+            source - 4 * (source >= 4) as u32,
+            &mut record.var[0].read_aux[3].prev_timestamp,
+        );
+
         eprintln!(
-            "record.var[0].read_aux[3].prev_timestamp: {:?}",
-            record.var[0].read_aux[3].prev_timestamp
+            "record.var[0].read_aux[3].prev_timestamp: {:?}, record.var[0].data[3]: {:?}",
+            record.var[0].read_aux[3].prev_timestamp, record.var[0].data[3]
         );
 
         // Fill record.var for the rest of the rows of iteration trace
