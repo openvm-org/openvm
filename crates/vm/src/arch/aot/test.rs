@@ -1,12 +1,28 @@
 use crate::arch::aot::AotInstance;
 use openvm_instructions::program::Program;
+use openvm_instructions::LocalOpcode;
 use openvm_instructions::{exe::VmExe, instruction::Instruction};
+use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use p3_baby_bear::BabyBearParameters;
 
 #[test]
 fn test_aot() {
-    let program = Program::from_instructions(&[]);
+    type F = BabyBear;
+
+    let instruction = Instruction {
+        opcode: BaseAluOpcode::ADD.global_opcode(),
+        a: F::from_canonical_u32(0),
+        b: F::from_canonical_u32(0),
+        c: F::from_canonical_u32(0),
+        d: F::from_canonical_u32(0),
+        e: F::from_canonical_u32(0),
+        f: F::from_canonical_u32(0),
+        g: F::from_canonical_u32(0),
+    };
+
+    let program = Program::from_instructions(&[instruction]);
     let exe = VmExe {
         program,
         pc_start: 0,
