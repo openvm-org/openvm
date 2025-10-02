@@ -2,14 +2,18 @@ use std::sync::Arc;
 
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    proof::{Proof, StackingProof},
+};
 
 use crate::{
     stacking::{
         per_air_part::DummyPerAirPartAir, per_column::DummyPerColumnAir,
         sumcheck::StackingSumcheckAir,
     },
-    system::{AirModule, BusInventory, Preflight},
+    system::{AirModule, BusInventory, Preflight, StackingPreflight},
 };
 
 mod per_air_part;
@@ -50,11 +54,48 @@ impl AirModule for StackingModule {
         ]
     }
 
+    fn run_preflight(
+        &self,
+        vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+    ) {
+        let ts = &mut preflight.transcript;
+        let StackingProof {
+            univariate_round_coeffs,
+            sumcheck_round_polys,
+            stacking_openings,
+        } = &proof.stacking_proof;
+
+        let _mu = ts.sample_ext();
+
+        for coef in univariate_round_coeffs {
+            ts.observe_ext(*coef);
+        }
+        let _ = ts.sample_ext();
+
+        for poly in sumcheck_round_polys {
+            for eval in poly {
+                ts.observe_ext(*eval);
+            }
+            let _ = ts.sample_ext();
+        }
+
+        for matrix_openings in stacking_openings {
+            for col_opening in matrix_openings {
+                ts.observe_ext(*col_opening);
+            }
+        }
+
+        preflight.stacking = StackingPreflight {
+            post_tidx: ts.len(),
+        };
+    }
+
     fn generate_proof_inputs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        _public_values_per_air: &[Vec<F>],
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![
