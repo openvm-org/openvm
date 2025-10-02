@@ -80,6 +80,7 @@ fn test_circuit() {
         .collect();
 
     let proof = Proof {
+        public_values: vec![pis.clone()],
         common_main_commit: [21, 22, 23, 24, 25, 26, 27, 28].map(F::from_canonical_u32),
         trace_shapes: vec![Some(TraceShape {
             hypercube_dim: log_trace_degree - params.l_skip,
