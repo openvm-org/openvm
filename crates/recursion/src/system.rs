@@ -5,10 +5,11 @@ use core::{
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::FieldAlgebra;
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::DuplexSponge,
     proof::{Proof, TraceShape},
 };
 
@@ -30,11 +31,16 @@ use crate::{
 
 pub trait AirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
+    fn run_preflight(
+        &self,
+        vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+    );
     fn generate_proof_inputs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        public_values_per_air: &[Vec<F>],
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>>;
 }
@@ -88,60 +94,89 @@ pub struct BusInventory {
     pub stacking_claims_bus: StackingClaimsBus,
 }
 
-pub struct Preflight {
-    pub transcript: Vec<F>,
-    pub gkr_tidx: usize,
-    pub batch_constraint_tidx: usize,
-    pub stacking_tidx: usize,
-    pub whir_tidx: usize,
-
-    pub n_max: usize,
-    pub stacked_common_width: usize,
-    pub sorted_trace_shapes: Vec<(usize, TraceShape)>,
-
-    pub gkr_input_layer_numerator_claim: EF,
-    pub gkr_input_layer_denominator_claim: EF,
+#[derive(Debug, Default)]
+pub struct Transcript {
+    data: Vec<F>,
+    sponge: DuplexSponge,
 }
 
-impl Preflight {
-    pub fn run(vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Self {
-        let &MultiStarkVerifyingKeyV2 {
-            pre_hash: _vk_prehash,
-            inner: vk,
-        } = &vk;
+impl Transcript {
+    pub fn observe(&mut self, value: F) {
+        self.data.push(value);
+        self.sponge.observe(value);
+    }
 
-        let l_skip = vk.params.l_skip;
+    pub fn observe_ext(&mut self, value: EF) {
+        self.data.extend_from_slice(&value.as_base_slice());
+        self.sponge.observe_ext(value);
+    }
 
-        let mut num_common_cells = 0;
-        let mut n_max = 0;
-        let mut sorted_trace_shapes: Vec<(usize, TraceShape)> = vec![];
-        for (air_id, (avk, shape)) in zip(&vk.per_air, &proof.trace_shapes).enumerate() {
-            if let Some(shape) = shape {
-                num_common_cells +=
-                    (1 << (shape.hypercube_dim + l_skip)) * avk.params.width.common_main;
-                n_max = max(n_max, shape.hypercube_dim);
+    pub fn observe_commit(&mut self, digest: [F; 8]) {
+        self.data.extend_from_slice(&digest);
+        self.sponge.observe_commit(digest);
+    }
 
-                sorted_trace_shapes.push((air_id, shape.clone()));
-            }
-        }
-        sorted_trace_shapes.sort_by_key(|(_, shape)| Reverse(shape.hypercube_dim));
-
-        let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
-
-        Self {
-            transcript: vec![F::ZERO; 1000],
-            gkr_tidx: 100,
-            batch_constraint_tidx: 200,
-            stacking_tidx: 300,
-            whir_tidx: 400,
-            n_max,
-            sorted_trace_shapes,
-            stacked_common_width: ((num_common_cells + stack_height - 1) / stack_height),
-            gkr_input_layer_numerator_claim: EF::from_canonical_usize(123),
-            gkr_input_layer_denominator_claim: EF::from_canonical_usize(456),
+    pub fn observe_slice(&mut self, slc: &[F]) {
+        for x in slc {
+            self.observe(*x);
         }
     }
+
+    pub fn sample(&mut self) -> F {
+        let sample = self.sponge.sample();
+        self.data.push(sample);
+        sample
+    }
+
+    pub fn sample_ext(&mut self) -> EF {
+        let sample = self.sponge.sample_ext();
+        self.data.extend_from_slice(&sample.as_base_slice());
+        sample
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
 }
+
+#[derive(Debug, Default)]
+pub struct Preflight {
+    pub transcript: Transcript,
+    pub proof_shape: ProofShapePreflight,
+    pub gkr: GkrPreflight,
+    pub batch_constraint: BatchConstraintPreflight,
+    pub stacking: StackingPreflight,
+    pub whir: WhirPreflight,
+}
+
+#[derive(Debug, Default)]
+pub struct ProofShapePreflight {
+    pub stacked_common_width: usize,
+    pub sorted_trace_shapes: Vec<(usize, TraceShape)>,
+    pub n_max: usize,
+    pub n_logup: usize,
+    pub post_tidx: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct GkrPreflight {
+    pub post_tidx: usize,
+    pub input_layer_numerator_claim: EF,
+    pub input_layer_denominator_claim: EF,
+}
+
+#[derive(Debug, Default)]
+pub struct BatchConstraintPreflight {
+    pub post_tidx: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct StackingPreflight {
+    pub post_tidx: usize,
+}
+
+#[derive(Debug, Default)]
+pub struct WhirPreflight {}
 
 impl BusInventory {
     pub fn new() -> Self {
@@ -213,13 +248,17 @@ impl VerifierCircuit {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        public_values_per_air: &[Vec<F>],
-        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
+        let mut preflight = Preflight::default();
+
+        for module in self.modules.iter() {
+            module.run_preflight(vk, proof, &mut preflight);
+        }
+        println!("{:?}", preflight);
+
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {
-            let module_proof_inputs =
-                module.generate_proof_inputs(vk, proof, public_values_per_air, &preflight);
+            let module_proof_inputs = module.generate_proof_inputs(vk, proof, &preflight);
             debug_assert_eq!(
                 module_proof_inputs.len(),
                 module.airs().len(),

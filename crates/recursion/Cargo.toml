@@ -6,6 +6,8 @@ edition.workspace = true
 description = "Recursion circuit for v2"
 
 [dependencies]
+itertools = { workspace = true }
+p3-maybe-rayon.workspace = true
 p3-air = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
@@ -17,4 +19,5 @@ openvm-stark-sdk = { workspace = true }
 [dev-dependencies]
 
 [features]
-default = []
+default = ["parallel"]
+parallel = ["stark-backend-v2/parallel"]
