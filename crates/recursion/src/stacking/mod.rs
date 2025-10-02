@@ -72,13 +72,13 @@ impl AirModule for StackingModule {
         for coef in univariate_round_coeffs {
             ts.observe_ext(*coef);
         }
-        let _ = ts.sample_ext();
+        let _u0 = ts.sample_ext();
 
         for poly in sumcheck_round_polys {
             for eval in poly {
                 ts.observe_ext(*eval);
             }
-            let _ = ts.sample_ext();
+            let _u_round = ts.sample_ext();
         }
 
         for matrix_openings in stacking_openings {
