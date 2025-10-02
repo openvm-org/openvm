@@ -48,8 +48,10 @@ impl<F: PrimeField32> AotInstance<F> {
 
         let output = Command::new("gcc")
             .args([
+                "-no-pie",
+                "aot_asm.o",
                 "-L.",
-                "-lrust_function_x86",
+                "-lrust_function",
                 "-o",
                 "program",
             ])
@@ -58,109 +60,81 @@ impl<F: PrimeField32> AotInstance<F> {
         Self { exe: exe.clone() }
     }
 
+    pub fn generate_assembly_header() -> String {
+        let mut res = String::new();
+        res += &format!(".intel_syntax noprefix\n");
+        res += &format!(".code64\n");
+        res += &format!(".section .data\n");
+        res += &format!(".align 8\n");
+        for r in 0u64..32u64 {
+            res += &format!(".comm reg_{r}, 8, 8\n");
+        }
+        res += &format!(".section .text\n");
+        res += &format!(".extern print_message\n");
+        res += &format!(".extern print_register\n");
+        res += &format!(".global main\n");
+
+        res += &format!("main:\n");
+        res += &format!("\tsub rsp, 8\n");
+        res += &format!("\txor rax, rax\n");
+        res += &format!("\n");
+        return res;
+    }
+
+    pub fn generate_assembly_footer(exe: &VmExe<F>) -> String {
+        let mut res = String::new();
+
+        res += &format!("execute_end:\n");
+        res += &format!("\tadd rsp, 8\n");
+        res += &format!("\tret\n");
+        res += &format!("\n");
+
+        res += &format!(".section .rodata\n");
+        res += &format!(".align 64\n");
+
+        // TODO: make sure this list is sorted in increasing order of pc
+        for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
+            res += &format!("map_pc_{:x}:\t.quad pc_{:x}", pc, pc);
+        }
+        res += &format!("\n");
+
+        return res;
+    }
+
     pub fn compile(exe: &VmExe<F>) -> String {
         let mut res = String::new();
-        res += r#"
-.intel_syntax noprefix
-.section    __TEXT,__text,regular,pure_instructions
-.globl  _main
-
-"#;
-        for r in 0u64..32u64 {
-            res += &format!(".comm reg_{r}, 8, 3\n");
-        }
-
-        res += r#"
-.section    __TEXT,__text,regular,pure_instructions
-_main:  
-# can do some initializations here
-
-"#;
-
+        res += &Self::generate_assembly_header();
+        
         for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
             let opcode = instruction.opcode;
-
             if opcode == BaseAluOpcode::ADD.global_opcode() {
-                println!("instruction {pc} is ADD");
                 res += &Self::generate_assembly_add(pc, instruction);
             } else if opcode == BaseAluOpcode::XOR.global_opcode() {
-                println!("instruction {pc} is XOR");
             } else if opcode == BranchEqualOpcode::BEQ.global_opcode() {
-                println!("instruction {pc} is BEQ");
             } else if opcode == BranchLessThanOpcode::BGEU.global_opcode() {
-                println!("instruction {pc} is BGEU");
             } else if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode() {
-                println!("instruction {pc} is LOADB");
             } else if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode() {
-                println!("instruction {pc} is STOREB");
             } else {
-                println!("instruction {pc}'s opcode is not implemented yet");
             }
         }
 
-        // // TODO: remove these instructions
-        // let instruction = Instruction {
-        //     opcode: BaseAluOpcode::ADD.global_opcode(),
-        //     a: F::from_canonical_u32(0),
-        //     b: F::from_canonical_u32(0),
-        //     c: F::from_canonical_u32(18),
-        //     d: F::from_canonical_u32(0),
-        //     e: F::from_canonical_u32(0),
-        //     f: F::from_canonical_u32(0),
-        //     g: F::from_canonical_u32(0),
-        // };
-
-        // res += &format!("pc_{:x}:\n", 0);
-        // res += &Self::generate_assembly_add(instruction);
-        // res += &format!("\tmov rdi, qword ptr[rip + reg_0]\n");
-        // res += &format!("\tcall _print_register\n");
-        // res += "\n";
-
-        // let instruction = Instruction {
-        //     opcode: BranchEqualOpcode::BEQ.global_opcode(),
-        //     a: F::from_canonical_u32(0),
-        //     b: F::from_canonical_u32(0),
-        //     c: F::from_canonical_u32(0),
-        //     d: F::from_canonical_u32(0),
-        //     e: F::from_canonical_u32(0),
-        //     f: F::from_canonical_u32(0),
-        //     g: F::from_canonical_u32(0),
-        // };
-
-        // res += &Self::generate_assembly_beq(instruction, 4);
-
-        // res += "execute_end:\n";
-        // res += "\tret\n\n";
+        res += &Self::generate_assembly_footer(exe);
 
         return res;
     }
 
     pub fn generate_assembly_add(pc: u32, inst: Instruction<F>) -> String {
+        let mut res = String::new();
+        res += &format!("pc_{:x}:\n", pc);
+
         let opcode = inst.opcode;
+        let a = inst.a;
+        let b = inst.b;
+        let c = inst.c;
+        let e = inst.e;
 
-        let asm = {
-            // [a:4]_1 = [b:4]_1 + [c:4]_e
-            let a = inst.a;
-            let b = inst.b;
-            let c = inst.c;
-            let e = inst.e;
-
-            let mut res = String::new();
-            if e == F::ZERO {
-                res += &format!("\txor rbx, rbx\n");
-                res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
-                res += &format!("\tadd rbx, {c}\n");
-                res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
-            } else {
-                res += &format!("\txor rbx, rbx\n");
-                res += &format!("\tadd rbx, qword ptr[rip + reg_{b}]\n");
-                res += &format!("\tadd rbx, qword ptr[rip + reg_{c}]\n");
-                res += &format!("\tmov qword ptr[rip + reg_{a}], rbx\n");
-            }
-            res
-        };
-
-        return asm;
+        res += &format!("\n");
+        return res;
     }
 
     pub fn generate_assembly_beq(inst: Instruction<F>, pc: u32) -> String {
