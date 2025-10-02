@@ -96,9 +96,10 @@ pub(crate) fn generate_trace(
         let cols: &mut WhirCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
         cols.is_first = F::from_bool(i == 0);
-        cols.tidx = F::from_canonical_usize(preflight.whir_tidx);
+        cols.tidx = F::from_canonical_usize(preflight.stacking.post_tidx);
         cols.commit = proof.common_main_commit;
-        cols.common_stacked_width = F::from_canonical_usize(preflight.stacked_common_width);
+        cols.common_stacked_width =
+            F::from_canonical_usize(preflight.proof_shape.stacked_common_width);
     }
 
     RowMajorMatrix::new(trace, width)
