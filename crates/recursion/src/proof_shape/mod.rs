@@ -54,52 +54,49 @@ impl AirModule for ProofShapeModule {
 
         let mut num_common_main_cells = 0;
 
-        for (trace_shape, avk, pvs) in izip!(&proof.trace_shapes, &vk.per_air, &proof.public_values)
+        for (trace_vdata, avk, pvs) in izip!(&proof.trace_vdata, &vk.per_air, &proof.public_values)
         {
-            let is_air_present = trace_shape.is_some();
+            let is_air_present = trace_vdata.is_some();
 
             if !avk.is_required {
                 ts.observe(F::from_bool(is_air_present));
             }
-            if !is_air_present {
-                continue;
-            }
+            if let Some(trace_vdata) = trace_vdata {
+                num_common_main_cells += (1 << (vk.params.l_skip + trace_vdata.hypercube_dim))
+                    * avk.params.width.common_main;
 
-            let trace_shape = trace_shape.as_ref().unwrap();
-            num_common_main_cells += (1 << (vk.params.l_skip + trace_shape.hypercube_dim))
-                * avk.params.width.common_main;
-
-            if let Some(pdata) = avk.preprocessed_data.as_ref() {
-                ts.observe_commit(pdata.commit);
-            } else {
-                ts.observe(F::from_canonical_usize(trace_shape.hypercube_dim));
+                if let Some(pdata) = avk.preprocessed_data.as_ref() {
+                    ts.observe_commit(pdata.commit);
+                } else {
+                    ts.observe(F::from_canonical_usize(trace_vdata.hypercube_dim));
+                }
+                debug_assert_eq!(
+                    avk.params.width.cached_mains.len(),
+                    trace_vdata.cached_commitments.len()
+                );
+                for commit in &trace_vdata.cached_commitments {
+                    ts.observe_slice(commit);
+                }
+                debug_assert_eq!(avk.params.num_public_values, pvs.len());
             }
-            debug_assert_eq!(
-                avk.params.width.cached_mains.len(),
-                trace_shape.cached_commitments.len()
-            );
-            for commit in &trace_shape.cached_commitments {
-                ts.observe_slice(commit);
-            }
-            debug_assert_eq!(avk.params.num_public_values, pvs.len());
             for pv in pvs {
                 ts.observe(*pv);
             }
         }
 
-        let mut sorted_trace_shapes: Vec<_> = proof
-            .trace_shapes
+        let mut sorted_trace_vdata: Vec<_> = proof
+            .trace_vdata
             .iter()
             .cloned()
             .enumerate()
-            .flat_map(|(air_id, shape)| shape.map(|shape| (air_id, shape)))
+            .filter_map(|(air_id, data)| data.map(|data| (air_id, data)))
             .collect();
-        sorted_trace_shapes.sort_by_key(|(_, shape)| Reverse(shape.hypercube_dim));
+        sorted_trace_vdata.sort_by_key(|(_, data)| Reverse(data.hypercube_dim));
 
         let n_max = proof
-            .trace_shapes
+            .trace_vdata
             .iter()
-            .flat_map(|shape| shape.as_ref().map(|shape| shape.hypercube_dim))
+            .flat_map(|datum| datum.as_ref().map(|datum| datum.hypercube_dim))
             .max()
             .unwrap();
         let n_logup = proof.gkr_proof.claims_per_layer.len(); // n_logup = num_layers
@@ -109,7 +106,7 @@ impl AirModule for ProofShapeModule {
 
         preflight.proof_shape = ProofShapePreflight {
             stacked_common_width,
-            sorted_trace_shapes,
+            sorted_trace_vdata,
             n_max,
             n_logup,
             post_tidx: ts.len(),

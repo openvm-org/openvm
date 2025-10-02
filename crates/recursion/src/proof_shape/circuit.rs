@@ -164,7 +164,7 @@ pub(crate) fn generate_trace(
     let preflight = &preflight.proof_shape;
 
     let num_parts_per_air: Vec<_> = preflight
-        .sorted_trace_shapes
+        .sorted_trace_vdata
         .iter()
         .map(|&(air_id, _)| {
             let avk = &vk.per_air[air_id];
@@ -197,7 +197,7 @@ pub(crate) fn generate_trace(
             cols.stacked_width = F::from_canonical_usize(preflight.stacked_common_width);
             cols.n_logup = F::from_canonical_usize(preflight.n_logup);
         } else {
-            let (air_id, shape) = &preflight.sorted_trace_shapes[j];
+            let (air_id, shape) = &preflight.sorted_trace_vdata[j];
             let num_parts = num_parts_per_air[j];
 
             let avk = &vk.per_air[*air_id];

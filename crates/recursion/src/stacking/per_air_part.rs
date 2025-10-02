@@ -127,14 +127,14 @@ pub(crate) fn generate_trace(
             cols.commit_idx = F::ZERO;
             cols.commit_width = F::from_canonical_usize(preflight.proof_shape.stacked_common_width);
         } else {
-            let (air_id, shape) = &preflight.proof_shape.sorted_trace_shapes[i];
+            let (air_id, trace_vdata) = &preflight.proof_shape.sorted_trace_vdata[i];
             let avk = &vk.per_air[*air_id];
 
             cols.tidx = F::ZERO;
             cols.air_idx = F::from_canonical_usize(*air_id);
             cols.sorted_air_idx = F::from_canonical_usize(i);
             cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
-            cols.hypercube_dim = F::from_canonical_usize(shape.hypercube_dim);
+            cols.hypercube_dim = F::from_canonical_usize(trace_vdata.hypercube_dim);
             cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);
             cols.num_interactions =
                 F::from_canonical_usize(avk.symbolic_constraints.interactions.len());

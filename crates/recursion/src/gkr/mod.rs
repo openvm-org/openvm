@@ -62,7 +62,9 @@ impl AirModule for GkrModule {
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
 
-        ts.observe_ext(*q0_claim);
+        if !sumcheck_polys.is_empty() {
+            ts.observe_ext(*q0_claim);
+        }
 
         for (polys, claims) in zip(sumcheck_polys, claims_per_layer) {
             let _ = ts.sample_ext();

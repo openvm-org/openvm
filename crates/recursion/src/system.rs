@@ -1,16 +1,11 @@
-use core::{
-    cmp::{Reverse, max},
-    iter::zip,
-};
-
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::FieldExtensionAlgebra;
 use stark_backend_v2::{
-    EF, F,
+    D_EF, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::DuplexSponge,
-    proof::{Proof, TraceShape},
+    proof::{Proof, TraceVData},
 };
 
 use crate::{
@@ -97,22 +92,26 @@ pub struct BusInventory {
 #[derive(Debug, Default)]
 pub struct Transcript {
     data: Vec<F>,
+    is_sample: Vec<bool>,
     sponge: DuplexSponge,
 }
 
 impl Transcript {
     pub fn observe(&mut self, value: F) {
         self.data.push(value);
+        self.is_sample.push(false);
         self.sponge.observe(value);
     }
 
     pub fn observe_ext(&mut self, value: EF) {
         self.data.extend_from_slice(&value.as_base_slice());
+        self.is_sample.extend_from_slice(&[false; D_EF]);
         self.sponge.observe_ext(value);
     }
 
-    pub fn observe_commit(&mut self, digest: [F; 8]) {
+    pub fn observe_commit(&mut self, digest: [F; DIGEST_SIZE]) {
         self.data.extend_from_slice(&digest);
+        self.is_sample.extend_from_slice(&[false; DIGEST_SIZE]);
         self.sponge.observe_commit(digest);
     }
 
@@ -125,12 +124,14 @@ impl Transcript {
     pub fn sample(&mut self) -> F {
         let sample = self.sponge.sample();
         self.data.push(sample);
+        self.is_sample.push(true);
         sample
     }
 
     pub fn sample_ext(&mut self) -> EF {
         let sample = self.sponge.sample_ext();
         self.data.extend_from_slice(&sample.as_base_slice());
+        self.is_sample.extend_from_slice(&[true; D_EF]);
         sample
     }
 
@@ -152,7 +153,7 @@ pub struct Preflight {
 #[derive(Debug, Default)]
 pub struct ProofShapePreflight {
     pub stacked_common_width: usize,
-    pub sorted_trace_shapes: Vec<(usize, TraceShape)>,
+    pub sorted_trace_vdata: Vec<(usize, TraceVData)>,
     pub n_max: usize,
     pub n_logup: usize,
     pub post_tidx: usize,
