@@ -77,6 +77,10 @@ impl<F: PrimeField32> AotInstance<F> {
         res += &format!("main:\n");
         res += &format!("\tsub rsp, 8\n");
         res += &format!("\txor rax, rax\n");
+        // set all RISC-V register to 0
+        for r in 0u64..32u64 {
+            res += &format!("\tmov qword ptr [reg_{}], 0\n", r);
+        }
         res += &format!("\n");
         return res;
     }
@@ -85,6 +89,7 @@ impl<F: PrimeField32> AotInstance<F> {
         let mut res = String::new();
 
         res += &format!("execute_end:\n");
+        res += &format!("\txor rax, rax\n");
         res += &format!("\tadd rsp, 8\n");
         res += &format!("\tret\n");
         res += &format!("\n");
@@ -116,10 +121,23 @@ impl<F: PrimeField32> AotInstance<F> {
             } else if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode() {
             } else {
             }
+
+            res += &Self::generate_debug_registers(pc);
         }
 
         res += &Self::generate_assembly_footer(exe);
 
+        return res;
+    }
+
+    pub fn generate_debug_registers(pc: u32) -> String {
+        let mut res = String::new();
+        res += &format!("pc_debug_{:x}:\n", pc);
+        for r in 0u64..4u64 {
+            res += &format!("\tmov rdi, qword ptr [reg_{}]\n", r);
+            res += &format!("\tcall print_register\n");
+        }
+        res += "\n";
         return res;
     }
 
@@ -132,6 +150,22 @@ impl<F: PrimeField32> AotInstance<F> {
         let b = inst.b;
         let c = inst.c;
         let e = inst.e;
+
+        // specs: [a:4]_1 = [b:4]_1 + [c:4]_e
+
+        if e == F::ZERO {
+            // specs: [a:4]_1 = [b:4]_1 + [c:4]_0
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+            res += &format!("\tmov rbx, {}\n", c);
+            res += &format!("\tadd rax, rbx\n");
+            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        } else {
+            // specs: [a:4]_1 = [b:4]_1 + [c:4]_1
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", c);
+            res += &format!("\tadd rax, rbx\n");
+            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        }
 
         res += &format!("\n");
         return res;
