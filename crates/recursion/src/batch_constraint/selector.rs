@@ -92,13 +92,13 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     let vk = &vk.inner;
 
-    let num_valid_rows: usize = preflight.proof_shape.sorted_trace_shapes.len();
+    let num_valid_rows: usize = preflight.proof_shape.sorted_trace_vdata.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = BatchConstraintSelectorCols::<usize>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let (air_id, trace_shape) = &preflight.proof_shape.sorted_trace_shapes[i];
+        let (air_id, trace_vdata) = &preflight.proof_shape.sorted_trace_vdata[i];
         let avk = &vk.per_air[*air_id];
 
         let cols: &mut BatchConstraintSelectorCols<F> = row.borrow_mut();
@@ -107,7 +107,7 @@ pub(crate) fn generate_trace(
         cols.air_idx = F::from_canonical_usize(*air_id);
         cols.sorted_air_idx = F::from_canonical_usize(i);
         cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
-        cols.hypercube_dim = F::from_canonical_usize(trace_shape.hypercube_dim);
+        cols.hypercube_dim = F::from_canonical_usize(trace_vdata.hypercube_dim);
         cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);
         cols.num_interactions =
             F::from_canonical_usize(avk.symbolic_constraints.interactions.len());

@@ -106,8 +106,7 @@ impl AirModule for BatchConstraintModule {
         }
 
         // Common main
-        for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_shapes.iter().enumerate()
-        {
+        for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
             let width = &vk.inner.per_air[*air_id].params.width;
 
             for col_idx in 0..width.common_main {
@@ -117,8 +116,7 @@ impl AirModule for BatchConstraintModule {
             }
         }
 
-        for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_shapes.iter().enumerate()
-        {
+        for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
             let width = &vk.inner.per_air[*air_id].params.width;
             let widths = width.preprocessed.iter().chain(width.cached_mains.iter());
 
