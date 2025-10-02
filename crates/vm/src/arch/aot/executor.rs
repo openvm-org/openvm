@@ -35,22 +35,19 @@ impl<F: PrimeField32> AotInstance<F> {
         let output = Command::new("rustc")
             .args([
                 "--crate-type=staticlib",
-                "--target=x86_64-apple-darwin",
+                "--target=x86_64-unknown-linux-gnu",
                 "rust_function.rs",
                 "-o",
-                "librust_function_x86.a",
+                "librust_function.a",
             ])
             .output();
 
         let output = Command::new("as")
-            .args(["-arch", "x86_64", "aot_asm.s", "-o", "aot_asm.o"])
+            .args(["aot_asm.s", "-o", "aot_asm.o"])
             .output();
 
         let output = Command::new("gcc")
             .args([
-                "-arch",
-                "x86_64",
-                "aot_asm.o",
                 "-L.",
                 "-lrust_function_x86",
                 "-o",
