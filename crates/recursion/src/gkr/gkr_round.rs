@@ -116,7 +116,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyGkrRoundAir {
 
 pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
     let n_logup = proof.gkr_proof.claims_per_layer.len();
-    let n_max = preflight.n_max;
+    let n_max = preflight.proof_shape.n_max;
     let num_valid_rows = max(n_logup, n_max + 1);
 
     let num_rows = num_valid_rows.next_power_of_two();
@@ -130,16 +130,16 @@ pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMa
         cols.is_first = F::from_bool(i == 0);
         cols.n_logup = F::from_canonical_usize(n_logup);
         cols.n_max = F::from_canonical_usize(n_max);
-        cols.gkr_tidx = F::from_canonical_usize(preflight.gkr_tidx);
-        cols.bc_tidx = F::from_canonical_usize(preflight.batch_constraint_tidx);
+        cols.gkr_tidx = F::from_canonical_usize(preflight.proof_shape.post_tidx);
+        cols.bc_tidx = F::from_canonical_usize(preflight.gkr.post_tidx);
         cols.idx = F::from_canonical_usize(i);
         cols.send_zc_rnd = F::from_bool(num_valid_rows - i - 1 <= n_max + 1);
         cols.send_gkr_rnd = F::from_bool(i < n_logup);
 
         cols.numer_claim
-            .copy_from_slice(preflight.gkr_input_layer_numerator_claim.as_base_slice());
+            .copy_from_slice(preflight.gkr.input_layer_numerator_claim.as_base_slice());
         cols.denom_claim
-            .copy_from_slice(preflight.gkr_input_layer_numerator_claim.as_base_slice());
+            .copy_from_slice(preflight.gkr.input_layer_denominator_claim.as_base_slice());
     }
 
     RowMajorMatrix::new(trace, width)

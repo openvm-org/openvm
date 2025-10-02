@@ -118,10 +118,10 @@ pub(crate) fn generate_trace(
         let cols: &mut StackingCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
         cols.is_first = F::from_bool(i == 0);
-        cols.stacking_tidx = F::from_canonical_usize(preflight.stacking_tidx);
-        cols.whir_tidx = F::from_canonical_usize(preflight.whir_tidx);
+        cols.stacking_tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
+        cols.whir_tidx = F::from_canonical_usize(preflight.stacking.post_tidx);
         cols.round = F::from_canonical_usize(i);
-        cols.recv_bc = F::from_bool(i <= preflight.n_max);
+        cols.recv_bc = F::from_bool(i <= preflight.proof_shape.n_max);
     }
 
     RowMajorMatrix::new(trace, width)

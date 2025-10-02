@@ -117,8 +117,6 @@ pub(crate) fn generate_trace(
     let num_rows = num_valid_rows.next_power_of_two();
     let width = DummyPerAirPartCols::<usize>::width();
 
-    let mut j = 0;
-
     let mut trace = vec![F::ZERO; num_rows * width];
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut DummyPerAirPartCols<F> = row.borrow_mut();
@@ -127,14 +125,14 @@ pub(crate) fn generate_trace(
         if i == num_valid_rows - 1 {
             cols.is_summary = F::ONE;
             cols.commit_idx = F::ZERO;
-            cols.commit_width = F::from_canonical_usize(preflight.stacked_common_width);
+            cols.commit_width = F::from_canonical_usize(preflight.proof_shape.stacked_common_width);
         } else {
-            let (air_id, shape) = &preflight.sorted_trace_shapes[j];
+            let (air_id, shape) = &preflight.proof_shape.sorted_trace_shapes[i];
             let avk = &vk.per_air[*air_id];
 
             cols.tidx = F::ZERO;
             cols.air_idx = F::from_canonical_usize(*air_id);
-            cols.sorted_air_idx = F::from_canonical_usize(j);
+            cols.sorted_air_idx = F::from_canonical_usize(i);
             cols.has_preprocessed = F::from_bool(avk.preprocessed_data.is_some());
             cols.hypercube_dim = F::from_canonical_usize(shape.hypercube_dim);
             cols.num_main_parts = F::from_canonical_usize(avk.num_cached_mains() + 1);

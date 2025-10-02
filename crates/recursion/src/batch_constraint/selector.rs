@@ -92,13 +92,13 @@ pub(crate) fn generate_trace(
 ) -> RowMajorMatrix<F> {
     let vk = &vk.inner;
 
-    let num_valid_rows: usize = preflight.sorted_trace_shapes.len();
+    let num_valid_rows: usize = preflight.proof_shape.sorted_trace_shapes.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = BatchConstraintSelectorCols::<usize>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let (air_id, trace_shape) = &preflight.sorted_trace_shapes[i];
+        let (air_id, trace_shape) = &preflight.proof_shape.sorted_trace_shapes[i];
         let avk = &vk.per_air[*air_id];
 
         let cols: &mut BatchConstraintSelectorCols<F> = row.borrow_mut();

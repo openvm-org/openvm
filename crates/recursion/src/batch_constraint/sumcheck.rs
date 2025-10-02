@@ -108,7 +108,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for BatchConstraintSumcheckAir
 }
 
 pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
-    let num_valid_rows: usize = preflight.n_max + 1;
+    let num_valid_rows: usize = preflight.proof_shape.n_max + 1;
     let num_rows = num_valid_rows.next_power_of_two();
     let width = BatchConstraintSumcheckCols::<usize>::width();
 
@@ -117,14 +117,14 @@ pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMa
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut BatchConstraintSumcheckCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
-        cols.n_max = F::from_canonical_usize(preflight.n_max);
-        cols.bc_tidx = F::from_canonical_usize(preflight.batch_constraint_tidx);
-        cols.alpha_beta_tidx = F::from_canonical_usize(preflight.gkr_tidx);
-        cols.stacking_tidx = F::from_canonical_usize(preflight.stacking_tidx);
+        cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+        cols.bc_tidx = F::from_canonical_usize(preflight.gkr.post_tidx);
+        cols.alpha_beta_tidx = F::from_canonical_usize(preflight.proof_shape.post_tidx);
+        cols.stacking_tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
         cols.numer_claim
-            .copy_from_slice(preflight.gkr_input_layer_numerator_claim.as_base_slice());
+            .copy_from_slice(preflight.gkr.input_layer_numerator_claim.as_base_slice());
         cols.denom_claim
-            .copy_from_slice(preflight.gkr_input_layer_numerator_claim.as_base_slice());
+            .copy_from_slice(preflight.gkr.input_layer_denominator_claim.as_base_slice());
         cols.round = F::from_canonical_usize(i);
         if i == 0 {
             cols.is_first = F::ONE;

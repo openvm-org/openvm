@@ -1,22 +1,22 @@
 use core::cmp::max;
 use std::sync::Arc;
 
-use openvm_stark_backend::engine::StarkEngine;
+use openvm_stark_backend::{engine::StarkEngine, prover::types::AirProvingContext};
 use openvm_stark_sdk::{
     config::{FriParameters, baby_bear_poseidon2::BabyBearPoseidon2Engine},
     dummy_airs::fib_air::air::FibonacciAir,
     engine::StarkFriEngine,
 };
-use p3_field::FieldAlgebra;
+use p3_field::{FieldAlgebra, PrimeField32};
+use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
-    DIGEST_SIZE, EF, F,
+    F,
     keygen::types::{MultiStarkProvingKeyV2, SystemParams},
-    proof::{
-        BatchConstraintProof, GkrLayerClaims, GkrProof, Proof, StackingProof, TraceShape, WhirProof,
-    },
+    poseidon2::sponge::DuplexSponge,
+    prover::{AirProvingContextV2, ProvingContextV2, prove},
 };
 
-use crate::system::{Preflight, VerifierCircuit};
+use crate::system::VerifierCircuit;
 
 fn get_fib_number(n: usize) -> u32 {
     let mut a = 0;
@@ -29,16 +29,28 @@ fn get_fib_number(n: usize) -> u32 {
     b
 }
 
+pub fn generate_trace_rows<F: PrimeField32>(a: u32, b: u32, n: usize) -> RowMajorMatrix<F> {
+    assert!(n.is_power_of_two());
+
+    let mut rows = vec![vec![F::from_canonical_u32(a), F::from_canonical_u32(b)]];
+
+    for i in 1..n {
+        rows.push(vec![rows[i - 1][1], rows[i - 1][0] + rows[i - 1][1]]);
+    }
+
+    RowMajorMatrix::new(rows.concat(), 2)
+}
+
 #[test]
 fn test_circuit() {
     let params = SystemParams {
-        l_skip: 3,
-        n_stack: 15,
+        l_skip: 2,
+        n_stack: 5,
         log_blowup: 1,
         k_whir: 2,
-        num_whir_queries: 100,
+        num_whir_queries: 5, // TEST
     };
-    let log_trace_degree = 15;
+    let log_trace_degree = 3;
 
     // Public inputs:
     let a = 0u32;
@@ -58,81 +70,16 @@ fn test_circuit() {
     let fib_pk = MultiStarkProvingKeyV2::from_v1(params, fib_pk_v1);
     let fib_vk = fib_pk.get_vk();
 
-    let num_airs = 1;
-    let n_max = max(log_trace_degree - params.l_skip, 0);
-    let n_logup = 0;
-    let whir_rounds = (params.n_stack + (1 << params.k_whir) - 1) / (1 << params.k_whir);
+    let trace = generate_trace_rows::<F>(a, b, n);
 
-    let num_cols_per_air = fib_vk
-        .inner
-        .per_air
-        .iter()
-        .map(|avk| avk.params.width.total_width(0))
-        .collect::<Vec<_>>();
+    let single_ctx = AirProvingContextV2::from_v1(
+        params,
+        AirProvingContext::simple(Arc::new(trace), pis.clone()),
+    );
+    let ctx = ProvingContextV2::new(vec![(air_ids[0], single_ctx)]);
 
-    let claims_per_layer: Vec<_> = (0..n_logup)
-        .map(|_| GkrLayerClaims {
-            p_xi_0: EF::ONE,
-            p_xi_1: EF::ONE,
-            q_xi_0: EF::ONE,
-            q_xi_1: EF::ONE,
-        })
-        .collect();
-
-    let proof = Proof {
-        public_values: vec![pis.clone()],
-        common_main_commit: [21, 22, 23, 24, 25, 26, 27, 28].map(F::from_canonical_u32),
-        trace_shapes: vec![Some(TraceShape {
-            hypercube_dim: log_trace_degree - params.l_skip,
-            cached_commitments: vec![],
-        })],
-        gkr_proof: GkrProof {
-            q0_claim: EF::ONE,
-            claims_per_layer,
-            sumcheck_polys: (0..n_logup)
-                .map(|r| vec![[EF::ZERO; 3]; r])
-                .collect::<Vec<_>>(),
-        },
-        batch_constraint_proof: BatchConstraintProof {
-            numerator_term_per_air: vec![EF::ONE; num_airs],
-            denominator_term_per_air: vec![EF::ONE; num_airs],
-            univariate_round_coeffs: vec![EF::ONE; 1024 * 3],
-            sumcheck_round_polys: vec![vec![EF::ONE; 3]; n_max],
-            column_openings: num_cols_per_air
-                .iter()
-                .map(|&num_cols| vec![vec![(EF::ONE, EF::ONE); num_cols]])
-                .collect::<Vec<_>>(),
-        },
-        stacking_proof: StackingProof {
-            univariate_round_coeffs: vec![EF::ONE; 1024 * 3],
-            sumcheck_round_polys: vec![[EF::ONE; 2]; params.n_stack],
-            stacking_openings: vec![vec![EF::ONE; 10]],
-        },
-        whir_proof: WhirProof {
-            whir_sumcheck_polys: vec![[EF::ONE; 2]; params.n_stack + params.l_skip],
-            codeword_commits: vec![[F::ZERO; DIGEST_SIZE]; whir_rounds - 1],
-            ood_values: vec![EF::ONE; whir_rounds],
-            initial_round_opened_rows: vec![vec![
-                vec![F::ZERO; 10 * (1 << params.k_whir)];
-                params.num_whir_queries
-            ]],
-            initial_round_merkle_proofs: vec![vec![
-                vec![[F::ZERO; DIGEST_SIZE]];
-                params.num_whir_queries
-            ]],
-            codeword_opened_rows: vec![
-                vec![
-                    vec![EF::ZERO; 1 << params.k_whir];
-                    params.num_whir_queries
-                ];
-                whir_rounds - 1
-            ],
-            codeword_merkle_proofs: vec![vec![
-                vec![[F::ZERO; DIGEST_SIZE]; params.num_whir_queries];
-                whir_rounds - 1
-            ]],
-        },
-    };
+    let mut transcript = DuplexSponge::default();
+    let proof = prove(&mut transcript, &fib_pk, ctx);
 
     let circuit = VerifierCircuit::new();
 
@@ -144,7 +91,6 @@ fn test_circuit() {
     }
     let pk = keygen_builder.generate_pk();
 
-    let preflight = Preflight::run(&fib_vk, &proof);
-    let proof_inputs = circuit.generate_proof_inputs(&fib_vk, &proof, &[pis], &preflight);
+    let proof_inputs = circuit.generate_proof_inputs(&fib_vk, &proof);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }

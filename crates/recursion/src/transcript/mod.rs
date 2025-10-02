@@ -29,11 +29,18 @@ impl AirModule for TranscriptModule {
         vec![Arc::new(transcript_air)]
     }
 
+    fn run_preflight(
+        &self,
+        vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+    ) {
+    }
+
     fn generate_proof_inputs(
         &self,
         _vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        _public_values_per_air: &[Vec<F>],
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {

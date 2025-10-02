@@ -161,6 +161,7 @@ pub(crate) fn generate_trace(
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let vk = &vk.inner;
+    let preflight = &preflight.proof_shape;
 
     let num_parts_per_air: Vec<_> = preflight
         .sorted_trace_shapes
@@ -186,16 +187,15 @@ pub(crate) fn generate_trace(
         let cols: &mut DummyProofShapeCols<F> = row.borrow_mut();
 
         cols.is_valid = F::ONE;
-        cols.n_max =
-            F::from_canonical_usize(proof.batch_constraint_proof.sumcheck_round_polys.len());
+        cols.n_max = F::from_canonical_usize(preflight.n_max);
 
         // Summary row.
         if i == num_rows - 1 {
             cols.commit.copy_from_slice(&proof.common_main_commit);
             cols.is_summary = F::ONE;
-            cols.tidx = F::from_canonical_usize(preflight.gkr_tidx);
+            cols.tidx = F::from_canonical_usize(preflight.post_tidx);
             cols.stacked_width = F::from_canonical_usize(preflight.stacked_common_width);
-            cols.n_logup = F::from_canonical_usize(proof.gkr_proof.claims_per_layer.len());
+            cols.n_logup = F::from_canonical_usize(preflight.n_logup);
         } else {
             let (air_id, shape) = &preflight.sorted_trace_shapes[j];
             let num_parts = num_parts_per_air[j];

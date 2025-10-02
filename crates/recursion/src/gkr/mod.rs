@@ -1,12 +1,18 @@
+use core::iter::zip;
 use std::sync::Arc;
 
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use p3_field::FieldAlgebra;
+use stark_backend_v2::{
+    EF, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    proof::{GkrProof, Proof},
+};
 
 use crate::{
     gkr::{gkr_round::DummyGkrRoundAir, sumcheck::DummyGkrSumcheckAir},
-    system::{AirModule, BusInventory, Preflight},
+    system::{AirModule, BusInventory, GkrPreflight, Preflight},
 };
 
 mod gkr_round;
@@ -39,11 +45,58 @@ impl AirModule for GkrModule {
         ]
     }
 
+    fn run_preflight(
+        &self,
+        _vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+    ) {
+        let GkrProof {
+            q0_claim,
+            claims_per_layer,
+            sumcheck_polys,
+        } = &proof.gkr_proof;
+
+        let ts = &mut preflight.transcript;
+
+        let _alpha_logup = ts.sample_ext();
+        let _beta_logup = ts.sample_ext();
+
+        ts.observe_ext(*q0_claim);
+
+        for (polys, claims) in zip(sumcheck_polys, claims_per_layer) {
+            let _ = ts.sample_ext();
+
+            for poly in polys {
+                for eval in poly {
+                    ts.observe_ext(*eval);
+                }
+                let _xi_i = ts.sample_ext();
+            }
+
+            ts.observe_ext(claims.p_xi_0);
+            ts.observe_ext(claims.q_xi_0);
+            ts.observe_ext(claims.p_xi_1);
+            ts.observe_ext(claims.q_xi_1);
+
+            let _rho = ts.sample_ext();
+        }
+
+        for _ in preflight.proof_shape.n_logup..preflight.proof_shape.n_max + 1 {
+            let _ = ts.sample_ext();
+        }
+
+        preflight.gkr = GkrPreflight {
+            post_tidx: ts.len(),
+            input_layer_numerator_claim: EF::ZERO, // FIXME
+            input_layer_denominator_claim: EF::ZERO,
+        };
+    }
+
     fn generate_proof_inputs(
         &self,
         _vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        _public_values_per_air: &[Vec<F>],
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![
