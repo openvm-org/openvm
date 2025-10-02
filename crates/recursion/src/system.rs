@@ -183,7 +183,7 @@ impl BusInventory {
     pub fn new() -> Self {
         let mut b = BusIndexManager::new();
 
-        dbg!(Self {
+        Self {
             // Control flow buses
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
             gkr_module_bus: GkrModuleBus::new(b.new_bus_idx()),
@@ -207,7 +207,7 @@ impl BusInventory {
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
             stacking_claims_bus: StackingClaimsBus::new(b.new_bus_idx()),
-        })
+        }
     }
 
     pub fn air_part_shape_bus(&self) -> AirPartShapeBus {
@@ -255,7 +255,6 @@ impl VerifierCircuit {
         for module in self.modules.iter() {
             module.run_preflight(vk, proof, &mut preflight);
         }
-        println!("{:?}", preflight);
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {

@@ -47,7 +47,7 @@ impl AirModule for GkrModule {
 
     fn run_preflight(
         &self,
-        _vk: &MultiStarkVerifyingKeyV2,
+        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &mut Preflight,
     ) {
@@ -84,7 +84,7 @@ impl AirModule for GkrModule {
             let _rho = ts.sample_ext();
         }
 
-        for _ in preflight.proof_shape.n_logup..preflight.proof_shape.n_max + 1 {
+        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + vk.inner.params.l_skip {
             let _ = ts.sample_ext();
         }
 
