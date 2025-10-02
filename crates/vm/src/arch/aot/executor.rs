@@ -196,34 +196,31 @@ impl<F: PrimeField32> AotInstance<F> {
         return res;
     }
 
-    pub fn generate_assembly_beq(inst: Instruction<F>, pc: u32) -> String {
-        let asm = {
-            let a = inst.a;
-            let b = inst.b;
-            let c = inst.c;
+    pub fn generate_assembly_beq(pc: u32, inst: Instruction<F>) -> String {
+        // does this if([a:4]_1 == [b:4]_1) pc += c
 
-            let mut res = String::new();
-            res += &format!("pc_{:x}\n", pc);
-            res += &format!("\tmov rax, qword ptr[rip + reg_{a}\n");
-            res += &format!("\tmov rbx, qword ptr[rip + reg_{b}\n");
-            res += &format!("\tcmp eax, ebx\n");
-            res += &format!("\tje pc_{:x}_beq_true\n", pc);
-            res += &format!("\tjmp pc_{:x}_beq_done\n", pc);
-            res += "\n";
-            res += &format!("pc_{:x}_beq_true:\n", pc);
-            res += &format!("\tadd r8, {}\n", c);
-            res += "\n";
+        let mut res = String::new();
 
-            res += &format!("pc_{:x}_beq_done:\n", pc);
-            res += &format!("\tadd r8, {}\n", DEFAULT_PC_JUMP);
-            res += "\n";
+        let a = inst.a;
+        let b = inst.b;
+        let c = inst.c;
 
-            // increment pc
-            res += &format!("\tadd r8, {}\n", 4);
-            res += "\n";
-            res
-        };
-        return asm;
+        res += &format!("pc_{:x}:\n", pc);
+        res += &format!("\tmov rax, qword ptr [reg_{}]\n", a);
+        res += &format!("\tmov rbx, qword ptr [reg_{}]\n", b);
+        res += &format!("\tcmp rax, rbx\n");
+        res += &format!("\tje pc_{:x}_true:\n", pc);
+        res += &format!("\tadd r8, 4\n");
+        res += &format!("\tlea r10, [map_pc_0]\n");
+        res += &format!("\tmov r10, [r10 + r8*2]\n");
+        res += "\n";
+        res += &format!("pc_{:x}_true:\n", pc);
+        res += &format!("\tadd r8, {}\n", c);
+        res += &format!("\tlea r10, [map_pc_0]\n");
+        res += &format!("\tmov r10, [r10 + r8*2]\n");
+        res += "\n";
+        
+        return res;
     }
 
     // TODO: push & pop other caller saved regs too
