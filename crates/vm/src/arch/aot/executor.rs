@@ -72,6 +72,7 @@ impl<F: PrimeField32> AotInstance<F> {
         res += &format!(".section .text\n");
         res += &format!(".extern print_message\n");
         res += &format!(".extern print_register\n");
+        res += &format!(".extern print_register_number\n");
         res += &format!(".global main\n");
 
         res += &format!("main:\n");
@@ -99,7 +100,7 @@ impl<F: PrimeField32> AotInstance<F> {
 
         // TODO: make sure this list is sorted in increasing order of pc
         for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
-            res += &format!("map_pc_{:x}:\t.quad pc_{:x}", pc, pc);
+            res += &format!("map_pc_{:x}:\t.quad pc_{:x}\n", pc, pc);
         }
         res += &format!("\n");
 
@@ -118,6 +119,7 @@ impl<F: PrimeField32> AotInstance<F> {
             } else if opcode == BranchEqualOpcode::BEQ.global_opcode() {
             } else if opcode == BranchLessThanOpcode::BGEU.global_opcode() {
             } else if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode() {
+                res += &Self::generate_assembly_loadb(pc, instruction);
             } else if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode() {
             } else {
             }
@@ -130,10 +132,33 @@ impl<F: PrimeField32> AotInstance<F> {
         return res;
     }
 
+    pub fn generate_assembly_loadb(pc: u32, inst: Instruction<F>) -> String {
+        let mut res = String::new();
+        res += &format!("pc_{:x}:\n", pc);
+
+        // specs: if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)
+        let opcode = inst.opcode;
+        let a = inst.a;
+        let b = inst.b;
+        let c = inst.c; 
+        let e = inst.e;
+        let f = inst.f;
+        let g = inst.g;
+
+        // TODO: make it follow the specs
+        // currently we just do [a:4]_1 = [b:1]_0 
+        res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
+        res += "\n";
+
+        return res;
+    }
+
     pub fn generate_debug_registers(pc: u32) -> String {
         let mut res = String::new();
         res += &format!("pc_debug_{:x}:\n", pc);
         for r in 0u64..4u64 {
+            res += &format!("\tmov rdi, {}\n", r);
+            res += &format!("\tcall print_register_number\n");
             res += &format!("\tmov rdi, qword ptr [reg_{}]\n", r);
             res += &format!("\tcall print_register\n");
         }
