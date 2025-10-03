@@ -70,14 +70,15 @@ impl<F: PrimeField32> AotInstance<F> {
             res += &format!(".comm reg_{r}, 8, 8\n");
         }
         res += &format!(".section .text\n");
-        res += &format!(".extern print_message\n");
-        res += &format!(".extern print_register\n");
-        res += &format!(".extern print_register_number\n");
+        res += &format!(".extern print_debug\n");
         res += &format!(".global main\n");
 
         res += &format!("main:\n");
-        res += &format!("\tsub rsp, 8\n");
         res += &format!("\txor rax, rax\n");
+
+        // push the external registers
+        res += &format!("\tsub rsp, 8\n");
+
         // set all RISC-V register to 0
         for r in 0u64..32u64 {
             res += &format!("\tmov qword ptr [reg_{}], 0\n", r);
@@ -91,6 +92,8 @@ impl<F: PrimeField32> AotInstance<F> {
 
         res += &format!("execute_end:\n");
         res += &format!("\txor rax, rax\n");
+        
+        // pop the external register
         res += &format!("\tadd rsp, 8\n");
         res += &format!("\tret\n");
         res += &format!("\n");
@@ -110,14 +113,22 @@ impl<F: PrimeField32> AotInstance<F> {
     pub fn compile(exe: &VmExe<F>) -> String {
         let mut res = String::new();
         res += &Self::generate_assembly_header();
+
+        // for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
+        //     println!("pc: {}", pc);
+        // }
         
         for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
             let opcode = instruction.opcode;
             if opcode == BaseAluOpcode::ADD.global_opcode() {
                 res += &Self::generate_assembly_add(pc, instruction);
+            } else if opcode == BaseAluOpcode::SUB.global_opcode() {
+                res += &Self::generate_assembly_sub(pc, instruction);
             } else if opcode == BaseAluOpcode::XOR.global_opcode() {
             } else if opcode == BranchEqualOpcode::BEQ.global_opcode() {
+                res += &Self::generate_assembly_beq(pc, instruction);
             } else if opcode == BranchLessThanOpcode::BGEU.global_opcode() {
+                res += &Self::generate_assembly_bgeu(pc, instruction);
             } else if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode() {
                 res += &Self::generate_assembly_loadb(pc, instruction);
             } else if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode() {
@@ -132,11 +143,73 @@ impl<F: PrimeField32> AotInstance<F> {
         return res;
     }
 
+    pub fn generate_assembly_sub(pc: u32, inst: Instruction<F>) -> String {
+        let mut res = String::new();
+        res += &format!("pc_{:x}:\n", pc);
+
+        let opcode = inst.opcode;
+        let a = inst.a;
+        let b = inst.b;
+        let c = inst.c;
+        let e = inst.e;
+
+        // specs: [a:4]_1 = [b:4]_1 + [c:4]_e
+
+        if e == F::ZERO {
+            // specs: [a:4]_1 = [b:4]_1 + [c:4]_0
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+            res += &format!("\tmov rbx, {}\n", c);
+            res += &format!("\tsub rax, rbx\n");
+            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        } else {
+            // specs: [a:4]_1 = [b:4]_1 + [c:4]_1
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", c);
+            res += &format!("\tsub rax, rbx\n");
+            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        }
+
+        res += &format!("\tadd r8, 4\n");
+
+        res += &format!("\n");
+        return res;
+    }
+
+    pub fn generate_assembly_bgeu(pc: u32, inst: Instruction<F>) -> String {
+            // does this if([a:4]_1 >= [b:4]_1) pc += c
+            let mut res = String::new();
+
+            let a = inst.a;
+            let b = inst.b;
+            let c = inst.c;
+    
+            res += &format!("pc_{:x}:\n", pc);
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", a);
+            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", b);
+            res += &format!("\tcmp rax, rbx\n");
+            res += &format!("\tjge pc_{:x}_true\n", pc);
+            res += &format!("\tadd r8, 4\n");
+            res += &format!("\tlea r10, [map_pc_0]\n");
+            res += &format!("\tmov r10, [r10 + r8*2]\n");
+            res += &format!("\tjmp pc_{:x}\n", pc + DEFAULT_PC_JUMP);
+            res += "\n";
+
+            res += &format!("pc_{:x}_true:\n", pc);
+            res += &format!("\tadd r8, {}\n", c);
+            res += &format!("\tlea r10, [map_pc_0]\n");
+            res += &format!("\tmov r10, [r10 + r8*2]\n");
+            res += &format!("\tjmp r10\n");
+            res += "\n";
+            
+            return res;
+        }
+
     pub fn generate_assembly_loadb(pc: u32, inst: Instruction<F>) -> String {
         let mut res = String::new();
         res += &format!("pc_{:x}:\n", pc);
 
         // specs: if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)
+
         let opcode = inst.opcode;
         let a = inst.a;
         let b = inst.b;
@@ -146,8 +219,16 @@ impl<F: PrimeField32> AotInstance<F> {
         let g = inst.g;
 
         // TODO: make it follow the specs
-        // currently we just do [a:4]_1 = [b:1]_0 
-        res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
+        // currently we just do [a:4]_1 = [b:4]_e
+
+        if e == F::ZERO {
+            res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
+        } else {
+            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        }
+        
+        res += &format!("\tadd r8, 4\n");
         res += "\n";
 
         return res;
@@ -157,10 +238,14 @@ impl<F: PrimeField32> AotInstance<F> {
         let mut res = String::new();
         res += &format!("pc_debug_{:x}:\n", pc);
         for r in 0u64..4u64 {
-            res += &format!("\tmov rdi, {}\n", r);
-            res += &format!("\tcall print_register_number\n");
-            res += &format!("\tmov rdi, qword ptr [reg_{}]\n", r);
-            res += &format!("\tcall print_register\n");
+            res += &format!("\tmov rdx, r8\n"); // pc value 
+            res += &format!("\tmov rsi, qword ptr [reg_{}]\n", r);  // register value
+            res += &format!("\tmov rdi, {}\n", r); // register number
+            res += &format!("\tpush r8\n");
+            res += &format!("\tsub rsp, 8\n");
+            res += &format!("\tcall print_debug\n");
+            res += &format!("\tadd rsp, 8\n");
+            res += &format!("\tpop r8\n");
         }
         res += "\n";
         return res;
@@ -192,6 +277,8 @@ impl<F: PrimeField32> AotInstance<F> {
             res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
         }
 
+        res += &format!("\tadd r8, 4\n");
+
         res += &format!("\n");
         return res;
     }
@@ -209,15 +296,17 @@ impl<F: PrimeField32> AotInstance<F> {
         res += &format!("\tmov rax, qword ptr [reg_{}]\n", a);
         res += &format!("\tmov rbx, qword ptr [reg_{}]\n", b);
         res += &format!("\tcmp rax, rbx\n");
-        res += &format!("\tje pc_{:x}_true:\n", pc);
+        res += &format!("\tje pc_{:x}_true\n", pc);
         res += &format!("\tadd r8, 4\n");
         res += &format!("\tlea r10, [map_pc_0]\n");
         res += &format!("\tmov r10, [r10 + r8*2]\n");
+        res += &format!("\tjmp pc_{:x}\n", pc + DEFAULT_PC_JUMP);
         res += "\n";
         res += &format!("pc_{:x}_true:\n", pc);
         res += &format!("\tadd r8, {}\n", c);
         res += &format!("\tlea r10, [map_pc_0]\n");
         res += &format!("\tmov r10, [r10 + r8*2]\n");
+        res += &format!("\tjmp r10\n");
         res += "\n";
         
         return res;
