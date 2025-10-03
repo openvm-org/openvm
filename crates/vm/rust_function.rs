@@ -1,9 +1,8 @@
 #[no_mangle]
-pub extern "C" fn print_message() {
-    println!("Hello from Rust!");
+pub extern "C" fn print_debug(reg_num: u64, reg_val: u64, pc_val: u64) {
+    println!("currently at pc {}", pc_val);
+    println!("register {} has value {}", reg_num, reg_val);
+    println!("");
 }
 
-#[no_mangle]
-pub extern "C" fn print_register(r: u32) {
-    println!("register value {}", r);
-}
+
