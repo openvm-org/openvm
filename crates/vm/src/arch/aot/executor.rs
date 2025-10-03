@@ -20,14 +20,29 @@ use std::io::Write;
 use std::{env, env::args, fs, path::PathBuf, process::Command};
 use tracing::subscriber::SetGlobalDefaultError;
 
+use crate::arch::state;
+use crate::arch::MemoryConfig;
+
 const DEFAULT_PC_JUMP: u32 = 4;
 pub struct AotInstance<F: PrimeField32> {
     exe: VmExe<F>,
+    vm_state_address: usize
 }
 
 impl<F: PrimeField32> AotInstance<F> {
     pub fn new(exe: &VmExe<F>) -> Self {
-        let asm_string = Self::compile(exe);
+        /*  
+        Create a VmState during compile time and store it in the heap
+        */      
+
+        let memory_config = MemoryConfig::default();
+        let system_config = SystemConfig::default_from_memory(memory_config);
+        let init_memory = &exe.init_memory;
+        let vm_state: Box<state::VmState<F>> = Box::new(
+            VmState::initial(&system_config, &init_memory, 0, vec![])
+        );
+        let vm_state_address = &*vm_state as *const _ as usize;
+        let asm_string = Self::compile(exe, vm_state_address);
 
         let _ = File::create("aot_asm.s").expect("Unable to create file");
         std::fs::write("aot_asm.s", &asm_string).expect("Unable to write file");
@@ -57,10 +72,19 @@ impl<F: PrimeField32> AotInstance<F> {
             ])
             .output();
 
-        Self { exe: exe.clone() }
+        Self { 
+            exe: exe.clone(),
+            vm_state_address: vm_state_address
+        }
     }
 
-    pub fn generate_assembly_header() -> String {
+    pub fn execute(&self) {
+        unsafe {
+            let _ = Command::new("./program").status();
+        }
+    }
+
+    pub fn generate_assembly_header(vm_state_address: usize) -> String {
         let mut res = String::new();
         res += &format!(".intel_syntax noprefix\n");
         res += &format!(".code64\n");
@@ -71,10 +95,17 @@ impl<F: PrimeField32> AotInstance<F> {
         }
         res += &format!(".section .text\n");
         res += &format!(".extern print_debug\n");
+        res += &format!(".extern write_to_vmstate\n");
         res += &format!(".global main\n");
 
         res += &format!("main:\n");
         res += &format!("\txor rax, rax\n");
+
+        /* 
+        pass in the vm state to rbx
+        TODO: think of a better place to store the VmSttae
+        */
+        res += &format!("\tmov rbx, 0x{:x}\n", vm_state_address);
 
         // push the external registers
         res += &format!("\tsub rsp, 8\n");
@@ -110,9 +141,9 @@ impl<F: PrimeField32> AotInstance<F> {
         return res;
     }
 
-    pub fn compile(exe: &VmExe<F>) -> String {
+    pub fn compile(exe: &VmExe<F>, vm_state_address: usize) -> String {
         let mut res = String::new();
-        res += &Self::generate_assembly_header();
+        res += &Self::generate_assembly_header(vm_state_address);
 
         // for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
         //     println!("pc: {}", pc);
@@ -135,13 +166,52 @@ impl<F: PrimeField32> AotInstance<F> {
             } else {
             }
 
-            res += &Self::generate_debug_registers(pc);
+            // res += &Self::generate_debug_registers(pc);
         }
 
         res += &Self::generate_assembly_footer(exe);
 
         return res;
     }
+
+    pub fn generate_assembly_loadb(pc: u32, inst: Instruction<F>) -> String {
+        let mut res = String::new();
+        res += &format!("pc_{:x}:\n", pc);
+
+        // specs: if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)
+
+        let opcode = inst.opcode;
+        let a = inst.a;
+        let b = inst.b;
+        let c = inst.c; 
+        let e = inst.e;
+        let f = inst.f;
+        let g = inst.g;
+
+        // TODO: make it follow the specs
+        // currently we just do [a:4]_1 = [b:4]_e
+
+        // if e == F::ZERO {
+        //     res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
+        // } else {
+        //     res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
+        //     res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
+        // }
+
+        res += &format!("\tmov rdi, rbx\n");
+        res += &format!("\tpush r8\n");
+        res += &format!("\tsub rsp, 8\n");
+        res += &format!("\tcall write_to_vmstate\n");
+        res += &format!("\tadd rsp, 8\n");
+        res += &format!("\tpop r8\n");
+        
+
+        res += &format!("\tadd r8, 4\n");
+        res += "\n";
+
+        return res;
+    }
+
 
     pub fn generate_assembly_sub(pc: u32, inst: Instruction<F>) -> String {
         let mut res = String::new();
@@ -174,7 +244,6 @@ impl<F: PrimeField32> AotInstance<F> {
         res += &format!("\n");
         return res;
     }
-
     pub fn generate_assembly_bgeu(pc: u32, inst: Instruction<F>) -> String {
             // does this if([a:4]_1 >= [b:4]_1) pc += c
             let mut res = String::new();
@@ -204,35 +273,6 @@ impl<F: PrimeField32> AotInstance<F> {
             return res;
         }
 
-    pub fn generate_assembly_loadb(pc: u32, inst: Instruction<F>) -> String {
-        let mut res = String::new();
-        res += &format!("pc_{:x}:\n", pc);
-
-        // specs: if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)
-
-        let opcode = inst.opcode;
-        let a = inst.a;
-        let b = inst.b;
-        let c = inst.c; 
-        let e = inst.e;
-        let f = inst.f;
-        let g = inst.g;
-
-        // TODO: make it follow the specs
-        // currently we just do [a:4]_1 = [b:4]_e
-
-        if e == F::ZERO {
-            res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
-        } else {
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        }
-        
-        res += &format!("\tadd r8, 4\n");
-        res += "\n";
-
-        return res;
-    }
 
     pub fn generate_debug_registers(pc: u32) -> String {
         let mut res = String::new();
@@ -250,7 +290,6 @@ impl<F: PrimeField32> AotInstance<F> {
         res += "\n";
         return res;
     }
-
     pub fn generate_assembly_add(pc: u32, inst: Instruction<F>) -> String {
         let mut res = String::new();
         res += &format!("pc_{:x}:\n", pc);
@@ -282,7 +321,6 @@ impl<F: PrimeField32> AotInstance<F> {
         res += &format!("\n");
         return res;
     }
-
     pub fn generate_assembly_beq(pc: u32, inst: Instruction<F>) -> String {
         // does this if([a:4]_1 == [b:4]_1) pc += c
 
@@ -312,22 +350,5 @@ impl<F: PrimeField32> AotInstance<F> {
         return res;
     }
 
-    // TODO: push & pop other caller saved regs too
-    pub fn push_caller_saved_regs() -> String {
-        let mut res = String::new();
-        res += "\tpush r8";
-        return res;
-    }
-
-    pub fn pop_caller_saved_regs() -> String {
-        let mut res = String::new();
-        res += "\tpop r8";
-        return res;
-    }
-
-    pub fn execute(&self) {
-        unsafe {
-            let _ = Command::new("./program").status();
-        }
-    }
+    
 }
