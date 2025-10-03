@@ -55,9 +55,13 @@ impl AirModule for GkrModule {
             q0_claim,
             claims_per_layer,
             sumcheck_polys,
+            logup_pow_witness,
         } = &proof.gkr_proof;
 
         let ts = &mut preflight.transcript;
+
+        ts.observe(*logup_pow_witness);
+        let _pow_bits = ts.sample();
 
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
