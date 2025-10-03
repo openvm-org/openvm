@@ -156,7 +156,7 @@ fn test_is_eq_array_single_row_fail(x: [u32; 3], y: [u32; 3]) {
     let air = chip.air;
     let mut trace = chip.generate_trace();
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let row: &mut IsEqArrayCols<BabyBear, 3> = trace.values.as_mut_slice().borrow_mut();
     row.out = BabyBear::ONE - row.out;
     assert_eq!(
@@ -182,7 +182,7 @@ fn test_is_eq_array_fail_rand() {
     let air = chip.air;
     let trace = chip.generate_trace();
 
-    disable_debug_builder();
+    // disable_debug_builder();
     for i in 0..height {
         for j in 0..N {
             let mut prank_trace = trace.clone();

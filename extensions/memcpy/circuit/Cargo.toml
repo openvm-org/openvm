@@ -22,3 +22,7 @@ derive_more = { workspace = true, features = ["from"] }
 serde.workspace = true
 strum = { workspace = true }
 tracing.workspace = true
+
+[features]
+default = ["custom-memcpy"]
+custom-memcpy = []

@@ -29,12 +29,10 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
 
         let instruction_u32 = instruction_stream[0];
         let opcode = (instruction_u32 & 0x7f) as u8;
-
         // Check if this is our custom memcpy_loop instruction
         if opcode != MEMCPY_LOOP_OPCODE {
             return None;
         }
-
         // Parse U-type instruction format
         let mut dec_insn = UType::new(instruction_u32);
         let shift = dec_insn.imm >> 12;
@@ -44,7 +42,6 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
         if ![0, 1, 2, 3].contains(&shift) {
             return None;
         }
-
         // Convert to OpenVM instruction format
         let mut instruction = from_u_type(
             Rv32MemcpyOpcode::MEMCPY_LOOP.global_opcode().as_usize(),
@@ -52,6 +49,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for MemcpyTranspilerExtension {
         );
         instruction.a = F::ZERO;
         instruction.d = F::ZERO;
+        // eprintln!("instruction: {:?}", instruction);
+        // eprintln!("TRANSPILER CALLLLEDDDDDD");
 
         Some(TranspilerOutput::one_to_one(instruction))
     }

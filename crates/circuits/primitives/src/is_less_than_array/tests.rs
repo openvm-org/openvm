@@ -187,7 +187,7 @@ fn test_is_less_than_tuple_chip_negative() {
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],
@@ -209,7 +209,7 @@ fn test_is_less_than_tuple_chip_nonzero_diff() {
     let trace = chip.generate_wrong_trace();
     let range_checker_trace = range_checker.generate_trace();
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![air, range_checker.air],

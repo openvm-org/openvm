@@ -5,7 +5,9 @@ use openvm_stark_backend::{
     p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
+    config::{
+        baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level, FriParameters,
+    },
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
@@ -108,7 +110,7 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
-    setup_tracing();
+    setup_tracing_with_log_level(tracing::Level::DEBUG);
     let engine = E::new(fri_params);
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
     let vk = pk.get_vk();
@@ -150,9 +152,11 @@ where
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
         if debug {
             debug_proving_ctx(&vm, &pk, &ctx);
+            eprintln!("End of function stark_utils debug");
         }
         let proof = vm.engine.prove(vm.pk(), ctx);
         proofs.push(proof);
+        eprintln!("End of function stark_utils prove");
     }
     assert!(proofs.len() >= min_segments);
     vm.verify(&vk, &proofs)

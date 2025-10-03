@@ -180,7 +180,7 @@ fn test_assert_less_than_negative_1() {
     // Make the trace invalid
     trace.values.swap(0, 1);
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace]).err(),
         Some(VerificationError::OodEvaluationMismatch),
@@ -205,7 +205,7 @@ fn test_assert_less_than_negative_2() {
     // Make the trace invalid
     trace.values[3] = FieldAlgebra::from_canonical_u64(1 << decomp as u64);
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
         Some(VerificationError::OodEvaluationMismatch),

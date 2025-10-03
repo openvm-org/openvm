@@ -544,6 +544,9 @@ where
     {
         assert!(self.memory.is_none(), "Memory must be finalized");
         let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+        // for (ctx, air) in ctxs.clone().iter().zip(airs.iter()) {
+        //     eprintln!("{}: {}", air.name(), ctx.main_trace_height());
+        // }
         engine_provider().run_test_impl(airs, ctxs)
     }
 }

@@ -234,7 +234,7 @@ fn run_negative_fri_mat_opening_test() {
         *trace = RowMajorMatrix::new(values, OVERALL_WIDTH);
     };
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)

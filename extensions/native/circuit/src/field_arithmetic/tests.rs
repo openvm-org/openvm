@@ -273,7 +273,7 @@ fn run_negative_field_arithmetic_test(
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)

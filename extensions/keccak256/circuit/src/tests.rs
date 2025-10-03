@@ -299,7 +299,7 @@ fn run_negative_keccak256_test(
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)
