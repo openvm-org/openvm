@@ -58,20 +58,17 @@ impl AirModule for WhirModule {
             codeword_merkle_proofs,
         } = &proof.whir_proof;
 
-        let _ = ts.sample_ext();
-
-        println!("sumcheck polys: {:?}", whir_sumcheck_polys.len());
-        println!("ood values: {:?}", ood_values.len());
+        let _mu = ts.sample_ext();
 
         let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
         debug_assert_eq!(ood_values.len(), codeword_commits.len());
         for (i, (ood, commit)) in zip(ood_values, codeword_commits).enumerate() {
-            for _ in 0..vk.inner.params.l_skip {
+            for _ in 0..vk.inner.params.k_whir {
                 if let Some(evals) = sumcheck_poly_iter.next() {
                     for eval in evals {
                         ts.observe_ext(*eval);
                     }
-                    ts.sample_ext();
+                    let _alpha = ts.sample_ext();
                 }
             }
             ts.observe_slice(commit);
@@ -80,7 +77,7 @@ impl AirModule for WhirModule {
             ts.observe_ext(*ood);
 
             for j in 0..vk.inner.params.num_whir_queries {
-                let _ = ts.sample();
+                let _bits = ts.sample();
                 if i == 0 {
                     for l in 0..initial_round_opened_rows.len() {
                         ts.observe_slice(&initial_round_opened_rows[l][j]);
@@ -99,6 +96,7 @@ impl AirModule for WhirModule {
             }
             let _gamma = ts.sample_ext();
         }
+        debug_assert!(sumcheck_poly_iter.next().is_none());
 
         preflight.whir = WhirPreflight {}
     }
