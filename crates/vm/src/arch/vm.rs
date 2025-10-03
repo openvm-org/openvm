@@ -457,11 +457,11 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
             PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
-        eprintln!("crates/vm/src/arch/vm.rs::execute_preflight");
-        eprintln!("=== TRACE HEIGHTS PASSED TO EXECUTE_PREFLIGHT ===");
-        for (air_idx, &height) in trace_heights.iter().enumerate() {
-            eprintln!("AIR[{}]: trace_height={}", air_idx, height);
-        }
+        // eprintln!("crates/vm/src/arch/vm.rs::execute_preflight");
+        // eprintln!("=== TRACE HEIGHTS PASSED TO EXECUTE_PREFLIGHT ===");
+        // for (air_idx, &height) in trace_heights.iter().enumerate() {
+        //     eprintln!("AIR[{}]: trace_height={}", air_idx, height);
+        // }
         debug_assert!(interpreter
             .executor_idx_to_air_idx
             .iter()
@@ -482,30 +482,30 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
 
         // Debug logging for capacities and AIR mapping
-        eprintln!("=== CAPACITY DEBUG INFO ===");
-        for (air_idx, &(height, width)) in capacities.iter().enumerate() {
-            eprintln!(
-                "AIR[{}]: height={}, width={}, total_elements={}",
-                air_idx,
-                height,
-                width,
-                height * width
-            );
-        }
+        // eprintln!("=== CAPACITY DEBUG INFO ===");
+        // for (air_idx, &(height, width)) in capacities.iter().enumerate() {
+        //     eprintln!(
+        //         "AIR[{}]: height={}, width={}, total_elements={}",
+        //         air_idx,
+        //         height,
+        //         width,
+        //         height * width
+        //     );
+        // }
 
-        eprintln!("=== EXECUTOR TO AIR MAPPING ===");
-        for (executor_idx, &air_idx) in executor_idx_to_air_idx.iter().enumerate() {
-            eprintln!("Executor[{}] -> AIR[{}]", executor_idx, air_idx);
-        }
+        // eprintln!("=== EXECUTOR TO AIR MAPPING ===");
+        // for (executor_idx, &air_idx) in executor_idx_to_air_idx.iter().enumerate() {
+        //     eprintln!("Executor[{}] -> AIR[{}]", executor_idx, air_idx);
+        // }
         let executor_inventory = &self.executor().inventory;
 
         // Find all opcodes that map to executor index 14
-        eprintln!("=== OPCODES FOR EXECUTOR[14] ===");
-        for (opcode, &executor_idx) in &executor_inventory.instruction_lookup {
-            if executor_idx == 14 {
-                eprintln!("Opcode {} -> Executor[{}]", opcode, executor_idx);
-            }
-        }
+        // eprintln!("=== OPCODES FOR EXECUTOR[14] ===");
+        // for (opcode, &executor_idx) in &executor_inventory.instruction_lookup {
+        //     if executor_idx == 14 {
+        //         eprintln!("Opcode {} -> Executor[{}]", opcode, executor_idx);
+        //     }
+        // }
         let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
 
         let system_config: &SystemConfig = self.config().as_ref();
@@ -1359,6 +1359,7 @@ pub fn debug_proving_ctx<E, VB>(
             )
         }));
     vm.engine.debug(&airs, &pks, &proof_inputs);
+    eprintln!("End of function VM debug");
 }
 
 #[cfg(feature = "metrics")]

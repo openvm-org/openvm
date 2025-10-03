@@ -760,16 +760,16 @@ where
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
-                println!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: inst: opcode {:?}", inst.opcode.as_usize());
+                // eprintln!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: inst: opcode {:?}", inst.opcode.as_usize());
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,
                         pre_compute: buf,
                     }
                 } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&inst.opcode) {
-                    if inst.opcode.as_usize() == 595 {  // MULHU opcode
-                        println!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: MULHU instruction (opcode 595) being routed to metered execution, executor_idx: {}", executor_idx);  
-                    } 
+                    // if inst.opcode.as_usize() == 595 {  // MULHU opcode
+                    //     println!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: MULHU instruction (opcode 595) being routed to metered execution, executor_idx: {}", executor_idx);
+                    // }
                     let executor_idx = executor_idx as usize;
                     let executor = inventory
                         .executors

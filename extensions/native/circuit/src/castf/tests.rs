@@ -239,7 +239,7 @@ fn run_negative_castf_test(prank_vals: CastFPrankValues, b: Option<F>, error: Ve
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let tester = tester
         .build()
         .load_and_prank_trace(harness, modify_trace)

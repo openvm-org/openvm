@@ -235,7 +235,7 @@ fn test_optional_air() {
     }
     // Case 3: Negative - unbalanced interactions.
     {
-        disable_debug_builder();
+        // disable_debug_builder();
         let mut recv_chip1 = recv_chip1.clone();
         recv_chip1.load_data(DummyInteractionData {
             count: vec![1, 2, 4],

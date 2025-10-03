@@ -137,7 +137,7 @@ mod tests {
     }
 
     #[test]
-    fn test_complex() -> Result<()> {
+    fn test_complex1() -> Result<()> {
         let config = test_rv32modularwithfp2_config(vec![(
             "Complex".to_string(),
             SECP256K1_CONFIG.modulus.clone(),

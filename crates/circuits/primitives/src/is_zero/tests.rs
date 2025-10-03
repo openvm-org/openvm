@@ -133,7 +133,7 @@ fn test_single_is_zero_fail(x: u32) {
     let mut trace = chip.generate_trace();
     trace.values[1] = BabyBear::ONE - trace.values[1];
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(any_rap_arc_vec![air], vec![trace])
             .err(),
@@ -153,7 +153,7 @@ fn test_vec_is_zero_fail(x_vec: [u32; 4], expected: [u32; 4]) {
     let air = chip.air;
     let mut trace = chip.generate_trace();
 
-    disable_debug_builder();
+    // disable_debug_builder();
     for (i, _value) in expected.iter().enumerate() {
         trace.row_mut(i)[1] = BabyBear::ONE - trace.row_mut(i)[1];
         assert_eq!(

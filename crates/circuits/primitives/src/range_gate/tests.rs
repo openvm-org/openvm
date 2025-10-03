@@ -96,7 +96,7 @@ fn negative_test_range_gate_chip() {
         2,
     );
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![range_checker.air],

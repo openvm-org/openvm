@@ -129,7 +129,7 @@ fn negative_test_xor_limbs_chip() {
 
     let xor_trace = xor_chip.generate_trace();
 
-    disable_debug_builder();
+    // disable_debug_builder();
     let result = BabyBearBlake3Engine::run_simple_test_no_pis_fast(
         any_rap_arc_vec![requester, xor_chip.air],
         vec![requester_trace, xor_trace],

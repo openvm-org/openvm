@@ -1156,7 +1156,7 @@ mod is_equal_tests {
             *trace = RowMajorMatrix::new(trace_row, trace.width());
         };
 
-        disable_debug_builder();
+        // disable_debug_builder();
         let tester = tester
             .build()
             .load_and_prank_trace(harness, modify_trace)

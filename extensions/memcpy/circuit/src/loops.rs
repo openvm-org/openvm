@@ -54,6 +54,7 @@ pub struct MemcpyLoopCols<T> {
     pub shift: [T; 3], // in this implementation, write shift in binary? wott
     // iter needs 3, for one hot encoding
     // can do same here, since we need is_shift_non_zero to be degree 1
+    pub head: [T; 3],
     pub is_valid: T,
     pub to_timestamp: T,
     pub to_dest: [T; MEMCPY_LOOP_NUM_LIMBS],
@@ -112,6 +113,13 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
 
         let shift = local
             .shift
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (i, x)| {
+                acc + (*x) * AB::Expr::from_canonical_u32(i as u32 + 1)
+            });
+        let head = local
+            .head
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (i, x)| {
@@ -265,13 +273,30 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
 
          */
 
+        /*
+        shift = 0: head = 0
+        shift = 1: head = 3
+        shift = 2: head = 2
+        shift = 3: head = 1
+         */
+        // 2x^3/3 - 4x^2 + 19x/3
+        // let head = AB::Expr::from_canonical_u32(2)
+        //     * shift.clone()
+        //     * shift.clone()
+        //     * shift.clone()
+        //     * AB::F::from_canonical_u32(3).inverse()
+        //     - AB::Expr::from_canonical_u32(4) * shift.clone() * shift.clone()
+        //     + AB::Expr::from_canonical_u32(19)
+        //         * shift.clone()
+        //         * AB::F::from_canonical_u32(3).inverse();
+
         self.memcpy_bus
             .send(
                 local.from_state.timestamp,
                 dest,
                 (AB::Expr::ONE - local.is_source_small)
                     * (source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone()),
-                len.clone() - shift.clone(),
+                len.clone() - head.clone(), // this should be  - head as well
                 shift.clone(),
             )
             .eval(builder, local.is_valid);
@@ -284,7 +309,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
                 to_dest,
                 (AB::Expr::ONE - local.is_to_source_small)
                     * (to_source - AB::Expr::from_canonical_u32(12) * is_shift_non_zero.clone()),
-                to_len - shift.clone(),
+                to_len - head.clone(), // this should be - head
                 AB::Expr::from_canonical_u32(4),
             )
             .eval(builder, local.is_valid);
@@ -375,11 +400,15 @@ impl MemcpyLoopChip {
         shift: u8,
         register_aux: [MemoryBaseAuxRecord; 3],
     ) {
-        let mut timestamp = from_timestamp + (((len - shift as u32) & !0x0f) >> 1) + 1 as u32;
+        let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+        let mut timestamp = from_timestamp + (((len - head as u32) & !0x0f) >> 1) + 1 as u32;
         let write_aux = register_aux
             .iter()
             .map(|aux_record| {
                 let mut aux_col = MemoryBaseAuxCols::default();
+                // eprintln!("fill write_aux");
+                // eprintln!("aux_record.prev_timestamp: {:?}", aux_record.prev_timestamp);
+                // eprintln!("timestamp: {:?}", timestamp);
                 mem_helper.fill(aux_record.prev_timestamp, timestamp, &mut aux_col);
                 timestamp += 1;
                 MemoryExtendedAuxRecord::from_aux_cols(aux_col)
@@ -388,7 +417,7 @@ impl MemcpyLoopChip {
             .try_into()
             .unwrap();
 
-        let num_copies = (len - shift as u32) & !0x0f;
+        let num_copies = (len - head as u32) & !0x0f;
         let to_dest = dest + num_copies;
         let to_source = source + num_copies;
 
@@ -435,15 +464,15 @@ impl MemcpyLoopChip {
     /// Generates trace
     pub fn generate_trace<F: PrimeField32>(&self) -> RowMajorMatrix<F> {
         let height = next_power_of_two_or_zero(self.records.lock().unwrap().len());
-        let mut rows = F::zero_vec(height * NUM_MEMCPY_LOOP_COLS);
-
-        // TODO: run in parallel
+        let mut rows = F::zero_vec(height * NUM_MEMCPY_LOOP_COLS); // initially declare to be all 0s
+                                                                   // TODO: run in parallel
         for (i, record) in self.records.lock().unwrap().iter().enumerate() {
             let row = &mut rows[i * NUM_MEMCPY_LOOP_COLS..(i + 1) * NUM_MEMCPY_LOOP_COLS];
             let cols: &mut MemcpyLoopCols<F> = row.borrow_mut();
 
             let shift = record.shift;
-            let num_copies = (record.len - shift as u32) & !0x0f;
+            let head = if shift == 0 { 0 } else { 4 - shift as u32 };
+            let num_copies = (record.len - head) & !0x0f;
             let to_source = record.source + num_copies;
 
             cols.from_state.pc = F::from_canonical_u32(record.from_pc);
@@ -452,6 +481,7 @@ impl MemcpyLoopChip {
             cols.source = record.source.to_le_bytes().map(F::from_canonical_u8);
             cols.len = record.len.to_le_bytes().map(F::from_canonical_u8);
             cols.shift = [shift == 1, shift == 2, shift == 3].map(F::from_bool);
+            cols.head = [head == 1, head == 2, head == 3].map(F::from_bool);
             cols.is_valid = F::ONE;
             // We have MEMCPY_LOOP_NUM_WRITES writes in the loop, (num_copies / 4) writes
             // and (num_copies / 4 + shift != 0) reads in iterations

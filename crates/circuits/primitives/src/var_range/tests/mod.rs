@@ -138,7 +138,7 @@ fn negative_test_variable_range_checker_chip_send() {
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = vec![list_trace, var_range_trace];
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),
@@ -247,7 +247,7 @@ fn negative_test_variable_range_checker_chip_range_check() {
     let var_range_trace = var_range_checker.generate_trace();
     let all_traces = vec![list_trace, var_range_trace];
 
-    disable_debug_builder();
+    // disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(all_chips, all_traces).err(),
         Some(VerificationError::ChallengePhaseError),

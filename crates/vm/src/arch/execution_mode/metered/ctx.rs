@@ -225,14 +225,14 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
 impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
-        if chip_idx == 10 {
-            eprintln!(
-                "crates/vm/src/arch/execution_mode/metered/ctx.rs::on_height_change: AIR[10] height change: {} -> {} (delta: {})",
-                self.trace_heights[10],
-                self.trace_heights[10].wrapping_add(height_delta),
-                height_delta
-            );
-        }
+        // if chip_idx == 10 {
+        //     eprintln!(
+        //         "crates/vm/src/arch/execution_mode/metered/ctx.rs::on_height_change: AIR[10] height change: {} -> {} (delta: {})",
+        //         self.trace_heights[10],
+        //         self.trace_heights[10].wrapping_add(height_delta),
+        //         height_delta
+        //     );
+        // }
         debug_assert!(
             chip_idx < self.trace_heights.len(),
             "chip_idx out of bounds"

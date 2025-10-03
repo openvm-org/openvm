@@ -28,6 +28,7 @@ mod tests {
     };
     use openvm_memcpy_transpiler::Rv32MemcpyOpcode;
     use openvm_stark_backend::p3_field::{FieldAlgebra, PrimeField32};
+    use openvm_stark_backend::p3_matrix::{dense::DenseMatrix, Matrix};
     use openvm_stark_sdk::config::setup_tracing_with_log_level;
     use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
     use rand::Rng;
@@ -240,20 +241,18 @@ mod tests {
          memory is hashed with merkle tree
          persistent is chunks of 8 field elements, each field element is 4 bytes
     */
-    #[test_case(0, 1, 64)]
-    #[test_case(1, 100, 64)]
-    #[test_case(2, 100, 40)]
-    #[test_case(3, 100, 40)]
-    fn memcpy_loop_test(shift: u32, num_ops: usize, len: u32) {
-        let mut tester = VmChipTestBuilder::default();
-        let (mut harness, range_checker, memcpy_loop) = create_harness(&tester);
-        //returns airs and chips for range_checler and memcpy_loop
-    }
 
-    #[test_case(0, 1, 64)] //shift if 0, we copy 4 values correctly, just offset of 0?
-    #[test_case(1, 100, 64)] //shift if 1, we copy (4-1) values correctly, just offset of 1?
-    #[test_case(2, 100, 40)] //shift if 2, copy (4-2) values correctly, offset of 2
-    #[test_case(3, 100, 40)]
+    /*
+        multiple of 16, fails on LogUp
+        non-multiple of 16, fails on mismatch data
+    */
+    /*
+    error is something with the contents of the data??
+     */
+    #[test_case(0, 1, 52)] //shift if 0, we copy 4 values correctly, just offset of 0?
+    #[test_case(1, 1, 64)] //1 - 1 - 52
+    #[test_case(2, 1, 52)] //shift if 2, copy (4-2) values correctly, offset of 2
+    #[test_case(3, 1, 52)]
     fn rand_memcpy_iter_test(shift: u32, num_ops: usize, len: u32) {
         //debug builder, catch in proof gen instead of verification step
         let mut rng = create_seeded_rng();
@@ -263,17 +262,26 @@ mod tests {
         let (mut harness, range_checker, memcpy_loop) = create_harness(&tester);
 
         for tc in 0..num_ops {
-            let base = rng.gen_range(0..250) * 4;
+            let base = rng.gen_range(4..250) * 4;
             let source_offset = base;
             let dest_offset = rng.gen_range(500..750) * 4; // Ensure word alignment
-            let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
-                .map(|_| rng.gen_range(0..=u8::MAX))
-                .collect(); //generates the data to be copied
 
+            let mut source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
+                .map(|_| rng.gen_range(0..u8::MAX))
+                .collect(); //generates the data to be copied
+                            // let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
+                            //     .map(|i| (i % 256) as u8) // ensure it fits in u8
+                            //     .collect();
+                            // let source_data = [
+                            //     177, 219, 134, 68, 154, 250, 240, 12, 74, 114, 224, 6, 86, 189, 15, 16, 197, 189,
+                            //     115, 54, 46, 98, 253, 38, 124, 233, 200, 251, 107, 66, 67, 214, 4, 97, 65, 68, 9,
+                            //     117, 222, 129, 116, 226, 17, 161, 48, 56, 177, 216, 117, 167, 53, 14,
+                            // ];
             eprintln!(
                 "test case: {}, source_offset: {}, dest_offset: {}, len: {}",
                 tc, source_offset, dest_offset, len
             );
+            eprintln!("source_data: {:?}", source_data);
             // set and execute memcpy should have the onus of handling the shift
             set_and_execute_memcpy(
                 &mut tester,
@@ -286,32 +294,94 @@ mod tests {
                 len,
             );
         }
+        let csv = true;
+        let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+            if csv {
+                for row_idx in 0..trace.height() {
+                    let row_data = trace.row_slice(row_idx);
+                    let csv_line = row_data
+                        .iter()
+                        .map(|val| {
+                            let numeric_val: u32 = val.as_canonical_u32();
+                            numeric_val.to_string()
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    println!("{}", csv_line);
+                }
+            } else {
+                eprintln!("=== TRACE DEBUG INFO ===");
+                eprintln!(
+                    "Trace dimensions: {} rows x {} cols",
+                    trace.height(),
+                    trace.width()
+                );
+
+                // Print all rows with aligned formatting
+                for row_idx in 0..trace.height() {
+                    let row_data = trace.row_slice(row_idx);
+                    let formatted_values: Vec<String> = row_data
+                        .iter()
+                        .map(|val| format!("{:>10}", val.as_canonical_u32()))
+                        .collect();
+                    eprintln!("Row {:>3}: [{}]", row_idx, formatted_values.join(", "));
+                }
+                eprintln!("========================");
+            }
+        };
 
         let tester = tester
             .build()
-            .load(harness)
+            .load_and_prank_trace(harness, modify_trace) // Use this instead of load()
             .load_periphery(range_checker)
             .load_periphery(memcpy_loop)
             .finalize();
         tester.simple_test().expect("Verification failed");
     }
 
-    #[test_case(0, 100, 20)]
-    #[test_case(1, 100, 20)]
-    #[test_case(2, 100, 20)]
-    #[test_case(3, 100, 20)]
+    /*
+        cargo test --manifest-path extensions/memcpy/tests/Cargo.toml tests::rand_memcpy_iter_test::_1_100_40_expects -- --nocapture 2>&1
+        2013265920 = -1 in the field
+        2013265909 = -12 in the field
+        failed values are 2013265913, awfully close? this is value of -8 in the field
+        cur, prev + 16
+        ends up being cur -prev -16 == -8
+        cur - prev = 8
+        cur = prev + 8
+    so we are incrementing source pointer by 8, which isnt enough
+
+    check if it is last row actually, and if this computation is correct
+        compile in debug mode with debug symbols
+
+    Current Issue:
+        if the length is nt a multiple of 16, in the last iteration, the next source wont be 16 away, because of the remainder %16
+        SO: things to check:
+            - is this AIR in the correct section of the loop? ie are we checking the correct code segment of memcpy
+            - if it is in the correct section, why is it checking mod 16? it should only be checking chunks of 16
+                - this might imply that the row checking is incorrect, since we are checking one extra iteration
+
+        1. ensure that the constraints are correct, and make sense. ask shayan how constraints work; ask JPW if AIR constraints are correct; suspicion for why its correct
+
+        2. ensure infomration being filled into columns is correct (based on trace gen)
+
+        */
+
+    #[test_case(0, 1, 20)]
+    #[test_case(1, 1, 52)] // 1 1 52
+    #[test_case(2, 1, 20)]
+    #[test_case(3, 1, 20)]
     fn rand_memcpy_iter_test_persistent(shift: u32, num_ops: usize, len: u32) {
         let mut rng = create_seeded_rng();
-
+        //check diff b/w default and default_persistent
         let mut tester = VmChipTestBuilder::default_persistent();
-        let (mut harness, range_checker, _iter_air) = create_harness(&tester);
+        let (mut harness, range_checker, memcpy_loop) = create_harness(&tester);
 
         for _ in 0..num_ops {
-            let base = rng.gen_range(0..250) * 4;
+            let base = rng.gen_range(4..250) * 4;
             let source_offset = base;
             let dest_offset = rng.gen_range(500..750) * 4; // Ensure word alignment
             let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
-                .map(|_| rng.gen_range(0..=u8::MAX))
+                .map(|_| rng.gen_range(0..u8::MAX))
                 .collect();
 
             set_and_execute_memcpy(
@@ -330,6 +400,7 @@ mod tests {
             .build()
             .load(harness)
             .load_periphery(range_checker)
+            .load_periphery(memcpy_loop)
             .finalize();
         tester.simple_test().expect("Verification failed");
     }

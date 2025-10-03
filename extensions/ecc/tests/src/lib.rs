@@ -17,6 +17,7 @@ mod tests {
         CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig, P256_CONFIG, SECP256K1_CONFIG,
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
+    use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_memcpy_transpiler::MemcpyTranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -192,9 +193,20 @@ mod tests {
             get_programs_dir!(),
             "ecdsa",
             ["k256"],
-            &config,
+            &NoInitFile, // using already created file
         )?;
-        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        // missing keccak
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension)
+                .with_extension(Keccak256TranspilerExtension),
+        )?;
         air_test(SdkVmBuilder, config, openvm_exe);
         Ok(())
     }
@@ -210,7 +222,16 @@ mod tests {
             ["p256"],
             &NoInitFile, // using already created file
         )?;
-        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
+        )?;
         let mut input = StdIn::default();
         input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
         air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);
@@ -228,7 +249,16 @@ mod tests {
             ["k256"],
             &NoInitFile, // using already created file
         )?;
-        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
+        )?;
         let mut input = StdIn::default();
         input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
         air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);
@@ -246,7 +276,16 @@ mod tests {
             ["k256"],
             &NoInitFile, // using already created file
         )?;
-        let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv32ITranspilerExtension)
+                .with_extension(Rv32MTranspilerExtension)
+                .with_extension(Rv32IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension)
+                .with_extension(MemcpyTranspilerExtension),
+        )?;
         let mut input = StdIn::default();
         input.write(&k256_sec1_decoding_test_vectors());
         air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);

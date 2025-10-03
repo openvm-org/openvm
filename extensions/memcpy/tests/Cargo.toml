@@ -24,6 +24,10 @@ test-case.workspace = true
 tracing.workspace = true
 
 [features]
-default = ["parallel", "custom-memcpy"]
+default = ["parallel", "custom-memcpy", "stark-debug"]
 parallel = ["openvm-circuit/parallel"]
 custom-memcpy = []
+stark-debug = ["openvm-circuit/stark-debug"]
+
+[profile.dev]
+debug = "full"
