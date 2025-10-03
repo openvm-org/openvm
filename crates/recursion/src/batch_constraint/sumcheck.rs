@@ -128,7 +128,8 @@ pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMa
         cols.round = F::from_canonical_usize(i);
         if i == 0 {
             cols.is_first = F::ONE;
-        } else if i == num_valid_rows - 1 {
+        }
+        if i == num_valid_rows - 1 {
             cols.is_last = F::ONE;
         }
     }

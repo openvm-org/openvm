@@ -18,6 +18,7 @@ openvm-stark-sdk = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+stark-backend-v2 = { workspace = true, features = ["test-utils"]}
 
 [features]
 default = ["parallel"]

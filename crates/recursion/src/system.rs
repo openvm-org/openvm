@@ -91,9 +91,9 @@ pub struct BusInventory {
 
 #[derive(Debug, Default)]
 pub struct Transcript {
-    data: Vec<F>,
-    is_sample: Vec<bool>,
-    sponge: DuplexSponge,
+    pub(crate) data: Vec<F>,
+    pub(crate) is_sample: Vec<bool>,
+    pub(crate) sponge: DuplexSponge,
 }
 
 impl Transcript {
@@ -245,16 +245,20 @@ impl VerifierCircuit {
         airs
     }
 
+    pub fn run_preflight(&self, vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Preflight {
+        let mut preflight = Preflight::default();
+        for module in self.modules.iter() {
+            module.run_preflight(vk, proof, &mut preflight);
+        }
+        preflight
+    }
+
     pub fn generate_proof_inputs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
     ) -> Vec<AirProofRawInput<F>> {
-        let mut preflight = Preflight::default();
-
-        for module in self.modules.iter() {
-            module.run_preflight(vk, proof, &mut preflight);
-        }
+        let preflight = self.run_preflight(vk, proof);
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {
