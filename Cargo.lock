@@ -5458,8 +5458,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.4"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5490,8 +5490,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.4"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
 dependencies = [
  "cc",
  "glob",
@@ -5499,8 +5499,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.4"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
 dependencies = [
  "bytesize",
  "ctor",
@@ -5711,6 +5711,7 @@ dependencies = [
  "serde",
  "strum",
  "tiny-keccak",
+ "tokio",
 ]
 
 [[package]]
@@ -6244,8 +6245,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.4"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6274,8 +6275,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.4"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
 dependencies = [
  "dashmap",
  "derivative",
@@ -9238,6 +9239,7 @@ dependencies = [
  "io-uring",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "slab",
