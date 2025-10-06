@@ -7,6 +7,7 @@ use p3_field::FieldAlgebra;
 use stark_backend_v2::{
     D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrProof, Proof},
 };
 
@@ -27,7 +28,7 @@ impl GkrModule {
     }
 }
 
-impl AirModule for GkrModule {
+impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let gkr_verify_air = DummyGkrRoundAir {
             gkr_bus: self.bus_inventory.gkr_module_bus,
@@ -42,7 +43,7 @@ impl AirModule for GkrModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &mut Preflight,
+        preflight: &mut Preflight<TS>,
     ) {
         let GkrProof {
             q0_claim,
@@ -105,7 +106,7 @@ impl AirModule for GkrModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight,
+        preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
