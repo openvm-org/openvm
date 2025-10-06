@@ -5458,8 +5458,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=007ac22dc6db8cda12d8b704254636c5cf5c4884#007ac22dc6db8cda12d8b704254636c5cf5c4884"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=902d577e15969e216c9130c47bf6dbbe2dfcfbf0#902d577e15969e216c9130c47bf6dbbe2dfcfbf0"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5485,13 +5485,14 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tokio",
  "tracing",
 ]
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=007ac22dc6db8cda12d8b704254636c5cf5c4884#007ac22dc6db8cda12d8b704254636c5cf5c4884"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=902d577e15969e216c9130c47bf6dbbe2dfcfbf0#902d577e15969e216c9130c47bf6dbbe2dfcfbf0"
 dependencies = [
  "cc",
  "glob",
@@ -5499,8 +5500,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=007ac22dc6db8cda12d8b704254636c5cf5c4884#007ac22dc6db8cda12d8b704254636c5cf5c4884"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=902d577e15969e216c9130c47bf6dbbe2dfcfbf0#902d577e15969e216c9130c47bf6dbbe2dfcfbf0"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6244,14 +6245,13 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=007ac22dc6db8cda12d8b704254636c5cf5c4884#007ac22dc6db8cda12d8b704254636c5cf5c4884"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=902d577e15969e216c9130c47bf6dbbe2dfcfbf0#902d577e15969e216c9130c47bf6dbbe2dfcfbf0"
 dependencies = [
  "bitcode",
  "cfg-if",
  "derivative",
  "derive-new 0.7.0",
- "eyre",
  "itertools 0.14.0",
  "metrics",
  "mimalloc",
@@ -6266,7 +6266,6 @@ dependencies = [
  "rayon",
  "rustc-hash 2.1.1",
  "serde",
- "serde_json",
  "thiserror 1.0.69",
  "tikv-jemallocator",
  "tracing",
@@ -6274,12 +6273,12 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?rev=007ac22dc6db8cda12d8b704254636c5cf5c4884#007ac22dc6db8cda12d8b704254636c5cf5c4884"
+version = "1.2.1-rc.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?rev=902d577e15969e216c9130c47bf6dbbe2dfcfbf0#902d577e15969e216c9130c47bf6dbbe2dfcfbf0"
 dependencies = [
  "dashmap",
  "derivative",
- "derive_more 0.99.20",
+ "derive_more 1.0.0",
  "ff 0.13.1",
  "itertools 0.14.0",
  "metrics",
