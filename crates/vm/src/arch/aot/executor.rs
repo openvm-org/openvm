@@ -11,52 +11,66 @@ use openvm_rv32im_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, Rv32LoadStoreOpcode,
 };
 use openvm_stark_backend::p3_field::FieldAlgebra;
-use openvm_stark_sdk::config::fri_params::standard_fri_params_with_100_bits_conjectured_security;
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
-use p3_baby_bear::BabyBearParameters;
+use p3_baby_bear::{BabyBear, BabyBearParameters};
 use p3_field::PrimeField32;
 use std::fs::File;
 use std::io::Write;
+use std::pin::Pin;
 use std::{env, env::args, fs, path::PathBuf, process::Command};
 use tracing::subscriber::SetGlobalDefaultError;
 
 use crate::arch::state;
 use crate::arch::MemoryConfig;
 
-const DEFAULT_PC_JUMP: u32 = 4;
+use libc::{
+    shm_open, 
+    shm_unlink, 
+    mmap, 
+    munmap, 
+    ftruncate, 
+    close,
+    O_CREAT, 
+    O_RDWR, 
+    O_RDONLY, 
+    PROT_READ, 
+    PROT_WRITE, 
+    MAP_SHARED,
+    MAP_FAILED
+};
+
+use std::ffi::CString;
+
 pub struct AotInstance<F: PrimeField32> {
     exe: VmExe<F>,
-    vm_state_address: usize
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct MemoryUpdate {
+    address_space: u32, 
+    pointer: u32, 
+    value: u32,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MemoryLog {
+    count: usize,
+    updates: [MemoryUpdate; 10],
 }
 
 impl<F: PrimeField32> AotInstance<F> {
+    /* 
+    compile with 
+    as aot_asm.s -o aot_asm.o
+    gcc -no-pie aot_asm.o -L. -lopenvm_circuit_rust_bridge -o program
+    */
     pub fn new(exe: &VmExe<F>) -> Self {
-        /*  
-        Create a VmState during compile time and store it in the heap
-        */      
-
-        let memory_config = MemoryConfig::default();
-        let system_config = SystemConfig::default_from_memory(memory_config);
-        let init_memory = &exe.init_memory;
-        let vm_state: Box<state::VmState<F>> = Box::new(
-            VmState::initial(&system_config, &init_memory, 0, vec![])
-        );
-        let vm_state_address = &*vm_state as *const _ as usize;
-        let asm_string = Self::compile(exe, vm_state_address);
+        /* Write out the assembly
 
         let _ = File::create("aot_asm.s").expect("Unable to create file");
         std::fs::write("aot_asm.s", &asm_string).expect("Unable to write file");
-
-        let output = Command::new("rustc")
-            .args([
-                "--crate-type=staticlib",
-                "--target=x86_64-unknown-linux-gnu",
-                "rust_function.rs",
-                "-o",
-                "librust_function.a",
-            ])
-            .output();
-
+        */
         let output = Command::new("as")
             .args(["aot_asm.s", "-o", "aot_asm.o"])
             .output();
@@ -66,289 +80,79 @@ impl<F: PrimeField32> AotInstance<F> {
                 "-no-pie",
                 "aot_asm.o",
                 "-L.",
-                "-lrust_function",
+                "-lopenvm_circuit_rust_bridge",
                 "-o",
                 "program",
             ])
             .output();
 
         Self { 
-            exe: exe.clone(),
-            vm_state_address: vm_state_address
+            exe: exe.clone()
         }
+    }
+
+    pub fn generate_asm() {
+
     }
 
     pub fn execute(&self) {
+        // parent process set-up the shared memory
+        let c_name = CString::new("/shmem").unwrap();
+        
+        unsafe {
+            let size = std::mem::size_of::<MemoryLog>();
+            let fd = shm_open(c_name.as_ptr(), O_CREAT | O_RDWR, 0o666);
+            ftruncate(fd, size as i64);
+
+            let ptr = mmap(
+                std::ptr::null_mut(), 
+                size, 
+                PROT_READ | PROT_WRITE, 
+                MAP_SHARED, 
+                fd, 
+                0
+            );
+
+            let log_ptr = ptr as *mut MemoryLog;
+            (*log_ptr).count = 0;
+
+            munmap(ptr, size);
+            close(fd);
+        }
+
         unsafe {
             let _ = Command::new("./program").status();
         }
-    }
 
-    pub fn generate_assembly_header(vm_state_address: usize) -> String {
-        let mut res = String::new();
-        res += &format!(".intel_syntax noprefix\n");
-        res += &format!(".code64\n");
-        res += &format!(".section .data\n");
-        res += &format!(".align 8\n");
-        for r in 0u64..32u64 {
-            res += &format!(".comm reg_{r}, 8, 8\n");
-        }
-        res += &format!(".section .text\n");
-        res += &format!(".extern print_debug\n");
-        res += &format!(".extern write_to_vmstate\n");
-        res += &format!(".global main\n");
-
-        res += &format!("main:\n");
-        res += &format!("\txor rax, rax\n");
-
-        /* 
-        pass in the vm state to rbx
-        TODO: think of a better place to store the VmSttae
-        */
-        res += &format!("\tmov rbx, 0x{:x}\n", vm_state_address);
-
-        // push the external registers
-        res += &format!("\tsub rsp, 8\n");
-
-        // set all RISC-V register to 0
-        for r in 0u64..32u64 {
-            res += &format!("\tmov qword ptr [reg_{}], 0\n", r);
-        }
-        res += &format!("\n");
-        return res;
-    }
-
-    pub fn generate_assembly_footer(exe: &VmExe<F>) -> String {
-        let mut res = String::new();
-
-        res += &format!("execute_end:\n");
-        res += &format!("\txor rax, rax\n");
-        
-        // pop the external register
-        res += &format!("\tadd rsp, 8\n");
-        res += &format!("\tret\n");
-        res += &format!("\n");
-
-        res += &format!(".section .rodata\n");
-        res += &format!(".align 64\n");
-
-        // TODO: make sure this list is sorted in increasing order of pc
-        for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
-            res += &format!("map_pc_{:x}:\t.quad pc_{:x}\n", pc, pc);
-        }
-        res += &format!("\n");
-
-        return res;
-    }
-
-    pub fn compile(exe: &VmExe<F>, vm_state_address: usize) -> String {
-        let mut res = String::new();
-        res += &Self::generate_assembly_header(vm_state_address);
-
-        // for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
-        //     println!("pc: {}", pc);
-        // }
-        
-        for (pc, instruction, _debug_info) in exe.program.enumerate_by_pc() {
-            let opcode = instruction.opcode;
-            if opcode == BaseAluOpcode::ADD.global_opcode() {
-                res += &Self::generate_assembly_add(pc, instruction);
-            } else if opcode == BaseAluOpcode::SUB.global_opcode() {
-                res += &Self::generate_assembly_sub(pc, instruction);
-            } else if opcode == BaseAluOpcode::XOR.global_opcode() {
-            } else if opcode == BranchEqualOpcode::BEQ.global_opcode() {
-                res += &Self::generate_assembly_beq(pc, instruction);
-            } else if opcode == BranchLessThanOpcode::BGEU.global_opcode() {
-                res += &Self::generate_assembly_bgeu(pc, instruction);
-            } else if opcode == Rv32LoadStoreOpcode::LOADB.global_opcode() {
-                res += &Self::generate_assembly_loadb(pc, instruction);
-            } else if opcode == Rv32LoadStoreOpcode::STOREB.global_opcode() {
-            } else {
-            }
-
-            // res += &Self::generate_debug_registers(pc);
-        }
-
-        res += &Self::generate_assembly_footer(exe);
-
-        return res;
-    }
-
-    pub fn generate_assembly_loadb(pc: u32, inst: Instruction<F>) -> String {
-        let mut res = String::new();
-        res += &format!("pc_{:x}:\n", pc);
-
-        // specs: if(f!=0) [a:4]_1 = sign_extend([r32{c,g}(b):1]_e)
-
-        let opcode = inst.opcode;
-        let a = inst.a;
-        let b = inst.b;
-        let c = inst.c; 
-        let e = inst.e;
-        let f = inst.f;
-        let g = inst.g;
-
-        // TODO: make it follow the specs
-        // currently we just do [a:4]_1 = [b:4]_e
-
-        // if e == F::ZERO {
-        //     res += &format!("\tmov qword ptr [reg_{}], {}\n", a, b);
-        // } else {
-        //     res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-        //     res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        // }
-
-        res += &format!("\tmov rdi, rbx\n");
-        res += &format!("\tpush r8\n");
-        res += &format!("\tsub rsp, 8\n");
-        res += &format!("\tcall write_to_vmstate\n");
-        res += &format!("\tadd rsp, 8\n");
-        res += &format!("\tpop r8\n");
-        
-
-        res += &format!("\tadd r8, 4\n");
-        res += "\n";
-
-        return res;
-    }
-
-
-    pub fn generate_assembly_sub(pc: u32, inst: Instruction<F>) -> String {
-        let mut res = String::new();
-        res += &format!("pc_{:x}:\n", pc);
-
-        let opcode = inst.opcode;
-        let a = inst.a;
-        let b = inst.b;
-        let c = inst.c;
-        let e = inst.e;
-
-        // specs: [a:4]_1 = [b:4]_1 + [c:4]_e
-
-        if e == F::ZERO {
-            // specs: [a:4]_1 = [b:4]_1 + [c:4]_0
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-            res += &format!("\tmov rbx, {}\n", c);
-            res += &format!("\tsub rax, rbx\n");
-            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        } else {
-            // specs: [a:4]_1 = [b:4]_1 + [c:4]_1
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", c);
-            res += &format!("\tsub rax, rbx\n");
-            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        }
-
-        res += &format!("\tadd r8, 4\n");
-
-        res += &format!("\n");
-        return res;
-    }
-    pub fn generate_assembly_bgeu(pc: u32, inst: Instruction<F>) -> String {
-            // does this if([a:4]_1 >= [b:4]_1) pc += c
-            let mut res = String::new();
-
-            let a = inst.a;
-            let b = inst.b;
-            let c = inst.c;
+        unsafe {
+            let size = std::mem::size_of::<MemoryLog>();
     
-            res += &format!("pc_{:x}:\n", pc);
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", a);
-            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", b);
-            res += &format!("\tcmp rax, rbx\n");
-            res += &format!("\tjge pc_{:x}_true\n", pc);
-            res += &format!("\tadd r8, 4\n");
-            res += &format!("\tlea r10, [map_pc_0]\n");
-            res += &format!("\tmov r10, [r10 + r8*2]\n");
-            res += &format!("\tjmp pc_{:x}\n", pc + DEFAULT_PC_JUMP);
-            res += "\n";
-
-            res += &format!("pc_{:x}_true:\n", pc);
-            res += &format!("\tadd r8, {}\n", c);
-            res += &format!("\tlea r10, [map_pc_0]\n");
-            res += &format!("\tmov r10, [r10 + r8*2]\n");
-            res += &format!("\tjmp r10\n");
-            res += "\n";
-            
-            return res;
+            let fd = shm_open(c_name.as_ptr(), O_CREAT | O_RDWR, 0o666);
+            ftruncate(fd, size as i64);
+    
+            let ptr = mmap(
+                std::ptr::null_mut(), 
+                size, 
+                PROT_READ | PROT_WRITE, 
+                MAP_SHARED, 
+                fd, 
+                0
+            );
+    
+            let log_ptr = ptr as *mut MemoryLog;
+    
+            println!("Updates: {:?}", (*log_ptr).updates);
+    
+            munmap(ptr, size);
+            close(fd);
         }
-
-
-    pub fn generate_debug_registers(pc: u32) -> String {
-        let mut res = String::new();
-        res += &format!("pc_debug_{:x}:\n", pc);
-        for r in 0u64..4u64 {
-            res += &format!("\tmov rdx, r8\n"); // pc value 
-            res += &format!("\tmov rsi, qword ptr [reg_{}]\n", r);  // register value
-            res += &format!("\tmov rdi, {}\n", r); // register number
-            res += &format!("\tpush r8\n");
-            res += &format!("\tsub rsp, 8\n");
-            res += &format!("\tcall print_debug\n");
-            res += &format!("\tadd rsp, 8\n");
-            res += &format!("\tpop r8\n");
-        }
-        res += "\n";
-        return res;
-    }
-    pub fn generate_assembly_add(pc: u32, inst: Instruction<F>) -> String {
-        let mut res = String::new();
-        res += &format!("pc_{:x}:\n", pc);
-
-        let opcode = inst.opcode;
-        let a = inst.a;
-        let b = inst.b;
-        let c = inst.c;
-        let e = inst.e;
-
-        // specs: [a:4]_1 = [b:4]_1 + [c:4]_e
-
-        if e == F::ZERO {
-            // specs: [a:4]_1 = [b:4]_1 + [c:4]_0
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-            res += &format!("\tmov rbx, {}\n", c);
-            res += &format!("\tadd rax, rbx\n");
-            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        } else {
-            // specs: [a:4]_1 = [b:4]_1 + [c:4]_1
-            res += &format!("\tmov rax, qword ptr [reg_{}]\n", b);
-            res += &format!("\tmov rbx, qword ptr [reg_{}]\n", c);
-            res += &format!("\tadd rax, rbx\n");
-            res += &format!("\tmov qword ptr [reg_{}], rax\n", a);
-        }
-
-        res += &format!("\tadd r8, 4\n");
-
-        res += &format!("\n");
-        return res;
-    }
-    pub fn generate_assembly_beq(pc: u32, inst: Instruction<F>) -> String {
-        // does this if([a:4]_1 == [b:4]_1) pc += c
-
-        let mut res = String::new();
-
-        let a = inst.a;
-        let b = inst.b;
-        let c = inst.c;
-
-        res += &format!("pc_{:x}:\n", pc);
-        res += &format!("\tmov rax, qword ptr [reg_{}]\n", a);
-        res += &format!("\tmov rbx, qword ptr [reg_{}]\n", b);
-        res += &format!("\tcmp rax, rbx\n");
-        res += &format!("\tje pc_{:x}_true\n", pc);
-        res += &format!("\tadd r8, 4\n");
-        res += &format!("\tlea r10, [map_pc_0]\n");
-        res += &format!("\tmov r10, [r10 + r8*2]\n");
-        res += &format!("\tjmp pc_{:x}\n", pc + DEFAULT_PC_JUMP);
-        res += "\n";
-        res += &format!("pc_{:x}_true:\n", pc);
-        res += &format!("\tadd r8, {}\n", c);
-        res += &format!("\tlea r10, [map_pc_0]\n");
-        res += &format!("\tmov r10, [r10 + r8*2]\n");
-        res += &format!("\tjmp r10\n");
-        res += "\n";
-        
-        return res;
     }
 
+    pub fn clean_up(&self) {
+        unsafe {
+            let c_name = CString::new("/shmem").unwrap();
+            shm_unlink(c_name.as_ptr());
+        }
+    }
     
 }
