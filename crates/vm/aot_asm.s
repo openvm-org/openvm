@@ -1,9 +1,7 @@
 .intel_syntax noprefix
 .code64
 .section .text
-.extern print_message
-.extern initialize_vmstate
-.extern write_to_vmstate
+.extern ADD_RV32
 .global main
 
 main:
@@ -11,13 +9,14 @@ main:
     mov rbp, rsp    
     and rsp, -16   
 	
-	call initialize_vmstate
+	mov rdi, 1
+	mov rsi, 2
+	mov rdx, 3
+	mov rcx, 1
 
-	mov rbx, rax 
+	call ADD_RV32
 
-	mov rdi, rbx 
-	call write_to_vmstate
-    
     pop rbp
     xor eax, eax      
-    ret
+    
+	ret

@@ -233,14 +233,14 @@ unsafe fn execute_e2_impl<
     execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, instret, pc, exec_state);
 }
 
-trait AluOp {
+pub trait AluOp {
     fn compute(rs1: u32, rs2: u32) -> u32;
 }
-struct AddOp;
-struct SubOp;
-struct XorOp;
-struct OrOp;
-struct AndOp;
+pub struct AddOp;
+pub struct SubOp;
+pub struct XorOp;
+pub struct OrOp;
+pub struct AndOp;
 impl AluOp for AddOp {
     #[inline(always)]
     fn compute(rs1: u32, rs2: u32) -> u32 {
