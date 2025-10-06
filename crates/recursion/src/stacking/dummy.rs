@@ -7,7 +7,10 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    proof::Proof,
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -133,10 +136,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyStackingAir {
     }
 }
 
-pub(crate) fn generate_trace(
+pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
-    preflight: &Preflight,
+    preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
     let mut constraint_sc_msgs = preflight.batch_constraint_sumcheck_randomness().into_iter();
     let mut column_claims_bus_msgs = preflight.column_claims_messages(vk, proof).into_iter();

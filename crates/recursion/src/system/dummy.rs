@@ -5,6 +5,7 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
     D_EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
 };
 
@@ -18,7 +19,7 @@ use crate::{
     system::Preflight,
 };
 
-impl Preflight {
+impl<TS: FiatShamirTranscript> Preflight<TS> {
     pub(crate) fn batch_constraint_module_msgs(
         &self,
         proof: &Proof,
