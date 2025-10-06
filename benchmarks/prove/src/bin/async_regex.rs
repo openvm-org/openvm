@@ -47,7 +47,7 @@ async fn main() -> eyre::Result<()> {
     let (app_pk, _app_vk) = sdk.app_keygen();
 
     let max_par_jobs: usize = var("MAX_PAR_JOBS").map(|m| m.parse()).unwrap_or(Ok(1))?;
-    let num_jobs: usize = var("NUM_JOBS").map(|m| m.parse()).unwrap_or(Ok(10))?;
+    let num_jobs: usize = var("NUM_JOBS").map(|m| m.parse()).unwrap_or(Ok(20))?;
     let cur_num_jobs = Arc::new(AtomicUsize::new(0));
 
     let mut tasks = Vec::with_capacity(num_jobs);
@@ -82,6 +82,7 @@ async fn main() -> eyre::Result<()> {
             res
         });
         tasks.push(task);
+        sleep(Duration::from_millis(1000)).await;
     }
     for task in tasks {
         task.await??;
