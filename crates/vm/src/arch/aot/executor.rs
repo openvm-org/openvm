@@ -21,6 +21,8 @@ use tracing::subscriber::SetGlobalDefaultError;
 
 use crate::arch::state;
 use crate::arch::MemoryConfig;
+use crate::arch::execution_mode::ExecutionCtx;
+use crate::arch::VmExecState;
 
 use libc::{
     shm_open, 
@@ -95,9 +97,21 @@ impl<F: PrimeField32> AotInstance<F> {
 
     }
 
-    pub fn execute(&self) {
+    pub fn execute(&self) -> VmExecState<F, GuestMemory, ExecutionCtx> {
         // parent process set-up the shared memory
         let c_name = CString::new("/shmem").unwrap();
+
+        /* 
+        initialize vm state and execution context
+        goal is to create a VmExecState<F>
+        */
+
+        let memory_config = Default::default();
+        let system_config = SystemConfig::default_from_memory(memory_config);
+        let init_memory = Default::default();
+        let vm_state: VmState<F> = VmState::initial(&system_config, &init_memory, 0, vec![]);
+        let exec_ctx = ExecutionCtx::new(None); // Pure execution context
+        let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, exec_ctx);
         
         unsafe {
             let size = std::mem::size_of::<MemoryLog>();
@@ -140,12 +154,24 @@ impl<F: PrimeField32> AotInstance<F> {
             );
     
             let log_ptr = ptr as *mut MemoryLog;
-    
-            println!("Updates: {:?}", (*log_ptr).updates);
+
+            /*
+            Do conversion from MemoryLog to VmState
+            */
+
+            let count = (*log_ptr).count;
+            for i in 0..count {
+                let update = (*log_ptr).updates[i];
+                let data : &[u8; 1] = &[update.value as u8];
+                println!("update: {:?}", update);
+                vm_exec_state.vm_write::<u8, 1>(update.address_space, update.pointer, data);
+            }
     
             munmap(ptr, size);
             close(fd);
         }
+
+        return vm_exec_state;
     }
 
     pub fn clean_up(&self) {
