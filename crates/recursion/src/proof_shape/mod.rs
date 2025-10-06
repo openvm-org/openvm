@@ -5,7 +5,10 @@ use itertools::izip;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
-use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    proof::Proof,
+};
 
 use crate::{
     proof_shape::dummy::DummyProofShapeAir,
@@ -24,7 +27,7 @@ impl ProofShapeModule {
     }
 }
 
-impl AirModule for ProofShapeModule {
+impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let proof_shape_air = DummyProofShapeAir {
             gkr_bus: self.bus_inventory.gkr_module_bus,
@@ -42,7 +45,7 @@ impl AirModule for ProofShapeModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &mut Preflight,
+        preflight: &mut Preflight<TS>,
     ) {
         let ts = &mut preflight.transcript;
         ts.observe_commit(vk.pre_hash);
@@ -116,7 +119,7 @@ impl AirModule for ProofShapeModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight,
+        preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],

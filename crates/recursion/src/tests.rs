@@ -4,8 +4,12 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
 };
 use stark_backend_v2::{
-    poseidon2::sponge::DuplexSponge,
-    test_utils::{FibFixture, InteractionsFixture, test_system_params_small},
+    F,
+    poseidon2::sponge::{FiatShamirTranscript, DuplexSponge},
+    test_utils::{
+        DuplexSpongeRecorder, DuplexSpongeValidator, FibFixture, InteractionsFixture,
+        test_system_params_small,
+    },
 };
 
 use crate::system::VerifierCircuit;
@@ -17,14 +21,15 @@ fn test_recursion_circuit_single_fib() {
     let fib = FibFixture::build(test_system_params_small(), 0, 1, 1 << log_trace_degree);
     let proof = fib.prove();
 
-    let circuit = VerifierCircuit::new();
+    let mut sponge = DuplexSponge::default();
+    let circuit = VerifierCircuit::<DuplexSponge>::new();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&fib.vk, &proof);
+    let proof_inputs = circuit.generate_proof_inputs(sponge, &fib.vk, &proof);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -33,28 +38,26 @@ fn test_recursion_circuit_interactions() {
     let fx = InteractionsFixture::build(test_system_params_small());
     let proof = fx.prove();
 
-    let circuit = VerifierCircuit::new();
+    let circuit = VerifierCircuit::<DuplexSponge>::new();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&fx.vk, &proof);
+    let sponge = DuplexSponge::default();
+    let proof_inputs = circuit.generate_proof_inputs(sponge, &fx.vk, &proof);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
 #[test]
-fn test_preflight_single_fib() {
+fn test_preflight_single_fib_sponge() {
     let fib = FibFixture::build(test_system_params_small(), 0, 1, 1 << 5);
 
-    let mut prover_sponge = DuplexSponge::default();
+    let mut prover_sponge = DuplexSpongeRecorder::default();
     let proof = fib.prove_with_sponge(&mut prover_sponge);
 
-    let circuit = VerifierCircuit::new();
-    let mut preflight = circuit.run_preflight(&fib.vk, &proof);
-
-    let pro = prover_sponge.sample();
-    let pre = preflight.transcript.sponge.sample();
-    assert_eq!(pro, pre);
+    let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.history);
+    let circuit = VerifierCircuit::<DuplexSpongeValidator>::new();
+    let _ = circuit.run_preflight(preflight_sponge, &fib.vk, &proof);
 }
