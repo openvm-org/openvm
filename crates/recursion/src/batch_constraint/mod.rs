@@ -1,12 +1,8 @@
-use core::{cmp::Reverse, iter::zip};
+use core::iter::zip;
 use std::sync::Arc;
 
-use itertools::{izip, multizip};
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, dummy_airs::fib_air::trace,
-};
-use p3_field::FieldAlgebra;
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -14,16 +10,11 @@ use stark_backend_v2::{
 };
 
 use crate::{
-    batch_constraint::{
-        columns::DummyPerColumnAir, selector::BatchConstraintSelectorAir,
-        sumcheck::BatchConstraintSumcheckAir,
-    },
+    batch_constraint::dummy::BatchConstraintDummyAir,
     system::{AirModule, BatchConstraintPreflight, BusInventory, Preflight},
 };
 
-mod columns;
-mod selector;
-mod sumcheck;
+mod dummy;
 
 pub struct BatchConstraintModule {
     bus_inventory: BusInventory,
@@ -37,26 +28,17 @@ impl BatchConstraintModule {
 
 impl AirModule for BatchConstraintModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        // TODO: GkrRandomnessBus
-        // TODO: ColumnClaimsBus
-        let sumcheck_air = BatchConstraintSumcheckAir {
+        let sumcheck_air = BatchConstraintDummyAir {
             bc_module_bus: self.bus_inventory.bc_module_bus,
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
-            initial_zc_randomness_bus: self.bus_inventory.initial_zerocheck_randomness_bus,
+            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
             batch_constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
-        };
-        let selector_air = BatchConstraintSelectorAir {
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
-        };
-        let per_column_air = DummyPerColumnAir {
             column_claims_bus: self.bus_inventory.column_claims_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
         };
-        vec![
-            Arc::new(sumcheck_air) as AirRef<_>,
-            Arc::new(selector_air) as AirRef<_>,
-            Arc::new(per_column_air) as AirRef<_>,
-        ]
+        vec![Arc::new(sumcheck_air) as AirRef<_>]
     }
 
     fn run_preflight(
@@ -74,6 +56,8 @@ impl AirModule for BatchConstraintModule {
             column_openings,
         } = &proof.batch_constraint_proof;
 
+        let mut sumcheck_rnd = vec![];
+
         // Constraint batching
         let _lambda = ts.sample_ext();
 
@@ -87,13 +71,15 @@ impl AirModule for BatchConstraintModule {
         for coef in univariate_round_coeffs {
             ts.observe_ext(*coef);
         }
-        let _r0 = ts.sample_ext();
+        let r0 = ts.sample_ext();
+        sumcheck_rnd.push(r0);
 
         for polys in sumcheck_round_polys {
             for eval in polys {
                 ts.observe_ext(*eval);
             }
-            let _ri = ts.sample_ext();
+            let ri = ts.sample_ext();
+            sumcheck_rnd.push(ri);
         }
 
         // Common main
@@ -122,6 +108,7 @@ impl AirModule for BatchConstraintModule {
 
         preflight.batch_constraint = BatchConstraintPreflight {
             post_tidx: ts.len(),
+            sumcheck_rnd,
         }
     }
 
@@ -131,22 +118,10 @@ impl AirModule for BatchConstraintModule {
         proof: &Proof,
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
-        vec![
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(proof, preflight))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(selector::generate_trace(vk, proof, preflight))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(columns::generate_trace(vk, proof, preflight))),
-                public_values: vec![],
-            },
-        ]
+        vec![AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            public_values: vec![],
+        }]
     }
 }

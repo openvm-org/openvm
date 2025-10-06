@@ -1,20 +1,18 @@
-use core::cmp::Reverse;
+use core::cmp::{Reverse, max};
 use std::sync::Arc;
 
 use itertools::izip;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
-use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config, dummy_airs::fib_air::trace,
-};
+use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
 use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use crate::{
-    proof_shape::circuit::DummyProofShapeAir,
+    proof_shape::dummy::DummyProofShapeAir,
     system::{AirModule, BusInventory, Preflight, ProofShapePreflight},
 };
 
-mod circuit;
+mod dummy;
 
 pub struct ProofShapeModule {
     bus_inventory: BusInventory,
@@ -107,6 +105,7 @@ impl AirModule for ProofShapeModule {
         preflight.proof_shape = ProofShapePreflight {
             stacked_common_width,
             sorted_trace_vdata,
+            n_global: max(n_max, n_logup),
             n_max,
             n_logup,
             post_tidx: ts.len(),
@@ -121,7 +120,7 @@ impl AirModule for ProofShapeModule {
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(circuit::generate_trace(vk, proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
             public_values: vec![],
         }]
     }
