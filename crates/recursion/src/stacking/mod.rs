@@ -9,16 +9,11 @@ use stark_backend_v2::{
 };
 
 use crate::{
-    stacking::{
-        per_air_part::DummyPerAirPartAir, per_column::DummyPerColumnAir,
-        sumcheck::StackingSumcheckAir,
-    },
+    stacking::dummy::DummyStackingAir,
     system::{AirModule, BusInventory, Preflight, StackingPreflight},
 };
 
-mod per_air_part;
-mod per_column;
-mod sumcheck;
+mod dummy;
 
 pub struct StackingModule {
     bus_inventory: BusInventory,
@@ -32,26 +27,19 @@ impl StackingModule {
 
 impl AirModule for StackingModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        // TODO: stacking widths bus
-        let stacking_air = StackingSumcheckAir {
+        let dummy_air = DummyStackingAir {
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
             whir_module_bus: self.bus_inventory.whir_module_bus,
             batch_constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
-        };
-        let selector_air = DummyPerAirPartAir {
+            column_claims_bus: self.bus_inventory.column_claims_bus,
+            stacking_claims_bus: self.bus_inventory.stacking_claims_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
         };
-        let columns_air = DummyPerColumnAir {
-            column_claims_bus: self.bus_inventory.column_claims_bus,
-        };
-        vec![
-            Arc::new(stacking_air),
-            Arc::new(selector_air),
-            Arc::new(columns_air),
-        ]
+        vec![Arc::new(dummy_air)]
     }
 
     fn run_preflight(
@@ -60,6 +48,8 @@ impl AirModule for StackingModule {
         proof: &Proof,
         preflight: &mut Preflight,
     ) {
+        let mut sumcheck_rnd = vec![];
+
         let ts = &mut preflight.transcript;
         let StackingProof {
             univariate_round_coeffs,
@@ -72,13 +62,15 @@ impl AirModule for StackingModule {
         for coef in univariate_round_coeffs {
             ts.observe_ext(*coef);
         }
-        let _u0 = ts.sample_ext();
+        let u0 = ts.sample_ext();
+        sumcheck_rnd.push(u0);
 
         for poly in sumcheck_round_polys {
             for eval in poly {
                 ts.observe_ext(*eval);
             }
-            let _u_round = ts.sample_ext();
+            let ui = ts.sample_ext();
+            sumcheck_rnd.push(ui);
         }
 
         for matrix_openings in stacking_openings {
@@ -89,6 +81,7 @@ impl AirModule for StackingModule {
 
         preflight.stacking = StackingPreflight {
             post_tidx: ts.len(),
+            sumcheck_rnd,
         };
     }
 
@@ -98,22 +91,10 @@ impl AirModule for StackingModule {
         proof: &Proof,
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
-        vec![
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(vk, proof, preflight))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(per_air_part::generate_trace(vk, proof, preflight))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(per_column::generate_trace(vk, proof, preflight))),
-                public_values: vec![],
-            },
-        ]
+        vec![AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            public_values: vec![],
+        }]
     }
 }
