@@ -12,10 +12,9 @@ use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, GkrModuleBus, GkrRandomnessBus,
-        InitialZerocheckRandomnessBus, PublicValuesBus, StackingClaimsBus, StackingCommitmentsBus,
-        StackingModuleBus, StackingSumcheckRandomnessBus, StackingWidthsBus, TranscriptBus,
-        WhirModuleBus,
+        ConstraintSumcheckRandomnessBus, GkrModuleBus, PublicValuesBus, StackingClaimsBus,
+        StackingCommitmentsBus, StackingModuleBus, StackingSumcheckRandomnessBus,
+        StackingWidthsBus, TranscriptBus, WhirModuleBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     proof_shape::ProofShapeModule,
@@ -23,6 +22,8 @@ use crate::{
     transcript::TranscriptModule,
     whir::WhirModule,
 };
+
+mod dummy;
 
 pub trait AirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
@@ -79,8 +80,7 @@ pub struct BusInventory {
     pub public_values_bus: PublicValuesBus,
 
     // Randomness buses
-    pub initial_zerocheck_randomness_bus: InitialZerocheckRandomnessBus,
-    pub gkr_randomness_bus: GkrRandomnessBus,
+    pub xi_randomness_bus: XiRandomnessBus,
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
     pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
 
@@ -154,6 +154,7 @@ pub struct Preflight {
 pub struct ProofShapePreflight {
     pub stacked_common_width: usize,
     pub sorted_trace_vdata: Vec<(usize, TraceVData)>,
+    pub n_global: usize,
     pub n_max: usize,
     pub n_logup: usize,
     pub post_tidx: usize,
@@ -162,18 +163,19 @@ pub struct ProofShapePreflight {
 #[derive(Debug, Default)]
 pub struct GkrPreflight {
     pub post_tidx: usize,
-    pub input_layer_numerator_claim: EF,
-    pub input_layer_denominator_claim: EF,
+    pub xi: Vec<(usize, EF)>,
 }
 
 #[derive(Debug, Default)]
 pub struct BatchConstraintPreflight {
     pub post_tidx: usize,
+    pub sumcheck_rnd: Vec<EF>,
 }
 
 #[derive(Debug, Default)]
 pub struct StackingPreflight {
     pub post_tidx: usize,
+    pub sumcheck_rnd: Vec<EF>,
 }
 
 #[derive(Debug, Default)]
@@ -184,8 +186,9 @@ impl BusInventory {
         let mut b = BusIndexManager::new();
 
         Self {
-            // Control flow buses
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
+
+            // Control flow buses
             gkr_module_bus: GkrModuleBus::new(b.new_bus_idx()),
             bc_module_bus: BatchConstraintModuleBus::new(b.new_bus_idx()),
             stacking_module_bus: StackingModuleBus::new(b.new_bus_idx()),
@@ -199,8 +202,7 @@ impl BusInventory {
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
 
             // Randomness buses
-            initial_zerocheck_randomness_bus: InitialZerocheckRandomnessBus::new(b.new_bus_idx()),
-            gkr_randomness_bus: GkrRandomnessBus::new(b.new_bus_idx()),
+            xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
             constraint_randomness_bus: ConstraintSumcheckRandomnessBus::new(b.new_bus_idx()),
             stacking_randomness_bus: StackingSumcheckRandomnessBus::new(b.new_bus_idx()),
 
@@ -217,7 +219,7 @@ impl BusInventory {
 
 impl VerifierCircuit {
     pub fn new() -> Self {
-        let bus_inventory = BusInventory::new();
+        let bus_inventory = dbg!(BusInventory::new());
 
         let transcript_module = TranscriptModule::new(bus_inventory.clone());
         let proof_shape_module = ProofShapeModule::new(bus_inventory.clone());

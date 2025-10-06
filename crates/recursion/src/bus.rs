@@ -2,6 +2,7 @@ use core::iter;
 
 use openvm_stark_backend::interaction::{BusIndex, InteractionBuilder, PermutationCheckBus};
 use stark_backend_v2::{D_EF, DIGEST_SIZE};
+use stark_recursion_circuit_derive::AlignedBorrow;
 
 pub trait BusPayload<E> {
     fn into_bus_vec(self) -> Vec<E>;
@@ -47,6 +48,8 @@ macro_rules! define_typed_bus {
     };
 }
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct GkrModuleMessage<T> {
     pub tidx: T,
     pub n_logup: T,
@@ -61,32 +64,35 @@ impl<E, T: Into<E>> BusPayload<E> for GkrModuleMessage<T> {
 
 define_typed_bus!(GkrModuleBus, GkrModuleMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintModuleMessage<T> {
     pub tidx: T,
-    pub alpha_beta_tidx: T,
     pub n_max: T,
+    pub alpha_logup: [T; 4],
+    pub beta_logup: [T; 4],
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
 }
 
 impl<E, T: Into<E>> BusPayload<E> for BatchConstraintModuleMessage<T> {
     fn into_bus_vec(self) -> Vec<E> {
-        [
-            self.tidx.into(),
-            self.alpha_beta_tidx.into(),
-            self.n_max.into(),
-        ]
-        .into_iter()
-        .chain(
-            self.gkr_input_layer_claim
-                .into_iter()
-                .flat_map(|claim| claim.into_iter().map(Into::into)),
-        )
-        .collect()
+        [self.tidx.into(), self.n_max.into()]
+            .into_iter()
+            .chain(self.alpha_logup.map(Into::into))
+            .chain(self.beta_logup.map(Into::into))
+            .chain(
+                self.gkr_input_layer_claim
+                    .into_iter()
+                    .flat_map(|claim| claim.into_iter().map(Into::into)),
+            )
+            .collect()
     }
 }
 
 define_typed_bus!(BatchConstraintModuleBus, BatchConstraintModuleMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingModuleMessage<T> {
     pub tidx: T,
 }
@@ -99,6 +105,8 @@ impl<E, T: Into<E>> BusPayload<E> for StackingModuleMessage<T> {
 
 define_typed_bus!(StackingModuleBus, StackingModuleMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct WhirModuleMessage<T> {
     pub tidx: T,
 }
@@ -111,7 +119,8 @@ impl<E, T: Into<E>> BusPayload<E> for WhirModuleMessage<T> {
 
 define_typed_bus!(WhirModuleBus, WhirModuleMessage);
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct TranscriptBusMessage<T> {
     pub tidx: T,
     pub value: T,
@@ -126,10 +135,11 @@ impl<E, T: Into<E>> BusPayload<E> for TranscriptBusMessage<T> {
 
 define_typed_bus!(TranscriptBus, TranscriptBusMessage);
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
-    pub idx: T,
+    pub air_id: T,
     pub hypercube_dim: T,
     pub has_preprocessed: T,
     pub num_main_parts: T,
@@ -140,7 +150,7 @@ impl<E, T: Into<E>> BusPayload<E> for AirShapeBusMessage<T> {
     fn into_bus_vec(self) -> Vec<E> {
         vec![
             self.sort_idx.into(),
-            self.idx.into(),
+            self.air_id.into(),
             self.hypercube_dim.into(),
             self.has_preprocessed.into(),
             self.num_main_parts.into(),
@@ -151,7 +161,8 @@ impl<E, T: Into<E>> BusPayload<E> for AirShapeBusMessage<T> {
 
 define_typed_bus!(AirShapeBus, AirShapeBusMessage);
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct AirPartShapeBusMessage<T> {
     pub idx: T,
     pub part: T,
@@ -166,7 +177,8 @@ impl<E, T: Into<E>> BusPayload<E> for AirPartShapeBusMessage<T> {
 
 define_typed_bus!(AirPartShapeBus, AirPartShapeBusMessage);
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingWidthBusMessage<T> {
     pub commit_idx: T,
     pub width: T,
@@ -180,7 +192,8 @@ impl<E, T: Into<E>> BusPayload<E> for StackingWidthBusMessage<T> {
 
 define_typed_bus!(StackingWidthsBus, StackingWidthBusMessage);
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingCommitmentsBusMessage<T> {
     pub commit_idx: T,
     pub commitment: [T; DIGEST_SIZE],
@@ -196,29 +209,14 @@ impl<E, T: Into<E>> BusPayload<E> for StackingCommitmentsBusMessage<T> {
 
 define_typed_bus!(StackingCommitmentsBus, StackingCommitmentsBusMessage);
 
-pub struct GkrRandomnessMessage<T> {
-    pub idx: T,
-    pub layer: T,
-    pub challenge: [T; D_EF],
-}
-
-impl<E, T: Into<E>> BusPayload<E> for GkrRandomnessMessage<T> {
-    fn into_bus_vec(self) -> Vec<E> {
-        iter::once(self.idx.into())
-            .chain(iter::once(self.layer.into()))
-            .chain(self.challenge.map(Into::into))
-            .collect()
-    }
-}
-
-define_typed_bus!(GkrRandomnessBus, GkrRandomnessMessage);
-
-pub struct InitialZerocheckRandomnessMessage<T> {
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct XiRandomnessMessage<T> {
     pub idx: T,
     pub challenge: [T; D_EF],
 }
 
-impl<E, T: Into<E>> BusPayload<E> for InitialZerocheckRandomnessMessage<T> {
+impl<E, T: Into<E>> BusPayload<E> for XiRandomnessMessage<T> {
     fn into_bus_vec(self) -> Vec<E> {
         iter::once(self.idx.into())
             .chain(self.challenge.map(Into::into))
@@ -226,11 +224,10 @@ impl<E, T: Into<E>> BusPayload<E> for InitialZerocheckRandomnessMessage<T> {
     }
 }
 
-define_typed_bus!(
-    InitialZerocheckRandomnessBus,
-    InitialZerocheckRandomnessMessage
-);
+define_typed_bus!(XiRandomnessBus, XiRandomnessMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ConstraintSumcheckRandomness<T> {
     pub idx: T,
     pub challenge: [T; D_EF],
@@ -249,9 +246,11 @@ define_typed_bus!(
     ConstraintSumcheckRandomness
 );
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ColumnClaimsMessage<T> {
     pub idx: T,
-    pub air_idx: T,
+    pub sort_idx: T,
     pub part_idx: T,
     pub col_idx: T,
     pub col_claim: [T; D_EF],
@@ -261,7 +260,7 @@ pub struct ColumnClaimsMessage<T> {
 impl<E, T: Into<E>> BusPayload<E> for ColumnClaimsMessage<T> {
     fn into_bus_vec(self) -> Vec<E> {
         iter::once(self.idx.into())
-            .chain(iter::once(self.air_idx.into()))
+            .chain(iter::once(self.sort_idx.into()))
             .chain(iter::once(self.part_idx.into()))
             .chain(iter::once(self.col_idx.into()))
             .chain(self.col_claim.map(Into::into))
@@ -272,6 +271,8 @@ impl<E, T: Into<E>> BusPayload<E> for ColumnClaimsMessage<T> {
 
 define_typed_bus!(ColumnClaimsBus, ColumnClaimsMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingClaimsMessage<T> {
     pub idx: T,
     pub claim: [T; D_EF],
@@ -287,6 +288,8 @@ impl<E, T: Into<E>> BusPayload<E> for StackingClaimsMessage<T> {
 
 define_typed_bus!(StackingClaimsBus, StackingClaimsMessage);
 
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingSumcheckRandomnessMessage<T> {
     pub idx: T,
     pub challenge: [T; D_EF],
@@ -305,7 +308,8 @@ define_typed_bus!(
     StackingSumcheckRandomnessMessage
 );
 
-#[derive(Debug)]
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct PublicValuesBusMessage<T> {
     pub air_idx: T,
     pub pv_idx: T,

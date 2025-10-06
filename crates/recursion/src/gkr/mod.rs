@@ -5,18 +5,17 @@ use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
 use stark_backend_v2::{
-    EF, F,
+    D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     proof::{GkrProof, Proof},
 };
 
 use crate::{
-    gkr::{gkr_round::DummyGkrRoundAir, sumcheck::DummyGkrSumcheckAir},
+    gkr::dummy::DummyGkrRoundAir,
     system::{AirModule, BusInventory, GkrPreflight, Preflight},
 };
 
-mod gkr_round;
-mod sumcheck;
+mod dummy;
 
 pub struct GkrModule {
     bus_inventory: BusInventory,
@@ -33,16 +32,10 @@ impl AirModule for GkrModule {
         let gkr_verify_air = DummyGkrRoundAir {
             gkr_bus: self.bus_inventory.gkr_module_bus,
             bc_module_bus: self.bus_inventory.bc_module_bus,
-            initial_zc_rnd_bus: self.bus_inventory.initial_zerocheck_randomness_bus,
-            gkr_randomness_bus: self.bus_inventory.gkr_randomness_bus,
+            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
         };
-        let gkr_sumcheck_air = DummyGkrSumcheckAir {
-            gkr_randomness_bus: self.bus_inventory.gkr_randomness_bus,
-        };
-        vec![
-            Arc::new(gkr_verify_air) as AirRef<_>,
-            Arc::new(gkr_sumcheck_air) as AirRef<_>,
-        ]
+        vec![Arc::new(gkr_verify_air) as AirRef<_>]
     }
 
     fn run_preflight(
@@ -70,14 +63,21 @@ impl AirModule for GkrModule {
             ts.observe_ext(*q0_claim);
         }
 
-        for (polys, claims) in zip(sumcheck_polys, claims_per_layer) {
+        let mut xi = vec![(0, EF::ZERO); sumcheck_polys.len() + 1];
+
+        for (i, (polys, claims)) in zip(sumcheck_polys, claims_per_layer).enumerate() {
+            let is_final_layer = i == sumcheck_polys.len() - 1;
+
             let _ = ts.sample_ext();
 
-            for poly in polys {
+            for (j, poly) in polys.iter().enumerate() {
                 for eval in poly {
                     ts.observe_ext(*eval);
                 }
-                let _xi_i = ts.sample_ext();
+                let xi_i = ts.sample_ext();
+                if is_final_layer {
+                    xi[j + 1] = (ts.len() - D_EF, xi_i);
+                }
             }
 
             ts.observe_ext(claims.p_xi_0);
@@ -85,37 +85,32 @@ impl AirModule for GkrModule {
             ts.observe_ext(claims.p_xi_1);
             ts.observe_ext(claims.q_xi_1);
 
-            let _rho = ts.sample_ext();
+            let rho = ts.sample_ext();
+            if is_final_layer {
+                xi[0] = (ts.len() - D_EF, rho);
+            }
         }
 
         for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + vk.inner.params.l_skip {
-            let _ = ts.sample_ext();
+            xi.push((ts.len(), ts.sample_ext()));
         }
 
         preflight.gkr = GkrPreflight {
             post_tidx: ts.len(),
-            input_layer_numerator_claim: EF::ZERO, // FIXME
-            input_layer_denominator_claim: EF::ZERO,
+            xi,
         };
     }
 
     fn generate_proof_inputs(
         &self,
-        _vk: &MultiStarkVerifyingKeyV2,
+        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
-        vec![
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(gkr_round::generate_trace(proof, preflight))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(proof))),
-                public_values: vec![],
-            },
-        ]
+        vec![AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            public_values: vec![],
+        }]
     }
 }
