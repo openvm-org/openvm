@@ -15,57 +15,90 @@ use openvm_rv32im_circuit::{
     Rv32LoadStoreExecutor,
     Rv32LoadStoreChip,
     LoadStoreCoreRecord,
+    AluOp,
+    AddOp,
+    SubOp,
+    XorOp,
+    OrOp,
+    AndOp,
 };
 
-#[no_mangle]
-pub extern "C" fn print_message() {
-    println!("Hello world!");
+use libc::{
+    shm_open, 
+    shm_unlink, 
+    mmap, 
+    munmap, 
+    ftruncate, 
+    close,
+    O_CREAT, 
+    O_RDWR, 
+    O_RDONLY, 
+    PROT_READ, 
+    PROT_WRITE, 
+    MAP_SHARED,
+    MAP_FAILED
+};
+
+use std::ffi::CString;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct MemoryUpdate {
+    address_space: u32, 
+    pointer: u32, 
+    value: u32,
 }
 
-static VM_STATE: OnceLock<Pin<Box<VmState<BabyBear>>>> = OnceLock::new();
-
-#[no_mangle]
-pub extern "C" fn initialize_vmstate() -> usize {
-    println!("initialize_vmstate() called");
-
-    let vm_state = VM_STATE.get_or_init(|| {
-        println!("Creating VmState...");
-        
-        let mut memory_config = MemoryConfig::default();
-
-        let system_config = SystemConfig::default_from_memory(memory_config);
-        let init_memory = BTreeMap::new();
-
-        println!("Calling VmState::initial");
-        let state = VmState::initial(&system_config, &init_memory, 0, vec![]);
-        println!("Done calling VmState::initial");    
-        Box::pin(state)
-    });
-
-    let ptr = vm_state.as_ref().get_ref() as *const VmState<BabyBear> as usize;
-    println!("the address of the vm_state is: 0x{:x}", ptr);
-    ptr
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct MemoryLog {
+    count: usize,
+    updates: [MemoryUpdate; 10],
 }
 
-#[no_mangle]
-pub extern "C" fn write_to_vmstate(vm_state_address: usize) {
-    println!("write_to_vmstate() called");
-    type T = u8;
-    type F = BabyBear;
+pub fn update_memory_log(update: MemoryUpdate) {
+    let shmem_name = "/shmem";
+    let c_name = CString::new(shmem_name).unwrap();
 
-    let vm_state_ptr = vm_state_address as *mut VmState<F>;
-    let memory = unsafe { 
-        &mut (*vm_state_ptr).memory    
-    };
-
-    const BLOCK_SIZE : usize = 4;
-    let address_space = 2;
-    let pointer = 0;
-    let data: [T; BLOCK_SIZE] = [1, 2, 3, 4];
-    
     unsafe {
-        memory.write::<T, BLOCK_SIZE>(address_space, pointer, data);
-    }
+        let size = std::mem::size_of::<MemoryLog>();
 
-    println!("write to vmstate done succesfully!");
+        let fd = shm_open(c_name.as_ptr(), O_CREAT | O_RDWR, 0o666);
+        ftruncate(fd, size as i64);
+
+        let ptr = mmap(
+            std::ptr::null_mut(), 
+            size, 
+            PROT_READ | PROT_WRITE, 
+            MAP_SHARED, 
+            fd, 
+            0
+        );
+
+        let log_ptr = ptr as *mut MemoryLog;
+        (*log_ptr).updates[(*log_ptr).count] = update;
+        (*log_ptr).count += 1;
+
+        println!("Count: {}", (*log_ptr).count);
+        println!("Updates: {:?}", (*log_ptr).updates);
+
+        munmap(ptr, size);
+        close(fd);
+    }
+}
+
+#[no_mangle]
+pub fn ADD_RV32(a: u32, b: u32, c: u32, e: u32) -> u32 {
+    println!("ADD_RV32 called with a: {}, b: {}, c: {}, e: {}", a, b, c, e);
+    let result = AddOp::compute(b, c);
+    println!("Result: {}", result);
+    
+    let update = MemoryUpdate {
+        address_space: 1,
+        pointer: a,
+        value: result
+    };
+    
+    update_memory_log(update);
+    result
 }
