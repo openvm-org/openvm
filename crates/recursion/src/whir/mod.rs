@@ -8,6 +8,7 @@ use p3_field::Powers;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::FiatShamirTranscript,
     proof::{Proof, WhirProof},
 };
 
@@ -28,7 +29,7 @@ impl WhirModule {
     }
 }
 
-impl AirModule for WhirModule {
+impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let whir_air = DummyWhirAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
@@ -45,7 +46,7 @@ impl AirModule for WhirModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &mut Preflight,
+        preflight: &mut Preflight<TS>,
     ) {
         let ts = &mut preflight.transcript;
         let WhirProof {
@@ -97,7 +98,7 @@ impl AirModule for WhirModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight,
+        preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],

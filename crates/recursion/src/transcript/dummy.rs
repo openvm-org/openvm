@@ -7,7 +7,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, proof::Proof};
+use stark_backend_v2::{F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -48,7 +48,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
     }
 }
 
-pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
+pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
+    proof: &Proof,
+    preflight: &Preflight<TS>,
+) -> RowMajorMatrix<F> {
     let num_valid_rows: usize = preflight.transcript.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = DummyTranscriptCols::<usize>::width();

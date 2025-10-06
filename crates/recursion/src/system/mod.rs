@@ -4,7 +4,7 @@ use p3_field::FieldExtensionAlgebra;
 use stark_backend_v2::{
     D_EF, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::DuplexSponge,
+    poseidon2::sponge::{DuplexSponge, FiatShamirTranscript},
     proof::{Proof, TraceVData},
 };
 
@@ -25,19 +25,19 @@ use crate::{
 
 mod dummy;
 
-pub trait AirModule {
+pub trait AirModule<TS: FiatShamirTranscript> {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
     fn run_preflight(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &mut Preflight,
+        preflight: &mut Preflight<TS>,
     );
     fn generate_proof_inputs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight,
+        preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>>;
 }
 
@@ -59,8 +59,8 @@ impl BusIndexManager {
     }
 }
 
-pub struct VerifierCircuit {
-    modules: Vec<Box<dyn AirModule>>,
+pub struct VerifierCircuit<TS: FiatShamirTranscript> {
+    modules: Vec<Box<dyn AirModule<TS>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -90,13 +90,23 @@ pub struct BusInventory {
 }
 
 #[derive(Debug, Default)]
-pub struct Transcript {
+pub struct Transcript<TS: FiatShamirTranscript> {
     pub(crate) data: Vec<F>,
     pub(crate) is_sample: Vec<bool>,
-    pub(crate) sponge: DuplexSponge,
+    pub(crate) sponge: TS,
 }
 
-impl Transcript {
+impl<TS: FiatShamirTranscript> Transcript<TS> {
+    pub fn new(sponge: TS) -> Self {
+        Self {
+            data: vec![],
+            is_sample: vec![],
+            sponge,
+        }
+    }
+}
+
+impl<TS: FiatShamirTranscript> Transcript<TS> {
     pub fn observe(&mut self, value: F) {
         self.data.push(value);
         self.is_sample.push(false);
@@ -141,13 +151,26 @@ impl Transcript {
 }
 
 #[derive(Debug, Default)]
-pub struct Preflight {
-    pub transcript: Transcript,
+pub struct Preflight<TS: FiatShamirTranscript> {
+    pub transcript: Transcript<TS>,
     pub proof_shape: ProofShapePreflight,
     pub gkr: GkrPreflight,
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
+}
+
+impl<TS: FiatShamirTranscript> Preflight<TS> {
+    fn new(sponge: TS) -> Self {
+        Self {
+            transcript: Transcript::new(sponge),
+            proof_shape: Default::default(),
+            gkr: Default::default(),
+            batch_constraint: Default::default(),
+            stacking: Default::default(),
+            whir: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -217,7 +240,7 @@ impl BusInventory {
     }
 }
 
-impl VerifierCircuit {
+impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
     pub fn new() -> Self {
         let bus_inventory = dbg!(BusInventory::new());
 
@@ -228,7 +251,7 @@ impl VerifierCircuit {
         let stacking_module = StackingModule::new(bus_inventory.clone());
         let whir_module = WhirModule::new(bus_inventory.clone());
 
-        let modules: Vec<Box<dyn AirModule>> = vec![
+        let modules: Vec<Box<dyn AirModule<TS>>> = vec![
             Box::new(transcript_module),
             Box::new(proof_shape_module),
             Box::new(gkr_module),
@@ -247,8 +270,13 @@ impl VerifierCircuit {
         airs
     }
 
-    pub fn run_preflight(&self, vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Preflight {
-        let mut preflight = Preflight::default();
+    pub fn run_preflight(
+        &self,
+        sponge: TS,
+        vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+    ) -> Preflight<TS> {
+        let mut preflight = Preflight::<TS>::new(sponge);
         for module in self.modules.iter() {
             module.run_preflight(vk, proof, &mut preflight);
         }
@@ -257,10 +285,11 @@ impl VerifierCircuit {
 
     pub fn generate_proof_inputs(
         &self,
+        sponge: TS,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
     ) -> Vec<AirProofRawInput<F>> {
-        let preflight = self.run_preflight(vk, proof);
+        let preflight = self.run_preflight(sponge, vk, proof);
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {

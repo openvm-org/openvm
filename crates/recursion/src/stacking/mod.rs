@@ -5,6 +5,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::FiatShamirTranscript,
     proof::{Proof, StackingProof},
 };
 
@@ -25,7 +26,7 @@ impl StackingModule {
     }
 }
 
-impl AirModule for StackingModule {
+impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let dummy_air = DummyStackingAir {
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
@@ -46,7 +47,7 @@ impl AirModule for StackingModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &mut Preflight,
+        preflight: &mut Preflight<TS>,
     ) {
         let mut sumcheck_rnd = vec![];
 
@@ -89,7 +90,7 @@ impl AirModule for StackingModule {
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight,
+        preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
