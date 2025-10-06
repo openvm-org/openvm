@@ -5,7 +5,7 @@ use openvm_stark_sdk::{
 };
 use stark_backend_v2::{
     poseidon2::sponge::DuplexSponge,
-    test_utils::{FibFixture, test_system_params_small},
+    test_utils::{FibFixture, InteractionsFixture, test_system_params_small},
 };
 
 use crate::system::VerifierCircuit;
@@ -25,6 +25,22 @@ fn test_recursion_circuit_single_fib() {
     }
     let pk = keygen_builder.generate_pk();
     let proof_inputs = circuit.generate_proof_inputs(&fib.vk, &proof);
+    engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
+}
+
+#[test]
+fn test_recursion_circuit_interactions() {
+    let fx = InteractionsFixture::build(test_system_params_small());
+    let proof = fx.prove();
+
+    let circuit = VerifierCircuit::new();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let mut keygen_builder = engine.keygen_builder();
+    for air in circuit.airs() {
+        keygen_builder.add_air(air);
+    }
+    let pk = keygen_builder.generate_pk();
+    let proof_inputs = circuit.generate_proof_inputs(&fx.vk, &proof);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
