@@ -363,12 +363,15 @@ mod async_prover {
                 let mut tasks = Vec::with_capacity(segments.len());
                 for (seg_idx, segment) in segments.into_iter().enumerate() {
                     tracing::info!(
-                        "Re-executing from instret {} to instret_start {} for segment {seg_idx}",
-                        state.instret(),
-                        segment.instret_start
+                        %seg_idx,
+                        instret = state.instret(),
+                        %segment.instret_start,
+                        pc = state.pc(),
+                        "Re-executing",
                     );
                     let num_insns = segment.instret_start.checked_sub(state.instret()).unwrap();
                     state = pure_interpreter.execute_from_state(state, Some(num_insns))?;
+                    tracing::info!(segment_start_pc = state.pc());
 
                     let semaphore = self.semaphore.clone();
                     let async_worker = self.clone();
