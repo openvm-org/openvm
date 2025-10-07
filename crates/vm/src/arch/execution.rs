@@ -66,6 +66,8 @@ pub enum ExecutionError {
     FailedWithExitCode(u32),
     #[error("trace buffer out of bounds: requested {requested} but capacity is {capacity}")]
     TraceBufferOutOfBounds { requested: usize, capacity: usize },
+    #[error("instruction counter overflow: {instret} + {num_insns} > u64::MAX")]
+    InstretOverflow { instret: u64, num_insns: u64 },
     #[error("inventory error: {0}")]
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
