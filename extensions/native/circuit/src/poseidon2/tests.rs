@@ -295,7 +295,7 @@ fn test<const N: usize>(cases: [Case; N]) {
     let valid_tester = valid_tester.build().load(valid_harness).finalize();
     valid_tester.simple_test().expect("Verification failed");
 
-    // disable_debug_builder();
+    disable_debug_builder();
     let p2_chip = Poseidon2SubChip::<F, SBOX_REGISTERS>::new(Poseidon2Config::default().constants);
     let inner_trace = p2_chip.generate_trace(vec![[F::ZERO; 2 * CHUNK]]);
     let inner_width = p2_chip.air.width();
