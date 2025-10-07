@@ -354,7 +354,17 @@ where
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let instret = from_state.instret();
-        let instret_end = num_insns.map(|n| instret.checked_add(n).unwrap());
+        let instret_end = if let Some(n) = num_insns {
+            let end = instret
+                .checked_add(n)
+                .ok_or(ExecutionError::InstretOverflow {
+                    instret,
+                    num_insns: n,
+                })?;
+            Some(end)
+        } else {
+            None
+        };
         let ctx = ExecutionCtx::new(instret_end);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
