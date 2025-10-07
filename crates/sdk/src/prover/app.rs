@@ -377,7 +377,6 @@ mod async_prover {
                     );
                     let num_insns = segment.instret_start.checked_sub(state.instret()).unwrap();
                     state = pure_interpreter.execute_from_state(state, Some(num_insns))?;
-                    tracing::info!(segment_start_pc = state.pc());
 
                     let semaphore = self.semaphore.clone();
                     let async_worker = self.clone();
@@ -412,8 +411,13 @@ mod async_prover {
                 // Finish execution to termination
                 state = pure_interpreter.execute_from_state(state, None)?;
                 if state.instret() != terminal_instret {
+                    tracing::warn!(
+                        "Pure execution terminal instret={}, metered execution terminal instret={}",
+                        state.instret(),
+                        terminal_instret
+                    );
                     // This should never happen
-                    return eyre::eyre!("Pure and metered execution inconsistency");
+                    return Err(ExecutionError::DidNotTerminate.into());
                 }
                 let final_memory = &state.memory.memory;
                 let user_public_values = UserPublicValuesProof::compute(
