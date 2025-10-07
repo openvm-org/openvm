@@ -153,7 +153,7 @@ fn negative_sha256_test_bad_final_hash() {
     modify_trace(&mut trace);
     air_ctx.common_main = Some(Arc::new(trace));
 
-    // disable_debug_builder();
+    disable_debug_builder();
     let tester = tester
         .build()
         .load_air_proving_ctx((air, air_ctx))

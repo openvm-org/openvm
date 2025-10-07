@@ -250,7 +250,7 @@ fn public_values_neg_pv_not_match() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 56456]);
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],
@@ -274,7 +274,7 @@ fn public_values_neg_index_out_of_bound() {
     let trace = RowMajorMatrix::new_row(cols.flatten());
     let pvs = to_field_vec(vec![0, 0, 0]);
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],
@@ -315,7 +315,7 @@ fn public_values_neg_double_publish_impl(actual_pv: u32) {
     let air: AirRef<_> = Arc::new(PublicValuesCoreAir::new(3, 2));
     let pvs = to_field_vec(vec![0, 0, actual_pv]);
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_test_fast(
             vec![air],

@@ -760,7 +760,6 @@ where
             let pre_inst = if let Some((inst, _)) = inst_opt {
                 tracing::trace!("get_metered_pre_compute_instruction {inst:?}");
                 let pc = program.pc_base + i as u32 * DEFAULT_PC_STEP;
-                // eprintln!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: inst: opcode {:?}", inst.opcode.as_usize());
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,

@@ -700,7 +700,7 @@ impl GpuChipTester {
     }
 
     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
-        // disable_debug_builder();
+        disable_debug_builder();
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error

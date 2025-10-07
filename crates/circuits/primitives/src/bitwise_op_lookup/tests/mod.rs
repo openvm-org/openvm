@@ -144,7 +144,7 @@ fn run_negative_test(bad_row: (u32, u32, u32, BitwiseOperation)) {
         lookup.generate_trace(),
     ];
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(chips, traces).err(),
         Some(VerificationError::ChallengePhaseError),

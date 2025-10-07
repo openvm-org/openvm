@@ -117,7 +117,7 @@ fn negative_test_range_tuple_chip() {
     // Corrupt the trace to make it invalid
     range_trace.values[0] = BabyBear::from_wrapped_u32(99);
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearBlake3Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![range_checker.air],

@@ -171,7 +171,7 @@ fn test_is_less_than_negative() {
 
     trace.values[2] = FieldAlgebra::from_canonical_u64(0);
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(airs, vec![trace, range_trace],).err(),
         Some(VerificationError::OodEvaluationMismatch),

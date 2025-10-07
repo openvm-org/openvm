@@ -54,7 +54,7 @@ fn run_poseidon2_subchip_test(subchip: Arc<Poseidon2SubChip<BabyBear, 0>>, rng: 
         .expect("Verification failed");
 
     // negative test
-    // disable_debug_builder();
+    disable_debug_builder();
     for _ in 0..10 {
         let rand_idx = rng.gen_range(0..subchip.air.width());
         let rand_inc = BabyBear::from_canonical_u32(rng.gen_range(1..=1 << 27));

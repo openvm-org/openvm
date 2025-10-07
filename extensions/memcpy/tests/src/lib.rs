@@ -8,7 +8,7 @@ mod tests {
             testing::{
                 TestBuilder, TestChipHarness, VmChipTestBuilder, MEMCPY_BUS, RANGE_CHECKER_BUS,
             },
-            Arena, PreflightExecutor,
+            Arena, Executor, MeteredExecutor, PreflightExecutor,
         },
         system::{memory::SharedMemoryHelper, SystemPort},
     };
@@ -101,12 +101,13 @@ mod tests {
     }
 
     fn set_and_execute_memcpy<RA: Arena, E: PreflightExecutor<F, RA>>(
+        // choose type of executor here
         tester: &mut impl TestBuilder<F>,
         executor: &mut E,
         arena: &mut RA,
         shift: u32,
         source_data: &[u8],
-        dest_offset: u32, //these are 4 byte aligned tho??
+        dest_offset: u32,
         source_offset: u32,
         len: u32,
     ) {
@@ -210,47 +211,8 @@ mod tests {
     // passes all constraints.
     //////////////////////////////////////////////////////////////////////////////////////
 
-    // why are all the tests improved
-    // two adicity bug lol
-    // also currently for execution, not copying the offsets well
-
-    // ok so NOW
-    // we can at least get proof generation going! but it is incorrect LOL!
-    //i think at this point, have to fix the execution, so that the trace that is passed in is correct
-    //that being said, even if it is correct, (0,1,64) still failing
-    // other tests failing too, but for different reasons (probs bc code execution is wrong)
-
-    /*
-       1. figure out how to make correct checker for memcpy, with different shifts LOL
-           shift means the offsets in memory
-           rn checker seems a bit sus? is it properly taking into account shift?
-       2. read base C code, to get better understanding
-
-
-       OK SO: memcpy is only the loop
-        precondition: destination is aligned to 4 bytes, src is offset by
-            if d%4==1, we copy 3 values at the start, so s%4==3 at the end
-                this will correspond with a shift value of 1
-    */
-    //u8 is 1 byte of memory
-    //ayush alexander
-    /*
-    volatilite vs persistent memroy
-     volatile: prove single program without segmentatiob
-     persistent prove single program with segmentation, so memory has to be a continuation of previous segmentation
-         memory is hashed with merkle tree
-         persistent is chunks of 8 field elements, each field element is 4 bytes
-    */
-
-    /*
-        multiple of 16, fails on LogUp
-        non-multiple of 16, fails on mismatch data
-    */
-    /*
-    error is something with the contents of the data??
-     */
-    #[test_case(0, 1, 52)] //shift if 0, we copy 4 values correctly, just offset of 0?
-    #[test_case(1, 1, 64)] //1 - 1 - 52
+    #[test_case(0, 1, 100)] //shift if 0, we copy 4 values correctly, just offset of 0?
+    #[test_case(1, 1, 52)] //1 - 1 - 52
     #[test_case(2, 1, 52)] //shift if 2, copy (4-2) values correctly, offset of 2
     #[test_case(3, 1, 52)]
     fn rand_memcpy_iter_test(shift: u32, num_ops: usize, len: u32) {
@@ -269,9 +231,7 @@ mod tests {
             let mut source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
                 .map(|_| rng.gen_range(0..u8::MAX))
                 .collect(); //generates the data to be copied
-                            // let source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
-                            //     .map(|i| (i % 256) as u8) // ensure it fits in u8
-                            //     .collect();
+                            // let source_data: Vec<u8s
                             // let source_data = [
                             //     177, 219, 134, 68, 154, 250, 240, 12, 74, 114, 224, 6, 86, 189, 15, 16, 197, 189,
                             //     115, 54, 46, 98, 253, 38, 124, 233, 200, 251, 107, 66, 67, 214, 4, 97, 65, 68, 9,
@@ -366,10 +326,10 @@ mod tests {
 
         */
 
-    #[test_case(0, 1, 20)]
+    #[test_case(0, 1, 100)]
     #[test_case(1, 1, 52)] // 1 1 52
-    #[test_case(2, 1, 20)]
-    #[test_case(3, 1, 20)]
+    #[test_case(2, 1, 100)]
+    #[test_case(3, 1, 100)]
     fn rand_memcpy_iter_test_persistent(shift: u32, num_ops: usize, len: u32) {
         let mut rng = create_seeded_rng();
         //check diff b/w default and default_persistent

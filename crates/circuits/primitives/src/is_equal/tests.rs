@@ -129,7 +129,7 @@ fn test_single_is_zero_fail(x: u32, y: u32) {
         FieldAlgebra::ONE
     };
 
-    // disable_debug_builder();
+    disable_debug_builder();
     assert_eq!(
         BabyBearPoseidon2Engine::run_simple_test_no_pis_fast(
             any_rap_arc_vec![IsEqTestAir(IsEqSubAir)],
