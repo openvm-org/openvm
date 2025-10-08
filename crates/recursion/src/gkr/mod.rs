@@ -60,16 +60,28 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
 
-        if !sumcheck_polys.is_empty() {
+        if !claims_per_layer.is_empty() {
+            debug_assert_eq!(sumcheck_polys.len() + 1, claims_per_layer.len());
+
             ts.observe_ext(*q0_claim);
+
+            let claims = &claims_per_layer[0];
+
+            ts.observe_ext(claims.p_xi_0);
+            ts.observe_ext(claims.q_xi_0);
+            ts.observe_ext(claims.p_xi_1);
+            ts.observe_ext(claims.q_xi_1);
+
+            let _mu = ts.sample_ext();
         }
 
-        let mut xi = vec![(0, EF::ZERO); sumcheck_polys.len() + 1];
+        let mut xi = vec![(0, EF::ZERO); claims_per_layer.len()];
 
-        for (i, (polys, claims)) in zip(sumcheck_polys, claims_per_layer).enumerate() {
+        for (i, (polys, claims)) in zip(sumcheck_polys, claims_per_layer.iter().skip(1)).enumerate()
+        {
             let is_final_layer = i == sumcheck_polys.len() - 1;
 
-            let _ = ts.sample_ext();
+            let _lambda = ts.sample_ext();
 
             for (j, poly) in polys.iter().enumerate() {
                 for eval in poly {
@@ -86,9 +98,9 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
             ts.observe_ext(claims.p_xi_1);
             ts.observe_ext(claims.q_xi_1);
 
-            let rho = ts.sample_ext();
+            let mu = ts.sample_ext();
             if is_final_layer {
-                xi[0] = (ts.len() - D_EF, rho);
+                xi[0] = (ts.len() - D_EF, mu);
             }
         }
 
