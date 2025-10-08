@@ -12,7 +12,7 @@ use openvm_circuit::{
                 MemoryBaseAuxCols, MemoryBaseAuxRecord, MemoryBridge, MemoryExtendedAuxRecord,
                 MemoryWriteAuxCols,
             },
-            MemoryAddress, MemoryAuxColsFactory,
+            MemoryAddress, MemoryAuxColsFactory, POINTER_MAX_BITS,
         },
         SystemPort,
     },
@@ -200,12 +200,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
         let dest_u16_limbs = u8_word_to_u16(local.dest);
         let to_dest_u16_limbs = u8_word_to_u16(local.to_dest);
         // Limb computation for (source - 12 * is_shift_non_zero), with zero-padding when low limb < 12? NAH
-        let source_u16_limbs = [
-            local.source[0]
-                + local.source[1] * AB::F::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS),
-            local.source[2]
-                + local.source[3] * AB::F::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS),
-        ];
+        let source_u16_limbs = u8_word_to_u16(local.source);
         let to_source_u16_limbs = [
             local.to_source[0]
                 + local.to_source[1] * AB::F::from_canonical_u32(1 << MEMCPY_LOOP_LIMB_BITS),
@@ -233,7 +228,7 @@ impl<AB: InteractionBuilder> Air<AB> for MemcpyLoopAir {
             self.range_bus
                 .range_check(
                     data[1].clone(),
-                    self.pointer_max_bits - MEMCPY_LOOP_LIMB_BITS * 2,
+                    POINTER_MAX_BITS - MEMCPY_LOOP_LIMB_BITS * 2,
                 )
                 .eval(builder, local.is_valid);
         });
@@ -368,10 +363,6 @@ impl MemcpyLoopChip {
             .iter()
             .map(|aux_record| {
                 let mut aux_col = MemoryBaseAuxCols::default();
-                eprintln!(
-                    "aux_record.prev_timestamp: {:?}, timestamp: {:?}",
-                    aux_record.prev_timestamp, timestamp
-                );
                 mem_helper.fill(aux_record.prev_timestamp, timestamp, &mut aux_col);
                 timestamp += 1;
                 MemoryExtendedAuxRecord::from_aux_cols(aux_col)
@@ -401,7 +392,7 @@ impl MemcpyLoopChip {
             self.range_checker_chip
                 .add_count(data[0] >> 2, 2 * MEMCPY_LOOP_LIMB_BITS - 2);
             self.range_checker_chip
-                .add_count(data[1], self.pointer_max_bits - 2 * MEMCPY_LOOP_LIMB_BITS);
+                .add_count(data[1], POINTER_MAX_BITS - 2 * MEMCPY_LOOP_LIMB_BITS);
         });
 
         // Create record

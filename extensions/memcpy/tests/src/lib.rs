@@ -211,10 +211,10 @@ mod tests {
     // passes all constraints.
     //////////////////////////////////////////////////////////////////////////////////////
 
-    #[test_case(0, 1, 100)] //shift if 0, we copy 4 values correctly, just offset of 0?
-    #[test_case(1, 1, 52)] //1 - 1 - 52
-    #[test_case(2, 1, 52)] //shift if 2, copy (4-2) values correctly, offset of 2
-    #[test_case(3, 1, 52)]
+    #[test_case(0, 1, 64)] //shift if 0, we copy 4 values correctly, just offset of 0?
+    #[test_case(1, 1, 64)] //1 - 1 - 52
+    #[test_case(2, 1, 64)] //shift if 2, copy (4-2) values correctly, offset of 2
+    #[test_case(3, 1, 64)]
     fn rand_memcpy_iter_test(shift: u32, num_ops: usize, len: u32) {
         //debug builder, catch in proof gen instead of verification step
         let mut rng = create_seeded_rng();
@@ -224,19 +224,11 @@ mod tests {
         let (mut harness, range_checker, memcpy_loop) = create_harness(&tester);
 
         for tc in 0..num_ops {
-            let base = rng.gen_range(4..250) * 4;
+            let base = rng.gen_range(1000..1250) * 4;
             let source_offset = base;
-            let dest_offset = rng.gen_range(500..750) * 4; // Ensure word alignment
-
-            let mut source_data: Vec<u8> = (0..len.div_ceil(4) * 4)
-                .map(|_| rng.gen_range(0..u8::MAX))
-                .collect(); //generates the data to be copied
-                            // let source_data: Vec<u8s
-                            // let source_data = [
-                            //     177, 219, 134, 68, 154, 250, 240, 12, 74, 114, 224, 6, 86, 189, 15, 16, 197, 189,
-                            //     115, 54, 46, 98, 253, 38, 124, 233, 200, 251, 107, 66, 67, 214, 4, 97, 65, 68, 9,
-                            //     117, 222, 129, 116, 226, 17, 161, 48, 56, 177, 216, 117, 167, 53, 14,
-                            // ];
+            let dest_offset = rng.gen_range(2500..2750) * 4; // Ensure word alignment
+            let mut source_data: Vec<u8> = (0..len.div_ceil(4) * 4).map(|i| 247 as u8).collect(); //generates the data to be copied
+                                                                                                  // [ 128, 247] fail??? (shift = 0)
             eprintln!(
                 "test case: {}, source_offset: {}, dest_offset: {}, len: {}",
                 tc, source_offset, dest_offset, len
@@ -326,10 +318,10 @@ mod tests {
 
         */
 
-    #[test_case(0, 1, 100)]
-    #[test_case(1, 1, 52)] // 1 1 52
-    #[test_case(2, 1, 100)]
-    #[test_case(3, 1, 100)]
+    #[test_case(0, 100, 100)]
+    #[test_case(1, 100, 52)]
+    #[test_case(2, 100, 100)]
+    #[test_case(3, 100, 100)]
     fn rand_memcpy_iter_test_persistent(shift: u32, num_ops: usize, len: u32) {
         let mut rng = create_seeded_rng();
         //check diff b/w default and default_persistent
