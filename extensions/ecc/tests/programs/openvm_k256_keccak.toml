@@ -2,6 +2,7 @@
 [app_vm_config.rv32m]
 [app_vm_config.io]
 [app_vm_config.keccak]
+[app_vm_config.memcpy]
 
 [app_vm_config.modular]
 supported_moduli = [

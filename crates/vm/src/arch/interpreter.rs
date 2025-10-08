@@ -766,6 +766,9 @@ where
                         pre_compute: buf,
                     }
                 } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&inst.opcode) {
+                    // if inst.opcode.as_usize() == 595 {  // MULHU opcode
+                    //     println!("crates/vm/src/arch/interpreter.rs::get_metered_pre_compute_instructions: MULHU instruction (opcode 595) being routed to metered execution, executor_idx: {}", executor_idx);
+                    // }
                     let executor_idx = executor_idx as usize;
                     let executor = inventory
                         .executors

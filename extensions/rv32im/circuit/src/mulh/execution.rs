@@ -162,6 +162,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOpera
     _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    eprintln!("extensions/rv32im/circuit/src/mulh/execution.rs::execute_e1_impl: PURE: MulH executor executing MULHU opcode via execute_e1_impl");
+
     let pre_compute: &MulHPreCompute = pre_compute.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, instret, pc, exec_state);
 }
