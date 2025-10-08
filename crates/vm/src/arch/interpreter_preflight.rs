@@ -101,17 +101,13 @@ impl<F: Field, E> PreflightInterpretedInstance<F, E> {
         &self.inventory.executors
     }
 
-    pub fn filtered_execution_frequencies(&self) -> Vec<u32>
-    where
-        E: Send + Sync,
-    {
+    pub fn filtered_execution_frequencies(&self) -> Vec<u32> {
         let base_idx = get_pc_index(self.pc_base);
         self.pc_handler
             .par_iter()
-            .enumerate()
+            .zip_eq(&self.execution_frequencies)
             .skip(base_idx)
-            .filter(|(_, entry)| entry.is_some())
-            .map(|(i, _)| self.execution_frequencies[i])
+            .filter_map(|(entry, freq)| entry.is_some().then_some(*freq))
             .collect()
     }
 
