@@ -34,9 +34,9 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
 
     fn run_preflight(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
+        _vk: &MultiStarkVerifyingKeyV2,
+        _proof: &Proof,
+        _preflight: &mut Preflight<TS>,
     ) {
     }
 

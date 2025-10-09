@@ -46,7 +46,7 @@ pub(crate) struct DummyProofShapeAir {
     pub air_part_shape_bus: AirPartShapeBus,
     pub stacking_commitments_bus: StackingCommitmentsBus,
     pub stacking_widths_bus: StackingWidthsBus,
-    pub public_values_bus: PublicValuesBus,
+    pub _public_values_bus: PublicValuesBus,
 }
 
 impl<F> BaseAir<F> for DummyProofShapeAir {
