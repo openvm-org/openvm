@@ -146,7 +146,7 @@ impl<F: Clone + Send + Sync> AccessAdapterInventory<F> {
         tracing::debug!("Computed heights from memory adapters arena: {:?}", heights);
     }
 
-    fn apply_overridden_heights(&mut self, heights: &mut [usize]) {
+    fn apply_overridden_heights(&self, heights: &mut [usize]) {
         for (i, h) in heights.iter_mut().enumerate() {
             if let Some(oh) = self.chips[i].overridden_trace_height() {
                 assert!(

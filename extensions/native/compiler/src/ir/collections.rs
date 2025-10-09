@@ -125,7 +125,7 @@ impl<C: Config> Builder<C> {
     }
 
     /// Creates an array from a vector.
-    pub fn vec<V: MemVariable<C>>(&mut self, v: Vec<V>) -> Array<C, V> {
+    pub fn vec<V: MemVariable<C>>(&self, v: Vec<V>) -> Array<C, V> {
         Array::Fixed(Rc::new(RefCell::new(
             v.into_iter().map(|x| Some(x)).collect(),
         )))

@@ -717,7 +717,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
         self.basic_blocks.push(BasicBlock::new());
     }
 
-    fn block_label(&mut self) -> F {
+    fn block_label(&self) -> F {
         F::from_canonical_usize(self.basic_blocks.len() - 1)
     }
 
