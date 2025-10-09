@@ -1,10 +1,8 @@
-use core::iter::zip;
 use std::sync::Arc;
 
 use itertools::izip;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::Powers;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -53,10 +51,10 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             whir_sumcheck_polys,
             codeword_commits,
             ood_values,
-            initial_round_opened_rows,
-            initial_round_merkle_proofs,
-            codeword_opened_rows,
-            codeword_merkle_proofs,
+            initial_round_opened_rows: _,
+            initial_round_merkle_proofs: _,
+            codeword_opened_rows: _,
+            codeword_merkle_proofs: _,
             whir_pow_witnesses,
         } = &proof.whir_proof;
 
