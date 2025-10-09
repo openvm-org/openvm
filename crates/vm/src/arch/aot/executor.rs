@@ -23,162 +23,174 @@ use crate::arch::state;
 use crate::arch::MemoryConfig;
 use crate::arch::execution_mode::ExecutionCtx;
 use crate::arch::VmExecState;
+use crate::arch::interpreter::{get_pre_compute_max_size, alloc_pre_compute_buf, split_pre_compute_buf, get_pre_compute_instructions};
 
-use libc::{
-    shm_open, 
-    shm_unlink, 
-    mmap, 
-    munmap, 
-    ftruncate, 
-    close,
-    O_CREAT, 
-    O_RDWR, 
-    O_RDONLY, 
-    PROT_READ, 
-    PROT_WRITE, 
-    MAP_SHARED,
-    MAP_FAILED
-};
+use std::ffi::c_void;
+use memmap2::MmapOptions;
+use memmap2::MmapMut;
+use crate::arch::Executor;
+use crate::arch::ExecutorInventory;
+use crate::arch::ExecutionCtxTrait;
+use crate::arch::VmExecutor;
+use crate::arch::interpreter::PreComputeInstruction;
 
 use std::ffi::CString;
+use crate::arch::Streams;
 
-pub struct AotInstance<F: PrimeField32> {
-    exe: VmExe<F>,
+pub struct AotInstance {
+    mmap: MmapMut,
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-struct MemoryUpdate {
-    address_space: u32, 
-    pointer: u32, 
-    value: u32,
-}
+type F = BabyBear;
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct MemoryLog {
-    count: usize,
-    updates: [MemoryUpdate; 10],
-}
+impl AotInstance {
+    pub fn new<E>(
+        exe: &VmExe<F>,
+    ) -> Self {
+        Self::create_assembly(exe);
 
-impl<F: PrimeField32> AotInstance<F> {
-    /* 
-    compile with 
-    as aot_asm.s -o aot_asm.o
-    gcc -no-pie aot_asm.o -L. -lopenvm_circuit_rust_bridge -o program
-    */
-    pub fn new(exe: &VmExe<F>) -> Self {
-        /* Write out the assembly
-
-        let _ = File::create("aot_asm.s").expect("Unable to create file");
-        std::fs::write("aot_asm.s", &asm_string).expect("Unable to write file");
-        */
-        let output = Command::new("as")
-            .args(["aot_asm.s", "-o", "aot_asm.o"])
-            .output();
-
-        let output = Command::new("gcc")
-            .args([
-                "-no-pie",
-                "aot_asm.o",
-                "-L.",
-                "-lopenvm_circuit_rust_bridge",
-                "-o",
-                "program",
-            ])
-            .output();
-
-        Self { 
-            exe: exe.clone()
+        let status = Command::new("cargo")
+            .args(&["build", "--release"])
+            .current_dir("asm_bridge/")
+            .status()
+            .expect("Failed to execute cargo");
+        
+        if !status.success() {
+            panic!("Cargo build failed");
         }
-    }
 
-    pub fn generate_asm() {
+        let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
+        let mut mmap = unsafe {
+            MmapOptions::new().len(len).map_anon().expect("mmap")
+        };  
 
-    }
-
-    pub fn execute(&self) -> VmExecState<F, GuestMemory, ExecutionCtx> {
-        // parent process set-up the shared memory
-        let c_name = CString::new("/shmem").unwrap();
-
-        /* 
-        initialize vm state and execution context
-        goal is to create a VmExecState<F>
-        */
-
+        // create a vm_exec_state
         let memory_config = Default::default();
         let system_config = SystemConfig::default_from_memory(memory_config);
         let init_memory = Default::default();
         let vm_state: VmState<F> = VmState::initial(&system_config, &init_memory, 0, vec![]);
-        let exec_ctx = ExecutionCtx::new(None); // Pure execution context
+        let exec_ctx = ExecutionCtx::new(None); 
         let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, exec_ctx);
+
+        /*
+        let inventory = ExecutorInventory::new(system_config);
+        */
+
+        unsafe {
+            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            std::ptr::write(ptr, vm_exec_state);
+        }     
+
+        /*
+        let program = &exe.program;
+        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
+        let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        */
         
-        unsafe {
-            let size = std::mem::size_of::<MemoryLog>();
-            let fd = shm_open(c_name.as_ptr(), O_CREAT | O_RDWR, 0o666);
-            ftruncate(fd, size as i64);
+        // let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
+        //     program,
+        //     &inventory,
+        //     &mut split_pre_compute_buf,
+        // )?;
 
-            let ptr = mmap(
-                std::ptr::null_mut(), 
-                size, 
-                PROT_READ | PROT_WRITE, 
-                MAP_SHARED, 
-                fd, 
-                0
-            );
-
-            let log_ptr = ptr as *mut MemoryLog;
-            (*log_ptr).count = 0;
-
-            munmap(ptr, size);
-            close(fd);
+        Self {
+            mmap,
         }
-
-        unsafe {
-            let _ = Command::new("./program").status();
-        }
-
-        unsafe {
-            let size = std::mem::size_of::<MemoryLog>();
+    }    
     
-            let fd = shm_open(c_name.as_ptr(), O_CREAT | O_RDWR, 0o666);
-            ftruncate(fd, size as i64);
-    
-            let ptr = mmap(
-                std::ptr::null_mut(), 
-                size, 
-                PROT_READ | PROT_WRITE, 
-                MAP_SHARED, 
-                fd, 
-                0
-            );
-    
-            let log_ptr = ptr as *mut MemoryLog;
+    pub fn create_assembly(exe: &VmExe<F>) {
+        // save assembly to asm_bridge/src/asm_run.s
+        let mut asm = String::new();
+        asm += ".intel_syntax noprefix\n";
+        asm += ".code64\n";
+        asm += ".section .text\n";
+        asm += ".extern TEST_FN\n";
+        asm += ".extern ADD_RV32\n";
+        asm += ".global asm_run_internal\n";
+        asm += "\n";
 
-            /*
-            Do conversion from MemoryLog to VmState
-            */
+        asm += "asm_run_internal:\n";
+        asm += "    mov rbx, rdi\n";
+        asm += "    sub rsp, 8\n";
+        asm += "    call TEST_FN\n";
+        asm += "\n";
 
-            let count = (*log_ptr).count;
-            for i in 0..count {
-                let update = (*log_ptr).updates[i];
-                let data : &[u8; 1] = &[update.value as u8];
-                println!("update: {:?}", update);
-                vm_exec_state.vm_write::<u8, 1>(update.address_space, update.pointer, data);
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm += &format!("pc_{:x}:\n", pc);
+            let opcode = instruction.opcode; 
+
+            match opcode {
+                x if x == BaseAluOpcode::ADD.global_opcode() => {
+                    asm += "    mov rdi, rbx\n";
+                    asm += &format!("    mov rsi, {}\n", instruction.a);
+                    asm += &format!("    mov rdx, {}\n", instruction.b);
+                    asm += &format!("    mov rcx, {}\n", instruction.c);
+                    asm += &format!("    mov r8, {}\n", instruction.d);
+                    asm += &format!("    mov r9, {}\n", instruction.e);
+                    asm += &format!("    call ADD_RV32\n");
+                }
+                x if x == BaseAluOpcode::SUB.global_opcode() => {
+                    asm += "    mov rdi, rbx\n";
+                    asm += &format!("    mov rsi, {}\n", instruction.a);
+                    asm += &format!("    mov rdx, {}\n", instruction.b);
+                    asm += &format!("    mov rcx, {}\n", instruction.c);
+                    asm += &format!("    mov r8, {}\n", instruction.d);
+                    asm += &format!("    mov r9, {}\n", instruction.e);
+                    asm += &format!("    call SUB_RV32\n");
+                }
+                _ => {
+                    println!("instruction {pc}'s opcode is not implemented yet");
+                }
             }
-    
-            munmap(ptr, size);
-            close(fd);
+            asm += "\n";
         }
 
-        return vm_exec_state;
+        asm += "asm_run_end:\n";
+        asm += "    add rsp, 8\n";
+        asm += "    xor eax, eax\n";
+        asm += "    ret\n";
+
+        fs::write("asm_bridge/src/asm_run.s", asm).expect("Failed to write file");
     }
 
-    pub fn clean_up(&self) {
+    // for testing
+    pub fn default_asm() {
+        let mut asm = String::new();
+        asm += ".intel_syntax noprefix\n";
+        asm += ".code64\n";
+        asm += ".section .text\n";
+        asm += ".extern TEST_FN\n";
+        asm += ".global asm_run_internal\n";
+        asm += "\n";
+        asm += "asm_run_internal:\n";
+        asm += "    push rbp\n";
+        asm += "    mov rbp, rsp\n";
+        asm += "    call TEST_FN\n";
+        asm += "    pop rbp\n";
+        asm += "    xor eax, eax\n";
+        asm += "    ret\n";
+
+        fs::write("asm_bridge/src/asm_run.s", asm).expect("Failed to write file");
+    }
+
+    // execute finds the dynamic library, calls the asm_run function, and returns a reference to the vm_exec_state
+    pub fn execute(&mut self, 
+        inputs: impl Into<Streams<F>>,
+        num_insns: Option<u64>
+    ) -> &mut VmExecState<F, GuestMemory, ExecutionCtx> {
         unsafe {
-            let c_name = CString::new("/shmem").unwrap();
-            shm_unlink(c_name.as_ptr());
+            let lib = Library::new("/home/ubuntu/openvm-test/target/release/libasm_bridge.so").expect("Failed to load library");
+            let asm_run: Symbol<unsafe extern "C" fn(*mut c_void)> = 
+                lib.get(b"asm_run").expect("Failed to find asm_run symbol");
+            
+            asm_run(self.mmap.as_mut_ptr() as *mut c_void);
         }
+        
+        let vm_exec_state_ref = unsafe {
+            &mut *(self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>)
+        };
+
+        vm_exec_state_ref
     }
-    
 }
