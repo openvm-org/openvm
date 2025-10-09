@@ -45,7 +45,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
 
     fn run_preflight(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
+        _vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &mut Preflight<TS>,
     ) {

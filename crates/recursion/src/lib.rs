@@ -1,10 +1,10 @@
-mod batch_constraint;
-mod bus;
-mod gkr;
-mod proof_shape;
-mod stacking;
-mod system;
+pub mod batch_constraint;
+pub mod bus;
+pub mod gkr;
+pub mod proof_shape;
+pub mod stacking;
+pub mod system;
 #[cfg(test)]
 mod tests;
-mod transcript;
-mod whir;
+pub mod transcript;
+pub mod whir;
