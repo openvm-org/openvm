@@ -15,34 +15,19 @@ use openvm_circuit::arch::interpreter::get_pre_compute_max_size;
 use openvm_circuit::arch::ExecutorInventory;
 use openvm_circuit::arch::VmExecutor;
 use openvm_rv32im_circuit::Rv32IExecutor;
-
 use openvm_circuit::derive::VmConfig;
+use openvm_rv32im_circuit::Rv32IConfig;
+
+
+use openvm_stark_sdk::{
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+    engine::StarkFriEngine};
 
 use openvm_rv32im_circuit::{
     Rv32I, Rv32Io, Rv32M
 };
 
-#[derive(Clone, Debug, VmConfig)]
-pub struct ExecuteConfig {
-    pub system: SystemConfig,
-    pub rv32i: Rv32I,
-    pub rv32m: Rv32M,
-    pub io: Rv32Io,
-}
-
-impl Default for ExecuteConfig {
-    fn default() -> Self {
-        Self {
-            system: SystemConfig::default(),
-            rv32i: Rv32I,
-            rv32m: Rv32M::default(),
-            io: Rv32Io,
-        }
-    }
-}
-
 use openvm_stark_backend::config::Val;
-
 
 type F = BabyBear;
 type Executor = Rv32IExecutor;
@@ -69,24 +54,15 @@ impl AotInstance {
     }    
 }
 
-
 fn main() {
-    let program = Program::from_instructions(&[
+    let program = Program::<F>::from_instructions(&[
         Instruction::from_isize(
             BaseAluOpcode::ADD.global_opcode(),
-            4, // a
-            4, // b
-            5, // c
-            0, // d
-            0  // e
-        ),
-        Instruction::from_isize(
-            BaseAluOpcode::SUB.global_opcode(),
-            4, //a 
-            4, //b
-            2, //c
-            0, //d
-            0  //e
+            4,
+            4,
+            5,
+            0,
+            0,
         )
     ]);
 
@@ -97,8 +73,12 @@ fn main() {
         init_memory: Default::default(),
     };
 
-    let config = ExecuteConfig::default();
-    let executor = VmExecutor::<Val<E::SC>, _>::new(config)?;
+    let config = Rv32IConfig::default();
+
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+
+
+    let executor = VmExecutor::<F, _>::new(config);
     executor.instance(exe);    
     
     // let inventory : ExecutorInventory<Executor> = ExecutorInventory::new(system_config);
