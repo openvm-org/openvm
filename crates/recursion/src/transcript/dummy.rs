@@ -39,9 +39,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
-        let (local, next) = (main.row_slice(0), main.row_slice(1));
+        let local = main.row_slice(0);
         let local: &DummyTranscriptCols<AB::Var> = (*local).borrow();
-        let next: &DummyTranscriptCols<AB::Var> = (*next).borrow();
 
         self.transcript_bus
             .send(builder, local.msg.clone(), local.is_valid);
@@ -49,7 +48,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
 }
 
 pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
-    proof: &Proof,
+    _proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
     let num_valid_rows: usize = preflight.transcript.len();

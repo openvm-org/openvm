@@ -4,7 +4,7 @@ use p3_field::FieldExtensionAlgebra;
 use stark_backend_v2::{
     D_EF, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::{DuplexSponge, FiatShamirTranscript},
+    poseidon2::sponge::FiatShamirTranscript,
     proof::{Proof, TraceVData},
 };
 
@@ -114,7 +114,7 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
     }
 
     pub fn observe_ext(&mut self, value: EF) {
-        self.data.extend_from_slice(&value.as_base_slice());
+        self.data.extend_from_slice(value.as_base_slice());
         self.is_sample.extend_from_slice(&[false; D_EF]);
         self.sponge.observe_ext(value);
     }
@@ -140,11 +140,12 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
 
     pub fn sample_ext(&mut self) -> EF {
         let sample = self.sponge.sample_ext();
-        self.data.extend_from_slice(&sample.as_base_slice());
+        self.data.extend_from_slice(sample.as_base_slice());
         self.is_sample.extend_from_slice(&[true; D_EF]);
         sample
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -204,8 +205,8 @@ pub struct StackingPreflight {
 #[derive(Debug, Default)]
 pub struct WhirPreflight {}
 
-impl BusInventory {
-    pub fn new() -> Self {
+impl Default for BusInventory {
+    fn default() -> Self {
         let mut b = BusIndexManager::new();
 
         Self {
@@ -234,15 +235,17 @@ impl BusInventory {
             stacking_claims_bus: StackingClaimsBus::new(b.new_bus_idx()),
         }
     }
+}
 
+impl BusInventory {
     pub fn air_part_shape_bus(&self) -> AirPartShapeBus {
         self.air_part_shape_bus
     }
 }
 
-impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
-    pub fn new() -> Self {
-        let bus_inventory = dbg!(BusInventory::new());
+impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
+    fn default() -> Self {
+        let bus_inventory = BusInventory::default();
 
         let transcript_module = TranscriptModule::new(bus_inventory.clone());
         let proof_shape_module = ProofShapeModule::new(bus_inventory.clone());
@@ -261,7 +264,9 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         ];
         VerifierCircuit { modules }
     }
+}
 
+impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
     pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let mut airs = vec![];
         for module in &self.modules {

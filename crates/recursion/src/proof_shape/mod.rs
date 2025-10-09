@@ -36,7 +36,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             stacking_commitments_bus: self.bus_inventory.stacking_commitments_bus,
             stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
-            public_values_bus: self.bus_inventory.public_values_bus,
+            _public_values_bus: self.bus_inventory.public_values_bus,
         };
         vec![Arc::new(proof_shape_air) as AirRef<_>]
     }
@@ -103,7 +103,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
         let n_logup = proof.gkr_proof.claims_per_layer.len(); // n_logup = num_layers
 
         let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
-        let stacked_common_width = (num_common_main_cells + stack_height - 1) / stack_height;
+        let stacked_common_width = num_common_main_cells.div_ceil(stack_height);
 
         preflight.proof_shape = ProofShapePreflight {
             stacked_common_width,
