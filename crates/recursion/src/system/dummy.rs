@@ -218,7 +218,7 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
         let mut messages = vec![];
         messages.push(StackingCommitmentsBusMessage {
             commit_idx: F::ZERO,
-            commitment: proof.common_main_commit.clone(),
+            commitment: proof.common_main_commit,
         });
         let mut commit_idx = F::ONE;
         for (air_id, vdata) in &self.proof_shape.sorted_trace_vdata {
@@ -227,7 +227,7 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
                 .preprocessed_data
                 .as_ref()
                 .into_iter()
-                .map(|p| p.commit.clone())
+                .map(|p| p.commit)
                 .chain(vdata.cached_commitments.iter().cloned());
 
             for commit in commits {
@@ -259,7 +259,7 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
 
             for width in widths {
                 let cells = width * (1 << (vdata.hypercube_dim + l_skip));
-                let stacking_width = (cells + stacking_height - 1) / stacking_height;
+                let stacking_width = cells.div_ceil(stacking_height);
                 messages.push(StackingWidthBusMessage {
                     commit_idx,
                     width: F::from_canonical_usize(stacking_width),

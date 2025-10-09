@@ -81,7 +81,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyGkrRoundAir {
 }
 
 pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
-    vk: &MultiStarkVerifyingKeyV2,
+    _vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {

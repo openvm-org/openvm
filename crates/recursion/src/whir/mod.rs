@@ -1,6 +1,5 @@
-use std::{num, sync::Arc};
+use std::sync::Arc;
 
-use itertools::izip;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{

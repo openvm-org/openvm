@@ -21,7 +21,7 @@ fn test_recursion_circuit_single_fib() {
     let proof = fib.prove();
 
     let sponge = DuplexSponge::default();
-    let circuit = VerifierCircuit::<DuplexSponge>::new();
+    let circuit = VerifierCircuit::<DuplexSponge>::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
@@ -37,7 +37,7 @@ fn test_recursion_circuit_interactions() {
     let fx = InteractionsFixture::build(test_system_params_small());
     let proof = fx.prove();
 
-    let circuit = VerifierCircuit::<DuplexSponge>::new();
+    let circuit = VerifierCircuit::<DuplexSponge>::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
@@ -57,7 +57,7 @@ fn test_preflight_single_fib_sponge() {
     let proof = fib.prove_with_sponge(&mut prover_sponge);
 
     let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.history);
-    let circuit = VerifierCircuit::<DuplexSpongeValidator>::new();
+    let circuit = VerifierCircuit::<DuplexSpongeValidator>::default();
     let preflight = circuit.run_preflight(preflight_sponge, &fib.vk, &proof);
     assert_eq!(
         preflight.transcript.sponge.idx,
@@ -73,7 +73,7 @@ fn test_preflight_interactions() {
     let proof = fx.prove_with_sponge(&mut prover_sponge);
 
     let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.history);
-    let circuit = VerifierCircuit::new();
+    let circuit = VerifierCircuit::default();
     let preflight = circuit.run_preflight(preflight_sponge, &fx.vk, &proof);
     assert_eq!(
         preflight.transcript.sponge.idx,
