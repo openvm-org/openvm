@@ -17,3 +17,4 @@ openvm-rv32im-circuit = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-benchmarks-execute = { workspace = true }
 openvm-benchmarks-utils = { workspace = true }
+openvm-stark-sdk = { workspace = true }
