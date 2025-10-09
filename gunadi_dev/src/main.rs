@@ -17,7 +17,9 @@ use openvm_circuit::arch::VmExecutor;
 use openvm_rv32im_circuit::Rv32IExecutor;
 use openvm_circuit::derive::VmConfig;
 use openvm_rv32im_circuit::Rv32IConfig;
-
+use openvm_rv32im_circuit::Rv32BaseAluExecutor;
+use openvm_rv32im_circuit::adapters::Rv32BaseAluAdapterExecutor;
+use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -38,11 +40,10 @@ pub struct AotInstance {
 
 impl AotInstance {
     pub fn new(
+        system_config: SystemConfig,
         inventory: &ExecutorInventory<Executor>,
         exe: &VmExe<F>,
     ) {
-        let memory_config : MemoryConfig = Default::default();
-        let system_config = SystemConfig::default_from_memory(memory_config);
         let init_memory : SparseMemoryImage = Default::default();
         let vm_state: VmState<F> = VmState::initial(&system_config, &init_memory, 0, vec![]);
         let exec_ctx = ExecutionCtx::new(None); 
@@ -50,11 +51,10 @@ impl AotInstance {
 
         let program = &exe.program; 
         let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
-
     }    
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program = Program::<F>::from_instructions(&[
         Instruction::from_isize(
             BaseAluOpcode::ADD.global_opcode(),
@@ -74,19 +74,18 @@ fn main() {
     };
 
     let config = Rv32IConfig::default();
-
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let executor = VmExecutor::<F, _>::new(config)?;
+    let _ = executor.instance(&exe);    
 
+    let memory_config : MemoryConfig = Default::default();
+    let system_config = SystemConfig::default_from_memory(memory_config);
+    let mut inventory : ExecutorInventory<Executor> = ExecutorInventory::new(system_config.clone());
 
-    let executor = VmExecutor::<F, _>::new(config);
-    executor.instance(exe);    
-    
-    // let inventory : ExecutorInventory<Executor> = ExecutorInventory::new(system_config);
+    let base_alu = Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+    inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
-    // let base_alu =
-    //     Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
+    let aot_instance = AotInstance::new(system_config.clone(), &inventory, &exe);
 
-    // inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()));
-
-    // let aot_instance = AotInstance::new(&inventory, &exe);
+    Ok(())
 } 
