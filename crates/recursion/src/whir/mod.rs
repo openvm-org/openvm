@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{num, sync::Arc};
 
 use itertools::izip;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
@@ -56,16 +56,19 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             codeword_opened_rows: _,
             codeword_merkle_proofs: _,
             whir_pow_witnesses,
+            final_poly,
         } = &proof.whir_proof;
 
         let _mu = ts.sample_ext();
 
         let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
-        debug_assert_eq!(ood_values.len(), codeword_commits.len());
-        debug_assert_eq!(ood_values.len(), whir_pow_witnesses.len());
-        for (i, (ood, commit, pow_witness)) in
-            izip!(ood_values, codeword_commits, whir_pow_witnesses).enumerate()
-        {
+
+        let num_whir_rounds = whir_pow_witnesses.len();
+
+        debug_assert_eq!(ood_values.len(), num_whir_rounds - 1);
+        debug_assert_eq!(codeword_commits.len(), num_whir_rounds - 1);
+
+        for i in 0..num_whir_rounds {
             for _ in 0..vk.inner.params.k_whir {
                 if let Some(evals) = sumcheck_poly_iter.next() {
                     for eval in evals {
@@ -74,18 +77,25 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
                     let _alpha = ts.sample_ext();
                 }
             }
-            ts.observe_slice(commit);
+            if i != num_whir_rounds - 1 {
+                ts.observe_slice(&codeword_commits[i]);
+                let _z0 = ts.sample_ext();
+                ts.observe_ext(ood_values[i]);
+            } else {
+                for coeff in final_poly {
+                    ts.observe_ext(*coeff);
+                }
+            }
 
-            let _z0 = ts.sample_ext();
-            ts.observe_ext(*ood);
-
-            ts.observe(*pow_witness);
+            ts.observe(whir_pow_witnesses[i]);
             let _pow_bits = ts.sample();
 
-            for j in 0..vk.inner.params.num_whir_queries {
+            for _ in 0..vk.inner.params.num_whir_queries {
                 let _bits = ts.sample();
             }
-            let _gamma = ts.sample_ext();
+            if i != num_whir_rounds - 1 {
+                let _gamma = ts.sample_ext();
+            }
         }
         debug_assert!(sumcheck_poly_iter.next().is_none());
 
