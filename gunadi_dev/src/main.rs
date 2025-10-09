@@ -30,7 +30,6 @@ use openvm_circuit::arch::Streams;
 use std::ffi::c_void;
 use libloading::{Library, Symbol};
 
-
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine};
@@ -41,12 +40,23 @@ use openvm_rv32im_circuit::{
 
 use openvm_stark_backend::config::Val;
 
+// FFI-safe descriptor for one mutable slice
+#[repr(C)]
+pub struct SliceMeta {
+    pub ptr: *mut u8,
+    pub len: usize,
+}
+
 type F = BabyBear;
 type Ctx = ExecutionCtx;
 type Executor = Rv32IExecutor;
 
-pub struct AotInstance {    
+pub struct AotInstance {
     mmap: MmapMut,
+    // Own the underlying memory so pointers remain valid.
+    pre_compute_buf: AlignedBuf,
+    // Store stable, FFI-safe metadata (boxed slice == fixed address, no reallocation).
+    split_meta: Box<[SliceMeta]>,
 }
 
 pub const DEFAULT_PC_STEP: u32 = 4;
@@ -86,27 +96,46 @@ impl AotInstance {
 
         let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, exec_ctx);
 
-        let program = &exe.program; 
-        
-        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
-        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
-        let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-
-        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
-            program,
-            inventory,
-            &mut split_pre_compute_buf,
-        )?;
-
         unsafe {
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             std::ptr::write(ptr, vm_exec_state);
         }  
 
+        let program = &exe.program; 
+        
+        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
+        let mut split_views = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+
+        let _pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
+            program,
+            inventory,
+            &mut split_views,
+        )?;
+
+        let split_meta_vec: Vec<SliceMeta> = split_views
+            .iter_mut()
+            .map(|s| SliceMeta {
+                ptr: s.as_mut_ptr(),
+                len: s.len(),
+            })
+            .collect();
+        let split_meta = split_meta_vec.into_boxed_slice();
         Ok(Self {
-            mmap: mmap, 
+            mmap,
+            pre_compute_buf,
+            split_meta
         })
     }    
+
+    /// Pointer you can pass to C/asm. Valid as long as `self` lives and
+    /// you don't mutate `split_meta`/`pre_compute_buf` in a way that reallocates.
+    pub fn split_meta_ptr(&mut self) -> *mut SliceMeta {
+        self.split_meta.as_mut_ptr()
+    }
+    pub fn split_meta_len(&self) -> usize {
+        self.split_meta.len()
+    }
 
     /*
     pub fn new_without_inventory(
@@ -266,9 +295,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
     let mut aot_instance = AotInstance::new(system_config.clone(), &inventory, &exe)?;
-    let _ = aot_instance.execute();
 
-    println!("hello world");
-
+    let ptr = aot_instance.split_meta_ptr();
+    println!("ptr:{:?}, count: {}", ptr, aot_instance.split_meta_len());
+    aot_instance.execute();
     Ok(())
 } 
