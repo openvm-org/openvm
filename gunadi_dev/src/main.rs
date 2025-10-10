@@ -55,7 +55,6 @@ type Ctx = ExecutionCtx;
 type Executor = Rv32IExecutor;
 
 pub struct AotInstance<'a> {
-    pub mmap: MmapMut,
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
@@ -72,7 +71,6 @@ impl<'a> AotInstance<'a> {
         inventory: &'a ExecutorInventory<Executor>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError> {
-
         Self::create_assembly(exe);
         let status = Command::new("cargo")
             .args(&["build", "--release"])
@@ -83,11 +81,6 @@ impl<'a> AotInstance<'a> {
         if !status.success() {
             panic!("Cargo build failed");
         }
-
-        let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
-        let mut mmap = unsafe {
-            MmapOptions::new().len(len).map_anon().expect("mmap")
-        };  
 
         let program = &exe.program; 
         let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
@@ -116,6 +109,11 @@ impl<'a> AotInstance<'a> {
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<(), libloading::Error> {
+        let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
+        let mut mmap = unsafe {
+            MmapOptions::new().len(len).map_anon().expect("mmap")
+        };  
+
         let vm_state = VmState::initial(
             &self.system_config,
             &self.init_memory,
