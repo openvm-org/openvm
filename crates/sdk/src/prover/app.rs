@@ -21,7 +21,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
 };
-use tracing::info_span;
+use tracing::{info_span, instrument};
 
 use crate::{
     commit::{AppExecutionCommit, CommitBytes},
@@ -118,9 +118,7 @@ where
     }
 
     /// Generates proof for every continuation segment
-    ///
-    /// This function internally calls [verify_app_proof] to verify the result before returning the
-    /// proof.
+    #[instrument(name = "app_prove", skip_all)]
     pub fn prove(
         &mut self,
         input: StdIn<Val<E::SC>>,
@@ -151,6 +149,24 @@ where
                 .absolute(self.instance.vm.engine.fri_params().log_blowup as u64);
             ContinuationVmProver::prove(&mut self.instance, input)
         })?;
+        Ok(proofs)
+    }
+
+    /// Generates proof for every continuation segment
+    ///
+    /// This function internally calls [verify_app_proof] to verify the result before returning the
+    /// proof.
+    #[instrument(name = "app_prove_and_verify", skip_all)]
+    pub fn prove_and_verify(
+        &mut self,
+        input: StdIn<Val<E::SC>>,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+            + MeteredExecutor<Val<E::SC>>
+            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        let proofs = self.prove(input)?;
         // We skip verification of the user public values proof here because it is directly computed
         // from the merkle tree above
         let res = verify_segments(
