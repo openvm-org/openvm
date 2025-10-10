@@ -246,7 +246,7 @@ mod async_prover {
     };
     use openvm_stark_sdk::config::FriParameters;
     use tokio::{spawn, sync::Semaphore, task::spawn_blocking};
-    use tracing::instrument;
+    use tracing::{instrument, Instrument};
 
     use super::*;
 
@@ -381,31 +381,36 @@ mod async_prover {
                 let semaphore = self.semaphore.clone();
                 let async_worker = self.clone();
                 let start_state = state.clone();
-                let task = spawn(async move {
-                    let _permit = semaphore.acquire().await?;
-                    spawn_blocking(move || {
-                        info_span!("prove_segment", segment = seg_idx).in_scope(
-                            || -> eyre::Result<_> {
-                                // We need a separate span so the metric label includes
-                                // "segment"
-                                // from _segment_span
-                                let _prove_span = info_span!("vm_prove").entered();
-                                let mut worker = async_worker.local()?;
-                                let instance = &mut worker.instance;
-                                let vm = &mut instance.vm;
-                                let preflight_interpreter = &mut instance.interpreter;
-                                let (segment_proof, _) = vm.prove(
-                                    preflight_interpreter,
-                                    start_state,
-                                    Some(segment.num_insns),
-                                    &segment.trace_heights,
-                                )?;
-                                Ok(segment_proof)
-                            },
-                        )
-                    })
-                    .await?
-                });
+                let task = spawn(
+                    async move {
+                        let _permit = semaphore.acquire().await?;
+                        let span = tracing::Span::current();
+                        spawn_blocking(move || {
+                            let _span = span.enter();
+                            info_span!("prove_segment", segment = seg_idx).in_scope(
+                                || -> eyre::Result<_> {
+                                    // We need a separate span so the metric label includes
+                                    // "segment"
+                                    // from _segment_span
+                                    let _prove_span = info_span!("vm_prove").entered();
+                                    let mut worker = async_worker.local()?;
+                                    let instance = &mut worker.instance;
+                                    let vm = &mut instance.vm;
+                                    let preflight_interpreter = &mut instance.interpreter;
+                                    let (segment_proof, _) = vm.prove(
+                                        preflight_interpreter,
+                                        start_state,
+                                        Some(segment.num_insns),
+                                        &segment.trace_heights,
+                                    )?;
+                                    Ok(segment_proof)
+                                },
+                            )
+                        })
+                        .await?
+                    }
+                    .in_current_span(),
+                );
                 tasks.push(task);
             }
             // Finish execution to termination

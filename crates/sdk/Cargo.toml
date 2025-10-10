@@ -64,7 +64,7 @@ cfg-if.workspace = true
 tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [features]
-default = ["parallel", "jemalloc"]
+default = ["parallel", "jemalloc", "async"]
 evm-prove = [
     "openvm-continuations/static-verifier",
     "openvm-native-recursion/evm-prove",
