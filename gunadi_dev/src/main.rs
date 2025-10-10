@@ -10,6 +10,7 @@ use openvm_rv32im_transpiler::{
 use openvm_instructions::LocalOpcode;
 use openvm_circuit::arch::MemoryConfig;
 use p3_baby_bear::BabyBear;
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_circuit::arch::SystemConfig;
 use openvm_circuit::system::memory::online::GuestMemory;
 use openvm_instructions::exe::SparseMemoryImage;
@@ -56,9 +57,7 @@ use openvm_stark_backend::config::Val;
 
 use openvm_circuit::arch::ExecutionCtxTrait;
 
-type F = BabyBear;
-
-pub struct AotInstance<'a, Ctx> {
+pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
@@ -70,8 +69,10 @@ type AsmRunFn = unsafe extern "C" fn(
     vec_ptr: *const c_void,
 );
 
-impl<'a, Ctx> AotInstance<'a, Ctx>
+// AotInstance only works for F = BabyBear
+impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where 
+    F: PrimeField32,
     Ctx: ExecutionCtxTrait
 {
     pub fn new<E>(
@@ -226,6 +227,9 @@ where
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    type F = BabyBear;
+
     let program = Program::<F>::from_instructions(&[
         Instruction::from_isize(
             BaseAluOpcode::ADD.global_opcode(),
@@ -279,7 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let branch_equal = Rv32BranchEqualExecutor::new(Rv32BranchAdapterExecutor,BranchEqualOpcode::CLASS_OFFSET, 4);
     inventory.add_executor(branch_equal, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
-    let mut aot_instance = AotInstance::<ExecutionCtx>::new(&inventory, &exe)?;
+    let mut aot_instance = AotInstance::<BabyBear, ExecutionCtx>::new(&inventory, &exe)?;
     aot_instance.execute(vec![], None);
 
     Ok(())
