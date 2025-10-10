@@ -392,7 +392,11 @@ mod async_prover {
                                     // We need a separate span so the metric label includes
                                     // "segment"
                                     // from _segment_span
-                                    let _prove_span = info_span!("vm_prove").entered();
+                                    let _prove_span = info_span!(
+                                        "vm_prove",
+                                        thread_id = ?std::thread::current().id()
+                                    )
+                                    .entered();
                                     let mut worker = async_worker.local()?;
                                     let instance = &mut worker.instance;
                                     let vm = &mut instance.vm;
