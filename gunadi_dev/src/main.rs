@@ -38,7 +38,10 @@ use memmap2::MmapMut;
 use openvm_circuit::arch::Streams;
 use std::ffi::c_void;
 use libloading::{Library, Symbol};
-use openvm_circuit::arch::interpreter::PreComputeInstruction;
+use openvm_circuit::arch::{
+    interpreter::PreComputeInstruction,
+    ExecutionError
+};
 
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -83,7 +86,7 @@ impl<'a> AotInstance<'a> {
         }
 
         let program = &exe.program; 
-        let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
+        let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
@@ -94,7 +97,6 @@ impl<'a> AotInstance<'a> {
         let init_memory = exe.init_memory.clone();
 
         let mut instance = Self {
-            mmap: mmap,
             pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
@@ -108,7 +110,7 @@ impl<'a> AotInstance<'a> {
         &mut self,
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
-    ) -> Result<(), libloading::Error> {
+    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
         let mut mmap = unsafe {
             MmapOptions::new().len(len).map_anon().expect("mmap")
@@ -122,26 +124,37 @@ impl<'a> AotInstance<'a> {
         );
         let ctx = ExecutionCtx::new(None);
         let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, ctx);
-        
-        let mut boxed_vm_exec_state = Box::new(&vm_exec_state);
 
         unsafe {
-            let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             std::ptr::write(ptr, vm_exec_state);
         }  
 
         unsafe {
-            let fi = &self.pre_compute_insns[0];
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
             let lib = Library::new("/home/ubuntu/openvm-test/target/release/libasm_bridge.so")
                 .expect("Failed to load library");
-            let asm_run: libloading::Symbol<AsmRunFn> = lib.get(b"asm_run")?;
-            let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            let asm_run: libloading::Symbol<AsmRunFn> = lib
+                .get(b"asm_run")
+                .expect("Failed to get asm_run symbol");
+            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             
             asm_run(ptr as *mut c_void, vec_ptr);
         }
 
-        Ok(())
+        let vm_exec_state_ref = unsafe {
+            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            &mut *ptr
+        };
+
+        let vm_state = vm_exec_state_ref.vm_state.clone();
+
+        unsafe {
+            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            std::ptr::drop_in_place(ptr);
+        }
+
+        Ok(vm_state)
     }
 
     pub fn create_assembly(exe: &VmExe<F>) {
@@ -208,15 +221,6 @@ impl<'a> AotInstance<'a> {
     }
 }
 
-impl<'a> Drop for AotInstance<'a> {
-    fn drop(&mut self) {
-        unsafe {
-            let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            std::ptr::drop_in_place(ptr);
-        }
-    }
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program = Program::<F>::from_instructions(&[
         Instruction::from_isize(
@@ -273,17 +277,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut aot_instance = AotInstance::new(&inventory, &exe)?;
     aot_instance.execute(vec![], None);
-
-    let ptr = aot_instance.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-
-    let vm_exec_state_ref = unsafe {
-        &mut *(ptr)
-    };
-
-    for r in 0..10 {
-        let res = vm_exec_state_ref.vm_read::<u8, 1>(1, r);
-        println!("result: {:?}", res);
-    }
 
     Ok(())
 } 
