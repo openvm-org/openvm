@@ -1118,6 +1118,7 @@ pub struct VerifiedExecutionPayload<F> {
 /// This verification requires an additional Merkle proof with respect to the Merkle root of
 /// the final memory state.
 // @dev: This function doesn't need to be generic in `VC`.
+#[instrument(name = "verify_segments_fn", skip_all)]
 pub fn verify_segments<E>(
     engine: &E,
     vk: &MultiStarkVerifyingKey<E::SC>,
@@ -1138,105 +1139,107 @@ where
     let mut program_commit = None;
 
     for (i, proof) in proofs.iter().enumerate() {
-        let res = engine.verify(vk, proof);
-        match res {
-            Ok(_) => (),
-            Err(e) => return Err(VmVerificationError::StarkError(e)),
-        };
+        info_span!("verify_segment", index = i).in_scope(|| {
+            let res = engine.verify(vk, proof);
+            match res {
+                Ok(_) => (),
+                Err(e) => return Err(VmVerificationError::StarkError(e)),
+            };
 
-        let mut program_air_present = false;
-        let mut connector_air_present = false;
-        let mut merkle_air_present = false;
+            let mut program_air_present = false;
+            let mut connector_air_present = false;
+            let mut merkle_air_present = false;
 
-        // Check public values.
-        for air_proof_data in proof.per_air.iter() {
-            let pvs = &air_proof_data.public_values;
-            let air_vk = &vk.inner.per_air[air_proof_data.air_id];
-            if air_proof_data.air_id == PROGRAM_AIR_ID {
-                program_air_present = true;
-                if i == 0 {
-                    program_commit =
-                        Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
-                } else if program_commit.unwrap()
-                    != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
-                {
-                    return Err(VmVerificationError::ProgramCommitMismatch { index: i });
-                }
-            } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
-                connector_air_present = true;
-                let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
+            // Check public values.
+            for air_proof_data in proof.per_air.iter() {
+                let pvs = &air_proof_data.public_values;
+                let air_vk = &vk.inner.per_air[air_proof_data.air_id];
+                if air_proof_data.air_id == PROGRAM_AIR_ID {
+                    program_air_present = true;
+                    if i == 0 {
+                        program_commit =
+                            Some(proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref());
+                    } else if program_commit.unwrap()
+                        != proof.commitments.main_trace[PROGRAM_CACHED_TRACE_INDEX].as_ref()
+                    {
+                        return Err(VmVerificationError::ProgramCommitMismatch { index: i });
+                    }
+                } else if air_proof_data.air_id == CONNECTOR_AIR_ID {
+                    connector_air_present = true;
+                    let pvs: &VmConnectorPvs<_> = pvs.as_slice().borrow();
 
-                if i != 0 {
-                    // Check initial pc matches the previous final pc.
-                    if pvs.initial_pc != prev_final_pc.unwrap() {
-                        return Err(VmVerificationError::InitialPcMismatch {
-                            initial: pvs.initial_pc.as_canonical_u32(),
-                            prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                    if i != 0 {
+                        // Check initial pc matches the previous final pc.
+                        if pvs.initial_pc != prev_final_pc.unwrap() {
+                            return Err(VmVerificationError::InitialPcMismatch {
+                                initial: pvs.initial_pc.as_canonical_u32(),
+                                prev_final: prev_final_pc.unwrap().as_canonical_u32(),
+                            });
+                        }
+                    } else {
+                        start_pc = Some(pvs.initial_pc);
+                    }
+                    prev_final_pc = Some(pvs.final_pc);
+
+                    let expected_is_terminate = i == proofs.len() - 1;
+                    if pvs.is_terminate != FieldAlgebra::from_bool(expected_is_terminate) {
+                        return Err(VmVerificationError::IsTerminateMismatch {
+                            expected: expected_is_terminate,
+                            actual: pvs.is_terminate.as_canonical_u32() != 0,
                         });
                     }
-                } else {
-                    start_pc = Some(pvs.initial_pc);
-                }
-                prev_final_pc = Some(pvs.final_pc);
 
-                let expected_is_terminate = i == proofs.len() - 1;
-                if pvs.is_terminate != FieldAlgebra::from_bool(expected_is_terminate) {
-                    return Err(VmVerificationError::IsTerminateMismatch {
-                        expected: expected_is_terminate,
-                        actual: pvs.is_terminate.as_canonical_u32() != 0,
-                    });
-                }
-
-                let expected_exit_code = if expected_is_terminate {
-                    ExitCode::Success as u32
-                } else {
-                    DEFAULT_SUSPEND_EXIT_CODE
-                };
-                if pvs.exit_code != FieldAlgebra::from_canonical_u32(expected_exit_code) {
-                    return Err(VmVerificationError::ExitCodeMismatch {
-                        expected: expected_exit_code,
-                        actual: pvs.exit_code.as_canonical_u32(),
-                    });
-                }
-            } else if air_proof_data.air_id == MERKLE_AIR_ID {
-                merkle_air_present = true;
-                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
-
-                // Check that initial root matches the previous final root.
-                if i != 0 {
-                    if pvs.initial_root != prev_final_memory_root.unwrap() {
-                        return Err(VmVerificationError::InitialMemoryRootMismatch);
+                    let expected_exit_code = if expected_is_terminate {
+                        ExitCode::Success as u32
+                    } else {
+                        DEFAULT_SUSPEND_EXIT_CODE
+                    };
+                    if pvs.exit_code != FieldAlgebra::from_canonical_u32(expected_exit_code) {
+                        return Err(VmVerificationError::ExitCodeMismatch {
+                            expected: expected_exit_code,
+                            actual: pvs.exit_code.as_canonical_u32(),
+                        });
                     }
+                } else if air_proof_data.air_id == MERKLE_AIR_ID {
+                    merkle_air_present = true;
+                    let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+
+                    // Check that initial root matches the previous final root.
+                    if i != 0 {
+                        if pvs.initial_root != prev_final_memory_root.unwrap() {
+                            return Err(VmVerificationError::InitialMemoryRootMismatch);
+                        }
+                    } else {
+                        initial_memory_root = Some(pvs.initial_root);
+                    }
+                    prev_final_memory_root = Some(pvs.final_root);
                 } else {
-                    initial_memory_root = Some(pvs.initial_root);
+                    if !pvs.is_empty() {
+                        return Err(VmVerificationError::UnexpectedPvs {
+                            expected: 0,
+                            actual: pvs.len(),
+                        });
+                    }
+                    // We assume the vk is valid, so this is only a debug assert.
+                    debug_assert_eq!(air_vk.params.num_public_values, 0);
                 }
-                prev_final_memory_root = Some(pvs.final_root);
-            } else {
-                if !pvs.is_empty() {
-                    return Err(VmVerificationError::UnexpectedPvs {
-                        expected: 0,
-                        actual: pvs.len(),
-                    });
-                }
-                // We assume the vk is valid, so this is only a debug assert.
-                debug_assert_eq!(air_vk.params.num_public_values, 0);
             }
-        }
-        if !program_air_present {
-            return Err(VmVerificationError::SystemAirMissing {
-                air_id: PROGRAM_AIR_ID,
-            });
-        }
-        if !connector_air_present {
-            return Err(VmVerificationError::SystemAirMissing {
-                air_id: CONNECTOR_AIR_ID,
-            });
-        }
-        if !merkle_air_present {
-            return Err(VmVerificationError::SystemAirMissing {
-                air_id: MERKLE_AIR_ID,
-            });
-        }
+            if !program_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: PROGRAM_AIR_ID,
+                });
+            }
+            if !connector_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: CONNECTOR_AIR_ID,
+                });
+            }
+            if !merkle_air_present {
+                return Err(VmVerificationError::SystemAirMissing {
+                    air_id: MERKLE_AIR_ID,
+                });
+            }
+        });
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
