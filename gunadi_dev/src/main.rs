@@ -56,6 +56,8 @@ type Executor = Rv32IExecutor;
 
 pub struct AotInstance<'a> {
     pub mmap: MmapMut,
+    init_memory: SparseMemoryImage,
+    system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
     pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>
 }
@@ -67,12 +69,11 @@ type AsmRunFn = unsafe extern "C" fn(
 
 impl<'a> AotInstance<'a> {
     pub fn new(
-        system_config: SystemConfig,
         inventory: &'a ExecutorInventory<Executor>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError> {
-        Self::create_assembly(exe);
 
+        Self::create_assembly(exe);
         let status = Command::new("cargo")
             .args(&["build", "--release"])
             .current_dir("asm_bridge")
@@ -88,39 +89,49 @@ impl<'a> AotInstance<'a> {
             MmapOptions::new().len(len).map_anon().expect("mmap")
         };  
 
-        let init_memory : SparseMemoryImage = Default::default();
-        let vm_state: VmState<F> = VmState::initial(&system_config, &init_memory, 0, vec![]);
-        let exec_ctx = ExecutionCtx::new(None); 
-        let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, exec_ctx);
-
-        unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            std::ptr::write(ptr, vm_exec_state);
-        }  
-
         let program = &exe.program; 
         let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
             program,
             inventory,
             &mut split_pre_compute_buf,
         )?;
+        let init_memory = exe.init_memory.clone();
 
         let mut instance = Self {
             mmap: mmap,
             pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
+            system_config: inventory.config().clone(),
+            init_memory: init_memory
         };
 
         Ok(instance)
     }   
     
     pub fn execute(
-        &mut self
+        &mut self,
+        inputs: impl Into<Streams<F>>,
+        num_insns: Option<u64>,
     ) -> Result<(), libloading::Error> {
+        let vm_state = VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            0,
+            inputs,
+        );
+        let ctx = ExecutionCtx::new(None);
+        let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(vm_state, ctx);
+        
+        let mut boxed_vm_exec_state = Box::new(&vm_exec_state);
+
+        unsafe {
+            let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            std::ptr::write(ptr, vm_exec_state);
+        }  
+
         unsafe {
             let fi = &self.pre_compute_insns[0];
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
@@ -131,6 +142,7 @@ impl<'a> AotInstance<'a> {
             
             asm_run(ptr as *mut c_void, vec_ptr);
         }
+
         Ok(())
     }
 
@@ -261,8 +273,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let branch_equal = Rv32BranchEqualExecutor::new(Rv32BranchAdapterExecutor,BranchEqualOpcode::CLASS_OFFSET, 4);
     inventory.add_executor(branch_equal, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
-    let mut aot_instance = AotInstance::new(system_config.clone(), &inventory, &exe)?;
-    aot_instance.execute();
+    let mut aot_instance = AotInstance::new(&inventory, &exe)?;
+    aot_instance.execute(vec![], None);
 
     let ptr = aot_instance.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
 
