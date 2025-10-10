@@ -21,7 +21,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
 };
-use tracing::info_span;
+use tracing::{info_span, instrument};
 
 use crate::{
     commit::{AppExecutionCommit, CommitBytes},
@@ -121,6 +121,7 @@ where
     ///
     /// This function internally calls [verify_app_proof] to verify the result before returning the
     /// proof.
+    #[instrument(name = "app_layer", skip_all)]
     pub fn prove(
         &mut self,
         input: StdIn<Val<E::SC>>,
@@ -153,20 +154,23 @@ where
         })?;
         // We skip verification of the user public values proof here because it is directly computed
         // from the merkle tree above
-        let res = verify_segments(
-            &self.instance.vm.engine,
-            &self.app_vm_vk,
-            &proofs.per_segment,
-        )?;
-        let app_exe_commit_u32s = self.app_commit().app_exe_commit.to_u32_digest();
-        let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
-        if exe_commit_u32s != app_exe_commit_u32s {
-            return Err(VmVerificationError::ExeCommitMismatch {
-                expected: app_exe_commit_u32s,
-                actual: exe_commit_u32s,
+        info_span!("verify_segments").in_scope(|| -> Result<(), VirtualMachineError> {
+            let res = verify_segments(
+                &self.instance.vm.engine,
+                &self.app_vm_vk,
+                &proofs.per_segment,
+            )?;
+            let app_exe_commit_u32s = self.app_commit().app_exe_commit.to_u32_digest();
+            let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
+            if exe_commit_u32s != app_exe_commit_u32s {
+                return Err(VmVerificationError::ExeCommitMismatch {
+                    expected: app_exe_commit_u32s,
+                    actual: exe_commit_u32s,
+                }
+                .into());
             }
-            .into());
-        }
+            Ok(())
+        })?;
         Ok(proofs)
     }
 
