@@ -5,23 +5,54 @@
 .global asm_run_internal
 
 asm_run_internal:
+    push rbp
+    push rbx
+    push r12
     mov rbx, rdi
     mov rbp, rsi
-    mov r12, rdx
-    sub rsp, 8
+    xor r13, r13
+    lea r10, [rip + map_pc_base]
+    lea r12, [rip + map_pc_end]
+    sub r12, r10
+    shr r12, 2
 pc_0:
     mov rdi, rbx
     mov rsi, rbp
-    mov r12, rdx
+    mov rdx, r13
     call extern_handler
+    mov r13, rax
+    shr eax, 2
+    cmp rax, r12
+    jae asm_run_end
+    lea r10, [rip + map_pc_base]
+    movsxd  r11, dword ptr [r10 + rax*4]
+    add r11, r10
+    jmp r11
 
 pc_4:
     mov rdi, rbx
     mov rsi, rbp
-    mov r12, rdx
+    mov rdx, r13
     call extern_handler
+    mov r13, rax
+    shr eax, 2
+    cmp rax, r12
+    jae asm_run_end
+    lea r10, [rip + map_pc_base]
+    movsxd  r11, dword ptr [r10 + rax*4]
+    add r11, r10
+    jmp r11
 
 asm_run_end:
-    add rsp, 8
     xor eax, eax
+    pop r12
+    pop rbx
+    pop rbp
     ret
+.section .rodata,"a",@progbits
+.p2align 4
+map_pc_base:
+    .long (pc_0 - map_pc_base)
+    .long (pc_4 - map_pc_base)
+map_pc_end:
+

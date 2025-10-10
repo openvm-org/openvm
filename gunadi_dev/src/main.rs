@@ -114,11 +114,7 @@ impl<'a> AotInstance<'a> {
     ) -> Result<(), libloading::Error> {
         unsafe {
             let fi = &self.pre_compute_insns[0];
-            std::hint::black_box(&fi.pre_compute);  // Prevent optimization from removing this
-            // println!("RIGHT BEFORE FFI: {:?}", fi.pre_compute);
-
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
-
             let lib = Library::new("/home/ubuntu/openvm-test/target/release/libasm_bridge.so")
                 .expect("Failed to load library");
             let asm_run: libloading::Symbol<AsmRunFn> = lib.get(b"asm_run")?;
@@ -140,42 +136,67 @@ impl<'a> AotInstance<'a> {
         asm += "\n";
 
         asm += "asm_run_internal:\n";
+        asm += "    push rbp\n";
+        asm += "    push rbx\n";
+        asm += "    push r12\n";
+        
         asm += "    mov rbx, rdi\n";
         asm += "    mov rbp, rsi\n";
-        asm += "    mov r12, rdx\n";
-        asm += "    sub rsp, 8\n";
+        asm += "    xor r13, r13\n";
+
+        asm += "    lea r10, [rip + map_pc_base]\n";
+        asm += "    lea r12, [rip + map_pc_end]\n";
+        asm += "    sub r12, r10\n";
+        asm += "    shr r12, 2\n";
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             asm += &format!("pc_{:x}:\n", pc);
             asm += "    mov rdi, rbx\n";
             asm += "    mov rsi, rbp\n";
-            asm += "    mov r12, rdx\n";
+            asm += "    mov rdx, r13\n";
             asm += "    call extern_handler\n";
+
+            asm += "    mov r13, rax\n";
+            asm += "    shr eax, 2\n";
+            asm += "    cmp rax, r12\n";
+            asm += "    jae asm_run_end\n";
+
+            asm += "    lea r10, [rip + map_pc_base]\n";
+            asm += "    movsxd  r11, dword ptr [r10 + rax*4]\n";
+            asm += "    add r11, r10\n";
+            asm += "    jmp r11\n";
             asm += "\n";
         }
 
         asm += "asm_run_end:\n";
-        asm += "    add rsp, 8\n";
         asm += "    xor eax, eax\n";
+        asm += "    pop r12\n";
+        asm += "    pop rbx\n";
+        asm += "    pop rbp\n";
         asm += "    ret\n";
+
+        asm += ".section .rodata,\"a\",@progbits\n";
+        asm += ".p2align 4\n";
+        asm += "map_pc_base:\n";
+
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm += &format!("    .long (pc_{:x} - map_pc_base)\n", pc);
+        }
+        asm += "map_pc_end:\n";
+        asm += "\n";
 
         fs::write("asm_bridge/src/asm_run.s", asm).expect("Failed to write file");
     }
-
-
 }
 
-// impl<'a> Drop for AotInstance<'a> {
-//     fn drop(&mut self) {
-//         println!("AOT INSTANCE IS DROPPED");
-//         unsafe {
-//             // Manually drop the VmExecState before unmapping
-//             let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-//             std::ptr::drop_in_place(ptr);
-//         }
-//         // mmap drops automatically after this
-//     }
-// }
+impl<'a> Drop for AotInstance<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            let ptr = self.mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            std::ptr::drop_in_place(ptr);
+        }
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program = Program::<F>::from_instructions(&[
@@ -191,7 +212,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             BaseAluOpcode::ADD.global_opcode(),
             4,
             4,
-            2,
+            4,
             1,
             0,
         )
@@ -216,30 +237,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let base_alu = Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
 
-    /*
-    let program = &exe.program; 
-    let pre_compute_max_size = get_pre_compute_max_size(program, &inventory);
-    let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
-    let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-
-    let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
-        program,
-        &inventory,
-        &mut split_pre_compute_buf,
-    )?;
-
-    let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
-    let mut mmap = unsafe {
-        MmapOptions::new().len(len).map_anon().expect("mmap")
-    };  
-
-    let mut instance = AotInstance {
-        mmap: mmap,
-        pre_compute_insns: pre_compute_insns,
-        pre_compute_buf: pre_compute_buf,
-    };
-    */
-
     let mut aot_instance = AotInstance::new(system_config.clone(), &inventory, &exe)?;
     aot_instance.execute();
 
@@ -248,8 +245,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vm_exec_state_ref = unsafe {
         &mut *(ptr)
     };
-
-    println!("value: {:?}", vm_exec_state_ref.vm_read::<u8, 4>(1, 4));
 
     Ok(())
 } 
