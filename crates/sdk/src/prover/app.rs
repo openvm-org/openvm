@@ -336,7 +336,9 @@ mod async_prover {
         #[instrument(
             name = "app proof",
             skip_all,
-            group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string())
+            fields(
+                group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string())
+            )
         )]
         pub async fn prove(
             self,
