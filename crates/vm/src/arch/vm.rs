@@ -1239,7 +1239,8 @@ where
                     air_id: MERKLE_AIR_ID,
                 });
             }
-        });
+            Ok(())
+        })?;
     }
     let exe_commit = compute_exe_commit(
         &vm_poseidon2_hasher(),
