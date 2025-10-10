@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#501ac3125638fc3f5a044a9be5cc5220b5b575e2"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#501ac3125638fc3f5a044a9be5cc5220b5b575e2"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#501ac3125638fc3f5a044a9be5cc5220b5b575e2"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6164,6 +6164,7 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "thiserror 1.0.69",
+ "tokio",
  "toml 0.8.23",
  "tracing",
 ]
@@ -6246,7 +6247,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#501ac3125638fc3f5a044a9be5cc5220b5b575e2"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6276,11 +6277,11 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.4"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fasync-errors#f9e8d331ee0e9a8ba613835a17edab45d23ed289"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=main#501ac3125638fc3f5a044a9be5cc5220b5b575e2"
 dependencies = [
  "dashmap",
  "derivative",
- "derive_more 0.99.20",
+ "derive_more 1.0.0",
  "ff 0.13.1",
  "itertools 0.14.0",
  "metrics",

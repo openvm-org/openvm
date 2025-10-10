@@ -104,6 +104,12 @@ macro_rules! run {
             #[cfg(feature = "tco")]
             {
                 tracing::debug!("execute_tco");
+
+                if $ctx::should_suspend($instret, $pc, $arg, &mut $exec_state) {
+                    $exec_state.set_instret_and_pc($instret, $pc);
+                    return Ok(());
+                }
+
                 let handler = $interpreter
                     .get_handler($pc)
                     .ok_or(ExecutionError::PcOutOfBounds($pc))?;
@@ -353,10 +359,21 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let ctx = ExecutionCtx::new(num_insns);
+        let instret = from_state.instret();
+        let instret_end = if let Some(n) = num_insns {
+            let end = instret
+                .checked_add(n)
+                .ok_or(ExecutionError::InstretOverflow {
+                    instret,
+                    num_insns: n,
+                })?;
+            Some(end)
+        } else {
+            None
+        };
+        let ctx = ExecutionCtx::new(instret_end);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
-        let instret = exec_state.instret();
         let pc = exec_state.pc();
         let instret_end = exec_state.ctx.instret_end;
         run!(
