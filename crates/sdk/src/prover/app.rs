@@ -246,6 +246,7 @@ mod async_prover {
     };
     use openvm_stark_sdk::config::FriParameters;
     use tokio::{spawn, sync::Semaphore, task::spawn_blocking};
+    use tracing::instrument;
 
     use super::*;
 
@@ -332,6 +333,11 @@ mod async_prover {
             )
         }
 
+        #[instrument(
+            name = "app proof",
+            skip_all,
+            group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string())
+        )]
         pub async fn prove(
             self,
             input: StdIn<Val<E::SC>>,
@@ -341,122 +347,112 @@ mod async_prover {
             #[cfg(feature = "metrics")]
             metrics::counter!("fri.log_blowup").absolute(self.fri_params().log_blowup as u64);
 
-            info_span!(
-                "app proof",
-                group = self
-                    .program_name
-                    .as_ref()
-                    .unwrap_or(&"app_proof".to_string())
-            )
-            .in_scope(async || {
-                // PERF[jpw]: it is possible to create metered_interpreter without creating vm. The
-                // latter is more convenient, but does unnecessary setup (e.g., transfer pk to
-                // device). Also, app_commit should be cached.
-                let mut local_prover = self.local()?;
-                let app_commit = local_prover.app_commit();
-                local_prover.instance.reset_state(input.clone());
-                let mut state = local_prover.instance.state_mut().take().unwrap();
-                let vm = &mut local_prover.instance.vm;
-                let metered_ctx = vm.build_metered_ctx(&self.app_exe);
-                let metered_interpreter = vm.metered_interpreter(&self.app_exe)?;
-                let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
-                drop(metered_interpreter);
-                let pure_interpreter = vm.interpreter(&self.app_exe)?;
-                let mut tasks = Vec::with_capacity(segments.len());
-                let terminal_instret = segments
-                    .last()
-                    .map(|s| s.instret_start + s.num_insns)
-                    .unwrap_or(u64::MAX);
-                for (seg_idx, segment) in segments.into_iter().enumerate() {
-                    tracing::info!(
-                        %seg_idx,
-                        instret = state.instret(),
-                        %segment.instret_start,
-                        pc = state.pc(),
-                        "Re-executing",
-                    );
-                    let num_insns = segment.instret_start.checked_sub(state.instret()).unwrap();
-                    state = pure_interpreter.execute_from_state(state, Some(num_insns))?;
-
-                    let semaphore = self.semaphore.clone();
-                    let async_worker = self.clone();
-                    let start_state = state.clone();
-                    let task = spawn(async move {
-                        let _permit = semaphore.acquire().await?;
-                        spawn_blocking(move || {
-                            info_span!("prove_segment", segment = seg_idx).in_scope(
-                                || -> eyre::Result<_> {
-                                    // We need a separate span so the metric label includes
-                                    // "segment"
-                                    // from _segment_span
-                                    let _prove_span = info_span!("vm_prove").entered();
-                                    let mut worker = async_worker.local()?;
-                                    let instance = &mut worker.instance;
-                                    let vm = &mut instance.vm;
-                                    let preflight_interpreter = &mut instance.interpreter;
-                                    let (segment_proof, _) = vm.prove(
-                                        preflight_interpreter,
-                                        start_state,
-                                        Some(segment.num_insns),
-                                        &segment.trace_heights,
-                                    )?;
-                                    Ok(segment_proof)
-                                },
-                            )
-                        })
-                        .await?
-                    });
-                    tasks.push(task);
-                }
-                // Finish execution to termination
-                state = pure_interpreter.execute_from_state(state, None)?;
-                if state.instret() != terminal_instret {
-                    tracing::warn!(
-                        "Pure execution terminal instret={}, metered execution terminal instret={}",
-                        state.instret(),
-                        terminal_instret
-                    );
-                    // This should never happen
-                    return Err(ExecutionError::DidNotTerminate.into());
-                }
-                let final_memory = &state.memory.memory;
-                let user_public_values = UserPublicValuesProof::compute(
-                    vm.config().as_ref().memory_config.memory_dimensions(),
-                    vm.config().as_ref().num_public_values,
-                    &vm_poseidon2_hasher(),
-                    final_memory,
+            // PERF[jpw]: it is possible to create metered_interpreter without creating vm. The
+            // latter is more convenient, but does unnecessary setup (e.g., transfer pk to
+            // device). Also, app_commit should be cached.
+            let mut local_prover = self.local()?;
+            let app_commit = local_prover.app_commit();
+            local_prover.instance.reset_state(input.clone());
+            let mut state = local_prover.instance.state_mut().take().unwrap();
+            let vm = &mut local_prover.instance.vm;
+            let metered_ctx = vm.build_metered_ctx(&self.app_exe);
+            let metered_interpreter = vm.metered_interpreter(&self.app_exe)?;
+            let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
+            drop(metered_interpreter);
+            let pure_interpreter = vm.interpreter(&self.app_exe)?;
+            let mut tasks = Vec::with_capacity(segments.len());
+            let terminal_instret = segments
+                .last()
+                .map(|s| s.instret_start + s.num_insns)
+                .unwrap_or(u64::MAX);
+            for (seg_idx, segment) in segments.into_iter().enumerate() {
+                tracing::info!(
+                    %seg_idx,
+                    instret = state.instret(),
+                    %segment.instret_start,
+                    pc = state.pc(),
+                    "Re-executing",
                 );
+                let num_insns = segment.instret_start.checked_sub(state.instret()).unwrap();
+                state = pure_interpreter.execute_from_state(state, Some(num_insns))?;
 
-                let mut proofs = Vec::with_capacity(tasks.len());
-                for task in tasks {
-                    let proof = task.await??;
-                    proofs.push(proof);
-                }
-                let cont_proof = ContinuationVmProof {
-                    per_segment: proofs,
-                    user_public_values,
-                };
+                let semaphore = self.semaphore.clone();
+                let async_worker = self.clone();
+                let start_state = state.clone();
+                let task = spawn(async move {
+                    let _permit = semaphore.acquire().await?;
+                    spawn_blocking(move || {
+                        info_span!("prove_segment", segment = seg_idx).in_scope(
+                            || -> eyre::Result<_> {
+                                // We need a separate span so the metric label includes
+                                // "segment"
+                                // from _segment_span
+                                let _prove_span = info_span!("vm_prove").entered();
+                                let mut worker = async_worker.local()?;
+                                let instance = &mut worker.instance;
+                                let vm = &mut instance.vm;
+                                let preflight_interpreter = &mut instance.interpreter;
+                                let (segment_proof, _) = vm.prove(
+                                    preflight_interpreter,
+                                    start_state,
+                                    Some(segment.num_insns),
+                                    &segment.trace_heights,
+                                )?;
+                                Ok(segment_proof)
+                            },
+                        )
+                    })
+                    .await?
+                });
+                tasks.push(task);
+            }
+            // Finish execution to termination
+            state = pure_interpreter.execute_from_state(state, None)?;
+            if state.instret() != terminal_instret {
+                tracing::warn!(
+                    "Pure execution terminal instret={}, metered execution terminal instret={}",
+                    state.instret(),
+                    terminal_instret
+                );
+                // This should never happen
+                return Err(ExecutionError::DidNotTerminate.into());
+            }
+            let final_memory = &state.memory.memory;
+            let user_public_values = UserPublicValuesProof::compute(
+                vm.config().as_ref().memory_config.memory_dimensions(),
+                vm.config().as_ref().num_public_values,
+                &vm_poseidon2_hasher(),
+                final_memory,
+            );
 
-                // We skip verification of the user public values proof here because it is directly
-                // computed from the merkle tree above
-                let engine = E::new(self.fri_params());
-                let res = verify_segments(
-                    &engine,
-                    &self.app_vm_pk.vm_pk.get_vk(),
-                    &cont_proof.per_segment,
-                )?;
-                let app_exe_commit_u32s = app_commit.app_exe_commit.to_u32_digest();
-                let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
-                if exe_commit_u32s != app_exe_commit_u32s {
-                    return Err(VmVerificationError::ExeCommitMismatch {
-                        expected: app_exe_commit_u32s,
-                        actual: exe_commit_u32s,
-                    }
-                    .into());
+            let mut proofs = Vec::with_capacity(tasks.len());
+            for task in tasks {
+                let proof = task.await??;
+                proofs.push(proof);
+            }
+            let cont_proof = ContinuationVmProof {
+                per_segment: proofs,
+                user_public_values,
+            };
+
+            // We skip verification of the user public values proof here because it is directly
+            // computed from the merkle tree above
+            let engine = E::new(self.fri_params());
+            let res = verify_segments(
+                &engine,
+                &self.app_vm_pk.vm_pk.get_vk(),
+                &cont_proof.per_segment,
+            )?;
+            let app_exe_commit_u32s = app_commit.app_exe_commit.to_u32_digest();
+            let exe_commit_u32s = res.exe_commit.map(|x| x.as_canonical_u32());
+            if exe_commit_u32s != app_exe_commit_u32s {
+                return Err(VmVerificationError::ExeCommitMismatch {
+                    expected: app_exe_commit_u32s,
+                    actual: exe_commit_u32s,
                 }
-                Ok(cont_proof)
-            })
-            .await
+                .into());
+            }
+            Ok(cont_proof)
         }
     }
 }
