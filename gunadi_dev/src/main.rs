@@ -40,8 +40,9 @@ use std::ffi::c_void;
 use libloading::{Library, Symbol};
 use openvm_circuit::arch::{
     interpreter::PreComputeInstruction,
-    ExecutionError
+    ExecutionError,
 };
+use openvm_circuit::arch::Executor;
 
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
@@ -56,7 +57,6 @@ use openvm_stark_backend::config::Val;
 use openvm_circuit::arch::ExecutionCtxTrait;
 
 type F = BabyBear;
-type Executor = Rv32IExecutor;
 
 pub struct AotInstance<'a, Ctx> {
     init_memory: SparseMemoryImage,
@@ -74,10 +74,13 @@ impl<'a, Ctx> AotInstance<'a, Ctx>
 where 
     Ctx: ExecutionCtxTrait
 {
-    pub fn new(
-        inventory: &'a ExecutorInventory<Executor>,
+    pub fn new<E>(
+        inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
-    ) -> Result<Self, StaticProgramError> {
+    ) -> Result<Self, StaticProgramError> 
+    where
+        E: Executor<F>,
+    {
         Self::create_assembly(exe);
 
         let status = Command::new("cargo")
@@ -92,7 +95,7 @@ where
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, Executor>(
+        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
             &mut split_pre_compute_buf,
@@ -268,7 +271,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let memory_config : MemoryConfig = Default::default();
     let system_config = SystemConfig::default_from_memory(memory_config);
-    let mut inventory : ExecutorInventory<Executor> = ExecutorInventory::new(system_config.clone());
+    let mut inventory : ExecutorInventory<Rv32IExecutor> = ExecutorInventory::new(system_config.clone());
 
     let base_alu = Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
