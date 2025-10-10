@@ -152,6 +152,20 @@ where
                 .absolute(self.instance.vm.engine.fri_params().log_blowup as u64);
             ContinuationVmProver::prove(&mut self.instance, input)
         })?;
+        Ok(proofs)
+    }
+
+    #[instrument(name = "app_layer", skip_all)]
+    pub fn prove_and_verify(
+        &mut self,
+        input: StdIn<Val<E::SC>>,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+            + MeteredExecutor<Val<E::SC>>
+            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        let proofs = self.prove(input)?;
         // We skip verification of the user public values proof here because it is directly computed
         // from the merkle tree above
         info_span!("verify_segments").in_scope(|| -> Result<(), VirtualMachineError> {
