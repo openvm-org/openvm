@@ -53,11 +53,12 @@ use openvm_rv32im_circuit::{
 
 use openvm_stark_backend::config::Val;
 
+use openvm_circuit::arch::ExecutionCtxTrait;
+
 type F = BabyBear;
-type Ctx = ExecutionCtx;
 type Executor = Rv32IExecutor;
 
-pub struct AotInstance<'a> {
+pub struct AotInstance<'a, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
@@ -69,21 +70,23 @@ type AsmRunFn = unsafe extern "C" fn(
     vec_ptr: *const c_void,
 );
 
-impl<'a> AotInstance<'a> {
+impl<'a, Ctx> AotInstance<'a, Ctx>
+where 
+    Ctx: ExecutionCtxTrait
+{
     pub fn new(
         inventory: &'a ExecutorInventory<Executor>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError> {
         Self::create_assembly(exe);
+
         let status = Command::new("cargo")
             .args(&["build", "--release"])
             .current_dir("asm_bridge")
             .status()
             .expect("Failed to execute cargo");
 
-        if !status.success() {
-            panic!("Cargo build failed");
-        }
+        assert!(status.success(), "Cargo build failed with exit code: {:?}", status.code());
 
         let program = &exe.program; 
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
@@ -96,14 +99,12 @@ impl<'a> AotInstance<'a> {
         )?;
         let init_memory = exe.init_memory.clone();
 
-        let mut instance = Self {
+        Ok(Self {
             pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
             init_memory: init_memory
-        };
-
-        Ok(instance)
+        })
     }   
     
     pub fn execute(
@@ -275,7 +276,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let branch_equal = Rv32BranchEqualExecutor::new(Rv32BranchAdapterExecutor,BranchEqualOpcode::CLASS_OFFSET, 4);
     inventory.add_executor(branch_equal, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
-    let mut aot_instance = AotInstance::new(&inventory, &exe)?;
+    let mut aot_instance = AotInstance::<ExecutionCtx>::new(&inventory, &exe)?;
     aot_instance.execute(vec![], None);
 
     Ok(())
