@@ -43,6 +43,34 @@ pc_4:
     add r11, r10
     jmp r11
 
+pc_8:
+    mov rdi, rbx
+    mov rsi, rbp
+    mov rdx, r13
+    call extern_handler
+    mov r13, rax
+    shr eax, 2
+    cmp rax, r12
+    jae asm_run_end
+    lea r10, [rip + map_pc_base]
+    movsxd  r11, dword ptr [r10 + rax*4]
+    add r11, r10
+    jmp r11
+
+pc_c:
+    mov rdi, rbx
+    mov rsi, rbp
+    mov rdx, r13
+    call extern_handler
+    mov r13, rax
+    shr eax, 2
+    cmp rax, r12
+    jae asm_run_end
+    lea r10, [rip + map_pc_base]
+    movsxd  r11, dword ptr [r10 + rax*4]
+    add r11, r10
+    jmp r11
+
 asm_run_end:
     xor eax, eax
     pop r12
@@ -54,5 +82,7 @@ asm_run_end:
 map_pc_base:
     .long (pc_0 - map_pc_base)
     .long (pc_4 - map_pc_base)
+    .long (pc_8 - map_pc_base)
+    .long (pc_c - map_pc_base)
 map_pc_end:
 

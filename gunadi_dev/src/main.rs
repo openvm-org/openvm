@@ -3,7 +3,10 @@ use openvm_circuit::arch::VmExecState;
 use openvm_circuit::arch::VmState; 
 use openvm_instructions::program::Program;
 use openvm_instructions::instruction::Instruction;
-use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_rv32im_transpiler::{
+    BaseAluOpcode,
+    BranchEqualOpcode
+};
 use openvm_instructions::LocalOpcode;
 use openvm_circuit::arch::MemoryConfig;
 use p3_baby_bear::BabyBear;
@@ -14,11 +17,17 @@ use openvm_circuit::arch::execution_mode::ExecutionCtx;
 use openvm_circuit::arch::interpreter::{get_pre_compute_max_size, alloc_pre_compute_buf, split_pre_compute_buf, get_pre_compute_instructions};
 use openvm_circuit::arch::ExecutorInventory;
 use openvm_circuit::arch::VmExecutor;
-use openvm_rv32im_circuit::Rv32IExecutor;
+use openvm_rv32im_circuit::{
+    Rv32IExecutor,
+    Rv32BranchEqualExecutor
+};
 use openvm_circuit::derive::VmConfig;
 use openvm_rv32im_circuit::Rv32IConfig;
 use openvm_rv32im_circuit::Rv32BaseAluExecutor;
-use openvm_rv32im_circuit::adapters::Rv32BaseAluAdapterExecutor;
+use openvm_rv32im_circuit::adapters::{
+    Rv32BaseAluAdapterExecutor,
+    Rv32BranchAdapterExecutor
+};
 use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 use std::process::Command;
 use memmap2::MmapOptions;
@@ -202,17 +211,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let program = Program::<F>::from_instructions(&[
         Instruction::from_isize(
             BaseAluOpcode::ADD.global_opcode(),
-            4,
-            4,
-            4,
+            1,
+            1,
+            3,
             1,
             0,
         ), 
         Instruction::from_isize(
+            BaseAluOpcode::SUB.global_opcode(),
+            1,
+            1,
+            1,
+            1,
+            0,
+        ),
+        Instruction::from_isize(
+            BranchEqualOpcode::BNE.global_opcode(),
+            1,
+            2,
+            4,
+            1,
+            0,
+        ),
+        Instruction::from_isize(
             BaseAluOpcode::ADD.global_opcode(),
-            4,
-            4,
-            4,
+            3,
+            3,
+            2,
             1,
             0,
         )
@@ -225,17 +250,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         init_memory: Default::default(),
     };
 
-    let config = Rv32IConfig::default();
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
-    let executor = VmExecutor::<F, _>::new(config)?;
-    let _ = executor.instance(&exe);    
-
     let memory_config : MemoryConfig = Default::default();
     let system_config = SystemConfig::default_from_memory(memory_config);
-
     let mut inventory : ExecutorInventory<Executor> = ExecutorInventory::new(system_config.clone());
+
     let base_alu = Rv32BaseAluExecutor::new(Rv32BaseAluAdapterExecutor, BaseAluOpcode::CLASS_OFFSET);
     inventory.add_executor(base_alu, BaseAluOpcode::iter().map(|x| x.global_opcode()))?;
+
+    let branch_equal = Rv32BranchEqualExecutor::new(Rv32BranchAdapterExecutor,BranchEqualOpcode::CLASS_OFFSET, 4);
+    inventory.add_executor(branch_equal, BranchEqualOpcode::iter().map(|x| x.global_opcode()))?;
 
     let mut aot_instance = AotInstance::new(system_config.clone(), &inventory, &exe)?;
     aot_instance.execute();
@@ -245,6 +269,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let vm_exec_state_ref = unsafe {
         &mut *(ptr)
     };
+
+    for r in 0..10 {
+        let res = vm_exec_state_ref.vm_read::<u8, 1>(1, r);
+        println!("result: {:?}", res);
+    }
 
     Ok(())
 } 
