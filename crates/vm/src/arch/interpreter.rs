@@ -678,7 +678,7 @@ pub fn get_pre_compute_max_size<F, E: Executor<F>>(
         .next_power_of_two()
 }
 
-fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
+pub fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -768,7 +768,7 @@ where
 }
 
 #[cfg(not(feature = "tco"))]
-fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
+pub fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],

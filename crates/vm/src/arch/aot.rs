@@ -15,7 +15,7 @@ use crate::arch::SystemConfig;
 use crate::system::memory::online::GuestMemory;
 use openvm_instructions::exe::SparseMemoryImage;
 use crate::arch::execution_mode::ExecutionCtx;
-use crate::arch::interpreter::{get_pre_compute_max_size, alloc_pre_compute_buf, split_pre_compute_buf, get_pre_compute_instructions};
+use crate::arch::interpreter::{get_pre_compute_max_size, alloc_pre_compute_buf, split_pre_compute_buf, get_pre_compute_instructions, get_metered_pre_compute_max_size, get_metered_pre_compute_instructions};
 use crate::arch::ExecutorInventory;
 use crate::arch::VmExecutor;
 use crate::derive::VmConfig;
@@ -41,6 +41,8 @@ use crate::arch::InterpretedInstance;
 use crate::arch::execution_mode::MeteredCtx;
 use crate::arch::execution_mode::Segment;
 use crate::arch::instructions::SystemOpcode::TERMINATE;
+use crate::arch::MeteredExecutor;
+use crate::arch::MeteredExecutionCtxTrait;
 
 pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
@@ -49,10 +51,95 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>
 }
 
+use std::sync::Mutex;
+
 type AsmRunFn = unsafe extern "C" fn(
     exec_state: *mut core::ffi::c_void, 
     vec_ptr: *const c_void,
 );
+
+const PURE_EXECUTION : u32 = 0;
+const METERED_EXECUTION : u32 = 1;
+
+static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
+
+
+pub fn create_assembly<F>(exe: &VmExe<F>, execution_mode: u32)
+where F: p3_field::Field
+ {
+    // save assembly to asm_bridge/src/asm_run.s
+    let mut asm = String::new();
+    asm += ".intel_syntax noprefix\n";
+    asm += ".code64\n";
+    asm += ".section .text\n";
+    asm += ".extern extern_handler\n";
+    asm += ".global asm_run_internal\n";
+    asm += "\n";
+
+    asm += "asm_run_internal:\n";
+    asm += "    push rbp\n";
+    asm += "    push rbx\n";
+    asm += "    push r12\n";
+    
+    asm += "    mov rbx, rdi\n";
+    asm += "    mov rbp, rsi\n";
+    asm += "    xor r13, r13\n";
+    asm += "    lea r10, [rip + map_pc_base]\n";
+    asm += "    lea r12, [rip + map_pc_end]\n";
+    asm += "    sub r12, r10\n";
+    asm += "    shr r12, 2\n";
+
+    for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        asm += &format!("pc_{:x}:\n", pc);
+
+        if instruction.opcode == TERMINATE.global_opcode() {
+            asm += "    jmp asm_run_end\n";
+            asm += "\n";
+        } else {
+            asm += "    mov rdi, rbx\n";
+            asm += "    mov rsi, rbp\n";
+            asm += "    mov rdx, r13\n";
+
+            if execution_mode == METERED_EXECUTION {
+                asm += "    call metered_extern_handler\n";
+            } else {
+                asm += "    call extern_handler\n";
+            }
+            
+            asm += "    mov r13, rax\n";
+            asm += "    shr eax, 2\n";
+            asm += "    cmp rax, r12\n";
+            asm += "    jae asm_run_end\n";
+
+            asm += "    lea r10, [rip + map_pc_base]\n";
+            asm += "    movsxd  r11, dword ptr [r10 + rax*4]\n";
+            asm += "    add r11, r10\n";
+            asm += "    jmp r11\n";
+            asm += "\n";
+        }
+    }
+
+    asm += "asm_run_end:\n";
+    asm += "    xor eax, eax\n";
+    asm += "    pop r12\n";
+    asm += "    pop rbx\n";
+    asm += "    pop rbp\n";
+    asm += "    ret\n";
+
+    asm += ".section .rodata,\"a\",@progbits\n";
+    asm += ".p2align 4\n";
+    asm += "map_pc_base:\n";
+
+    for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        asm += &format!("    .long (pc_{:x} - map_pc_base)\n", pc);
+    }
+    asm += "map_pc_end:\n";
+    asm += "\n";
+
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let asm_file_path = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge/src/asm_run.s");
+    fs::write(asm_file_path, asm).expect("Failed to write file");
+}
 
 // AotInstance only works for F = BabyBear
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -67,7 +154,9 @@ where
     where
         E: Executor<F>,
     {
-        Self::create_assembly(exe);
+        let _lock = ASSEMBLY_LOCK.lock().unwrap();
+
+        create_assembly(exe, PURE_EXECUTION);
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
@@ -98,75 +187,6 @@ where
             init_memory: init_memory
         })
     }   
-
-    pub fn create_assembly(exe: &VmExe<F>) {
-        // save assembly to asm_bridge/src/asm_run.s
-        let mut asm = String::new();
-        asm += ".intel_syntax noprefix\n";
-        asm += ".code64\n";
-        asm += ".section .text\n";
-        asm += ".extern extern_handler\n";
-        asm += ".global asm_run_internal\n";
-        asm += "\n";
-
-        asm += "asm_run_internal:\n";
-        asm += "    push rbp\n";
-        asm += "    push rbx\n";
-        asm += "    push r12\n";
-        
-        asm += "    mov rbx, rdi\n";
-        asm += "    mov rbp, rsi\n";
-        asm += "    xor r13, r13\n";
-        asm += "    lea r10, [rip + map_pc_base]\n";
-        asm += "    lea r12, [rip + map_pc_end]\n";
-        asm += "    sub r12, r10\n";
-        asm += "    shr r12, 2\n";
-
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            asm += &format!("pc_{:x}:\n", pc);
-
-            if instruction.opcode == TERMINATE.global_opcode() {
-                println!("pc {} is terminate instruction", pc);
-            }
-
-            asm += "    mov rdi, rbx\n";
-            asm += "    mov rsi, rbp\n";
-            asm += "    mov rdx, r13\n";
-            asm += "    call extern_handler\n";
-
-            asm += "    mov r13, rax\n";
-            asm += "    shr eax, 2\n";
-            asm += "    cmp rax, r12\n";
-            asm += "    jae asm_run_end\n";
-
-            asm += "    lea r10, [rip + map_pc_base]\n";
-            asm += "    movsxd  r11, dword ptr [r10 + rax*4]\n";
-            asm += "    add r11, r10\n";
-            asm += "    jmp r11\n";
-            asm += "\n";
-        }
-
-        asm += "asm_run_end:\n";
-        asm += "    xor eax, eax\n";
-        asm += "    pop r12\n";
-        asm += "    pop rbx\n";
-        asm += "    pop rbp\n";
-        asm += "    ret\n";
-
-        asm += ".section .rodata,\"a\",@progbits\n";
-        asm += ".p2align 4\n";
-        asm += "map_pc_base:\n";
-
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            asm += &format!("    .long (pc_{:x} - map_pc_base)\n", pc);
-        }
-        asm += "map_pc_end:\n";
-        asm += "\n";
-
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let asm_file_path = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge/src/asm_run.s");
-        fs::write(asm_file_path, asm).expect("Failed to write file");
-    }
 }
 
 impl<F> AotInstance<'_, F, ExecutionCtx>
@@ -242,6 +262,56 @@ where
         Ok(vm_state)
     }
 }
+
+impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+where 
+    F: PrimeField32,
+    Ctx: MeteredExecutionCtxTrait,
+{
+    pub fn new_metered<E>(
+        inventory: &'a ExecutorInventory<E>,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: MeteredExecutor<F>,
+    {
+        let _lock = ASSEMBLY_LOCK.lock().unwrap();
+
+        create_assembly(exe, METERED_EXECUTION);
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
+        
+        let status = Command::new("cargo")
+            .args(&["build", "--release"])
+            .current_dir(&asm_bridge_dir)
+            .status()
+            .expect("Failed to execute cargo");
+
+        assert!(status.success(), "Cargo build failed with exit code: {:?}", status.code());
+
+        let program = &exe.program; 
+        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
+        let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
+            program,
+            inventory,
+            executor_idx_to_air_idx,
+            &mut split_pre_compute_buf,
+        )?;
+        let init_memory = exe.init_memory.clone();
+
+        Ok(Self {
+            pre_compute_insns: pre_compute_insns,
+            pre_compute_buf: pre_compute_buf,
+            system_config: inventory.config().clone(),
+            init_memory: init_memory
+        })
+    }
+}
+
 
 impl<F> AotInstance<'_, F, MeteredCtx>
 where 
