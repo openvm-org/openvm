@@ -21,7 +21,7 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Engine,
     engine::{StarkEngine, StarkFriEngine},
 };
-use tracing::info_span;
+use tracing::instrument;
 
 use crate::{
     commit::{AppExecutionCommit, CommitBytes},
@@ -118,9 +118,11 @@ where
     }
 
     /// Generates proof for every continuation segment
-    ///
-    /// This function internally calls [verify_app_proof] to verify the result before returning the
-    /// proof.
+    #[instrument(
+        name = "app_prove",
+        skip_all,
+        fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
+    )]
     pub fn prove(
         &mut self,
         input: StdIn<Val<E::SC>>,
@@ -138,19 +140,30 @@ where
             self.vm_config().as_ref(),
             &self.instance.vm.engine.fri_params(),
         );
-        let proofs = info_span!(
-            "app proof",
-            group = self
-                .program_name
-                .as_ref()
-                .unwrap_or(&"app_proof".to_string())
-        )
-        .in_scope(|| {
-            #[cfg(feature = "metrics")]
-            metrics::counter!("fri.log_blowup")
-                .absolute(self.instance.vm.engine.fri_params().log_blowup as u64);
-            ContinuationVmProver::prove(&mut self.instance, input)
-        })?;
+        #[cfg(feature = "metrics")]
+        metrics::counter!("fri.log_blowup")
+            .absolute(self.instance.vm.engine.fri_params().log_blowup as u64);
+        ContinuationVmProver::prove(&mut self.instance, input)
+    }
+
+    /// Generates proof for every continuation segment
+    ///
+    /// This function internally calls [verify_segments] to verify the result before returning the
+    /// proof.
+    ///
+    /// **Note**: This function calls [`app_commit`](Self::app_commit), which is computationally
+    /// intensive if it is the first time it is called within an `AppProver` instance.
+    #[instrument(name = "app_prove_and_verify", skip_all)]
+    pub fn prove_and_verify(
+        &mut self,
+        input: StdIn<Val<E::SC>>,
+    ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
+    where
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+            + MeteredExecutor<Val<E::SC>>
+            + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        let proofs = self.prove(input)?;
         // We skip verification of the user public values proof here because it is directly computed
         // from the merkle tree above
         let res = verify_segments(

@@ -18,6 +18,7 @@ use openvm_stark_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use tracing::instrument;
 
 use crate::{types::BN254_BYTES, F, SC};
 
@@ -88,6 +89,7 @@ pub struct AppExecutionCommit {
 impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
+    #[instrument(name = "AppExecutionCommit::compute", skip_all)]
     pub fn compute<SC: StarkGenericConfig>(
         app_memory_config: &MemoryConfig,
         app_exe: &VmExe<Val<SC>>,
