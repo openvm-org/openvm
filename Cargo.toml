@@ -29,7 +29,7 @@ members = [
     "crates/toolchain/tests",
     "crates/continuations",
     "crates/vm",
-    "crates/vm/rust_bridge",
+    "crates/vm/src/arch/asm_bridge",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
@@ -176,6 +176,7 @@ openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = fal
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
+openvm-benchmarks-execute = { path = "benchmarks/execute", default-features = false }
 
 # Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }

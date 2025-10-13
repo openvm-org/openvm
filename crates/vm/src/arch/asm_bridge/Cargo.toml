@@ -1,5 +1,5 @@
 [package]
-name = "openvm-circuit-rust-bridge"
+name = "asm_bridge"
 version.workspace = true 
 edition.workspace = true
 authors.workspace = true
@@ -7,11 +7,11 @@ homepage.workspace = true
 repository.workspace = true
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
-libc = "0.2"
-openvm-circuit.workspace = true
+cc = "1.0"
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32im-circuit.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true

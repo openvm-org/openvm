@@ -43,6 +43,7 @@ use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
+    aot::AotInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
@@ -66,7 +67,7 @@ use crate::{
         },
         program::trace::{generate_cached_trace, VmCommittedExe},
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
-    },
+    }
 };
 
 #[derive(Error, Debug)]
@@ -232,6 +233,13 @@ where
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
+    }
+
+    pub fn aot_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
+        AotInstance::new(&self.inventory, exe)
     }
 }
 

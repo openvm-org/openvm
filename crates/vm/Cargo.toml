@@ -8,9 +8,9 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+strum = { workspace = true } 
 p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
-
 openvm-poseidon2-air = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
