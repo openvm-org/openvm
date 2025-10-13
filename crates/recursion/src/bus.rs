@@ -50,6 +50,36 @@ macro_rules! define_typed_bus {
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct RangeCheckerBusMessage<T> {
+    pub value: T,
+    pub max_bits: T,
+}
+
+impl<E, T: Into<E>> BusPayload<E> for RangeCheckerBusMessage<T> {
+    fn into_bus_vec(self) -> Vec<E> {
+        vec![self.value.into(), self.max_bits.into()]
+    }
+}
+
+define_typed_bus!(RangeCheckerBus, RangeCheckerBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct PowerCheckerBusMessage<T> {
+    pub log: T,
+    pub exp: T,
+}
+
+impl<E, T: Into<E>> BusPayload<E> for PowerCheckerBusMessage<T> {
+    fn into_bus_vec(self) -> Vec<E> {
+        vec![self.log.into(), self.exp.into()]
+    }
+}
+
+define_typed_bus!(PowerCheckerBus, PowerCheckerBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct GkrModuleMessage<T> {
     pub tidx: T,
     pub n_logup: T,
