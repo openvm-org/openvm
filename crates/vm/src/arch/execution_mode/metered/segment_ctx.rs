@@ -9,7 +9,7 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
 pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
-#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
+#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
