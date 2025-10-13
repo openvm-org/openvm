@@ -5419,6 +5419,7 @@ dependencies = [
  "serde",
  "serde-big-array",
  "static_assertions",
+ "strum",
  "test-case",
  "test-log",
  "thiserror 1.0.69",
@@ -5461,17 +5462,6 @@ dependencies = [
  "itertools 0.14.0",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "openvm-circuit-rust-bridge"
-version = "1.4.1-rc.1"
-dependencies = [
- "libc",
- "openvm-circuit",
- "openvm-rv32im-circuit",
- "openvm-stark-backend",
- "openvm-stark-sdk",
 ]
 
 [[package]]
@@ -8609,13 +8599,6 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "shmem"
-version = "0.1.0"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "signal-hook-registry"
