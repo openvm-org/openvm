@@ -38,6 +38,8 @@ pub struct AotInstance<'a, F, Ctx> {
     pc_start: u32,
 }
 
+use std::sync::Mutex;
+
 type AsmRunFn = unsafe extern "C" fn(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
