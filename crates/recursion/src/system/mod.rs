@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldExtensionAlgebra;
@@ -12,11 +14,13 @@ use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, GkrModuleBus, PublicValuesBus, StackingClaimsBus,
-        StackingCommitmentsBus, StackingModuleBus, StackingSumcheckRandomnessBus,
-        StackingWidthsBus, TranscriptBus, WhirModuleBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
+        RangeCheckerBus, StackingClaimsBus, StackingCommitmentsBus, StackingModuleBus,
+        StackingSumcheckRandomnessBus, StackingWidthsBus, TranscriptBus, WhirModuleBus,
+        XiRandomnessBus,
     },
     gkr::GkrModule,
+    primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
@@ -61,6 +65,8 @@ impl BusIndexManager {
 
 pub struct VerifierCircuit<TS: FiatShamirTranscript> {
     modules: Vec<Box<dyn AirModule<TS>>>,
+    range_checker: Arc<RangeCheckerAir<8>>,
+    pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -87,6 +93,10 @@ pub struct BusInventory {
     // Claims buses
     pub column_claims_bus: ColumnClaimsBus,
     pub stacking_claims_bus: StackingClaimsBus,
+
+    // Peripheral buses
+    pub range_checker_bus: RangeCheckerBus,
+    pub power_of_two_bus: PowerCheckerBus,
 }
 
 #[derive(Debug, Default)]
@@ -233,6 +243,10 @@ impl Default for BusInventory {
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
             stacking_claims_bus: StackingClaimsBus::new(b.new_bus_idx()),
+
+            // Peripheral buses
+            range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
+            power_of_two_bus: PowerCheckerBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -246,6 +260,12 @@ impl BusInventory {
 impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
     fn default() -> Self {
         let bus_inventory = BusInventory::default();
+
+        let range_checker = Arc::new(RangeCheckerAir::<8>::new(bus_inventory.range_checker_bus));
+        let pow_2_checker = Arc::new(PowerCheckerAir::<2, 32>::new(
+            bus_inventory.power_of_two_bus,
+            bus_inventory.range_checker_bus,
+        ));
 
         let transcript_module = TranscriptModule::new(bus_inventory.clone());
         let proof_shape_module = ProofShapeModule::new(bus_inventory.clone());
@@ -262,7 +282,11 @@ impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
             Box::new(stacking_module),
             Box::new(whir_module),
         ];
-        VerifierCircuit { modules }
+        VerifierCircuit {
+            modules,
+            range_checker,
+            pow_2_checker,
+        }
     }
 }
 
@@ -272,6 +296,8 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         for module in &self.modules {
             airs.extend(module.airs());
         }
+        airs.push(self.range_checker.clone());
+        airs.push(self.pow_2_checker.clone());
         airs
     }
 
@@ -309,6 +335,8 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
             );
             proof_inputs.extend(module_proof_inputs);
         }
+        proof_inputs.push(self.range_checker.generate_proof_input());
+        proof_inputs.push(self.pow_2_checker.generate_proof_input());
         proof_inputs
     }
 }
