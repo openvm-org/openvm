@@ -17,8 +17,8 @@ use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -181,6 +181,7 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let vk = pk.get_vk();
     let exe = exe.into();

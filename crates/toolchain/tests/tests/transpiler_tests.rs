@@ -164,10 +164,39 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
     )?;
+
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config)?;
+
     let interpreter = executor.instance(&exe)?;
-    interpreter.execute(vec![], None)?;
+    let interp_state = interpreter.execute(vec![], None)?;
+
+    let mut aot_instance = executor.aot_instance(&exe)?;
+    let aot_state = aot_instance.execute(vec![], None)?;
+
+    for r in 0..32 {
+        let interp = unsafe {
+            interp_state.memory.read::<u8, 1>(1, r)
+        };
+        let aot_interp = unsafe {
+            aot_state.memory.read::<u8, 1>(1, r)
+        };
+        assert_eq!(interp, aot_interp);
+        // println!("check register {}, interp: {}, aot: {}", r, interp[0], aot_interp[0]);
+    }
+
+    for r in 0..10000 {
+        let interp = unsafe {
+            interp_state.memory.read::<u8, 1>(2, r)
+        };
+        let aot_interp = unsafe {
+            aot_state.memory.read::<u8, 1>(2, r)
+        };
+        assert_eq!(interp, aot_interp);
+        // println!("check address space {}, interp: {}, aot_interp: {}", r, interp[0], aot_interp[0]);
+    }
+
+    
     Ok(())
 }
 
