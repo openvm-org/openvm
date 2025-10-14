@@ -1,18 +1,17 @@
 [package]
 name = "asm_bridge"
-version = "1.4.1-rc.1"
-edition = "2021"
+version.workspace = true 
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
 
-# This makes asm_bridge its own standalone workspace, not part of the parent workspace
-[workspace]
-
 [dependencies]
 cc = "1.0"
-openvm-circuit = { path = "../../crates/vm", features = ["test-utils"] }
-openvm-rv32im-circuit = { path = "../../extensions/rv32im/circuit", default-features = false }
-
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-rv32im-circuit.workspace = true
+openvm-stark-backend.workspace = true
+openvm-stark-sdk.workspace = true
