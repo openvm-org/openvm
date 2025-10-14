@@ -104,6 +104,12 @@ macro_rules! run {
             #[cfg(feature = "tco")]
             {
                 tracing::debug!("execute_tco");
+
+                if $ctx::should_suspend($instret, $pc, $arg, &mut $exec_state) {
+                    $exec_state.set_instret_and_pc($instret, $pc);
+                    return Ok(());
+                }
+
                 let handler = $interpreter
                     .get_handler($pc)
                     .ok_or(ExecutionError::PcOutOfBounds($pc))?;

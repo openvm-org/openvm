@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.5"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#ace5f1d4ad373f231e41f75ddd491450e2db791b"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.5"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#ace5f1d4ad373f231e41f75ddd491450e2db791b"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.5"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#ace5f1d4ad373f231e41f75ddd491450e2db791b"
 dependencies = [
  "bytesize",
  "ctor",
@@ -5711,6 +5711,7 @@ dependencies = [
  "serde",
  "strum",
  "tiny-keccak",
+ "tokio",
 ]
 
 [[package]]
@@ -6163,6 +6164,7 @@ dependencies = [
  "snark-verifier-sdk",
  "tempfile",
  "thiserror 1.0.69",
+ "tokio",
  "toml 0.8.23",
  "tracing",
 ]
@@ -6245,7 +6247,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.5"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#ace5f1d4ad373f231e41f75ddd491450e2db791b"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6275,7 +6277,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.5"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#ace5f1d4ad373f231e41f75ddd491450e2db791b"
 dependencies = [
  "dashmap",
  "derivative",
@@ -9238,6 +9240,7 @@ dependencies = [
  "io-uring",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "slab",

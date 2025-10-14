@@ -233,6 +233,7 @@ dashmap = "6.1.0"
 memmap2 = "0.9.5"
 libc = "0.2.175"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
+tokio = "1" # >=1.0.0 to allow downstream flexibility
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
