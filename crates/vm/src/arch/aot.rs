@@ -48,7 +48,8 @@ pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
-    pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>
+    pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
+    lib: Library
 }
 
 use std::sync::Mutex;
@@ -60,9 +61,6 @@ type AsmRunFn = unsafe extern "C" fn(
 
 const PURE_EXECUTION : u32 = 0;
 const METERED_EXECUTION : u32 = 1;
-
-static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
-
 
 pub fn create_assembly<F>(exe: &VmExe<F>, execution_mode: u32)
 where F: p3_field::Field
@@ -154,20 +152,27 @@ where
     where
         E: Executor<F>,
     {
+        static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
         let _lock = ASSEMBLY_LOCK.lock().unwrap();
 
         create_assembly(exe, PURE_EXECUTION);
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let lib_path = std::path::Path::new(manifest_dir)
+            .parent().unwrap()
+            .parent().unwrap()
+            .join("target/release/libasm_bridge.so");
         let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
-        
         let status = Command::new("cargo")
             .args(&["build", "--release"])
             .current_dir(&asm_bridge_dir)
             .status()
             .expect("Failed to execute cargo");
-
         assert!(status.success(), "Cargo build failed with exit code: {:?}", status.code());
+
+        let lib = unsafe {
+            Library::new(&lib_path).expect("Failed to load library")
+        };
 
         let program = &exe.program; 
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
@@ -184,7 +189,8 @@ where
             pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
-            init_memory: init_memory
+            init_memory: init_memory,
+            lib: lib,
         })
     }   
 }
@@ -229,17 +235,8 @@ where
         }  
 
         unsafe {
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            // asm_bridge is a workspace member, so its target is at workspace root
-            let lib_path = std::path::Path::new(manifest_dir)
-                .parent().unwrap()  // go up to crates/
-                .parent().unwrap()  // go up to workspace root
-                .join("target/release/libasm_bridge.so");
-            
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
-            let lib = Library::new(&lib_path)
-                .expect("Failed to load library");
-            let asm_run: libloading::Symbol<AsmRunFn> = lib
+            let asm_run: libloading::Symbol<AsmRunFn> = self.lib
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
@@ -276,20 +273,27 @@ where
     where
         E: MeteredExecutor<F>,
     {
+        static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
         let _lock = ASSEMBLY_LOCK.lock().unwrap();
 
         create_assembly(exe, METERED_EXECUTION);
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let lib_path = std::path::Path::new(manifest_dir)
+            .parent().unwrap()
+            .parent().unwrap()
+            .join("target/release/libasm_bridge.so");
         let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
-        
         let status = Command::new("cargo")
             .args(&["build", "--release"])
             .current_dir(&asm_bridge_dir)
             .status()
             .expect("Failed to execute cargo");
-
         assert!(status.success(), "Cargo build failed with exit code: {:?}", status.code());
+
+        let lib = unsafe {
+            Library::new(&lib_path).expect("Failed to load library")
+        };
 
         let program = &exe.program; 
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
@@ -307,7 +311,8 @@ where
             pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
-            init_memory: init_memory
+            init_memory: init_memory,
+            lib: lib,
         })
     }
 }
@@ -349,17 +354,8 @@ where
         }  
 
         unsafe {
-            let manifest_dir = env!("CARGO_MANIFEST_DIR");
-            // asm_bridge is a workspace member, so its target is at workspace root
-            let lib_path = std::path::Path::new(manifest_dir)
-                .parent().unwrap()  // go up to crates/
-                .parent().unwrap()  // go up to workspace root
-                .join("target/release/libasm_bridge.so");
-            
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
-            let lib = Library::new(&lib_path)
-                .expect("Failed to load library");
-            let asm_run: libloading::Symbol<AsmRunFn> = lib
+            let asm_run: libloading::Symbol<AsmRunFn> = self.lib
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
