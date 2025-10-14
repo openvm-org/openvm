@@ -5458,8 +5458,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.5"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5490,8 +5490,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.5"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
 dependencies = [
  "cc",
  "glob",
@@ -5499,8 +5499,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.5"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6244,8 +6244,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.5"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6274,12 +6274,12 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1-rc.3"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.3#9c649e1c084f72b3cbdaebbb62d572eb05d088a0"
+version = "1.2.1-rc.5"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=chore%2Fvpmm_v3#22a1fd816b0980a9b78513243f5fcfb19d570b3e"
 dependencies = [
  "dashmap",
  "derivative",
- "derive_more 0.99.20",
+ "derive_more 1.0.0",
  "ff 0.13.1",
  "itertools 0.14.0",
  "metrics",
