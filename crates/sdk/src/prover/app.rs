@@ -259,7 +259,7 @@ mod async_prover {
     };
     use openvm_stark_sdk::config::FriParameters;
     use tokio::{spawn, sync::Semaphore, task::spawn_blocking};
-    use tracing::{instrument, Instrument};
+    use tracing::{info_span, instrument, Instrument};
 
     use super::*;
 
