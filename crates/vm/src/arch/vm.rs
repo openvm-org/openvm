@@ -288,6 +288,26 @@ where
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
+
+    // Creates an instance of the AotInstance specialized for metered execution of the given
+    /// `exe`.
+    pub fn aot_metered_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    /// Creates an instance of the AotInstance specialized for cost metering execution of the given
+    /// `exe`.
+    pub fn aot_metered_cost_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCostCtx>, StaticProgramError> {
+        AotInstance::new_metered_cost(&self.inventory, exe, executor_idx_to_air_idx)
+    }
 }
 
 #[derive(Error, Debug)]
