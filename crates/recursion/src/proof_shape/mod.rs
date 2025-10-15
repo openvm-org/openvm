@@ -100,7 +100,9 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
             .flat_map(|datum| datum.as_ref().map(|datum| datum.hypercube_dim))
             .max()
             .unwrap();
-        let n_logup = proof.gkr_proof.claims_per_layer.len(); // n_logup = num_layers
+        let num_layers = proof.gkr_proof.claims_per_layer.len();
+        let l_skip = vk.params.l_skip;
+        let n_logup = num_layers.saturating_sub(l_skip);
 
         let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
         let stacked_common_width = num_common_main_cells.div_ceil(stack_height);
