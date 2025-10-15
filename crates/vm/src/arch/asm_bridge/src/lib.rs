@@ -19,6 +19,8 @@ extern "C" {
     fn asm_run_internal(
         base: *mut c_void,
         vec_ptr: *const c_void,
+        pc: u32,
+        instret: u64,
     );
 }
 
@@ -26,8 +28,10 @@ extern "C" {
 pub unsafe extern "C" fn asm_run(
     base: *mut c_void,
     vec_ptr: *const c_void,
+    pc: u32,
+    instret: u64,
 ) {
-    asm_run_internal(base, vec_ptr);
+    asm_run_internal(base, vec_ptr, pc, instret);
 }
 
 #[no_mangle]
@@ -89,19 +93,22 @@ pub extern "C" fn metered_extern_handler(
     base: *mut c_void,
     vec_ptr: *const c_void,
     pc_val: u32,
+    instret_cnt: u64
 ) -> u32 {
     type F = BabyBear;
     type Ctx = MeteredCtx;
 
-    let mut instret: Box<u64> = Box::new(0); // placeholder to call the handler function
+    let mut instret: Box<u64> = Box::new(instret_cnt); // placeholder to call the handler function
     let mut pc: Box<u32> = Box::new(pc_val);
 
     let vm_exec_state_ref = unsafe {
         &mut *(base as *mut VmExecState<F, GuestMemory, Ctx>)
     };
 
-    let base_ptr = vec_ptr as *const PreComputeInstruction<'static, BabyBear, ExecutionCtx>;
+    let base_ptr = vec_ptr as *const PreComputeInstruction<'static, BabyBear, Ctx>;
     let i: usize = (pc_val / 4) as usize;
+
+    println!("called metered_extern_handler with instret {} pc {}", instret_cnt, pc_val);
 
     unsafe {
         let fi = unsafe {

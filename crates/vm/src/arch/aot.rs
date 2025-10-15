@@ -58,6 +58,8 @@ use std::thread;
 type AsmRunFn = unsafe extern "C" fn(
     exec_state: *mut core::ffi::c_void, 
     vec_ptr: *const c_void,
+    pc: u32,
+    instret: u64
 );
 
 const PURE_EXECUTION : u32 = 0;
@@ -82,45 +84,28 @@ where F: p3_field::Field
     asm += "    push r12\n";
     asm += "    push r13\n";
     asm += "    push r14\n";
-    
     asm += "    mov rbx, rdi\n";
     asm += "    mov rbp, rsi\n";
-    asm += "    xor r13, r13\n";
-    asm += "    xor r14, r14\n";
-    asm += "    lea r10, [rip + map_pc_base]\n";
-    asm += "    lea r12, [rip + map_pc_end]\n";
-    asm += "    sub r12, r10\n";
-    asm += "    shr r12, 2\n";
+    asm += "    mov r13, rdx\n"; // r13 = pc
+    asm += "    mov r14, rcx\n"; // r14 = instret
+    asm += "\n";
 
-    for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-        asm += &format!("pc_{:x}:\n", pc);
+    asm += "asm_execute:\n";
+    asm += "    mov rdi, rbx\n";
+    asm += "    mov rsi, rbp\n";
+    asm += "    mov rdx, r13\n";
 
-            asm += "    mov rdi, rbx\n";
-            asm += "    mov rsi, rbp\n";
-            asm += "    mov rdx, r13\n";
-            
-            if execution_mode == METERED_EXECUTION {
-                asm += "    call metered_extern_handler\n";
-            } else {
-                asm += "    call extern_handler\n";
-            }
-            asm += "    add r14, 1\n";
-            asm += "    cmp rax, 1\n";
-            asm += "    je asm_run_end\n";
-            
-            asm += "    mov r13, rax\n";
-
-            asm += "    shr eax, 2\n";
-            asm += "    cmp rax, r12\n";
-            asm += "    jae asm_run_end\n";
-
-            asm += "    lea r10, [rip + map_pc_base]\n";
-            asm += "    movsxd  r11, dword ptr [r10 + rax*4]\n";
-            asm += "    add r11, r10\n";
-            
-            asm += "    jmp r11\n";
-            asm += "\n";
+    if execution_mode == METERED_EXECUTION {
+        asm += "    call metered_extern_handler\n";
+    } else {
+        asm += "    call extern_handler\n";
     }
+    asm += "    add r14, 1\n";
+    asm += "    cmp rax, 1\n";
+    asm += "    je asm_run_end\n";
+    asm += "    mov r13, rax\n";
+    asm += "    jmp asm_execute\n";
+    asm += "\n";
 
     asm += "asm_run_end:\n";
     asm += "    mov rdi, rbx\n";
@@ -135,16 +120,6 @@ where F: p3_field::Field
     asm += "    pop rbx\n";
     asm += "    pop rbp\n";
     asm += "    ret\n";
-
-    asm += ".section .rodata,\"a\",@progbits\n";
-    asm += ".p2align 4\n";
-    asm += "map_pc_base:\n";
-
-    for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-        asm += &format!("    .long (pc_{:x} - map_pc_base)\n", pc);
-    }
-    asm += "map_pc_end:\n";
-    asm += "\n";
 
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let asm_file_path = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge/src/asm_run.s");
@@ -251,6 +226,10 @@ where
         };  
         */
 
+
+        let from_instret = (&from_state).instret();
+        let from_pc = (&from_state).pc();
+
         let ctx = ExecutionCtx::new(num_insns);
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> = Box::new(VmExecState::new(from_state, ctx));
 
@@ -280,7 +259,7 @@ where
             );
             */
 
-            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
+            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void, from_pc, from_instret);
         }
 
         Ok((*vm_exec_state).vm_state)
@@ -320,6 +299,7 @@ where
         };
 
         let program = &exe.program; 
+
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
@@ -376,6 +356,9 @@ where
         };
         */  
 
+        let from_instret = (&from_state).instret();
+        let from_pc = (&from_state).pc();
+
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> = Box::new(VmExecState::new(from_state, ctx.clone()));
         /*
         unsafe {
@@ -398,7 +381,7 @@ where
 
             let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
 
-            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
+            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void, from_pc, from_instret);
         }
 
         Ok((ctx.into_segments(), vm_exec_state.vm_state))
