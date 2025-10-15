@@ -446,10 +446,10 @@ where
     pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
@@ -461,7 +461,7 @@ where
     pub fn get_metered_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,

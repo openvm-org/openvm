@@ -949,6 +949,147 @@ fn test_vm_execute_native_chips() {
         .expect("Failed to execute");
 }
 
+#[test]
+fn test_vm_execute_native_chips_aot() {
+    type F = BabyBear;
+
+    let instructions = vec![
+        // Field Arithmetic operations (FieldArithmeticChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::large_from_isize(DIV.global_opcode(), 3, 20, 5, 4, 0, 0, 0),
+        // Field Extension operations (FieldExtensionChip)
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 8, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 16, 12, 8, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 20, 16, 12, 4, 4),
+        // Branch operations (NativeBranchEqChip)
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).global_opcode(),
+            1,
+            2,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        // JAL operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeJalOpcode::JAL.global_opcode(),
+            24,
+            DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // Range check operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            0,
+            10,
+            8,
+            4,
+            0,
+        ),
+        // Load/Store operations (NativeLoadStoreChip)
+        Instruction::from_isize(STOREW.global_opcode(), 0, 0, 28, 4, 4),
+        Instruction::from_isize(LOADW.global_opcode(), 32, 0, 28, 4, 4),
+        Instruction::from_isize(
+            PHANTOM.global_opcode(),
+            0,
+            0,
+            NativePhantom::HintInput as isize,
+            0,
+            0,
+        ),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
+        // Cast to field operation (CastFChip)
+        Instruction::from_usize(CastfOpcode::CASTF.global_opcode(), [36, 40, 0, 2, 4]),
+        // Poseidon2 operations (Poseidon2Chip)
+        Instruction::new(
+            Poseidon2Opcode::PERM_POS2.global_opcode(),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::ZERO,
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        Instruction::new(
+            Poseidon2Opcode::COMP_POS2.global_opcode(),
+            F::from_canonical_usize(52),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        // FRI operation (FriReducedOpeningChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 60, 64, 0, 4, 4, 0, 0), /* a_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 64, 68, 0, 4, 4, 0, 0), /* b_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 68, 2, 0, 4, 0, 0, 0), /* length_pointer (value 2), */
+        Instruction::large_from_isize(ADD.global_opcode(), 72, 1, 0, 4, 0, 0, 0), //alpha_pointer
+        Instruction::large_from_isize(ADD.global_opcode(), 76, 80, 0, 4, 4, 0, 0), /* result_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 80, 1, 0, 4, 0, 0, 0), /* is_init (value 1) , */
+        Instruction::from_usize(
+            FriOpcode::FRI_REDUCED_OPENING.global_opcode(),
+            [60, 64, 68, 72, 76, 0, 80],
+        ),
+        // Terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let input_stream: Vec<Vec<F>> = vec![vec![]];
+
+    let executor = VmExecutor::new(test_rv32_with_kernels_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
+    let vm_state = instance
+        .execute(input_stream.clone(), None)
+        .expect("Failed to execute");
+
+    // eyeball check
+    println!("[Interpreter] instret: {}", vm_state.instret());
+    println!("[Interpreter] pc: {}", vm_state.pc());
+    let interp_memory = vm_state.memory;
+
+    // setup the aot instance
+    let mut aot_instance = executor.aot_instance(&exe).unwrap();
+    let vm_state = aot_instance
+        .execute(input_stream, None)
+        .expect("Failed to execute");
+
+    // eyeball check
+    println!("[AOT] instret: {}", vm_state.instret());
+    println!("[AOT] pc: {}", vm_state.pc());
+    let aot_memory = vm_state.memory;
+
+    for r in 0..25 {
+        unsafe {
+            println!(
+                "[Interpreter] memory [4*{}:4]_4 = {:?}",
+                r,
+                interp_memory.read::<u32, 4>(4, 4 * r)
+            );
+            println!(
+                "[AOT] memory [4*{}:4]_4 = {:?}",
+                r,
+                aot_memory.read::<u32, 4>(4, 4 * r)
+            );
+        };
+    }
+}
+
 // This test ensures that metered execution never segments when continuations is disabled
 #[test]
 fn test_single_segment_executor_no_segmentation() {
