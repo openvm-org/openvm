@@ -1212,7 +1212,7 @@ fn test_vm_execute_metered_cost_halt() {
         .executor()
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
-    let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0); // sets max_execution_cost to 0
+    let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
     let (cost2, vm_state2) = instance2
         .execute_metered_cost(vec![], ctx2.clone())
         .expect("Failed to execute");
@@ -1227,13 +1227,11 @@ fn test_vm_execute_metered_cost_halt() {
         .expect("Failed to execute");
     assert_eq!(aot_vm_state1.instret(), instructions.len() as u64);
     assert_eq!(aot_cost1, cost1);
-    eprintln!("aot_cost1, cost1: {:?}, {:?}", aot_cost1, cost1);
 
     let aot_instance2 = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx2).unwrap(); 
     let (aot_cost2, aot_vm_state2) = aot_instance2
         .execute_metered_cost(vec![], ctx2.clone())
         .expect("Failed to execute");
-    eprintln!("aot_cost2, cost2: {:?}, {:?}", aot_cost2, cost2);
     assert_eq!(aot_vm_state2.instret(), 1);
     assert_eq!(aot_cost2, cost2);
     assert!(aot_cost2 < aot_cost1);

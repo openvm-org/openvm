@@ -571,9 +571,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        eprintln!("instret: {:?}, pc: {:?}, arg: {:?}", instret, pc, arg);
         if Ctx::should_suspend(instret, pc, arg, exec_state) { // override, call the should_suspend function for each Ctx
-            eprintln!("should suspend");
             break;
         }
         let pc_index = get_pc_index(pc);
