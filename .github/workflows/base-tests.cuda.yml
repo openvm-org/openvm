@@ -27,7 +27,7 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia/family=g6+g5
 
     steps:
       - uses: runs-on/action@v2
@@ -69,4 +69,4 @@ jobs:
       - name: Run async concurrency test
         working-directory: benchmarks/prove
         run: |
-          CUDA_OPT_LEVEL=3 cargo run --bin async_regex --features cuda,async
+          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=12 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 200000000
