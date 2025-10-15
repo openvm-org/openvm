@@ -85,7 +85,7 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
-    let n_logup = proof.gkr_proof.claims_per_layer.len();
+    let n_logup = preflight.proof_shape.n_logup;
     let n_max = preflight.proof_shape.n_max;
 
     let mut gkr_module_msgs = [GkrModuleMessage {
