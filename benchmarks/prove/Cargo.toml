@@ -33,7 +33,7 @@ metrics.workspace = true
 [dev-dependencies]
 
 [features]
-default = ["parallel", "jemalloc", "metrics", "async"]
+default = ["parallel", "jemalloc", "metrics"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]

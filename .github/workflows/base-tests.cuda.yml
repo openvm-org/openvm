@@ -65,3 +65,8 @@ jobs:
         working-directory: extensions/native/recursion
         run: |
           cargo nextest run --features cuda
+
+      - name: Run async concurrency test
+        working-directory: benchmarks/prove
+        run: |
+          CUDA_OPT_LEVEL=3 cargo run --bin async_regex --features cuda,async

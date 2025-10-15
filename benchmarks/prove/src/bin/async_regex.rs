@@ -38,14 +38,14 @@ async fn main() -> eyre::Result<()> {
 
     let (app_pk, _app_vk) = sdk.app_keygen();
 
-    let max_par_jobs: usize = var("MAX_PAR_JOBS").map(|m| m.parse()).unwrap_or(Ok(1))?;
+    let max_concurrency: usize = var("MAX_CONCURRENCY").map(|m| m.parse()).unwrap_or(Ok(1))?;
 
     let prover = AsyncAppProver::<DefaultStarkEngine, _>::new(
         SdkVmBuilder,
         app_pk.app_vm_pk.clone(),
         app_exe,
         app_pk.leaf_verifier_program_commit(),
-        max_par_jobs,
+        max_concurrency,
     )?;
     let _proof = prover.prove(input).await?;
 
