@@ -271,12 +271,14 @@ where
 
             let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
 
+            /*
             eprintln!(
                 "tid={:?} first_arg={:p} second_arg={:p}",
                 std::thread::current().id(),
                 state_ptr as *mut c_void,
                 (&self.table_box).as_ptr() as *const c_void
             );
+            */
 
             asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
         }
@@ -285,7 +287,6 @@ where
     }
 }
 
-/*
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where 
     F: PrimeField32,
@@ -299,9 +300,6 @@ where
     where
         E: MeteredExecutor<F>,
     {
-        static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
-        let _lock = ASSEMBLY_LOCK.lock().unwrap();
-
         create_assembly(exe, METERED_EXECUTION);
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -333,12 +331,16 @@ where
         )?;
         let init_memory = exe.init_memory.clone();
 
+        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice(); // todo: maybe rename this
+        let buf_ptr = table_box.as_ptr();
+        let box_handle_addr = &table_box as *const _;
+
         Ok(Self {
-            pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
             init_memory: init_memory,
             lib: lib,
+            table_box: table_box
         })
     }
 }
@@ -367,42 +369,38 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+        /*
         let len = std::mem::size_of::<VmExecState<F, GuestMemory, MeteredCtx>>();
         let mut mmap = unsafe {
             MmapOptions::new().len(len).map_anon().expect("mmap")
-        };  
+        };
+        */  
 
-        let mut vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx> = VmExecState::new(from_state, ctx);
-
+        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> = Box::new(VmExecState::new(from_state, ctx));
+        /*
         unsafe {
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
             std::ptr::write(ptr, vm_exec_state);
-        }  
+        } 
+        */ 
 
         unsafe {
+            /*
             let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
+            */
+
             let asm_run: libloading::Symbol<AsmRunFn> = self.lib
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
+            /*
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            
-            asm_run(ptr as *mut c_void, vec_ptr);
+            */
+
+            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+
+            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
         }
 
-        let vm_exec_state_ref = unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            &mut *ptr
-        };
-
-        let vm_exec_state = vm_exec_state_ref.try_clone().unwrap();
-
-        unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            std::ptr::drop_in_place(ptr);
-        }
-
-        let VmExecState { vm_state, ctx, .. } = vm_exec_state;
         Ok((ctx.into_segments(), vm_state))
     }
 }
-*/
