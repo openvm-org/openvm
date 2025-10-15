@@ -376,7 +376,7 @@ where
         };
         */  
 
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> = Box::new(VmExecState::new(from_state, ctx));
+        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> = Box::new(VmExecState::new(from_state, ctx.clone()));
         /*
         unsafe {
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
@@ -396,11 +396,11 @@ where
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
             */
 
-            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
 
             asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
         }
 
-        Ok((ctx.into_segments(), vm_state))
+        Ok((ctx.into_segments(), vm_exec_state.vm_state))
     }
 }

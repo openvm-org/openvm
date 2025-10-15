@@ -421,7 +421,7 @@ where
             .metered_instance(exe, &executor_idx_to_air_idx)
     }
 
-    pub fn aot_metered_interpreter(
+    pub fn aot_metered(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>

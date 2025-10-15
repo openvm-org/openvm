@@ -116,62 +116,60 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
-    // let (segments, _) = vm
-    //     .metered_interpreter(&exe)?
-    //     .execute_metered(input.clone(), metered_ctx)?;
-
-    let (interp_segments, vm_state) = vm
+    let (interp_segments, interp_state) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
-    let (segments, aot_vm_state) = vm
-        .aot_metered_interpreter(&exe)?
+    let (segments, aot_state) = vm
+        .aot_metered(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    assert_eq!(interp_segments.len(), segments.len());
+
+    println!("interp_segments.len() : {}", interp_segments.len());
+    println!("segments.len() : {}", segments.len());
+
+    for i in 0..interp_segments.len() {
+        assert_eq!(interp_segments[i].instret_start, segments[i].instret_start);
+        assert_eq!(interp_segments[i].num_insns, segments[i].num_insns);
+        assert_eq!(interp_segments[i].trace_heights, segments[i].trace_heights);
+    }
+    
+    assert_eq!(interp_segments, segments);
+
+    // check that the VM state are equal
+    assert_eq!(interp_state.instret(), aot_state.instret());
+    assert_eq!(interp_state.pc(), aot_state.pc());
 
     let system_config: &SystemConfig = &config.as_ref();
     let addr_spaces = &system_config.memory_config.addr_spaces; 
 
-    assert_eq!(interp_segments, segments);
-
-    for r in 0..addr_spaces[1].num_cells  {
-        let interp = unsafe {
-            vm_state.memory.read::<u8, 1>(1, r as u32)
-        };
-        let aot_interp = unsafe {
-            aot_vm_state.memory.read::<u8, 1>(1, r as u32)
-        };
-        assert_eq!(interp, aot_interp);
-    }
-
-    for r in 0..addr_spaces[2].num_cells  {
-        let interp = unsafe {
-            vm_state.memory.read::<u8, 1>(2, r as u32)
-        };
-        let aot_interp = unsafe {
-            aot_vm_state.memory.read::<u8, 1>(2, r as u32)
-        };
-        assert_eq!(interp, aot_interp);
-    }
-
-    for r in 0..addr_spaces[3].num_cells {
-        let interp = unsafe {
-            vm_state.memory.read::<u8, 1>(3, r as u32)
-        };
-        let aot_interp = unsafe {
-            aot_vm_state.memory.read::<u8, 1>(3, r as u32)
-        };
-        assert_eq!(interp, aot_interp);
+    for t in 1..4 {
+        for r in 0..addr_spaces[t as usize].num_cells {
+            let interp = unsafe {
+                interp_state.memory.read::<u8, 1>(t, r as u32)
+            };
+            let aot_interp = unsafe {
+                aot_state.memory.read::<u8, 1>(t, r as u32)
+            };
+            assert_eq!(interp, aot_interp);
+        }
     }
 
     for r in 0..(addr_spaces[4].num_cells/4) {
         let interp = unsafe {
-            vm_state.memory.read::<u32, 4>(4, 4 * r as u32)
+            interp_state.memory.read::<u32, 4>(4, 4 * r as u32)
         };
         let aot_interp = unsafe {
-            aot_vm_state.memory.read::<u32, 4>(4, 4 * r as u32)
+            aot_state.memory.read::<u32, 4>(4, 4 * r as u32)
         };
         assert_eq!(interp, aot_interp);
     }
+
+    // check streams are equal
+    assert_eq!(interp_state.streams.input_stream, aot_state.streams.input_stream);
+    assert_eq!(interp_state.streams.hint_stream, aot_state.streams.hint_stream);
+    assert_eq!(interp_state.streams.hint_space, aot_state.streams.hint_space);
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);

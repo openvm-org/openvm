@@ -63,17 +63,10 @@ pub extern "C" fn extern_handler(
     let base_ptr = vec_ptr as *const PreComputeInstruction<'static, BabyBear, ExecutionCtx>;
     let i: usize = (pc_val / 4) as usize;
 
-    println!("debug idx {}", i);
-    println!("debug base {:p}", base);
-    println!("debug vec_ptr {:p}", vec_ptr);
-
-    
-
     unsafe {
         let fi = unsafe {
             &*base_ptr.add(i)
         };
-        println!("debug pre_compute {:?}", fi.pre_compute);
         let arg : u64 = 0; // todo: change this later
         (fi.handler)(fi.pre_compute, &mut instret, &mut pc, arg, vm_exec_state_ref);
     };
@@ -97,22 +90,36 @@ pub extern "C" fn metered_extern_handler(
     vec_ptr: *const c_void,
     pc_val: u32,
 ) -> u32 {
-    let mut instret: Box<u64> = Box::new(0);
+    type F = BabyBear;
+    type Ctx = MeteredCtx;
+
+    let mut instret: Box<u64> = Box::new(0); // placeholder to call the handler function
     let mut pc: Box<u32> = Box::new(pc_val);
 
-    unsafe {
-        type F = BabyBear;
-        type Ctx = MeteredCtx;
-        let typed_ptr = vec_ptr as *const Vec<PreComputeInstruction<'_, F, Ctx>>;
-        let pre_compute_insns = &*typed_ptr;
-        let fi = &pre_compute_insns[(pc_val / 4) as usize];
-        let arg : u64 = 0; // todo: change this later
+    let vm_exec_state_ref = unsafe {
+        &mut *(base as *mut VmExecState<F, GuestMemory, Ctx>)
+    };
 
-        let vm_exec_state_ref = unsafe {
-            &mut *(base as *mut VmExecState<F, GuestMemory, Ctx>)
+    let base_ptr = vec_ptr as *const PreComputeInstruction<'static, BabyBear, ExecutionCtx>;
+    let i: usize = (pc_val / 4) as usize;
+
+    unsafe {
+        let fi = unsafe {
+            &*base_ptr.add(i)
         };
+        let arg : u64 = 0; // todo: change this later
         (fi.handler)(fi.pre_compute, &mut instret, &mut pc, arg, vm_exec_state_ref);
     };
 
-    return *pc;
+    match vm_exec_state_ref.exit_code {
+        Ok(None) => {
+            return *pc;
+            // execution continues 
+        }
+        _ => {
+            // special indicator that we must terminate
+            // this won't collide with actual pc value because pc values are always multiple of 4
+            return 1;
+        }
+    }
 }
