@@ -49,84 +49,22 @@ pub struct AotInstance<'a, F, Ctx> {
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    table_box: Box<[PreComputeInstruction<'a, F, Ctx>]>
+    pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
+    pc_base: u32,
+    pc_start: u32,
 }
 
 use std::sync::Mutex;
 use std::thread;
 
 type AsmRunFn = unsafe extern "C" fn(
-    exec_state: *mut core::ffi::c_void, 
+    exec_state: *mut c_void, 
     vec_ptr: *const c_void,
     pc: u32,
-    instret: u64
+    instret: u64,
+    pc_base: u32
 );
 
-const PURE_EXECUTION : u32 = 0;
-const METERED_EXECUTION : u32 = 1;
-
-pub fn create_assembly<F>(exe: &VmExe<F>, execution_mode: u32)
-where F: p3_field::Field
- {
-    // save assembly to asm_bridge/src/asm_run.s
-    let mut asm = String::new();
-    
-    asm += ".intel_syntax noprefix\n";
-    asm += ".code64\n";
-    asm += ".section .text\n";
-    asm += ".extern extern_handler\n";
-    asm += ".global asm_run_internal\n";
-    asm += "\n";
-
-    asm += "asm_run_internal:\n";
-    asm += "    push rbp\n";
-    asm += "    push rbx\n";
-    asm += "    push r12\n";
-    asm += "    push r13\n";
-    asm += "    push r14\n";
-    asm += "    mov rbx, rdi\n";
-    asm += "    mov rbp, rsi\n";
-    asm += "    mov r13, rdx\n"; // r13 = pc
-    asm += "    mov r14, rcx\n"; // r14 = instret
-    asm += "\n";
-
-    asm += "asm_execute:\n";
-    asm += "    mov rdi, rbx\n";
-    asm += "    mov rsi, rbp\n";
-    asm += "    mov rdx, r13\n";
-
-    if execution_mode == METERED_EXECUTION {
-        asm += "    call metered_extern_handler\n";
-    } else {
-        asm += "    call extern_handler\n";
-    }
-    asm += "    add r14, 1\n";
-    asm += "    cmp rax, 1\n";
-    asm += "    je asm_run_end\n";
-    asm += "    mov r13, rax\n";
-    asm += "    jmp asm_execute\n";
-    asm += "\n";
-
-    asm += "asm_run_end:\n";
-    asm += "    mov rdi, rbx\n";
-    asm += "    mov rsi, r14\n";
-    asm += "    mov rdx, r13\n";
-    asm += "    call set_instret_and_pc\n";
-    asm += "    xor eax, eax\n";
-    
-    asm += "    pop r14\n";
-    asm += "    pop r13\n";
-    asm += "    pop r12\n";
-    asm += "    pop rbx\n";
-    asm += "    pop rbp\n";
-    asm += "    ret\n";
-
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let asm_file_path = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge/src/asm_run.s");
-    fs::write(asm_file_path, asm).expect("Failed to write file");
-}
-
-// AotInstance only works for F = BabyBear
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where 
     F: PrimeField32,
@@ -139,8 +77,6 @@ where
     where
         E: Executor<F>,
     {
-        create_assembly(exe, PURE_EXECUTION);
-
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let lib_path = std::path::Path::new(manifest_dir)
             .parent().unwrap()
@@ -162,33 +98,24 @@ where
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
             &mut split_pre_compute_buf,
         )?;
+        let pre_compute_insns_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
-
-        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice();
-        let buf_ptr = table_box.as_ptr();
-        let box_handle_addr = &table_box as *const _;
-
-        /*
-        eprintln!(
-            "tid={:?} buf={:p} len={} (box_handle_on_stack={:p}) vm_exec_state={:p}",
-            std::thread::current().id(),
-            buf_ptr,
-            table_box.len()
-        );
-        */
 
         Ok(Self {
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
             init_memory: init_memory,
             lib: lib,
-            table_box: table_box,
+            pre_compute_insns_box: pre_compute_insns_box,
+            pc_base: program.pc_base,
+            pc_start: exe.pc_start,
         })
     }   
 }
@@ -208,182 +135,49 @@ where
         let vm_state = VmState::initial(
             &self.system_config,
             &self.init_memory,
-            0,
+            self.pc_start,
             inputs,
         );
         self.execute_from_state(vm_state, num_insns)
     }
 
+    // Runs pure execution with AOT starting with `from_state` VmState
+    // Runs for `num_insns` instructions if `num_insns` is not None
+    // Otherwise executes until termination
     pub fn execute_from_state(
         &self,
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        /*
-        let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
-        let mut mmap = unsafe {
-            MmapOptions::new().len(len).map_anon().expect("mmap")
-        };  
-        */
+        type Ctx = ExecutionCtx;
 
-
-        let from_instret = (&from_state).instret();
-        let from_pc = (&from_state).pc();
-
+        let from_state_instret = (&from_state).instret();
+        let from_state_pc = (&from_state).pc();
         let ctx = ExecutionCtx::new(num_insns);
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> = Box::new(VmExecState::new(from_state, ctx));
 
-        /*
-        unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            std::ptr::write(ptr, vm_exec_state);
-        }  
-        */
+        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, Ctx>> = Box::new(VmExecState::new(from_state, ctx));
+        
+        println!("from_state_instret {}", from_state_instret);
+        println!("from_state_pc {}", from_state_pc);
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self.lib
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
-            /*
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            */
+            
+            let vm_exec_state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, Ctx>;
+            let pre_compute_insns_ptr = (&self.pre_compute_insns_box).as_ptr();
+            let pc_base = self.pc_base;
 
-            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-
-            /*
-            eprintln!(
-                "tid={:?} first_arg={:p} second_arg={:p}",
-                std::thread::current().id(),
-                state_ptr as *mut c_void,
-                (&self.table_box).as_ptr() as *const c_void
+            asm_run(
+                vm_exec_state_ptr as *mut c_void, 
+                pre_compute_insns_ptr as *const c_void, 
+                from_state_pc,
+                from_state_instret,
+                pc_base
             );
-            */
-
-            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void, from_pc, from_instret);
         }
 
         Ok((*vm_exec_state).vm_state)
-    }
-}
-
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
-where 
-    F: PrimeField32,
-    Ctx: MeteredExecutionCtxTrait,
-{
-    pub fn new_metered<E>(
-        inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: MeteredExecutor<F>,
-    {
-        create_assembly(exe, METERED_EXECUTION);
-
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let lib_path = std::path::Path::new(manifest_dir)
-            .parent().unwrap()
-            .parent().unwrap()
-            .join("target/release/libasm_bridge.so");
-        let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
-        let status = Command::new("cargo")
-            .args(&["build", "--release"])
-            .current_dir(&asm_bridge_dir)
-            .status()
-            .expect("Failed to execute cargo");
-        assert!(status.success(), "Cargo build failed with exit code: {:?}", status.code());
-
-        let lib = unsafe {
-            Library::new(&lib_path).expect("Failed to load library")
-        };
-
-        let program = &exe.program; 
-
-        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
-        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
-        let mut split_pre_compute_buf = split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
-            program,
-            inventory,
-            executor_idx_to_air_idx,
-            &mut split_pre_compute_buf,
-        )?;
-        let init_memory = exe.init_memory.clone();
-
-        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice(); // todo: maybe rename this
-        let buf_ptr = table_box.as_ptr();
-        let box_handle_addr = &table_box as *const _;
-
-        Ok(Self {
-            pre_compute_buf: pre_compute_buf,
-            system_config: inventory.config().clone(),
-            init_memory: init_memory,
-            lib: lib,
-            table_box: table_box
-        })
-    }
-}
-
-
-impl<F> AotInstance<'_, F, MeteredCtx>
-where 
-    F: PrimeField32,
-{
-    pub fn execute_metered(
-        &self,
-        inputs: impl Into<Streams<F>>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            0,
-            inputs,
-        );
-        self.execute_metered_from_state(vm_state, ctx)
-    }
-
-    pub fn execute_metered_from_state(
-        &self,
-        from_state: VmState<F, GuestMemory>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        /*
-        let len = std::mem::size_of::<VmExecState<F, GuestMemory, MeteredCtx>>();
-        let mut mmap = unsafe {
-            MmapOptions::new().len(len).map_anon().expect("mmap")
-        };
-        */  
-
-        let from_instret = (&from_state).instret();
-        let from_pc = (&from_state).pc();
-
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> = Box::new(VmExecState::new(from_state, ctx.clone()));
-        /*
-        unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            std::ptr::write(ptr, vm_exec_state);
-        } 
-        */ 
-
-        unsafe {
-            /*
-            let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
-            */
-
-            let asm_run: libloading::Symbol<AsmRunFn> = self.lib
-                .get(b"asm_run")
-                .expect("Failed to get asm_run symbol");
-            /*
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            */
-
-            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-
-            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void, from_pc, from_instret);
-        }
-
-        Ok((ctx.into_segments(), vm_exec_state.vm_state))
     }
 }

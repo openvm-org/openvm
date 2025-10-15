@@ -121,6 +121,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
 /// The global state is generic in guest memory `MEM` and additional context `CTX`.
 /// The host state is execution context specific.
 // @dev: Do not confuse with `ExecutionState` struct.
+
 pub struct VmExecState<F, MEM, CTX> {
     /// Core VM state
     pub vm_state: VmState<F, MEM>,

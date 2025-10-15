@@ -845,6 +845,7 @@ version = "1.4.1-rc.1"
 dependencies = [
  "cc",
  "openvm-circuit",
+ "openvm-instructions",
  "openvm-rv32im-circuit",
  "openvm-stark-backend",
  "openvm-stark-sdk",
