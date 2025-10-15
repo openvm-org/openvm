@@ -180,17 +180,13 @@ __global__ void keccakf_kernel(
         uint8_t *chunk = input + blk * KECCAK_RATE_BYTES;
         bool is_last_block = (blk == num_blocks - 1);
         for (int round = 0; round < NUM_ABSORB_ROUNDS; round++) {
-            uint8_t i_bytes[8];
+            uint8_t i_bytes[8] = {};
             int round_base = round * sizeof(uint64_t);
             // For the last block, zero-initialize and only copy available bytes
             if (is_last_block && round_base < last_block_len) {
-                memset(i_bytes, 0, sizeof(uint64_t));
                 size_t bytes_to_copy = min(sizeof(uint64_t), last_block_len - round_base);
                 memcpy(i_bytes, chunk + round_base, bytes_to_copy);
-            } else if (is_last_block) {
-                // All padding, copy nothing
-                memset(i_bytes, 0, sizeof(uint64_t));
-            } else {
+            } else if (!is_last_block) {
                 memcpy(i_bytes, chunk + round_base, sizeof(uint64_t));
             }
 
