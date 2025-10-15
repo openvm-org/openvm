@@ -175,7 +175,8 @@ where
 
         let init_memory = exe.init_memory.clone();
 
-        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice();
+        let table_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
+            pre_compute_insns.into_boxed_slice();
         let buf_ptr = table_box.as_ptr();
         let box_handle_addr = &table_box as *const _;
 
@@ -294,7 +295,6 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     }
 }
 
-/*
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
@@ -422,6 +422,11 @@ where
             pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
+
+        let table_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
+            pre_compute_insns.into_boxed_slice(); // todo: maybe rename this
+        let buf_ptr = table_box.as_ptr();
+        let box_handle_addr = &table_box as *const _;
 
         Ok(Self {
             system_config: inventory.config().clone(),
