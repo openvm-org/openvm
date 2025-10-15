@@ -60,10 +60,20 @@ pub extern "C" fn extern_handler(
         &mut *(base as *mut VmExecState<F, GuestMemory, Ctx>)
     };
 
+    let base_ptr = vec_ptr as *const PreComputeInstruction<'static, BabyBear, ExecutionCtx>;
+    let i: usize = (pc_val / 4) as usize;
+
+    println!("debug idx {}", i);
+    println!("debug base {:p}", base);
+    println!("debug vec_ptr {:p}", vec_ptr);
+
+    
+
     unsafe {
-        let typed_ptr = vec_ptr as *const Vec<PreComputeInstruction<'_, F, Ctx>>;
-        let pre_compute_insns = &*typed_ptr;
-        let fi = &pre_compute_insns[(pc_val / 4) as usize];
+        let fi = unsafe {
+            &*base_ptr.add(i)
+        };
+        println!("debug pre_compute {:?}", fi.pre_compute);
         let arg : u64 = 0; // todo: change this later
         (fi.handler)(fi.pre_compute, &mut instret, &mut pc, arg, vm_exec_state_ref);
     };

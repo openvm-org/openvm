@@ -48,11 +48,12 @@ pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     pre_compute_buf: AlignedBuf,
-    pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
-    lib: Library
+    lib: Library,
+    table_box: Box<[PreComputeInstruction<'a, F, Ctx>]>
 }
 
 use std::sync::Mutex;
+use std::thread;
 
 type AsmRunFn = unsafe extern "C" fn(
     exec_state: *mut core::ffi::c_void, 
@@ -67,6 +68,7 @@ where F: p3_field::Field
  {
     // save assembly to asm_bridge/src/asm_run.s
     let mut asm = String::new();
+    
     asm += ".intel_syntax noprefix\n";
     asm += ".code64\n";
     asm += ".section .text\n";
@@ -78,10 +80,13 @@ where F: p3_field::Field
     asm += "    push rbp\n";
     asm += "    push rbx\n";
     asm += "    push r12\n";
+    asm += "    push r13\n";
+    asm += "    push r14\n";
     
     asm += "    mov rbx, rdi\n";
     asm += "    mov rbp, rsi\n";
     asm += "    xor r13, r13\n";
+    asm += "    xor r14, r14\n";
     asm += "    lea r10, [rip + map_pc_base]\n";
     asm += "    lea r12, [rip + map_pc_end]\n";
     asm += "    sub r12, r10\n";
@@ -90,21 +95,21 @@ where F: p3_field::Field
     for (pc, instruction, _) in exe.program.enumerate_by_pc() {
         asm += &format!("pc_{:x}:\n", pc);
 
-        if instruction.opcode == TERMINATE.global_opcode() {
-            asm += "    jmp asm_run_end\n";
-            asm += "\n";
-        } else {
             asm += "    mov rdi, rbx\n";
             asm += "    mov rsi, rbp\n";
             asm += "    mov rdx, r13\n";
-
+            
             if execution_mode == METERED_EXECUTION {
                 asm += "    call metered_extern_handler\n";
             } else {
                 asm += "    call extern_handler\n";
             }
+            asm += "    add r14, 1\n";
+            asm += "    cmp rax, 1\n";
+            asm += "    je asm_run_end\n";
             
             asm += "    mov r13, rax\n";
+
             asm += "    shr eax, 2\n";
             asm += "    cmp rax, r12\n";
             asm += "    jae asm_run_end\n";
@@ -112,13 +117,20 @@ where F: p3_field::Field
             asm += "    lea r10, [rip + map_pc_base]\n";
             asm += "    movsxd  r11, dword ptr [r10 + rax*4]\n";
             asm += "    add r11, r10\n";
+            
             asm += "    jmp r11\n";
             asm += "\n";
-        }
     }
 
     asm += "asm_run_end:\n";
+    asm += "    mov rdi, rbx\n";
+    asm += "    mov rsi, r14\n";
+    asm += "    mov rdx, r13\n";
+    asm += "    call set_instret_and_pc\n";
     asm += "    xor eax, eax\n";
+    
+    asm += "    pop r14\n";
+    asm += "    pop r13\n";
     asm += "    pop r12\n";
     asm += "    pop rbx\n";
     asm += "    pop rbp\n";
@@ -152,9 +164,6 @@ where
     where
         E: Executor<F>,
     {
-        static ASSEMBLY_LOCK: Mutex<()> = Mutex::new(());
-        let _lock = ASSEMBLY_LOCK.lock().unwrap();
-
         create_assembly(exe, PURE_EXECUTION);
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
@@ -183,14 +192,28 @@ where
             inventory,
             &mut split_pre_compute_buf,
         )?;
+
         let init_memory = exe.init_memory.clone();
 
+        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice();
+        let buf_ptr = table_box.as_ptr();
+        let box_handle_addr = &table_box as *const _;
+
+        /*
+        eprintln!(
+            "tid={:?} buf={:p} len={} (box_handle_on_stack={:p}) vm_exec_state={:p}",
+            std::thread::current().id(),
+            buf_ptr,
+            table_box.len()
+        );
+        */
+
         Ok(Self {
-            pre_compute_insns: pre_compute_insns,
             pre_compute_buf: pre_compute_buf,
             system_config: inventory.config().clone(),
             init_memory: init_memory,
             lib: lib,
+            table_box: table_box,
         })
     }   
 }
@@ -221,45 +244,48 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+        /*
         let len = std::mem::size_of::<VmExecState<F, GuestMemory, ExecutionCtx>>();
         let mut mmap = unsafe {
             MmapOptions::new().len(len).map_anon().expect("mmap")
         };  
+        */
 
         let ctx = ExecutionCtx::new(num_insns);
-        let mut vm_exec_state: VmExecState<F, GuestMemory, ExecutionCtx> = VmExecState::new(from_state, ctx);
+        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> = Box::new(VmExecState::new(from_state, ctx));
 
+        /*
         unsafe {
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             std::ptr::write(ptr, vm_exec_state);
         }  
+        */
 
         unsafe {
-            let vec_ptr = &self.pre_compute_insns as *const Vec<_> as *const c_void;
             let asm_run: libloading::Symbol<AsmRunFn> = self.lib
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
+            /*
             let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            
-            asm_run(ptr as *mut c_void, vec_ptr);
+            */
+
+            let state_ptr = &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+
+            eprintln!(
+                "tid={:?} first_arg={:p} second_arg={:p}",
+                std::thread::current().id(),
+                state_ptr as *mut c_void,
+                (&self.table_box).as_ptr() as *const c_void
+            );
+
+            asm_run(state_ptr as *mut c_void, (&self.table_box).as_ptr() as *const c_void);
         }
 
-        let vm_exec_state_ref = unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            &mut *ptr
-        };
-
-        let vm_state = vm_exec_state_ref.vm_state.clone();
-
-        unsafe {
-            let ptr = mmap.as_mut_ptr() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            std::ptr::drop_in_place(ptr);
-        }
-
-        Ok(vm_state)
+        Ok((*vm_exec_state).vm_state)
     }
 }
 
+/*
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where 
     F: PrimeField32,
@@ -379,3 +405,4 @@ where
         Ok((ctx.into_segments(), vm_state))
     }
 }
+*/

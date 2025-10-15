@@ -28,6 +28,8 @@ use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
 
+use openvm_circuit::arch::VmExecState;
+
 type F = BabyBear;
 
 fn get_elf(elf_path: impl AsRef<Path>) -> Result<Elf> {
@@ -66,7 +68,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 
 #[test_case("tests/data/rv32im-exp-from-as")]
 #[test_case("tests/data/rv32im-fib-from-as")]
-fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
+fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
     let exe = VmExe::from_elf(
         elf,
@@ -77,7 +79,7 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     )?;
 
     let config = Rv32ImConfig::default();
-    let executor = VmExecutor::new(config)?;
+    let executor = VmExecutor::new(config.clone())?;
 
     let interpreter = executor.instance(&exe)?;
     let interp_state = interpreter.execute(vec![], None)?;
@@ -85,29 +87,60 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
     let mut aot_instance = executor.aot_instance(&exe)?;
     let aot_state = aot_instance.execute(vec![], None)?;
 
-    for r in 0..32 {
+    // check that the VM state are equal
+    assert_eq!(interp_state.instret(), aot_state.instret());
+    assert_eq!(interp_state.pc(), aot_state.pc());
+
+    let system_config: &SystemConfig = &config.as_ref();
+    let addr_spaces = &system_config.memory_config.addr_spaces; 
+
+    // check memory are equal
+    for t in 1..4 {
+        for r in 0..addr_spaces[t as usize].num_cells {
+            let interp = unsafe {
+                interp_state.memory.read::<u8, 1>(t, r as u32)
+            };
+            let aot_interp = unsafe {
+                aot_state.memory.read::<u8, 1>(t, r as u32)
+            };
+            assert_eq!(interp, aot_interp);
+        }
+    }
+    for r in 0..(addr_spaces[4].num_cells/4) {
         let interp = unsafe {
-            interp_state.memory.read::<u8, 1>(1, r)
+            interp_state.memory.read::<u32, 4>(4, 4 * r as u32)
         };
         let aot_interp = unsafe {
-            aot_state.memory.read::<u8, 1>(1, r)
+            aot_state.memory.read::<u32, 4>(4, 4 * r as u32)
         };
         assert_eq!(interp, aot_interp);
-        // println!("check register {}, interp: {}, aot: {}", r, interp[0], aot_interp[0]);
     }
 
-    for r in 0..10000 {
-        let interp = unsafe {
-            interp_state.memory.read::<u8, 1>(2, r)
-        };
-        let aot_interp = unsafe {
-            aot_state.memory.read::<u8, 1>(2, r)
-        };
-        assert_eq!(interp, aot_interp);
-        // println!("check address space {}, interp: {}, aot_interp: {}", r, interp[0], aot_interp[0]);
-    }
+    // check streams are equal
+    assert_eq!(interp_state.streams.input_stream, aot_state.streams.input_stream);
+    assert_eq!(interp_state.streams.hint_stream, aot_state.streams.hint_stream);
+    assert_eq!(interp_state.streams.hint_space, aot_state.streams.hint_space);
 
-    
+    Ok(())
+}
+
+
+
+#[test_case("tests/data/rv32im-exp-from-as")]
+#[test_case("tests/data/rv32im-fib-from-as")]
+fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
+    let elf = get_elf(elf_path)?;
+    let exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
+    )?;
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config)?;
+    let interpreter = executor.instance(&exe)?;
+    interpreter.execute(vec![], None)?;
     Ok(())
 }
 
