@@ -37,7 +37,7 @@ jobs:
           - { name: "ecc", path: "ecc" }
           - { name: "pairing", path: "pairing" }
         platform:
-          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 

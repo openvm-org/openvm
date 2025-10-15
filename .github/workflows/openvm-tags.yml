@@ -24,7 +24,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=8cpu-linux-arm64
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
     steps:
       - uses: actions/checkout@v5
       - name: Check the tags
