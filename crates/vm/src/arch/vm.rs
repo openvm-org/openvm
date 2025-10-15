@@ -241,7 +241,17 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        AotInstance::new(&self.inventory, exe)
+        #[cfg(target_arch = "x86_64")]
+        {
+            AotInstance::new(&self.inventory, exe)
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Err(StaticProgramError::UnsupportedArchitecture {
+                required: "x86_64",
+                found: std::env::consts::ARCH,
+            })
+        }
     }
 
     #[cfg(feature = "aot")]
@@ -296,7 +306,17 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
-        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+        #[cfg(target_arch = "x86_64")]
+        {
+            AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Err(StaticProgramError::UnsupportedArchitecture {
+                required: "x86_64",
+                found: std::env::consts::ARCH,
+            })
+        }
     }
 
     /// Creates an instance of the AotInstance specialized for cost metering execution of the given
@@ -306,7 +326,17 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<F, MeteredCostCtx>, StaticProgramError> {
-        AotInstance::new_metered_cost(&self.inventory, exe, executor_idx_to_air_idx)
+        #[cfg(target_arch = "x86_64")]
+        {
+            AotInstance::new_metered_cost(&self.inventory, exe, executor_idx_to_air_idx)
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Err(StaticProgramError::UnsupportedArchitecture {
+                required: "x86_64",
+                found: std::env::consts::ARCH,
+            })
+        }
     }
 }
 
