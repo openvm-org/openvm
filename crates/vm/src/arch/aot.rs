@@ -39,6 +39,7 @@ pub struct AotInstance<'a, F, Ctx> {
 }
 
 use std::sync::Mutex;
+use std::thread;
 
 type AsmRunFn = unsafe extern "C" fn(
     vm_exec_state_ptr: *mut c_void,
@@ -174,6 +175,19 @@ where
 
         let init_memory = exe.init_memory.clone();
 
+        let table_box : Box<[PreComputeInstruction<'a, F, Ctx>]> = pre_compute_insns.into_boxed_slice();
+        let buf_ptr = table_box.as_ptr();
+        let box_handle_addr = &table_box as *const _;
+
+        /*
+        eprintln!(
+            "tid={:?} buf={:p} len={} (box_handle_on_stack={:p}) vm_exec_state={:p}",
+            std::thread::current().id(),
+            buf_ptr,
+            table_box.len()
+        );
+        */
+
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
@@ -280,6 +294,7 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     }
 }
 
+/*
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
