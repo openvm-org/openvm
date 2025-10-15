@@ -92,9 +92,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             for _ in 0..vk.inner.params.num_whir_queries {
                 let _bits = ts.sample();
             }
-            if i != num_whir_rounds - 1 {
-                let _gamma = ts.sample_ext();
-            }
+            let _gamma = ts.sample_ext();
         }
         debug_assert!(sumcheck_poly_iter.next().is_none());
 
