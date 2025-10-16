@@ -26,6 +26,7 @@ use crate::{
 #[derive(AlignedBorrow)]
 struct DummyWhirCols<T> {
     is_first: T,
+    proof_idx: T,
     whir_module_msg: WhirModuleMessage<T>,
     commitments_msg: CommitmentsBusMessage<T>,
     has_commitments_msg: T,
@@ -64,23 +65,31 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyWhirAir {
 
         self.commitments_bus.send(
             builder,
+            local.proof_idx,
             local.commitments_msg.clone(),
             local.has_commitments_msg,
         );
         self.stacking_widths_bus.receive(
             builder,
+            local.proof_idx,
             local.stacking_widths_bus_msg.clone(),
             local.has_stacking_widths_bus_msg,
         );
         self.stacking_randomness_bus.receive(
             builder,
+            local.proof_idx,
             local.stacking_randomenss_msg.clone(),
             local.has_stacking_randomness_msg,
         );
-        self.whir_module_bus
-            .receive(builder, local.whir_module_msg.clone(), local.is_first);
+        self.whir_module_bus.receive(
+            builder,
+            local.proof_idx,
+            local.whir_module_msg.clone(),
+            local.is_first,
+        );
         self.transcript_bus.receive(
             builder,
+            local.proof_idx,
             local.transcript_msg.clone(),
             local.has_transcript_msg,
         );

@@ -58,7 +58,7 @@ impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
             AB::F::from_canonical_usize((1 << NUM_BITS) - 1),
         );
 
-        self.bus.receive(
+        self.bus.add_key_with_lookups(
             builder,
             RangeCheckerBusMessage {
                 value: local.value.into(),

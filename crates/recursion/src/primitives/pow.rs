@@ -70,7 +70,7 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
             .when_last_row()
             .assert_eq(local.log, AB::F::from_canonical_usize(N - 1));
 
-        self.pow_bus.receive(
+        self.pow_bus.add_key_with_lookups(
             builder,
             PowerCheckerBusMessage {
                 log: local.log,
@@ -78,7 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
             },
             local.mult_pow,
         );
-        self.range_bus.receive(
+        self.range_bus.add_key_with_lookups(
             builder,
             RangeCheckerBusMessage {
                 value: local.log.into(),

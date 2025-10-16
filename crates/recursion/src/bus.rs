@@ -2,7 +2,35 @@ use stark_backend_v2::{D_EF, DIGEST_SIZE};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 #[macro_export]
-macro_rules! define_typed_bus {
+macro_rules! define_typed_lookup_bus {
+    ($Bus:ident, $Msg:ident) => {
+        #[derive(Copy, Clone, Debug)]
+        pub struct $Bus(openvm_stark_backend::interaction::LookupBus);
+
+        impl $Bus {
+            #[inline]
+            pub fn new(bus_index: openvm_stark_backend::interaction::BusIndex) -> Self {
+                Self(openvm_stark_backend::interaction::LookupBus::new(bus_index))
+            }
+
+            #[inline]
+            pub fn add_key_with_lookups<AB>(
+                &self,
+                builder: &mut AB,
+                key: $Msg<impl Into<AB::Expr> + Clone>,
+                num_lookups: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                self.0
+                    .add_key_with_lookups(builder, key.to_vec(), num_lookups);
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! define_typed_per_proof_permutation_bus {
     ($Bus:ident, $Msg:ident) => {
         #[derive(Copy, Clone, Debug)]
         pub struct $Bus(openvm_stark_backend::interaction::PermutationCheckBus);
@@ -19,24 +47,32 @@ macro_rules! define_typed_bus {
             pub fn send<AB>(
                 &self,
                 builder: &mut AB,
+                proof_idx: AB::Var,
                 message: $Msg<impl Into<AB::Expr> + Clone>,
                 enabled: impl Into<AB::Expr>,
             ) where
                 AB: openvm_stark_backend::interaction::InteractionBuilder,
             {
-                self.0.send(builder, message.to_vec(), enabled);
+                let message = core::iter::once(proof_idx.into())
+                    .chain(message.to_vec().into_iter().map(|x| x.into()))
+                    .collect::<Vec<_>>();
+                self.0.send(builder, message, enabled);
             }
 
             #[inline]
             pub fn receive<AB>(
                 &self,
                 builder: &mut AB,
+                proof_idx: AB::Var,
                 message: $Msg<impl Into<AB::Expr> + Clone>,
                 enabled: impl Into<AB::Expr>,
             ) where
                 AB: openvm_stark_backend::interaction::InteractionBuilder,
             {
-                self.0.receive(builder, message.to_vec(), enabled);
+                let message = core::iter::once(proof_idx.into())
+                    .chain(message.to_vec().into_iter().map(|x| x.into()))
+                    .collect::<Vec<_>>();
+                self.0.receive(builder, message, enabled);
             }
         }
     };
@@ -49,7 +85,7 @@ pub struct RangeCheckerBusMessage<T> {
     pub max_bits: T,
 }
 
-define_typed_bus!(RangeCheckerBus, RangeCheckerBusMessage);
+define_typed_lookup_bus!(RangeCheckerBus, RangeCheckerBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -58,7 +94,7 @@ pub struct PowerCheckerBusMessage<T> {
     pub exp: T,
 }
 
-define_typed_bus!(PowerCheckerBus, PowerCheckerBusMessage);
+define_typed_lookup_bus!(PowerCheckerBus, PowerCheckerBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -68,7 +104,7 @@ pub struct GkrModuleMessage<T> {
     pub n_max: T,
 }
 
-define_typed_bus!(GkrModuleBus, GkrModuleMessage);
+define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -80,7 +116,7 @@ pub struct BatchConstraintModuleMessage<T> {
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
 }
 
-define_typed_bus!(BatchConstraintModuleBus, BatchConstraintModuleMessage);
+define_typed_per_proof_permutation_bus!(BatchConstraintModuleBus, BatchConstraintModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -88,7 +124,7 @@ pub struct StackingModuleMessage<T> {
     pub tidx: T,
 }
 
-define_typed_bus!(StackingModuleBus, StackingModuleMessage);
+define_typed_per_proof_permutation_bus!(StackingModuleBus, StackingModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -101,7 +137,7 @@ pub struct WhirModuleMessage<T> {
     pub claim: [T; 4],
 }
 
-define_typed_bus!(WhirModuleBus, WhirModuleMessage);
+define_typed_per_proof_permutation_bus!(WhirModuleBus, WhirModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -111,7 +147,7 @@ pub struct TranscriptBusMessage<T> {
     pub is_sample: T,
 }
 
-define_typed_bus!(TranscriptBus, TranscriptBusMessage);
+define_typed_per_proof_permutation_bus!(TranscriptBus, TranscriptBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -124,7 +160,7 @@ pub struct AirShapeBusMessage<T> {
     pub num_interactions: T,
 }
 
-define_typed_bus!(AirShapeBus, AirShapeBusMessage);
+define_typed_per_proof_permutation_bus!(AirShapeBus, AirShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -134,7 +170,7 @@ pub struct AirPartShapeBusMessage<T> {
     pub width: T,
 }
 
-define_typed_bus!(AirPartShapeBus, AirPartShapeBusMessage);
+define_typed_per_proof_permutation_bus!(AirPartShapeBus, AirPartShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -143,7 +179,7 @@ pub struct StackingIndexMessage<T> {
     pub col_idx: T,
 }
 
-define_typed_bus!(StackingIndicesBus, StackingIndexMessage);
+define_typed_per_proof_permutation_bus!(StackingIndicesBus, StackingIndexMessage);
 
 /// Carries all commitments in the proof.
 ///
@@ -158,7 +194,7 @@ pub struct CommitmentsBusMessage<T> {
     pub commitment: [T; DIGEST_SIZE],
 }
 
-define_typed_bus!(CommitmentsBus, CommitmentsBusMessage);
+define_typed_per_proof_permutation_bus!(CommitmentsBus, CommitmentsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -167,7 +203,7 @@ pub struct XiRandomnessMessage<T> {
     pub challenge: [T; D_EF],
 }
 
-define_typed_bus!(XiRandomnessBus, XiRandomnessMessage);
+define_typed_per_proof_permutation_bus!(XiRandomnessBus, XiRandomnessMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -176,7 +212,7 @@ pub struct ConstraintSumcheckRandomness<T> {
     pub challenge: [T; D_EF],
 }
 
-define_typed_bus!(
+define_typed_per_proof_permutation_bus!(
     ConstraintSumcheckRandomnessBus,
     ConstraintSumcheckRandomness
 );
@@ -192,7 +228,7 @@ pub struct ColumnClaimsMessage<T> {
     pub rot_claim: [T; D_EF],
 }
 
-define_typed_bus!(ColumnClaimsBus, ColumnClaimsMessage);
+define_typed_per_proof_permutation_bus!(ColumnClaimsBus, ColumnClaimsMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -201,7 +237,7 @@ pub struct StackingSumcheckRandomnessMessage<T> {
     pub challenge: [T; D_EF],
 }
 
-define_typed_bus!(
+define_typed_per_proof_permutation_bus!(
     StackingSumcheckRandomnessBus,
     StackingSumcheckRandomnessMessage
 );
@@ -214,4 +250,4 @@ pub struct PublicValuesBusMessage<T> {
     pub value: T,
 }
 
-define_typed_bus!(PublicValuesBus, PublicValuesBusMessage);
+define_typed_per_proof_permutation_bus!(PublicValuesBus, PublicValuesBusMessage);
