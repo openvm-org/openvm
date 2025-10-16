@@ -34,7 +34,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
             batch_constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             column_claims_bus: self.bus_inventory.column_claims_bus,
-            stacking_claims_bus: self.bus_inventory.stacking_claims_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
@@ -80,8 +79,11 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
             }
         }
 
+        let stacking_batching_challenge = ts.sample_ext();
+
         preflight.stacking = StackingPreflight {
             post_tidx: ts.len(),
+            stacking_batching_challenge,
             sumcheck_rnd,
         };
     }

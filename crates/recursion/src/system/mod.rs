@@ -13,11 +13,10 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
-        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
+        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
-        RangeCheckerBus, StackingClaimsBus, StackingCommitmentsBus, StackingModuleBus,
-        StackingSumcheckRandomnessBus, StackingWidthsBus, TranscriptBus, WhirModuleBus,
-        XiRandomnessBus,
+        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingSumcheckRandomnessBus,
+        TranscriptBus, WhirModuleBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
@@ -81,8 +80,8 @@ pub struct BusInventory {
     // Data buses
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub stacking_widths_bus: StackingWidthsBus,
-    pub stacking_commitments_bus: StackingCommitmentsBus,
+    pub stacking_widths_bus: StackingIndicesBus,
+    pub commitments_bus: CommitmentsBus,
     pub public_values_bus: PublicValuesBus,
 
     // Randomness buses
@@ -92,7 +91,6 @@ pub struct BusInventory {
 
     // Claims buses
     pub column_claims_bus: ColumnClaimsBus,
-    pub stacking_claims_bus: StackingClaimsBus,
 
     // Peripheral buses
     pub range_checker_bus: RangeCheckerBus,
@@ -209,6 +207,7 @@ pub struct BatchConstraintPreflight {
 #[derive(Debug, Default)]
 pub struct StackingPreflight {
     pub post_tidx: usize,
+    pub stacking_batching_challenge: EF,
     pub sumcheck_rnd: Vec<EF>,
 }
 
@@ -231,8 +230,8 @@ impl Default for BusInventory {
             // Data buses
             air_shape_bus: AirShapeBus::new(b.new_bus_idx()),
             air_part_shape_bus: AirPartShapeBus::new(b.new_bus_idx()),
-            stacking_widths_bus: StackingWidthsBus::new(b.new_bus_idx()),
-            stacking_commitments_bus: StackingCommitmentsBus::new(b.new_bus_idx()),
+            stacking_widths_bus: StackingIndicesBus::new(b.new_bus_idx()),
+            commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
 
             // Randomness buses
@@ -242,7 +241,6 @@ impl Default for BusInventory {
 
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
-            stacking_claims_bus: StackingClaimsBus::new(b.new_bus_idx()),
 
             // Peripheral buses
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),

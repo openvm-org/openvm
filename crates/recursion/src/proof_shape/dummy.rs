@@ -15,9 +15,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, GkrModuleBus,
-        GkrModuleMessage, PublicValuesBus, StackingCommitmentsBus, StackingCommitmentsBusMessage,
-        StackingWidthBusMessage, StackingWidthsBus, TranscriptBus, TranscriptBusMessage,
+        AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, CommitmentsBus,
+        CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage, PublicValuesBus,
+        StackingIndexMessage, StackingIndicesBus, TranscriptBus, TranscriptBusMessage,
     },
     system::Preflight,
 };
@@ -31,10 +31,10 @@ struct DummyProofShapeCols<T> {
     has_air_shape_bus_msg: T,
     air_part_shape_bus_msg: AirPartShapeBusMessage<T>,
     has_air_part_shape_bus_msg: T,
-    stacking_widths_bus_msg: StackingWidthBusMessage<T>,
+    stacking_widths_bus_msg: StackingIndexMessage<T>,
     has_stacking_widths_bus_msg: T,
-    stacking_commitments_msg: StackingCommitmentsBusMessage<T>,
-    has_stacking_commitments_msg: T,
+    commitments_msg: CommitmentsBusMessage<T>,
+    has_commitments_msg: T,
     transcript_msg: TranscriptBusMessage<T>,
     has_transcript_msg: T,
 }
@@ -44,8 +44,8 @@ pub(crate) struct DummyProofShapeAir {
     pub gkr_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub stacking_commitments_bus: StackingCommitmentsBus,
-    pub stacking_widths_bus: StackingWidthsBus,
+    pub commitments_bus: CommitmentsBus,
+    pub stacking_widths_bus: StackingIndicesBus,
     pub _public_values_bus: PublicValuesBus,
 }
 
@@ -84,10 +84,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
             local.air_part_shape_bus_msg.clone(),
             AB::Expr::TWO * local.has_air_part_shape_bus_msg,
         );
-        self.stacking_commitments_bus.send(
+        self.commitments_bus.send(
             builder,
-            local.stacking_commitments_msg.clone(),
-            local.has_stacking_commitments_msg,
+            local.commitments_msg.clone(),
+            local.has_commitments_msg,
         );
         self.stacking_widths_bus.send(
             builder,
@@ -112,7 +112,7 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
 ) -> RowMajorMatrix<F> {
     let mut air_shape_bus_msgs = preflight.air_bus_msgs(vk).into_iter();
     let mut air_part_shape_bus_msgs = preflight.air_part_bus_msgs(vk).into_iter();
-    let mut stacking_commitments_msgs = preflight.stacking_commitments_msgs(vk, proof).into_iter();
+    let mut commitments_msgs = preflight.stacking_commitments_msgs(vk, proof).into_iter();
     let mut stacking_widths_bus_msgs = preflight.stacking_widths_bus_msgs(vk).into_iter();
     let mut gkr_bus_msgs = vec![GkrModuleMessage {
         tidx: F::from_canonical_usize(preflight.proof_shape.post_tidx),
@@ -127,7 +127,7 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     let num_valid_rows = [
         air_shape_bus_msgs.len(),
         air_part_shape_bus_msgs.len(),
-        stacking_commitments_msgs.len(),
+        commitments_msgs.len(),
         stacking_widths_bus_msgs.len(),
         gkr_bus_msgs.len(),
         transcript_msgs.len(),
@@ -159,9 +159,9 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
             cols.stacking_widths_bus_msg = msg;
             cols.has_stacking_widths_bus_msg = F::ONE;
         }
-        if let Some(msg) = stacking_commitments_msgs.next() {
-            cols.stacking_commitments_msg = msg;
-            cols.has_stacking_commitments_msg = F::ONE;
+        if let Some(msg) = commitments_msgs.next() {
+            cols.commitments_msg = msg;
+            cols.has_commitments_msg = F::ONE;
         }
         if let Some(msg) = transcript_msgs.next() {
             cols.transcript_msg = msg;

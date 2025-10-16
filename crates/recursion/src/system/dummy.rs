@@ -3,7 +3,7 @@ use core::iter::zip;
 
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
-    D_EF, F,
+    D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
@@ -12,9 +12,9 @@ use stark_backend_v2::{
 use crate::{
     bus::{
         AirPartShapeBusMessage, AirShapeBusMessage, BatchConstraintModuleMessage,
-        ColumnClaimsMessage, ConstraintSumcheckRandomness, StackingClaimsMessage,
-        StackingCommitmentsBusMessage, StackingSumcheckRandomnessMessage, StackingWidthBusMessage,
-        TranscriptBusMessage, XiRandomnessMessage,
+        ColumnClaimsMessage, CommitmentsBusMessage, ConstraintSumcheckRandomness,
+        StackingIndexMessage, StackingSumcheckRandomnessMessage, TranscriptBusMessage,
+        WhirModuleMessage, XiRandomnessMessage,
     },
     system::Preflight,
 };
@@ -131,21 +131,6 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
         column_claims_bus_msgs
     }
 
-    pub(crate) fn stacking_claims_msgs(&self, proof: &Proof) -> Vec<StackingClaimsMessage<F>> {
-        let mut msgs = vec![];
-        let mut i = 0;
-        for per_commit_claims in proof.stacking_proof.stacking_openings.iter() {
-            for claim in per_commit_claims {
-                msgs.push(StackingClaimsMessage {
-                    idx: F::from_canonical_usize(i),
-                    claim: claim.as_base_slice().try_into().unwrap(),
-                });
-                i += 1;
-            }
-        }
-        msgs
-    }
-
     pub(crate) fn air_bus_msgs(&self, vk: &MultiStarkVerifyingKeyV2) -> Vec<AirShapeBusMessage<F>> {
         self.proof_shape
             .sorted_trace_vdata
@@ -210,14 +195,43 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
             .collect()
     }
 
+    pub fn whir_module_msg(&self, proof: &Proof) -> WhirModuleMessage<F> {
+        let mu = self.stacking.stacking_batching_challenge;
+        let mut mu_pows = mu.powers();
+        let mut claim = EF::ZERO;
+        for openings in &proof.stacking_proof.stacking_openings {
+            for &opening in openings {
+                claim += mu_pows.next().unwrap() * opening;
+            }
+        }
+        WhirModuleMessage {
+            tidx: F::from_canonical_usize(self.stacking.post_tidx),
+            mu: mu.as_base_slice().try_into().unwrap(),
+            claim: claim.as_base_slice().try_into().unwrap(),
+        }
+    }
+
+    pub fn whir_commitments_msgs(&self, proof: &Proof) -> Vec<CommitmentsBusMessage<F>> {
+        let mut messages = vec![];
+        for (i, commit) in proof.whir_proof.codeword_commits.iter().enumerate() {
+            messages.push(CommitmentsBusMessage {
+                major_idx: F::from_canonical_usize(i + 1),
+                minor_idx: F::ZERO,
+                commitment: *commit,
+            });
+        }
+        messages
+    }
+
     pub fn stacking_commitments_msgs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-    ) -> Vec<StackingCommitmentsBusMessage<F>> {
+    ) -> Vec<CommitmentsBusMessage<F>> {
         let mut messages = vec![];
-        messages.push(StackingCommitmentsBusMessage {
-            commit_idx: F::ZERO,
+        messages.push(CommitmentsBusMessage {
+            major_idx: F::ZERO,
+            minor_idx: F::ZERO,
             commitment: proof.common_main_commit,
         });
         let mut commit_idx = F::ONE;
@@ -231,8 +245,9 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
                 .chain(vdata.cached_commitments.iter().cloned());
 
             for commit in commits {
-                messages.push(StackingCommitmentsBusMessage {
-                    commit_idx,
+                messages.push(CommitmentsBusMessage {
+                    major_idx: F::ZERO,
+                    minor_idx: commit_idx,
                     commitment: commit,
                 });
                 commit_idx += F::ONE;
@@ -244,14 +259,16 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
     pub fn stacking_widths_bus_msgs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
-    ) -> Vec<StackingWidthBusMessage<F>> {
+    ) -> Vec<StackingIndexMessage<F>> {
         let l_skip = vk.inner.params.l_skip;
         let stacking_height = 1 << (l_skip + vk.inner.params.n_stack);
         let mut messages = vec![];
-        messages.push(StackingWidthBusMessage {
-            commit_idx: F::ZERO,
-            width: F::from_canonical_usize(self.proof_shape.stacked_common_width),
-        });
+        for i in 0..self.proof_shape.stacked_common_width {
+            messages.push(StackingIndexMessage {
+                commit_idx: F::ZERO,
+                col_idx: F::from_canonical_usize(i),
+            });
+        }
         let mut commit_idx = F::ONE;
         for (air_id, vdata) in &self.proof_shape.sorted_trace_vdata {
             let width = &vk.inner.per_air[*air_id].params.width;
@@ -260,10 +277,12 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
             for width in widths {
                 let cells = width * (1 << (vdata.hypercube_dim + l_skip));
                 let stacking_width = cells.div_ceil(stacking_height);
-                messages.push(StackingWidthBusMessage {
-                    commit_idx,
-                    width: F::from_canonical_usize(stacking_width),
-                });
+                for i in 0..stacking_width {
+                    messages.push(StackingIndexMessage {
+                        commit_idx,
+                        col_idx: F::from_canonical_usize(i),
+                    });
+                }
                 commit_idx += F::ONE;
             }
         }

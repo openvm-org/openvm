@@ -15,10 +15,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        StackingClaimsBus, StackingClaimsMessage, StackingCommitmentsBus,
-        StackingCommitmentsBusMessage, StackingSumcheckRandomnessBus,
-        StackingSumcheckRandomnessMessage, StackingWidthBusMessage, StackingWidthsBus,
-        TranscriptBus, TranscriptBusMessage, WhirModuleBus, WhirModuleMessage,
+        CommitmentsBus, CommitmentsBusMessage, StackingIndexMessage, StackingIndicesBus,
+        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
+        TranscriptBusMessage, WhirModuleBus, WhirModuleMessage,
     },
     system::Preflight,
 };
@@ -27,16 +26,13 @@ use crate::{
 #[derive(AlignedBorrow)]
 struct DummyWhirCols<T> {
     is_first: T,
-    tidx: T,
-
-    stacking_commitments_msg: StackingCommitmentsBusMessage<T>,
-    has_stacking_commitments_msg: T,
-    stacking_widths_bus_msg: StackingWidthBusMessage<T>,
+    whir_module_msg: WhirModuleMessage<T>,
+    commitments_msg: CommitmentsBusMessage<T>,
+    has_commitments_msg: T,
+    stacking_widths_bus_msg: StackingIndexMessage<T>,
     has_stacking_widths_bus_msg: T,
     stacking_randomenss_msg: StackingSumcheckRandomnessMessage<T>,
     has_stacking_randomness_msg: T,
-    stacking_claims_msg: StackingClaimsMessage<T>,
-    has_stacking_claims_msg: T,
     transcript_msg: TranscriptBusMessage<T>,
     has_transcript_msg: T,
 }
@@ -44,9 +40,8 @@ struct DummyWhirCols<T> {
 // Temporary dummy AIR to represent this module.
 pub struct DummyWhirAir {
     pub whir_module_bus: WhirModuleBus,
-    pub stacking_widths_bus: StackingWidthsBus,
-    pub stacking_claims_bus: StackingClaimsBus,
-    pub stacking_commitments_bus: StackingCommitmentsBus,
+    pub stacking_widths_bus: StackingIndicesBus,
+    pub commitments_bus: CommitmentsBus,
     pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
     pub transcript_bus: TranscriptBus,
 }
@@ -67,10 +62,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyWhirAir {
         let local = main.row_slice(0);
         let local: &DummyWhirCols<AB::Var> = (*local).borrow();
 
-        self.stacking_commitments_bus.receive(
+        self.commitments_bus.send(
             builder,
-            local.stacking_commitments_msg.clone(),
-            local.has_stacking_commitments_msg,
+            local.commitments_msg.clone(),
+            local.has_commitments_msg,
         );
         self.stacking_widths_bus.receive(
             builder,
@@ -82,18 +77,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyWhirAir {
             local.stacking_randomenss_msg.clone(),
             local.has_stacking_randomness_msg,
         );
-        self.stacking_claims_bus.receive(
-            builder,
-            local.stacking_claims_msg.clone(),
-            local.has_stacking_claims_msg,
-        );
-        self.whir_module_bus.receive(
-            builder,
-            WhirModuleMessage {
-                tidx: local.tidx.into(),
-            },
-            local.is_first,
-        );
+        self.whir_module_bus
+            .receive(builder, local.whir_module_msg.clone(), local.is_first);
         self.transcript_bus.receive(
             builder,
             local.transcript_msg.clone(),
@@ -107,19 +92,17 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
-    let mut stacking_commitments_msgs = preflight.stacking_commitments_msgs(vk, proof).into_iter();
+    let mut commitments_msgs = preflight.whir_commitments_msgs(proof).into_iter();
     let mut stacking_widths_bus_msgs = preflight.stacking_widths_bus_msgs(vk).into_iter();
     let mut stacking_randomness_msgs = preflight.stacking_randomness_msgs().into_iter();
-    let mut stacking_claims_msgs = preflight.stacking_claims_msgs(proof).into_iter();
     let mut transcript_msgs = preflight
         .transcript_msgs(preflight.stacking.post_tidx, preflight.transcript.len())
         .into_iter();
 
     let num_valid_rows: usize = [
         stacking_widths_bus_msgs.len(),
-        stacking_commitments_msgs.len(),
+        commitments_msgs.len(),
         stacking_randomness_msgs.len(),
-        stacking_claims_msgs.len(),
         transcript_msgs.len(),
     ]
     .into_iter()
@@ -133,11 +116,14 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut DummyWhirCols<F> = row.borrow_mut();
         cols.is_first = F::from_bool(i == 0);
-        cols.tidx = F::from_canonical_usize(preflight.stacking.post_tidx);
 
-        if let Some(msg) = stacking_commitments_msgs.next() {
-            cols.stacking_commitments_msg = msg;
-            cols.has_stacking_commitments_msg = F::ONE;
+        if i == 0 {
+            cols.whir_module_msg = preflight.whir_module_msg(proof);
+        }
+
+        if let Some(msg) = commitments_msgs.next() {
+            cols.commitments_msg = msg;
+            cols.has_commitments_msg = F::ONE;
         }
         if let Some(msg) = stacking_widths_bus_msgs.next() {
             cols.stacking_widths_bus_msg = msg;
@@ -146,10 +132,6 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         if let Some(msg) = stacking_randomness_msgs.next() {
             cols.stacking_randomenss_msg = msg;
             cols.has_stacking_randomness_msg = F::ONE;
-        }
-        if let Some(msg) = stacking_claims_msgs.next() {
-            cols.stacking_claims_msg = msg;
-            cols.has_stacking_claims_msg = F::ONE;
         }
         if let Some(msg) = transcript_msgs.next() {
             cols.transcript_msg = msg;

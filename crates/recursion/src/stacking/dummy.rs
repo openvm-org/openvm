@@ -17,9 +17,9 @@ use crate::{
     bus::{
         AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, ColumnClaimsBus,
         ColumnClaimsMessage, ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus,
-        StackingClaimsBus, StackingClaimsMessage, StackingModuleBus, StackingModuleMessage,
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, StackingWidthBusMessage,
-        StackingWidthsBus, TranscriptBus, TranscriptBusMessage, WhirModuleBus, WhirModuleMessage,
+        StackingIndexMessage, StackingIndicesBus, StackingModuleBus, StackingModuleMessage,
+        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
+        TranscriptBusMessage, WhirModuleBus, WhirModuleMessage,
     },
     system::Preflight,
 };
@@ -29,8 +29,7 @@ use crate::{
 struct DummyStackingCols<T> {
     is_first: T,
     stacking_tidx: T,
-    whir_tidx: T,
-
+    whir_module_msg: WhirModuleMessage<T>,
     constraint_sumcheck_rnd_msg: ConstraintSumcheckRandomness<T>,
     has_constraint_sumcheck_rnd: T,
     column_claim_msg: ColumnClaimsMessage<T>,
@@ -41,10 +40,8 @@ struct DummyStackingCols<T> {
     has_air_part_shape_bus_msg: T,
     stacking_randomness_bus_msg: StackingSumcheckRandomnessMessage<T>,
     has_stacking_randomness_bus_msg: T,
-    stacking_widths_bus_msg: StackingWidthBusMessage<T>,
+    stacking_widths_bus_msg: StackingIndexMessage<T>,
     has_stacking_widths_bus_msg: T,
-    stacking_claims_msg: StackingClaimsMessage<T>,
-    has_stacking_claims_msg: T,
     transcript_msg: TranscriptBusMessage<T>,
     has_transcript_msg: T,
 }
@@ -56,10 +53,9 @@ pub struct DummyStackingAir {
     pub column_claims_bus: ColumnClaimsBus,
     pub batch_constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
     pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
-    pub stacking_claims_bus: StackingClaimsBus,
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub stacking_widths_bus: StackingWidthsBus,
+    pub stacking_widths_bus: StackingIndicesBus,
     pub transcript_bus: TranscriptBus,
 }
 
@@ -96,18 +92,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyStackingAir {
             local.stacking_randomness_bus_msg.clone(),
             local.has_stacking_randomness_bus_msg,
         );
-        self.stacking_claims_bus.send(
-            builder,
-            local.stacking_claims_msg.clone(),
-            local.has_stacking_claims_msg,
-        );
-        self.whir_module_bus.send(
-            builder,
-            WhirModuleMessage {
-                tidx: local.whir_tidx.into(),
-            },
-            local.is_first,
-        );
+        self.whir_module_bus
+            .send(builder, local.whir_module_msg.clone(), local.is_first);
         self.column_claims_bus.receive(
             builder,
             local.column_claim_msg.clone(),
@@ -147,7 +133,6 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     let mut air_part_shape_bus_msgs = preflight.air_part_bus_msgs(vk).into_iter();
     let mut stacking_widths_bus_msgs = preflight.stacking_widths_bus_msgs(vk).into_iter();
     let mut stacking_randomness_msgs = preflight.stacking_randomness_msgs().into_iter();
-    let mut stacking_claims_msgs = preflight.stacking_claims_msgs(proof).into_iter();
     let mut transcript_msgs = preflight
         .transcript_msgs(
             preflight.batch_constraint.post_tidx,
@@ -162,7 +147,6 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         air_part_shape_bus_msgs.len(),
         stacking_widths_bus_msgs.len(),
         transcript_msgs.len(),
-        stacking_claims_msgs.len(),
     ]
     .into_iter()
     .max()
@@ -176,8 +160,8 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         let cols: &mut DummyStackingCols<F> = row.borrow_mut();
         cols.is_first = F::from_bool(i == 0);
         cols.stacking_tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
-        cols.whir_tidx = F::from_canonical_usize(preflight.stacking.post_tidx);
 
+        cols.whir_module_msg = preflight.whir_module_msg(proof);
         if let Some(msg) = constraint_sc_msgs.next() {
             cols.constraint_sumcheck_rnd_msg = msg;
             cols.has_constraint_sumcheck_rnd = F::ONE;
@@ -201,10 +185,6 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         if let Some(msg) = stacking_widths_bus_msgs.next() {
             cols.stacking_widths_bus_msg = msg;
             cols.has_stacking_widths_bus_msg = F::ONE;
-        }
-        if let Some(msg) = stacking_claims_msgs.next() {
-            cols.stacking_claims_msg = msg;
-            cols.has_stacking_claims_msg = F::ONE;
         }
         if let Some(msg) = transcript_msgs.next() {
             cols.transcript_msg = msg;

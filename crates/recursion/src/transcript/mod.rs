@@ -28,6 +28,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let transcript_air = DummyTranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
+            commitments_bus: self.bus_inventory.commitments_bus,
         };
         vec![Arc::new(transcript_air)]
     }
@@ -42,13 +43,13 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
 
     fn generate_proof_inputs(
         &self,
-        _vk: &MultiStarkVerifyingKeyV2,
+        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
             public_values: vec![],
         }]
     }
