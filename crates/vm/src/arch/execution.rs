@@ -86,7 +86,10 @@ pub enum StaticProgramError {
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
     #[error("operation unsupported on this architecture (required: {required}, found: {found})")]
-    UnsupportedArchitecture { required: &'static str, found: &'static str },
+    UnsupportedArchitecture {
+        required: &'static str,
+        found: &'static str,
+    },
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,

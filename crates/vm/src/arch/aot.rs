@@ -5,13 +5,16 @@ use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(not(feature = "tco"))]
+use crate::arch::interpreter::{
+    get_metered_pre_compute_instructions, get_pre_compute_instructions, get_pre_compute_max_size,
+};
 use crate::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCtx, MeteredCostCtx, Segment},
+        execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, Segment},
         interpreter::{
-            alloc_pre_compute_buf, get_metered_pre_compute_instructions,
-            get_metered_pre_compute_max_size, get_pre_compute_instructions,
-            get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
+            alloc_pre_compute_buf, get_metered_pre_compute_max_size, split_pre_compute_buf,
+            AlignedBuf, PreComputeInstruction,
         },
         ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
         MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
@@ -45,6 +48,23 @@ type AsmRunFn = unsafe extern "C" fn(
     from_state_instret: u64,
 );
 
+// Always provide `create_initial_vm_state` (used by multiple execution modes)
+impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+where
+    F: PrimeField32,
+    Ctx: ExecutionCtxTrait,
+{
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+        VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        )
+    }
+}
+
+#[cfg(not(feature = "tco"))]
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
@@ -195,15 +215,6 @@ where
             lib,
         })
     }
-
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
-    }
 }
 
 impl<F> AotInstance<'_, F, ExecutionCtx>
@@ -292,6 +303,7 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     }
 }
 
+#[cfg(not(feature = "tco"))]
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
@@ -502,13 +514,13 @@ where
 
     // TODO: implement execute_metered_until_suspend for AOT if needed
 }
-
+#[cfg(not(feature = "tco"))]
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for metered execution.
+    /// Creates a new interpreter instance for metered costexecution.
     pub fn new_metered_cost<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -524,7 +536,8 @@ where
             .parent()
             .unwrap()
             .join("target/release/libasm_bridge_metered_cost.so");
-        let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered_cost");
+        let asm_bridge_dir =
+            std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered_cost");
         let status = Command::new("cargo")
             .args(["build", "--release"])
             .current_dir(&asm_bridge_dir)
@@ -622,10 +635,7 @@ where
 
         // handle execution error
         match vm_exec_state.exit_code {
-            Ok(_) => Ok((
-                vm_exec_state.ctx.cost,
-                vm_exec_state.vm_state,
-            )),
+            Ok(_) => Ok((vm_exec_state.ctx.cost, vm_exec_state.vm_state)),
             Err(e) => Err(e),
         }
     }
