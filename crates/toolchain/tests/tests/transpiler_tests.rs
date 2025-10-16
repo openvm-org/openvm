@@ -9,7 +9,7 @@ use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
 use openvm_circuit::{
-    arch::{InitFileGenerator, SystemConfig, VmExecutor},
+    arch::{InitFileGenerator, SystemConfig, VmExecState, VmExecutor},
     derive::VmConfig,
     system::SystemExecutor,
     utils::air_test,
@@ -27,8 +27,6 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 use test_case::test_case;
-
-use openvm_circuit::arch::VmExecState;
 
 type F = BabyBear;
 
@@ -181,34 +179,35 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     assert_eq!(interp_state.pc(), aot_state.pc());
 
     let system_config: &SystemConfig = &config.as_ref();
-    let addr_spaces = &system_config.memory_config.addr_spaces; 
+    let addr_spaces = &system_config.memory_config.addr_spaces;
 
     // check memory are equal
     for t in 1..4 {
         for r in 0..addr_spaces[t as usize].num_cells {
-            let interp = unsafe {
-                interp_state.memory.read::<u8, 1>(t, r as u32)
-            };
-            let aot_interp = unsafe {
-                aot_state.memory.read::<u8, 1>(t, r as u32)
-            };
+            let interp = unsafe { interp_state.memory.read::<u8, 1>(t, r as u32) };
+            let aot_interp = unsafe { aot_state.memory.read::<u8, 1>(t, r as u32) };
             assert_eq!(interp, aot_interp);
         }
     }
-    for r in 0..(addr_spaces[4].num_cells/4) {
-        let interp = unsafe {
-            interp_state.memory.read::<u32, 4>(4, 4 * r as u32)
-        };
-        let aot_interp = unsafe {
-            aot_state.memory.read::<u32, 4>(4, 4 * r as u32)
-        };
+    for r in 0..(addr_spaces[4].num_cells / 4) {
+        let interp = unsafe { interp_state.memory.read::<u32, 4>(4, 4 * r as u32) };
+        let aot_interp = unsafe { aot_state.memory.read::<u32, 4>(4, 4 * r as u32) };
         assert_eq!(interp, aot_interp);
     }
 
     // check streams are equal
-    assert_eq!(interp_state.streams.input_stream, aot_state.streams.input_stream);
-    assert_eq!(interp_state.streams.hint_stream, aot_state.streams.hint_stream);
-    assert_eq!(interp_state.streams.hint_space, aot_state.streams.hint_space);
+    assert_eq!(
+        interp_state.streams.input_stream,
+        aot_state.streams.input_stream
+    );
+    assert_eq!(
+        interp_state.streams.hint_stream,
+        aot_state.streams.hint_stream
+    );
+    assert_eq!(
+        interp_state.streams.hint_space,
+        aot_state.streams.hint_space
+    );
 
     Ok(())
 }
