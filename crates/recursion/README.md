@@ -28,7 +28,7 @@ In table form (where ✅ means the parent category can depend on the child categ
 | **Constant Fields** | ❌ | ❌ | ❌ | ❌ |
 | **Dependent Fields** | ❌ | ❌ | ✅ | ❌ |
 
-#### Non-Configurable Fields
+### Non-Configurable Fields
 
 We get to choose which non-configurable fields are constant and which are dependent. As of now, the following need to be constant at all verifier layers:
 
@@ -44,3 +44,29 @@ The following can depend on constant fields:
 - Number of constraints
 
 We categorize other non-configurable fields as needed. If a non-configurable field is not categorized, it should **not** be used.
+
+### Verifying Multiple Proofs
+
+The verifier circuit will need to be able to verify several segment proofs at once. To support this, developers must ensure that `local`/`next` constraints properly handle the case where `local` is a valid row and `next` is not (and vice versa).
+
+> TODO[stephenh]: BELOW THIS HAS NOT BEEN IMPLEMENTED YET
+
+All AIRs will (eventually) need to implement the `AppendedTraceAir` trait. 
+
+```rust
+pub trait AppendedTraceAir<AB: AirBuilder + InteractionBuilder> {
+    type Cols<F>;
+    fn eval(
+        &self,
+        builder: &mut AB,
+        local: &Cols<AB::Var>,
+        next: &Cols<AB::Var>,
+        proof_idx: &AB::Var,
+        is_valid: &AB::Var,
+        is_first: &AB::Var,
+        is_last: &AB::Var
+    );
+}
+```
+
+All interactions will need to pass `proof_idx` as its first message element. Note that unlike `builder.when_first_row()`, and `builder.when_last_row()` in Plonky3, `is_first` and `is_last` here are boolean values.
