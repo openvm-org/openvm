@@ -2,11 +2,7 @@ use core::arch::global_asm;
 use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{ExecutionCtx},
-        interpreter::PreComputeInstruction,
-        VmExecState, 
-    },
+    arch::{execution_mode::ExecutionCtx, interpreter::PreComputeInstruction, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -27,7 +23,8 @@ extern "C" {
 /// Runs the VM execution from assembly
 ///
 /// # Safety
-/// 
+///
+///
 /// This function is unsafe because:
 /// - `vm_exec_state_ptr` must be valid
 /// - `pre_compute_insns` must point to valid pre-compute instructions
@@ -49,14 +46,14 @@ pub unsafe extern "C" fn asm_run(
 type F = BabyBear;
 type Ctx = ExecutionCtx;
 
-/// At the end of the assemby execution, store the instret and pc from the x86 registers
+/// At the end of the assembly execution, store the instret and pc from the x86 registers
 /// to the vm state's pc and instret for the pure execution mode
 #[no_mangle]
 pub extern "C" fn set_instret_and_pc(
-    vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
+    vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
-    final_pc: u32,                        // rdx = final_pc
-    final_instret: u64,                   // rcx = final_instret
+    final_pc: u32,                         // rdx = final_pc
+    final_instret: u64,                    // rcx = final_instret
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =

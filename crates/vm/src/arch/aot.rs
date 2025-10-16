@@ -1,10 +1,8 @@
 use std::{ffi::c_void, process::Command};
 
-use libloading::{Library};
-use openvm_instructions::{
-    exe::{SparseMemoryImage, VmExe},
-};
-use openvm_stark_backend::{p3_field::PrimeField32};
+use libloading::Library;
+use openvm_instructions::exe::{SparseMemoryImage, VmExe};
+use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
@@ -15,8 +13,8 @@ use crate::{
             get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
         ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
-        MeteredExecutionCtxTrait, MeteredExecutor,
-        StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
+        MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
+        VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
