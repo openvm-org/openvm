@@ -25,6 +25,7 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 struct DummyTranscriptCols<T> {
+    proof_idx: T,
     has_transcript_msg: T,
     transcript_msg: TranscriptBusMessage<T>,
     has_commitment_msg: T,
@@ -54,11 +55,13 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
 
         self.transcript_bus.send(
             builder,
+            local.proof_idx,
             local.transcript_msg.clone(),
             local.has_transcript_msg,
         );
         self.commitments_bus.receive(
             builder,
+            local.proof_idx,
             local.commitment_msg.clone(),
             local.has_commitment_msg,
         );
