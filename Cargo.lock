@@ -846,8 +846,6 @@ dependencies = [
  "cc",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-circuit",
- "openvm-stark-backend",
  "openvm-stark-sdk",
 ]
 
@@ -858,8 +856,6 @@ dependencies = [
  "cc",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-circuit",
- "openvm-stark-backend",
  "openvm-stark-sdk",
 ]
 
@@ -5423,7 +5419,6 @@ dependencies = [
  "serde",
  "serde-big-array",
  "static_assertions",
- "strum",
  "test-case",
  "test-log",
  "thiserror 1.0.69",

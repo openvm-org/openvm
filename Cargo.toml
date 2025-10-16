@@ -71,7 +71,7 @@ members = [
     "guest-libs/ruint/",
     "guest-libs/sha2/",
     "guest-libs/verify_stark/",
-    "scripts",
+    "scripts"
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -177,7 +177,6 @@ openvm-verify-stark = { path = "guest-libs/verify_stark", default-features = fal
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
-openvm-benchmarks-execute = { path = "benchmarks/execute", default-features = false }
 
 # Plonky3
 p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "539bbc84085efb609f4f62cb03cf49588388abdb", default-features = false }
