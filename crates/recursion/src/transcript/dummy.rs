@@ -1,5 +1,9 @@
-use core::borrow::{Borrow, BorrowMut};
+use core::{
+    borrow::{Borrow, BorrowMut},
+    cmp::max,
+};
 
+use itertools::Itertools;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -7,23 +11,29 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
+use stark_backend_v2::{
+    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    proof::Proof,
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{TranscriptBus, TranscriptBusMessage},
+    bus::{CommitmentsBus, CommitmentsBusMessage, TranscriptBus, TranscriptBusMessage},
     system::Preflight,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 struct DummyTranscriptCols<T> {
-    is_valid: T,
-    msg: TranscriptBusMessage<T>,
+    has_transcript_msg: T,
+    transcript_msg: TranscriptBusMessage<T>,
+    has_commitment_msg: T,
+    commitment_msg: CommitmentsBusMessage<T>,
 }
 
 pub struct DummyTranscriptAir {
     pub transcript_bus: TranscriptBus,
+    pub commitments_bus: CommitmentsBus,
 }
 
 impl BaseAirWithPublicValues<F> for DummyTranscriptAir {}
@@ -42,16 +52,32 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
         let local = main.row_slice(0);
         let local: &DummyTranscriptCols<AB::Var> = (*local).borrow();
 
-        self.transcript_bus
-            .send(builder, local.msg.clone(), local.is_valid);
+        self.transcript_bus.send(
+            builder,
+            local.transcript_msg.clone(),
+            local.has_transcript_msg,
+        );
+        self.commitments_bus.receive(
+            builder,
+            local.commitment_msg.clone(),
+            local.has_commitment_msg,
+        );
     }
 }
 
 pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
-    _proof: &Proof,
+    vk: &MultiStarkVerifyingKeyV2,
+    proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
-    let num_valid_rows: usize = preflight.transcript.len();
+    let commit_msgs = preflight
+        .stacking_commitments_msgs(vk, proof)
+        .into_iter()
+        .chain(preflight.whir_commitments_msgs(proof))
+        .collect_vec();
+    let transcript_len: usize = preflight.transcript.len();
+
+    let num_valid_rows = max(commit_msgs.len(), transcript_len);
     let num_rows = num_valid_rows.next_power_of_two();
     let width = DummyTranscriptCols::<usize>::width();
 
@@ -60,12 +86,16 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut DummyTranscriptCols<F> = row.borrow_mut();
 
-        cols.is_valid = F::ONE;
-        cols.msg = TranscriptBusMessage {
+        cols.has_transcript_msg = F::from_bool(i < transcript_len);
+        cols.transcript_msg = TranscriptBusMessage {
             tidx: F::from_canonical_usize(i),
             value: preflight.transcript.data[i],
             is_sample: F::from_bool(preflight.transcript.is_sample[i]),
         };
+        if i < commit_msgs.len() {
+            cols.has_commitment_msg = F::ONE;
+            cols.commitment_msg = commit_msgs[i].clone();
+        }
     }
 
     RowMajorMatrix::new(trace, width)

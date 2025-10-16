@@ -1,5 +1,3 @@
-use core::iter;
-
 use stark_backend_v2::{D_EF, DIGEST_SIZE};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -95,7 +93,12 @@ define_typed_bus!(StackingModuleBus, StackingModuleMessage);
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct WhirModuleMessage<T> {
+    /// The `tidx` _after_ batching randomness `mu` is sampled.
     pub tidx: T,
+    /// The batching randomness to combine stacking claims.
+    pub mu: [T; 4],
+    /// The reduced opening claim after batching.
+    pub claim: [T; 4],
 }
 
 define_typed_bus!(WhirModuleBus, WhirModuleMessage);
@@ -135,21 +138,27 @@ define_typed_bus!(AirPartShapeBus, AirPartShapeBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct StackingWidthBusMessage<T> {
+pub struct StackingIndexMessage<T> {
     pub commit_idx: T,
-    pub width: T,
+    pub col_idx: T,
 }
 
-define_typed_bus!(StackingWidthsBus, StackingWidthBusMessage);
+define_typed_bus!(StackingIndicesBus, StackingIndexMessage);
 
+/// Carries all commitments in the proof.
+///
+/// The stacking commitments have `major_idx = 0` and `minor_idx =
+/// stacking_matrix_idx`. The WHIR commitments have `major_idx = whir_round + 1`
+/// and `minor_idx = 0`.
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct StackingCommitmentsBusMessage<T> {
-    pub commit_idx: T,
+pub struct CommitmentsBusMessage<T> {
+    pub major_idx: T,
+    pub minor_idx: T,
     pub commitment: [T; DIGEST_SIZE],
 }
 
-define_typed_bus!(StackingCommitmentsBus, StackingCommitmentsBusMessage);
+define_typed_bus!(CommitmentsBus, CommitmentsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -184,15 +193,6 @@ pub struct ColumnClaimsMessage<T> {
 }
 
 define_typed_bus!(ColumnClaimsBus, ColumnClaimsMessage);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
-pub struct StackingClaimsMessage<T> {
-    pub idx: T,
-    pub claim: [T; D_EF],
-}
-
-define_typed_bus!(StackingClaimsBus, StackingClaimsMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
