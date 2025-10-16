@@ -230,6 +230,7 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
+    #[cfg(not(feature = "aot"))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
@@ -262,12 +263,22 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
+    #[cfg(not(feature = "aot"))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
     // Crates an AOT instance for metered execution of the given `exe`.

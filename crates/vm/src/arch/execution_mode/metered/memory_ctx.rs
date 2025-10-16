@@ -238,7 +238,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
 
     /// Resolve all lazy updates of each memory access for memory adapters/poseidon2/merkle chip.
     #[inline(always)]
-    pub fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
+    pub(crate) fn lazy_update_boundary_heights(&mut self, trace_heights: &mut [u32]) {
         debug_assert!(self.boundary_idx < trace_heights.len());
 
         // On page fault, assume we add all leaves in a page
