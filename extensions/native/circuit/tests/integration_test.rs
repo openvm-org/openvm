@@ -1125,23 +1125,6 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
-// #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
-// pub struct VmState<F, MEM = GuestMemory> {
-//     #[getset(get_copy = "pub", get_mut = "pub")]
-//     instret: u64,
-//     #[getset(get_copy = "pub", get_mut = "pub")]
-//     pc: u32,
-//     pub memory: MEM,
-//     pub streams: Streams<F>,
-//     pub rng: StdRng,
-//     /// The public values of the PublicValuesAir when it exists
-//     pub(crate) custom_pvs: Vec<Option<F>>,
-//     #[cfg(feature = "metrics")]
-//     pub metrics: VmMetrics,
-// }
-
-// merkle hash n compare the memory
-
 #[cfg(target_arch = "x86_64")]
 fn compare_vm_states(
     vm_state1: &VmState<BabyBear>,

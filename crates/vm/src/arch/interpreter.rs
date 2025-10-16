@@ -96,7 +96,7 @@ macro_rules! run {
                         $instret,
                         $pc,
                         $arg,
-                        &mut $exec_state, // VmExecState, can extract the type of Ctx used here
+                        &mut $exec_state,
                         &$interpreter.pre_compute_insns,
                     );
                 }
@@ -522,7 +522,7 @@ where
             exec_state,
             MeteredCostCtx
         );
-        check_exit_code(exec_state.exit_code)?; // in interpretedinstance, have this exit_code checked for suspension
+        check_exit_code(exec_state.exit_code)?;
         let VmExecState { ctx, vm_state, .. } = exec_state;
         let cost = ctx.cost;
         Ok((cost, vm_state))
@@ -571,18 +571,12 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .as_ref()
         .is_ok_and(|exit_code| exit_code.is_none())
     {
-        eprintln!("instret: {:?}, pc: {:?}, arg: {:?}", instret, pc, arg);
         if Ctx::should_suspend(instret, pc, arg, exec_state) {
-            // override, call the should_suspend function for each Ctx
-            eprintln!("should suspend");
             break;
         }
         let pc_index = get_pc_index(pc);
 
         if let Some(inst) = fn_ptrs.get(pc_index) {
-            // println!("[Interpreter] execute_trampoline");
-            // println!("instret: {}, pc: {}, arg: {}, pc_idx: {}", instret, pc, arg, pc_index);
-
             // SAFETY: pre_compute assumed to live long enough
             unsafe { (inst.handler)(inst.pre_compute, &mut instret, &mut pc, arg, exec_state) };
         } else {
