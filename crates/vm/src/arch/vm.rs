@@ -40,10 +40,10 @@ use thiserror::Error;
 use tracing::{info_span, instrument};
 
 use super::{
+    aot::AotInstance,
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
-    aot::AotInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
     ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
@@ -67,7 +67,7 @@ use crate::{
         },
         program::trace::{generate_cached_trace, VmCommittedExe},
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
-    }
+    },
 };
 
 #[derive(Error, Debug)]
@@ -447,12 +447,13 @@ where
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
-    where 
+    where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor().metered_aot_instance(exe, &executor_idx_to_air_idx)
+        self.executor()
+            .metered_aot_instance(exe, &executor_idx_to_air_idx)
     }
 
     pub fn metered_cost_interpreter(

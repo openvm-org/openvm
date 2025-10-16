@@ -1,7 +1,6 @@
 .intel_syntax noprefix
 .code64
 .section .text
-.extern extern_handler
 .global asm_run_internal
 
 asm_run_internal:

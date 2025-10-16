@@ -15,24 +15,24 @@ mod state;
 /// Top level [VmExecutor] and [VirtualMachine] constructor and API.
 pub mod vm;
 
+/// AOT execution
+pub mod aot;
 pub mod hasher;
 /// Interpreter for pure and metered VM execution
 pub mod interpreter;
 /// Interpreter for preflight VM execution, for trace generation purposes.
 pub mod interpreter_preflight;
-/// AOT execution
-pub mod aot;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
 
+pub use aot::AotInstance;
 pub use config::*;
 pub use execution::*;
 pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
-pub use aot::AotInstance;
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;

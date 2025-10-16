@@ -798,26 +798,30 @@ fn test_vm_pure_execution_non_continuation_aot() {
     let exe = VmExe::new(Program::from_instructions(&instructions));
     let executor = VmExecutor::new(test_native_config()).unwrap();
     let mut aot_instance = executor.aot_instance(&exe).unwrap();
-    let vm_state = aot_instance.execute(vec![], None).expect("Failed to execute");
+    let vm_state = aot_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
 
     // eyeball check
     println!("[AOT] instret: {}", vm_state.instret());
     println!("[AOT] pc: {}", vm_state.pc());
     let memory = vm_state.memory;
-    unsafe {
-        println!("[AOT] memory [0]_4 = {:?}", memory.read::<u32,4>(4, 0))
-    };
+    unsafe { println!("[AOT] memory [0]_4 = {:?}", memory.read::<u32, 4>(4, 0)) };
 
     let mut interp_instance = executor.instance(&exe).unwrap();
-    let vm_state = interp_instance.execute(vec![], None).expect("Failed to execute");
+    let vm_state = interp_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
 
     println!("[Interpreter] instret: {}", vm_state.instret());
     println!("[Interpreter] pc: {}", vm_state.pc());
     let memory = vm_state.memory;
     unsafe {
-        println!("[Interpreter] memory [0]_4 = {:?}", memory.read::<u32,4>(4, 0)); 
+        println!(
+            "[Interpreter] memory [0]_4 = {:?}",
+            memory.read::<u32, 4>(4, 0)
+        );
     };
-
 }
 
 #[test]
@@ -956,7 +960,6 @@ fn test_vm_execute_native_chips() {
         .expect("Failed to execute");
 }
 
-
 #[test]
 fn test_vm_execute_native_chips_aot() {
     type F = BabyBear;
@@ -1084,8 +1087,16 @@ fn test_vm_execute_native_chips_aot() {
 
     for r in 0..25 {
         unsafe {
-            println!("[Interpreter] memory [4*{}:4]_4 = {:?}", r, interp_memory.read::<u32,4>(4, 4 * r));
-            println!("[AOT] memory [4*{}:4]_4 = {:?}", r, aot_memory.read::<u32,4>(4, 4 * r));
+            println!(
+                "[Interpreter] memory [4*{}:4]_4 = {:?}",
+                r,
+                interp_memory.read::<u32, 4>(4, 4 * r)
+            );
+            println!(
+                "[AOT] memory [4*{}:4]_4 = {:?}",
+                r,
+                aot_memory.read::<u32, 4>(4, 4 * r)
+            );
         };
     }
 }

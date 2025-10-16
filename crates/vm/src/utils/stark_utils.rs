@@ -13,8 +13,8 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig, SystemConfig
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -117,61 +117,46 @@ where
     let metered_ctx = vm.build_metered_ctx(&exe);
 
     /*
+    Assertions for Pure Execution AOT
+    */
     {
-        /*
-        Additional assertions for AOT; TODO: Remove later
-        */
-
         let interp_state = vm
             .interpreter(&exe)?
             .execute(input.clone(), None)
             .expect("Failed to execute");
-        
-        let aot_state = vm 
+
+        let aot_state = vm
             .get_aot_instance(&exe)?
             .execute(input.clone(), None)
             .expect("Failed to execute");
 
-        let program = exe.program.clone();
-        println!("program.pc_base {}", exe.program.pc_base);
-        println!("exe.pc_start {}", exe.pc_start);
-
         assert_eq!(interp_state.pc(), aot_state.pc());
         assert_eq!(interp_state.instret(), aot_state.instret());
-
-        // eyeball check
-        println!("interp_state pc: {}, aot_state pc :{}", interp_state.pc(), aot_state.pc());
-        println!("interp_state instret: {}, aot_state instret :{}", interp_state.instret(), aot_state.instret());
     }
+
+    /*
+    Assertions for Metered AOT
     */
+    {
+        let (aot_segments, aot_state) = vm
+            .get_metered_aot_instance(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let (segments, interp_state) = vm
+            .metered_interpreter(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        assert_eq!(segments.len(), aot_segments.len());
+        for i in 0..segments.len() {
+            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+        }
+    }
 
     let (segments, interp_state) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
-    
-    // TODO: remove this later, this is only to assert segments are equal
-    let (aot_segments, aot_state) = vm
-        .get_metered_aot_instance(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
-
-    {
-        /*
-        Additional assertions for AOT; TODO: Remove later
-        */
-        assert_eq!(segments.len(), aot_segments.len());
-
-        println!("number of segments {}", segments.len());
-
-        for i in 0..segments.len() {
-            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
-            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
-            if segments[i].trace_heights != aot_segments[i].trace_heights {
-                println!("the {}-th segment trace height is not equal", i);
-            }
-            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
-        }
-
-    }
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
