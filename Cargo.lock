@@ -870,6 +870,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "asm_bridge_metered_cost"
+version = "1.4.1-rc.1"
+dependencies = [
+ "cc",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-rv32im-circuit",
+ "openvm-stark-backend",
+ "openvm-stark-sdk",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"

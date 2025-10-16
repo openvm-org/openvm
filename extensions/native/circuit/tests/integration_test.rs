@@ -1210,7 +1210,7 @@ fn test_vm_execute_metered_cost_native_chips() {
 
     #[cfg(target_arch = "x86_64")]
     {
-        let aot_instance = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx).unwrap();
+        let mut aot_instance = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx).unwrap();
         let (aot_cost, aot_vm_state) = aot_instance
             .execute_metered_cost(vec![], ctx.clone())
             .expect("Failed to execute");
@@ -1271,14 +1271,14 @@ fn test_vm_execute_metered_cost_halt() {
 
     #[cfg(target_arch = "x86_64")]
     {
-        let aot_instance1 = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx).unwrap();
+        let mut aot_instance1 = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx).unwrap();
         let (aot_cost1, aot_vm_state1) = aot_instance1
             .execute_metered_cost(vec![], ctx.clone())
             .expect("Failed to execute");
         assert_eq!(aot_vm_state1.instret(), instructions.len() as u64);
         assert_eq!(aot_cost1, cost1);
 
-        let aot_instance2 = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx2).unwrap(); 
+        let mut aot_instance2 = vm.executor().aot_metered_cost_instance(&exe, &executor_idx_to_air_idx2).unwrap(); 
         let (aot_cost2, aot_vm_state2) = aot_instance2
             .execute_metered_cost(vec![], ctx2.clone())
             .expect("Failed to execute");

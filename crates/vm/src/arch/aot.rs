@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCtx, Segment},
+        execution_mode::{ExecutionCtx, MeteredCtx, MeteredCostCtx, Segment},
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, get_pre_compute_instructions,
@@ -501,4 +501,134 @@ where
     }
 
     // TODO: implement execute_metered_until_suspend for AOT if needed
+}
+
+impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+where
+    F: PrimeField32,
+    Ctx: MeteredExecutionCtxTrait,
+{
+    /// Creates a new interpreter instance for metered execution.
+    pub fn new_metered_cost<E>(
+        inventory: &'a ExecutorInventory<E>,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: MeteredExecutor<F>,
+    {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let lib_path = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("target/release/libasm_bridge_metered_cost.so");
+        let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered_cost");
+        let status = Command::new("cargo")
+            .args(["build", "--release"])
+            .current_dir(&asm_bridge_dir)
+            .status()
+            .expect("Failed to execute cargo");
+        assert!(
+            status.success(),
+            "Cargo build failed with exit code: {:?}",
+            status.code()
+        );
+
+        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
+
+        let program = &exe.program;
+        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
+        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
+        let mut split_pre_compute_buf =
+            split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
+
+        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
+            program,
+            inventory,
+            executor_idx_to_air_idx,
+            &mut split_pre_compute_buf,
+        )?;
+        let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
+            pre_compute_insns.into_boxed_slice();
+
+        let init_memory = exe.init_memory.clone();
+
+        Ok(Self {
+            system_config: inventory.config().clone(),
+            pre_compute_buf,
+            pre_compute_insns_box,
+            pc_start: exe.pc_start,
+            init_memory,
+            lib,
+        })
+    }
+}
+
+impl<F> AotInstance<'_, F, MeteredCostCtx>
+where
+    F: PrimeField32,
+{
+    /// Metered cost execution for the given `inputs`. Execution begins from the initial
+    /// state specified by the `VmExe`. This function executes the program until termination.
+    ///
+    /// Returns the cost and the final VM state when execution stops.
+    ///
+    /// Assumes the program doesn't jump to out of bounds pc
+    pub fn execute_metered_cost(
+        &mut self,
+        inputs: impl Into<Streams<F>>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
+        let vm_state = self.create_initial_vm_state(inputs);
+        self.execute_metered_cost_from_state(vm_state, ctx)
+    }
+
+    /// Metered cost execution for the given `VmState`. This function executes the program until
+    /// termination
+    ///
+    /// Returns the cost and the final VM state when execution stops.
+    ///
+    /// Assume program doesn't jump to out of bounds pc
+    pub fn execute_metered_cost_from_state(
+        &self,
+        from_state: VmState<F, GuestMemory>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
+        let from_state_instret = from_state.instret();
+        let from_state_pc = from_state.pc();
+
+        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCostCtx>> =
+            Box::new(VmExecState::new(from_state, ctx));
+
+        unsafe {
+            let asm_run: libloading::Symbol<AsmRunFn> = self
+                .lib
+                .get(b"asm_run")
+                .expect("Failed to get asm_run symbol");
+
+            let vm_exec_state_ptr =
+                &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCostCtx>;
+            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
+
+            asm_run(
+                vm_exec_state_ptr as *mut c_void,
+                pre_compute_insns_ptr as *const c_void,
+                from_state_pc,
+                from_state_instret,
+            );
+        }
+
+        // handle execution error
+        match vm_exec_state.exit_code {
+            Ok(_) => Ok((
+                vm_exec_state.ctx.cost,
+                vm_exec_state.vm_state,
+            )),
+            Err(e) => Err(e),
+        }
+    }
+
+    // TODO: implement execute_metered_cost_until_suspend for AOT if needed
 }
