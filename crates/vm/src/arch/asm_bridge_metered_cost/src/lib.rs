@@ -131,10 +131,7 @@ pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_
 
     let max_execution_cost = exec_state_ref.ctx.max_execution_cost;
 
-    if exec_state_ref
-        .ctx
-        .cost > max_execution_cost
-    {
+    if exec_state_ref.ctx.cost > max_execution_cost {
         1
     } else {
         0
