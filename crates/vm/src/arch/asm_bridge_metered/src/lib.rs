@@ -13,8 +13,22 @@ use openvm_circuit::arch::interpreter::PreComputeInstruction;
 use openvm_circuit::arch::execution_mode::MeteredCtx;
 use openvm_instructions::program::DEFAULT_PC_STEP;
 
-// asm_run.s contains the assembly to run pure execution
+// asm_run.s contains the assembly to run metered execution
 global_asm!(include_str!("asm_run.s"));
+
+/*
+rbx = vm_exec_state
+rbp = pre_compute_insns
+r13 = from_state_pc
+r14 = from_state_instret
+
+pub extern "C" fn should_suspend(
+    instret: u64,
+    _pc: u32,
+    segment_check_insns: u64,
+    exec_state_ptr: *mut c_void,
+) 
+*/
 
 extern "C" {
     fn asm_run_internal(
@@ -45,17 +59,18 @@ pub unsafe extern "C" fn asm_run(
 
 type F = BabyBear;
 
-// at the end of the execution, store the instret and pc from the x86 registers
-// to update the vm state's pc and instret for the pure execution mode
+// at the end of the execution, you want to store the instret and pc from the x86 registers
+// to update the vm state's pc and instret
+// works for metered execution
 #[no_mangle]
-pub extern "C" fn set_instret_and_pc(
+pub extern "C" fn metered_set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void, // rdi = vm_exec_state
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32, // rdx = final_pc 
     final_instret: u64, // rcx = final_instret
     pc_base: u32, // r8 = pc_base
 ) {
-    type Ctx = ExecutionCtx;
+    type Ctx = MeteredCtx;
     // reference to vm_exec_state
     let vm_exec_state_ref = unsafe { 
         &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>)
@@ -63,24 +78,23 @@ pub extern "C" fn set_instret_and_pc(
     vm_exec_state_ref.vm_state.set_instret_and_pc(final_instret, final_pc);
 }
 
-// extern handler for the pure execution mode
-// calls the correct function handler based on `cur_pc`
 #[no_mangle]
-pub extern "C" fn extern_handler(
+pub extern "C" fn metered_extern_handler(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32, 
     cur_instret: u64,
     pc_base: u32,
 ) -> u32 {
-    type Ctx = ExecutionCtx;
 
-    // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
-    // it would be able to dereference instret and pc correctly
-    let mut instret: Box<u64> = Box::new(cur_instret);
+    println!("[AOT] cur_pc {} cur_instret {} pc_base {}", cur_pc, cur_instret, pc_base);
+
+    type F = BabyBear;
+    type Ctx = MeteredCtx;
+
+    let mut instret: Box<u64> = Box::new(cur_instret); // placeholder to call the handler function
     let mut pc: Box<u32> = Box::new(cur_pc);
 
-    // reference to vm_exec_state
     let vm_exec_state_ref = unsafe {
         &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>)
     };
@@ -93,10 +107,10 @@ pub extern "C" fn extern_handler(
         &*pre_compute_insns_base_ptr.add(pc_idx)
     };
 
-    let ctx = &vm_exec_state_ref.ctx;
+    let ctx = &vm_exec_state_ref.ctx; 
     // `arg` is a runtime constant that we want to keep in register
-    // - For pure execution it is `instret_end`
-    let arg = ctx.instret_end; 
+    // - For metered execution it is `segment_check_insns`
+    let arg = ctx.segmentation_ctx.segment_check_insns;
 
     unsafe {
         (pre_compute_insns.handler)(
@@ -107,7 +121,7 @@ pub extern "C" fn extern_handler(
             vm_exec_state_ref
         );
     };
-
+    
     match vm_exec_state_ref.exit_code {
         Ok(None) => { // execution continues 
             return *pc;
@@ -119,3 +133,25 @@ pub extern "C" fn extern_handler(
     }
 }
 
+
+#[no_mangle]
+pub extern "C" fn should_suspend(
+    instret: u64,
+    _pc: u32,
+    exec_state_ptr: *mut c_void,
+) -> u32 {
+    println!("should suspend called!");
+    type Ctx = MeteredCtx;
+
+    let exec_state_ref = unsafe {
+        &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>)
+    };
+
+    let segment_check_insns = exec_state_ref.ctx.segmentation_ctx.segment_check_insns;
+
+    if exec_state_ref.ctx.check_and_segment(instret, segment_check_insns) && *exec_state_ref.ctx.suspend_on_segment() {
+        return 1;
+    } else {
+        return 0;
+    }
+} 
