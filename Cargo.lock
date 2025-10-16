@@ -843,7 +843,6 @@ dependencies = [
 name = "asm_bridge"
 version = "1.4.1-rc.1"
 dependencies = [
- "cc",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-stark-sdk",
@@ -853,7 +852,6 @@ dependencies = [
 name = "asm_bridge_metered"
 version = "1.4.1-rc.1"
 dependencies = [
- "cc",
  "openvm-circuit",
  "openvm-instructions",
  "openvm-stark-sdk",
@@ -863,11 +861,8 @@ dependencies = [
 name = "asm_bridge_metered_cost"
 version = "1.4.1-rc.1"
 dependencies = [
- "cc",
  "openvm-circuit",
  "openvm-instructions",
- "openvm-rv32im-circuit",
- "openvm-stark-backend",
  "openvm-stark-sdk",
 ]
 

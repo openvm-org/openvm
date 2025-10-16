@@ -42,7 +42,7 @@ type AsmRunFn = unsafe extern "C" fn(
 );
 
 // Always provide `create_initial_vm_state` (used by multiple execution modes)
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<F, Ctx> AotInstance<'_, F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,

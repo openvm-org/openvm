@@ -124,7 +124,7 @@ pub extern "C" fn metered_cost_extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+pub extern "C" fn should_suspend(_instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
     type Ctx = MeteredCostCtx;
 
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
