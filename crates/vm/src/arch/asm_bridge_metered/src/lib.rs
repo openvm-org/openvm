@@ -1,7 +1,15 @@
 use std::ffi::c_void;
 
 use openvm_circuit::{
+<<<<<<< HEAD
     arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, VmExecState},
+=======
+    arch::{
+        execution_mode::{MeteredCtx},
+        interpreter::PreComputeInstruction,
+        VmExecState,
+    },
+>>>>>>> 5b25c190c (chore: fix clippy warnings)
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -26,8 +34,12 @@ extern "C" {
 /// Runs the VM execution from assembly
 ///
 /// # Safety
+<<<<<<< HEAD
 ///
 ///
+=======
+/// 
+>>>>>>> 5b25c190c (chore: fix clippy warnings)
 /// This function is unsafe because:
 /// - `vm_exec_state_ptr` must be valid
 /// - `pre_compute_insns` must point to valid pre-compute instructions
@@ -54,10 +66,17 @@ type Ctx = MeteredCtx;
 // works for metered execution
 #[no_mangle]
 pub extern "C" fn metered_set_instret_and_pc(
+<<<<<<< HEAD
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
     final_instret: u64,                    // rcx = final_instret
+=======
+    vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
+    _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
+    final_pc: u32,                        // rdx = final_pc
+    final_instret: u64,                   // rcx = final_instret
+>>>>>>> 5b25c190c (chore: fix clippy warnings)
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =

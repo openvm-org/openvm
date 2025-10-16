@@ -17,8 +17,8 @@ use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -231,7 +231,7 @@ where
     /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
     to test AOT segments in addition to the equal assertions
     */
-    let (segments, interp_state) = vm
+    let (segments, _) = vm
         .get_metered_aot_instance(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
