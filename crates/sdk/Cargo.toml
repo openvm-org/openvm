@@ -61,6 +61,7 @@ forge-fmt = { workspace = true, optional = true }
 rrs-lib.workspace = true
 num-bigint.workspace = true
 cfg-if.workspace = true
+tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -101,6 +102,7 @@ perf-metrics = [
 # turns on stark-backend debugger in all proofs
 stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
+async = ["tokio"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
 parallel = ["openvm-circuit/parallel"]

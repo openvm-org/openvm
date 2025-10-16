@@ -19,9 +19,9 @@ openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
-clap = { version = "4.5.9", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
@@ -38,6 +38,7 @@ metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
+async = ["openvm-sdk/async"]
 # runs leaf aggregation benchmarks:
 aggregation = []
 evm = ["openvm-sdk/evm-verify"]
@@ -63,3 +64,8 @@ path = "src/bin/fib_e2e.rs"
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
+
+[[bin]]
+name = "async_regex"
+path = "src/bin/async_regex.rs"
+required-features = ["async"]
