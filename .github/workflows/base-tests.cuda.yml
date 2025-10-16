@@ -27,7 +27,7 @@ env:
 jobs:
   tests-cuda:
     runs-on:
-      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia/family=g6+g5 # ensure 24G vram for async test
 
     steps:
       - uses: runs-on/action@v2
@@ -65,3 +65,8 @@ jobs:
         working-directory: extensions/native/recursion
         run: |
           cargo nextest run --features cuda
+
+      - name: Run async concurrency test
+        working-directory: benchmarks/prove
+        run: |
+          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=14 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000

@@ -406,3 +406,103 @@ fn test_keccak256_cuda_tracegen() {
         .simple_test()
         .unwrap();
 }
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_keccak256_cuda_tracegen_multi() {
+    let num_threads: usize = std::env::var("NUM_THREADS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2);
+
+    let num_tasks: usize = std::env::var("NUM_TASKS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(num_threads * 4);
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .max_blocking_threads(num_threads)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    runtime.block_on(async {
+        let tasks_per_thread = num_tasks.div_ceil(num_threads);
+        let mut worker_handles = Vec::new();
+
+        for worker_idx in 0..num_threads {
+            let start_task = worker_idx * tasks_per_thread;
+            let end_task = std::cmp::min(start_task + tasks_per_thread, num_tasks);
+
+            let worker_handle = tokio::task::spawn(async move {
+                for task_id in start_task..end_task {
+                    tokio::task::spawn_blocking(move || {
+                        println!("[worker {}, task {}] Starting test", worker_idx, task_id);
+
+                        let mut rng = create_seeded_rng();
+                        let mut tester = GpuChipTestBuilder::default()
+                            .with_bitwise_op_lookup(default_bitwise_lookup_bus());
+
+                        let mut harness = create_cuda_harness(&tester);
+
+                        let num_ops: usize = 10;
+                        for _ in 0..num_ops {
+                            set_and_execute(
+                                &mut tester,
+                                &mut harness.executor,
+                                &mut harness.dense_arena,
+                                &mut rng,
+                                KECCAK256,
+                                None,
+                                None,
+                                None,
+                            );
+                        }
+
+                        for len in [0, 135, 136, 137, 2000] {
+                            set_and_execute(
+                                &mut tester,
+                                &mut harness.executor,
+                                &mut harness.dense_arena,
+                                &mut rng,
+                                KECCAK256,
+                                None,
+                                Some(len),
+                                None,
+                            );
+                        }
+
+                        harness
+                            .dense_arena
+                            .get_record_seeker::<KeccakVmRecordMut, _>()
+                            .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+                        tester
+                            .build()
+                            .load_gpu_harness(harness)
+                            .finalize()
+                            .simple_test()
+                            .unwrap();
+
+                        println!(
+                            "[worker {}, task {}] Test completed ✅",
+                            worker_idx, task_id
+                        );
+                    })
+                    .await
+                    .expect("task failed");
+                }
+            });
+            worker_handles.push(worker_handle);
+        }
+
+        for handle in worker_handles {
+            handle.await.expect("worker failed");
+        }
+
+        println!(
+            "\nAll {} tasks completed on {} workers.",
+            num_tasks, num_threads
+        );
+    });
+}

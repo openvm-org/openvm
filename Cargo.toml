@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.4.1-rc.1"
+version = "1.4.1-rc.2"
 edition = "2021"
 rust-version = "1.86.0"
 authors = ["OpenVM Authors"]
@@ -115,11 +115,11 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
-openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
-openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
-openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.3", default-features = false }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.6", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.6", default-features = false }
+openvm-cuda-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.6", default-features = false }
+openvm-cuda-builder = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.6", default-features = false }
+openvm-cuda-common = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1-rc.6", default-features = false }
 
 # OpenVM
 openvm-sdk = { path = "crates/sdk", default-features = false }
@@ -236,6 +236,7 @@ memmap2 = "0.9.5"
 libc = "0.2.175"
 libloading = "0.8"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
+tokio = "1" # >=1.0.0 to allow downstream flexibility
 
 # default-features = false for no_std for use in guest programs
 itertools = { version = "0.14.0", default-features = false }
