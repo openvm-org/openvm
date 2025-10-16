@@ -31,8 +31,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
         let whir_air = DummyWhirAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
-            stacking_claims_bus: self.bus_inventory.stacking_claims_bus,
-            stacking_commitments_bus: self.bus_inventory.stacking_commitments_bus,
+            commitments_bus: self.bus_inventory.commitments_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
         };
@@ -57,8 +56,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             whir_pow_witnesses,
             final_poly,
         } = &proof.whir_proof;
-
-        let _mu = ts.sample_ext();
 
         let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
 
