@@ -51,6 +51,7 @@ pub unsafe extern "C" fn asm_run(
 }
 
 type F = BabyBear;
+type Ctx = MeteredCtx;
 
 // at the end of the execution, you want to store the instret and pc from the x86 registers
 // to update the vm state's pc and instret
@@ -62,7 +63,6 @@ pub extern "C" fn metered_set_instret_and_pc(
     final_pc: u32,                         // rdx = final_pc
     final_instret: u64,                    // rcx = final_instret
 ) {
-    type Ctx = MeteredCtx;
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
@@ -78,10 +78,6 @@ pub extern "C" fn metered_extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    println!("[AOT] cur_pc {} cur_instret {}", cur_pc, cur_instret);
-    type F = BabyBear;
-    type Ctx = MeteredCtx;
-
     let mut instret: Box<u64> = Box::new(cur_instret); // placeholder to call the handler function
     let mut pc: Box<u32> = Box::new(cur_pc);
 
@@ -125,8 +121,6 @@ pub extern "C" fn metered_extern_handler(
 
 #[no_mangle]
 pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
-    type Ctx = MeteredCtx;
-
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
     let segment_check_insns = exec_state_ref.ctx.segmentation_ctx.segment_check_insns;

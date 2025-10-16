@@ -13,8 +13,7 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig, VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -132,6 +131,19 @@ where
 
         assert_eq!(interp_state.pc(), aot_state.pc());
         assert_eq!(interp_state.instret(), aot_state.instret());
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces; 
+        
+        for r in 0..addr_spaces[1].num_cells  {
+            let interp = unsafe {
+                interp_state.memory.read::<u8, 1>(1, r as u32)
+            };
+            let aot_interp = unsafe {
+                aot_state.memory.read::<u8, 1>(1, r as u32)
+            };
+            assert_eq!(interp, aot_interp);
+        }
     }
 
     /*
@@ -149,6 +161,19 @@ where
         assert_eq!(interp_state.pc(), aot_state.pc());
         assert_eq!(interp_state.instret(), aot_state.instret());
 
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces; 
+
+        for r in 0..addr_spaces[1].num_cells  {
+            let interp = unsafe {
+                interp_state.memory.read::<u8, 1>(1, r as u32)
+            };
+            let aot_interp = unsafe {
+                aot_state.memory.read::<u8, 1>(1, r as u32)
+            };
+            assert_eq!(interp, aot_interp);
+        }
+
         assert_eq!(segments.len(), aot_segments.len());
         for i in 0..segments.len() {
             assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
@@ -159,6 +184,7 @@ where
 
     /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
     to test AOT segments in addition to the equal assertions
+    We would want to revert `stark_utils.rs` back to how it looked like in main 
     */
     let (segments, _) = vm
         .get_metered_aot_instance(&exe)?
