@@ -60,6 +60,8 @@ use openvm_stark_sdk::{
 };
 use rand::Rng;
 use test_log::test;
+use openvm_circuit::arch::VmState;
+use openvm_circuit::system::memory::online::LinearMemory;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
 where
@@ -1125,6 +1127,51 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
+
+// #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
+// pub struct VmState<F, MEM = GuestMemory> {
+//     #[getset(get_copy = "pub", get_mut = "pub")]
+//     instret: u64,
+//     #[getset(get_copy = "pub", get_mut = "pub")]
+//     pc: u32,
+//     pub memory: MEM,
+//     pub streams: Streams<F>,
+//     pub rng: StdRng,
+//     /// The public values of the PublicValuesAir when it exists
+//     pub(crate) custom_pvs: Vec<Option<F>>,
+//     #[cfg(feature = "metrics")]
+//     pub metrics: VmMetrics,
+// }
+
+// merkle hash n compare the memory
+
+#[cfg(target_arch = "x86_64")]
+fn compare_vm_states(
+    vm_state1: &VmState<BabyBear>,
+    vm_state2: &VmState<BabyBear>,
+    memory_dimensions: openvm_circuit::system::memory::dimensions::MemoryDimensions,
+) {
+    assert_eq!(vm_state1.instret(), vm_state2.instret());
+    assert_eq!(vm_state1.pc(), vm_state2.pc());
+    use openvm_circuit::arch::hasher::poseidon2::vm_poseidon2_hasher;  
+    use openvm_circuit::system::memory::merkle::MerkleTree;  
+    
+    let hasher = vm_poseidon2_hasher::<BabyBear>();  
+    
+    let tree1 = MerkleTree::from_memory(  
+        &vm_state1.memory.memory,   
+        &memory_dimensions,   
+        &hasher  
+    );  
+    let tree2 = MerkleTree::from_memory(  
+        &vm_state2.memory.memory,   
+        &memory_dimensions,   
+        &hasher  
+    );  
+    
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+}
+
 #[test]
 fn test_vm_execute_metered_cost_native_chips() {
     type F = BabyBear;
@@ -1134,7 +1181,7 @@ fn test_vm_execute_metered_cost_native_chips() {
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
     let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
 
     let instructions = vec![
         // Field Arithmetic operations (FieldArithmeticChip)
@@ -1170,6 +1217,7 @@ fn test_vm_execute_metered_cost_native_chips() {
         assert_eq!(aot_vm_state.instret(), instructions.len() as u64);
         assert!(aot_cost > 0);
         assert_eq!(cost, aot_cost);
+        compare_vm_states(&aot_vm_state, &vm_state, config.clone().system.memory_config.memory_dimensions());
     }
 }
 
@@ -1237,5 +1285,11 @@ fn test_vm_execute_metered_cost_halt() {
         assert_eq!(aot_vm_state2.instret(), 1);
         assert_eq!(aot_cost2, cost2);
         assert!(aot_cost2 < aot_cost1);
+        compare_vm_states(&aot_vm_state1, &vm_state1, config.clone().system.memory_config.memory_dimensions());
+        compare_vm_states(&aot_vm_state2, &vm_state2, config.clone().system.memory_config.memory_dimensions());
+        // 0 4
+        //doesnt increment PC by 4
     }
 }
+
+// include a check on the memory, to assert contents are the same as the original memory
