@@ -23,8 +23,6 @@ pub mod hasher;
 pub mod interpreter;
 /// Interpreter for preflight VM execution, for trace generation purposes.
 pub mod interpreter_preflight;
-/// AOT execution
-pub mod aot;
 /// Testing framework
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
@@ -37,7 +35,6 @@ pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
 pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
-pub use aot::AotInstance;
 pub use openvm_circuit_derive::create_handler;
 pub use openvm_instructions as instructions;
 pub use record_arena::*;
