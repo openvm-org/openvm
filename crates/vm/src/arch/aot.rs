@@ -1,38 +1,32 @@
-use std::{ffi::c_void, fs, process::Command};
+use std::{ffi::c_void, process::Command};
 
-use libloading::{Library, Symbol};
-use memmap2::{MmapMut, MmapOptions};
+use libloading::{Library};
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
-    instruction::Instruction,
-    program::Program,
-    LocalOpcode,
 };
-use openvm_rv32im_transpiler::{BaseAluOpcode, BranchEqualOpcode};
-use openvm_stark_backend::{config::Val, p3_field::PrimeField32};
-use p3_baby_bear::BabyBear;
-use strum::{EnumCount, EnumIter, FromRepr, IntoEnumIterator};
+use openvm_stark_backend::{p3_field::PrimeField32};
 
 use crate::{
     arch::{
         execution_mode::{ExecutionCtx, MeteredCtx, Segment},
-        instructions::SystemOpcode::TERMINATE,
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, get_pre_compute_instructions,
             get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
         ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
-        InterpretedInstance, MemoryConfig, MeteredExecutionCtxTrait, MeteredExecutor,
-        StaticProgramError, Streams, SystemConfig, VmExecState, VmExecutor, VmState,
+        MeteredExecutionCtxTrait, MeteredExecutor,
+        StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
-    derive::VmConfig,
     system::memory::online::GuestMemory,
 };
 
 pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
+    // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
+    // to this buffer.
+    #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
@@ -69,7 +63,7 @@ where
         let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         // build the dynamic library for pure execution
         let status = Command::new("cargo")
-            .args(&["build", "--release"])
+            .args(["build", "--release"])
             .current_dir(&asm_bridge_dir)
             .status()
             .expect("Failed to execute cargo");
@@ -145,8 +139,8 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let from_state_instret = (&from_state).instret();
-        let from_state_pc = (&from_state).pc();
+        let from_state_instret = from_state.instret();
+        let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
@@ -160,7 +154,7 @@ where
 
             let vm_exec_state_ptr =
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            let pre_compute_insns_ptr = (&self.pre_compute_insns_box).as_ptr();
+            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
@@ -171,12 +165,12 @@ where
         }
 
         if num_insns.is_some() {
-            check_exit_code((*vm_exec_state).exit_code)?;
+            check_exit_code(vm_exec_state.exit_code)?;
         } else {
-            check_termination((*vm_exec_state).exit_code)?;
+            check_termination(vm_exec_state.exit_code)?;
         }
 
-        Ok((*vm_exec_state).vm_state)
+        Ok(vm_exec_state.vm_state)
     }
 }
 
@@ -225,7 +219,7 @@ where
             .join("target/release/libasm_bridge_metered.so");
         let asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
         let status = Command::new("cargo")
-            .args(&["build", "--release"])
+            .args(["build", "--release"])
             .current_dir(&asm_bridge_dir)
             .status()
             .expect("Failed to execute cargo");
@@ -295,8 +289,8 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let from_state_instret = (&from_state).instret();
-        let from_state_pc = (&from_state).pc();
+        let from_state_instret = from_state.instret();
+        let from_state_pc = from_state.pc();
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
@@ -309,7 +303,7 @@ where
 
             let vm_exec_state_ptr =
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
-            let pre_compute_insns_ptr = (&self.pre_compute_insns_box).as_ptr();
+            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
@@ -322,8 +316,8 @@ where
         // handle execution error
         match vm_exec_state.exit_code {
             Ok(_) => Ok((
-                (*vm_exec_state).ctx.segmentation_ctx.segments,
-                (*vm_exec_state).vm_state,
+                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.vm_state,
             )),
             Err(e) => Err(e),
         }

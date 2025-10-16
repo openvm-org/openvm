@@ -13,7 +13,7 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, 
         VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
@@ -146,6 +146,9 @@ where
             .metered_interpreter(&exe)?
             .execute_metered(input.clone(), metered_ctx.clone())?;
 
+        assert_eq!(interp_state.pc(), aot_state.pc());
+        assert_eq!(interp_state.instret(), aot_state.instret());
+
         assert_eq!(segments.len(), aot_segments.len());
         for i in 0..segments.len() {
             assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
@@ -157,7 +160,7 @@ where
     /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
     to test AOT segments in addition to the equal assertions
     */
-    let (segments, interp_state) = vm
+    let (segments, _) = vm
         .get_metered_aot_instance(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 

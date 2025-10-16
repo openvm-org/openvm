@@ -9,7 +9,7 @@ use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
 use openvm_circuit::{
-    arch::{InitFileGenerator, SystemConfig, VmExecState, VmExecutor},
+    arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
     system::SystemExecutor,
     utils::air_test,
@@ -89,7 +89,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
 
-    let system_config: &SystemConfig = &config.as_ref();
+    let system_config: &SystemConfig = config.as_ref();
     let addr_spaces = &system_config.memory_config.addr_spaces;
 
     // check memory are equal

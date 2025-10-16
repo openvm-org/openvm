@@ -3,9 +3,9 @@ use std::ffi::c_void;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCtx},
+        execution_mode::{ExecutionCtx},
         interpreter::PreComputeInstruction,
-        MemoryConfig, SystemConfig, VmExecState, VmState,
+        VmExecState, 
     },
     system::memory::online::GuestMemory,
 };
@@ -24,6 +24,13 @@ extern "C" {
     );
 }
 
+/// Runs the VM execution from assembly
+///
+/// # Safety
+/// 
+/// This function is unsafe because:
+/// - `vm_exec_state_ptr` must be valid
+/// - `pre_compute_insns` must point to valid pre-compute instructions
 #[no_mangle]
 pub unsafe extern "C" fn asm_run(
     vm_exec_state_ptr: *mut c_void,
@@ -42,12 +49,12 @@ pub unsafe extern "C" fn asm_run(
 type F = BabyBear;
 type Ctx = ExecutionCtx;
 
-// at the end of the execution, store the instret and pc from the x86 registers
-// to update the vm state's pc and instret for the pure execution mode
+/// At the end of the assemby execution, store the instret and pc from the x86 registers
+/// to the vm state's pc and instret for the pure execution mode
 #[no_mangle]
 pub extern "C" fn set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
-    pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
+    _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                        // rdx = final_pc
     final_instret: u64,                   // rcx = final_instret
 ) {
@@ -103,7 +110,7 @@ pub extern "C" fn extern_handler(
         Ok(None) => {
             // execution continues
             *pc
-        },
+        }
         _ => {
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
@@ -113,11 +120,7 @@ pub extern "C" fn extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(
-    instret: u64,
-    _pc: u32,
-    exec_state_ptr: *mut c_void
-) -> u32 {
+pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };

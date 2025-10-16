@@ -3,9 +3,9 @@ use std::ffi::c_void;
 
 use openvm_circuit::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCtx},
+        execution_mode::{MeteredCtx},
         interpreter::PreComputeInstruction,
-        MemoryConfig, SystemConfig, VmExecState, VmState,
+        VmExecState,
     },
     system::memory::online::GuestMemory,
 };
@@ -31,6 +31,13 @@ extern "C" {
     );
 }
 
+/// Runs the VM execution from assembly
+///
+/// # Safety
+/// 
+/// This function is unsafe because:
+/// - `vm_exec_state_ptr` must be valid
+/// - `pre_compute_insns` must point to valid pre-compute instructions
 #[no_mangle]
 pub unsafe extern "C" fn asm_run(
     vm_exec_state_ptr: *mut c_void,
@@ -54,7 +61,7 @@ type F = BabyBear;
 #[no_mangle]
 pub extern "C" fn metered_set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
-    pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
+    _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                        // rdx = final_pc
     final_instret: u64,                   // rcx = final_instret
 ) {
@@ -110,7 +117,7 @@ pub extern "C" fn metered_extern_handler(
         Ok(None) => {
             // execution continues
             *pc
-        },
+        }
         _ => {
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
@@ -120,11 +127,7 @@ pub extern "C" fn metered_extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(
-    instret: u64, 
-    _pc: u32, 
-    exec_state_ptr: *mut c_void
-) -> u32 {
+pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
     type Ctx = MeteredCtx;
 
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };

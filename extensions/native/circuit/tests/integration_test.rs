@@ -808,7 +808,7 @@ fn test_vm_pure_execution_non_continuation_aot() {
     let memory = vm_state.memory;
     unsafe { println!("[AOT] memory [0]_4 = {:?}", memory.read::<u32, 4>(4, 0)) };
 
-    let mut interp_instance = executor.instance(&exe).unwrap();
+    let interp_instance = executor.instance(&exe).unwrap();
     let vm_state = interp_instance
         .execute(vec![], None)
         .expect("Failed to execute");
