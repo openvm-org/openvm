@@ -15,6 +15,12 @@ asm_run_internal:
     mov r14, rcx
 
 asm_execute:
+    mov rdi, r14 
+    mov rsi, rbp 
+    mov rdx, rbx 
+    call should_suspend
+    cmp rax, 1
+    je asm_run_end 
     mov rdi, rbx
     mov rsi, rbp
     mov rdx, r13

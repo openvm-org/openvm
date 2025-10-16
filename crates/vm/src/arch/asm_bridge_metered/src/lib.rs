@@ -120,8 +120,11 @@ pub extern "C" fn metered_extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
-    println!("should suspend called!");
+pub extern "C" fn should_suspend(
+    instret: u64, 
+    _pc: u32, 
+    exec_state_ptr: *mut c_void
+) -> u32 {
     type Ctx = MeteredCtx;
 
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };

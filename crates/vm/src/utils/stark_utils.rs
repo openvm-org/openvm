@@ -154,8 +154,11 @@ where
         }
     }
 
+    /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
+    to test AOT segments in addition to the equal assertions
+    */
     let (segments, interp_state) = vm
-        .metered_interpreter(&exe)?
+        .get_metered_aot_instance(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);

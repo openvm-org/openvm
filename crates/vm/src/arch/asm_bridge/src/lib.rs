@@ -40,6 +40,7 @@ pub unsafe extern "C" fn asm_run(
 }
 
 type F = BabyBear;
+type Ctx = ExecutionCtx;
 
 // at the end of the execution, store the instret and pc from the x86 registers
 // to update the vm state's pc and instret for the pure execution mode
@@ -50,7 +51,6 @@ pub extern "C" fn set_instret_and_pc(
     final_pc: u32,                        // rdx = final_pc
     final_instret: u64,                   // rcx = final_instret
 ) {
-    type Ctx = ExecutionCtx;
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
@@ -68,8 +68,6 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    type Ctx = ExecutionCtx;
-
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
@@ -111,5 +109,24 @@ pub extern "C" fn extern_handler(
             // this won't collide with actual pc value because pc values are always multiple of 4
             1
         }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn should_suspend(
+    instret: u64,
+    _pc: u32,
+    exec_state_ptr: *mut c_void
+) -> u32 {
+    // reference to vm_exec_state
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+
+    let instret_end = vm_exec_state_ref.ctx.instret_end;
+
+    if instret >= instret_end {
+        1 // should suspend is `true`
+    } else {
+        0 // should suspend is `false`
     }
 }
