@@ -33,8 +33,9 @@ asm_execute:
 
 asm_run_end:
     mov rdi, rbx
-    mov rsi, r14
+    mov rsi, rbp
     mov rdx, r13
+    mov rcx, r14 
     call metered_set_instret_and_pc
     xor eax, eax
     pop r14
