@@ -24,6 +24,7 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 struct DummyGkrRoundCols<T> {
+    proof_idx: T,
     gkr_module_msg: GkrModuleMessage<T>,
     has_gkr_module_msg: T,
     batch_constraint_module_msg: BatchConstraintModuleMessage<T>,
@@ -59,21 +60,25 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyGkrRoundAir {
 
         self.gkr_bus.receive(
             builder,
+            local.proof_idx,
             local.gkr_module_msg.clone(),
             local.has_gkr_module_msg,
         );
         self.bc_module_bus.send(
             builder,
+            local.proof_idx,
             local.batch_constraint_module_msg.clone(),
             local.has_batch_constraint_module_msg,
         );
         self.xi_randomness_bus.send(
             builder,
+            local.proof_idx,
             local.xi_randomness_msg.clone(),
             local.has_xi_ranodmness_msg,
         );
         self.transcript_bus.receive(
             builder,
+            local.proof_idx,
             local.transcript_msg.clone(),
             local.has_transcript_msg,
         );

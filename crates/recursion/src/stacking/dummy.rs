@@ -27,6 +27,7 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow)]
 struct DummyStackingCols<T> {
+    proof_idx: T,
     is_first: T,
     stacking_tidx: T,
     whir_module_msg: WhirModuleMessage<T>,
@@ -77,6 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyStackingAir {
 
         self.stacking_module_bus.receive(
             builder,
+            local.proof_idx,
             StackingModuleMessage {
                 tidx: local.stacking_tidx.into(),
             },
@@ -84,38 +86,49 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyStackingAir {
         );
         self.batch_constraint_randomness_bus.receive(
             builder,
+            local.proof_idx,
             local.constraint_sumcheck_rnd_msg.clone(),
             local.has_constraint_sumcheck_rnd,
         );
         self.stacking_randomness_bus.send(
             builder,
+            local.proof_idx,
             local.stacking_randomness_bus_msg.clone(),
             local.has_stacking_randomness_bus_msg,
         );
-        self.whir_module_bus
-            .send(builder, local.whir_module_msg.clone(), local.is_first);
+        self.whir_module_bus.send(
+            builder,
+            local.proof_idx,
+            local.whir_module_msg.clone(),
+            local.is_first,
+        );
         self.column_claims_bus.receive(
             builder,
+            local.proof_idx,
             local.column_claim_msg.clone(),
             local.has_column_claim_msg,
         );
         self.air_shape_bus.receive(
             builder,
+            local.proof_idx,
             local.air_shape_bus_msg.clone(),
             local.has_air_shape_bus_msg,
         );
         self.air_part_shape_bus.receive(
             builder,
+            local.proof_idx,
             local.air_part_shape_bus_msg.clone(),
             local.has_air_part_shape_bus_msg,
         );
         self.stacking_widths_bus.receive(
             builder,
+            local.proof_idx,
             local.stacking_widths_bus_msg.clone(),
             local.has_stacking_widths_bus_msg,
         );
         self.transcript_bus.receive(
             builder,
+            local.proof_idx,
             local.transcript_msg.clone(),
             local.has_transcript_msg,
         )

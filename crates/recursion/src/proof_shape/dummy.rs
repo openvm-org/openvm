@@ -25,6 +25,7 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 struct DummyProofShapeCols<T> {
+    proof_idx: T,
     gkr_bus_message: GkrModuleMessage<T>,
     has_gkr_bus_message: T,
     air_shape_bus_msg: AirShapeBusMessage<T>,
@@ -68,12 +69,14 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
 
         self.gkr_bus.send(
             builder,
+            local.proof_idx,
             local.gkr_bus_message.clone(),
             local.has_gkr_bus_message,
         );
 
         self.air_shape_bus.send(
             builder,
+            local.proof_idx,
             local.air_shape_bus_msg.clone(),
             AB::Expr::TWO * local.has_air_shape_bus_msg,
         );
@@ -81,22 +84,26 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
         // preprocessed/cached?
         self.air_part_shape_bus.send(
             builder,
+            local.proof_idx,
             local.air_part_shape_bus_msg.clone(),
             AB::Expr::TWO * local.has_air_part_shape_bus_msg,
         );
         self.commitments_bus.send(
             builder,
+            local.proof_idx,
             local.commitments_msg.clone(),
             local.has_commitments_msg,
         );
         self.stacking_widths_bus.send(
             builder,
+            local.proof_idx,
             local.stacking_widths_bus_msg.clone(),
             AB::Expr::TWO * local.has_stacking_widths_bus_msg,
         );
 
         self.transcript_bus.receive(
             builder,
+            local.proof_idx,
             local.transcript_msg.clone(),
             local.has_transcript_msg,
         );
