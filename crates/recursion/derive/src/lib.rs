@@ -62,6 +62,41 @@ pub fn aligned_borrow_derive(input: TokenStream) -> TokenStream {
             pub const fn width() -> usize {
                 std::mem::size_of::<#name<u8 #(, #non_first_generics)*>>()
             }
+
+            #[inline]
+            pub fn as_slice(&self) -> &[#type_generic] {
+                debug_assert_eq!(core::mem::align_of::<#name #type_generics>(), core::mem::align_of::<#type_generic>());
+                debug_assert_eq!(core::mem::size_of::<#name #type_generics>() % core::mem::size_of::<#type_generic>(), 0);
+                unsafe {
+                    core::slice::from_raw_parts(
+                        (self as *const Self).cast::<#type_generic>(),
+                        Self::width(),
+                    )
+                }
+            }
+
+            /// Mutable view of the whole struct as a contiguous slice of T.
+             #[inline]
+             pub fn as_slice_mut(&mut self) -> &mut [#type_generic] {
+                 debug_assert_eq!(core::mem::align_of::<#name #type_generics>(), core::mem::align_of::<#type_generic>());
+                 debug_assert_eq!(core::mem::size_of::<#name #type_generics>() % core::mem::size_of::<#type_generic>(), 0);
+                 unsafe {
+                     core::slice::from_raw_parts_mut(
+                         (self as *mut Self).cast::<#type_generic>(),
+                         Self::width(),
+                     )
+                 }
+             }
+
+             /// Copy out the contents as a Vec<T>.
+             /// Requires T: Clone for the slice `.to_vec()`.
+             #[inline]
+             pub fn to_vec(&self) -> std::vec::Vec<#type_generic>
+             where
+                 #type_generic: Clone
+             {
+                 self.as_slice().to_vec()
+             }
         }
     };
 
