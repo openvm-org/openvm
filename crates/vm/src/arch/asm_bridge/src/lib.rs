@@ -1,4 +1,3 @@
-use core::arch::global_asm;
 use std::ffi::c_void;
 
 use openvm_circuit::{

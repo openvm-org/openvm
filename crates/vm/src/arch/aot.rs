@@ -1,4 +1,4 @@
-use std::{ffi::c_void, path::Path, process::Command};
+use std::{ffi::c_void, process::Command};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -131,7 +131,7 @@ where
         );
 
         let lib_path_exact = src_asm_bridge_dir
-            .join(&format!("{}", asm_name))
+            .join(asm_name)
             .join("release")
             .join("libasm_bridge.so");
         let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };
@@ -351,7 +351,7 @@ where
         );
 
         let lib_path_exact = src_asm_bridge_dir
-            .join(&format!("{}", asm_name))
+            .join(asm_name)
             .join("release")
             .join("libasm_bridge_metered.so");
         let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };

@@ -16,6 +16,7 @@ mod state;
 pub mod vm;
 
 /// AOT execution
+#[cfg(not(feature = "tco"))]
 pub mod aot;
 pub mod hasher;
 /// Interpreter for pure and metered VM execution
@@ -26,6 +27,7 @@ pub mod interpreter_preflight;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod testing;
 
+#[cfg(not(feature = "tco"))]
 pub use aot::AotInstance;
 pub use config::*;
 pub use execution::*;
