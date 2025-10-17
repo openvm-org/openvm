@@ -250,7 +250,7 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
         messages
     }
 
-    pub fn stacking_widths_bus_msgs(
+    pub fn stacking_indices_bus_msgs(
         &self,
         vk: &MultiStarkVerifyingKeyV2,
     ) -> Vec<StackingIndexMessage<F>> {

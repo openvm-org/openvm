@@ -30,8 +30,8 @@ struct DummyWhirCols<T> {
     whir_module_msg: WhirModuleMessage<T>,
     commitments_msg: CommitmentsBusMessage<T>,
     has_commitments_msg: T,
-    stacking_widths_bus_msg: StackingIndexMessage<T>,
-    has_stacking_widths_bus_msg: T,
+    stacking_indices_bus_msg: StackingIndexMessage<T>,
+    has_stacking_indices_bus_msg: T,
     stacking_randomenss_msg: StackingSumcheckRandomnessMessage<T>,
     has_stacking_randomness_msg: T,
     transcript_msg: TranscriptBusMessage<T>,
@@ -41,7 +41,7 @@ struct DummyWhirCols<T> {
 // Temporary dummy AIR to represent this module.
 pub struct DummyWhirAir {
     pub whir_module_bus: WhirModuleBus,
-    pub stacking_widths_bus: StackingIndicesBus,
+    pub stacking_indices_bus: StackingIndicesBus,
     pub commitments_bus: CommitmentsBus,
     pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
     pub transcript_bus: TranscriptBus,
@@ -69,11 +69,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyWhirAir {
             local.commitments_msg.clone(),
             local.has_commitments_msg,
         );
-        self.stacking_widths_bus.receive(
+        self.stacking_indices_bus.receive(
             builder,
             local.proof_idx,
-            local.stacking_widths_bus_msg.clone(),
-            local.has_stacking_widths_bus_msg,
+            local.stacking_indices_bus_msg.clone(),
+            local.has_stacking_indices_bus_msg,
         );
         self.stacking_randomness_bus.receive(
             builder,
@@ -102,14 +102,14 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {
     let mut commitments_msgs = preflight.whir_commitments_msgs(proof).into_iter();
-    let mut stacking_widths_bus_msgs = preflight.stacking_widths_bus_msgs(vk).into_iter();
+    let mut stacking_indices_bus_msgs = preflight.stacking_indices_bus_msgs(vk).into_iter();
     let mut stacking_randomness_msgs = preflight.stacking_randomness_msgs().into_iter();
     let mut transcript_msgs = preflight
         .transcript_msgs(preflight.stacking.post_tidx, preflight.transcript.len())
         .into_iter();
 
     let num_valid_rows: usize = [
-        stacking_widths_bus_msgs.len(),
+        stacking_indices_bus_msgs.len(),
         commitments_msgs.len(),
         stacking_randomness_msgs.len(),
         transcript_msgs.len(),
@@ -134,9 +134,9 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
             cols.commitments_msg = msg;
             cols.has_commitments_msg = F::ONE;
         }
-        if let Some(msg) = stacking_widths_bus_msgs.next() {
-            cols.stacking_widths_bus_msg = msg;
-            cols.has_stacking_widths_bus_msg = F::ONE;
+        if let Some(msg) = stacking_indices_bus_msgs.next() {
+            cols.stacking_indices_bus_msg = msg;
+            cols.has_stacking_indices_bus_msg = F::ONE;
         }
         if let Some(msg) = stacking_randomness_msgs.next() {
             cols.stacking_randomenss_msg = msg;

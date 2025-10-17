@@ -67,7 +67,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
             eq_bits_lookup_bus: self.bus_inventory.eq_bits_lookup_bus,
         };
         let stacking_claims_air = StackingClaimsAir {
-            stacking_indices_bus: self.bus_inventory.stacking_widths_bus,
+            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             whir_module_bus: self.bus_inventory.whir_module_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             stacking_tidx_bus: self.bus_inventory.stacking_tidx_bus,
