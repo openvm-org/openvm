@@ -107,12 +107,16 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
         let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
         let stacked_common_width = num_common_main_cells.div_ceil(stack_height);
 
+        let logup_pow_bits = vk.params.logup_pow_bits;
+
         preflight.proof_shape = ProofShapePreflight {
             stacked_common_width,
             sorted_trace_vdata,
             n_global: max(n_max, n_logup),
             n_max,
             n_logup,
+            l_skip,
+            logup_pow_bits,
             post_tidx: ts.len(),
         };
     }

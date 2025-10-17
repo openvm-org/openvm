@@ -102,8 +102,11 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     let mut batch_constraint_module_msgs =
         preflight.batch_constraint_module_msgs(proof).into_iter();
     let mut xi_randomness_msgs = preflight.xi_randomness_messages().into_iter();
+    // Skip grinding nonce observation and grinding challenge sampling
+    // Skip alpha_logup, beta_logup sampling
+    let tidx = preflight.proof_shape.post_tidx + 2 + 2 * D_EF;
     let mut transcript_msgs = preflight
-        .transcript_msgs(preflight.proof_shape.post_tidx, preflight.gkr.post_tidx)
+        .transcript_msgs(tidx, preflight.gkr.post_tidx)
         .into_iter();
 
     let num_valid_rows = [
