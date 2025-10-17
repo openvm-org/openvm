@@ -6,8 +6,8 @@ use openvm_stark_sdk::{
 use stark_backend_v2::{
     poseidon2::sponge::DuplexSponge,
     test_utils::{
-        DuplexSpongeRecorder, DuplexSpongeValidator, FibFixture, InteractionsFixture,
-        test_system_params_small,
+        CachedFixture, DuplexSpongeRecorder, DuplexSpongeValidator, FibFixture,
+        InteractionsFixture, PreprocessedFixture, test_system_params_small,
     },
 };
 
@@ -63,6 +63,40 @@ fn test_preflight_single_fib_sponge() {
         preflight.transcript.sponge.idx,
         preflight.transcript.sponge.expected.len(),
     );
+}
+
+#[test]
+fn test_preflight_cached_trace() {
+    let fx = CachedFixture::build(test_system_params_small());
+    let proof = fx.prove();
+
+    let circuit = VerifierCircuit::<DuplexSponge>::default();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let mut keygen_builder = engine.keygen_builder();
+    for air in circuit.airs() {
+        keygen_builder.add_air(air);
+    }
+    let pk = keygen_builder.generate_pk();
+    let sponge = DuplexSponge::default();
+    let proof_inputs = circuit.generate_proof_inputs(sponge, &fx.vk, &proof);
+    engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
+}
+
+#[test]
+fn test_preflight_preprocessed_trace() {
+    let fx = PreprocessedFixture::build(test_system_params_small(), 0, 1, 1 << 5);
+    let proof = fx.prove();
+
+    let circuit = VerifierCircuit::<DuplexSponge>::default();
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let mut keygen_builder = engine.keygen_builder();
+    for air in circuit.airs() {
+        keygen_builder.add_air(air);
+    }
+    let pk = keygen_builder.generate_pk();
+    let sponge = DuplexSponge::default();
+    let proof_inputs = circuit.generate_proof_inputs(sponge, &fx.vk, &proof);
+    engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
 #[test]

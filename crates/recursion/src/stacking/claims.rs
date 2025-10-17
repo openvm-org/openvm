@@ -12,7 +12,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
     proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -42,11 +42,14 @@ pub struct StackingClaimsCols<F> {
 
     pub tidx: F,
     pub mu: [F; D_EF],
+    pub mu_pow: [F; D_EF],
 
     pub stacking_claim: [F; D_EF],
     pub claim_coefficient: [F; D_EF],
 
     pub s_n_u_n: [F; D_EF],
+
+    pub whir_claim: [F; D_EF],
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -80,7 +83,11 @@ impl StackingClaimsTraceGenerator {
 
         let initial_tidx = preflight.stacking.intermediate_tidx[2];
 
-        for (i, (&(commit_idx, stacked_col_idx, claim), chunk)) in
+        let mu = preflight.stacking.stacking_batching_challenge;
+        let mu_pows = mu.powers().take(claims.len()).collect_vec();
+        let mut whir_claim = EF::ZERO;
+
+        for (idx, (&(commit_idx, stacked_col_idx, claim), chunk)) in
             claims.iter().zip(trace.chunks_mut(width)).enumerate()
         {
             let cols: &mut StackingClaimsCols<F> = chunk.borrow_mut();
@@ -90,12 +97,14 @@ impl StackingClaimsTraceGenerator {
             cols.stacked_col_idx = F::from_canonical_usize(stacked_col_idx);
             cols.stacking_claim = from_fn(|i| claim.as_base_slice()[i]);
 
-            let mu = preflight.stacking.stacking_batching_challenge;
             cols.mu = from_fn(|i| mu.as_base_slice()[i]);
+            cols.mu_pow = from_fn(|i| mu_pows[idx].as_base_slice()[i]);
+            whir_claim += mu_pows[idx] * *claim;
+            cols.whir_claim = from_fn(|i| whir_claim.as_base_slice()[i]);
 
-            cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * i));
-            cols.is_last = F::from_bool(i + 1 == claims.len());
-            cols.is_first = F::from_bool(i == 0);
+            cols.tidx = F::from_canonical_usize(initial_tidx + (D_EF * idx));
+            cols.is_last = F::from_bool(idx + 1 == claims.len());
+            cols.is_first = F::from_bool(idx == 0);
         }
         RowMajorMatrix::new(trace, width)
     }
@@ -183,14 +192,13 @@ where
             );
         }
 
-        // TODO[stephenh]: claim should be the RLC
         self.whir_module_bus.send(
             builder,
             local.proof_idx,
             WhirModuleMessage {
                 tidx: AB::Expr::from_canonical_usize(2 * D_EF) + local.tidx,
                 mu: local.mu.map(Into::into),
-                claim: local.stacking_claim.map(Into::into),
+                claim: local.whir_claim.map(Into::into),
             },
             local.is_last,
         );
