@@ -41,8 +41,9 @@ contract TemplateTest is Test {
 
         IOpenVmHalo2Verifier verifier = _compileAndDeployOpenVmVerifier(publicValuesLength);
 
-        (bool success,) = address(verifier)
-            .delegatecall(abi.encodeCall(IOpenVmHalo2Verifier.verify, (guestPvs, proofData, appExeCommit, appVmCommit)));
+        (bool success,) = address(verifier).delegatecall(
+            abi.encodeCall(IOpenVmHalo2Verifier.verify, (guestPvs, proofData, appExeCommit, appVmCommit))
+        );
         require(success, "Verification failed");
     }
 
