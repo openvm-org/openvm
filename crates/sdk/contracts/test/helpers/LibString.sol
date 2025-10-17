@@ -1335,8 +1335,7 @@ library LibString {
         assembly {
             result := mload(0x40)
             let n := 0
-            for { } // Scan for '\0'.
-             byte(n, s) { n := add(n, 1) } { }
+            for { } byte(n, s) { n := add(n, 1) } { } // Scan for '\0'.
             mstore(result, n) // Store the length.
             let o := add(result, 0x20)
             mstore(o, s) // Store the bytes of the string.
@@ -1349,8 +1348,7 @@ library LibString {
     function normalizeSmallString(bytes32 s) internal pure returns (bytes32 result) {
         /// @solidity memory-safe-assembly
         assembly {
-            for { } // Scan for '\0'.
-             byte(result, s) { result := add(result, 1) } { }
+            for { } byte(result, s) { result := add(result, 1) } { } // Scan for '\0'.
             mstore(0x00, s)
             mstore(result, 0x00)
             result := mload(0x00)
