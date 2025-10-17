@@ -13,14 +13,19 @@ use stark_backend_v2::{
 
 use crate::{
     stacking::{
+        bus::{
+            ClaimCoefficientsBus, EqBaseBus, EqBitsLookupBus, EqKernelLookupBus,
+            StackingModuleTidxBus, SumcheckClaimsBus,
+        },
         claims::{StackingClaimsAir, StackingClaimsTraceGenerator},
         opening::{OpeningClaimsAir, OpeningClaimsTraceGenerator},
         sumcheck::{SumcheckRoundsAir, SumcheckRoundsTraceGenerator},
         univariate::{UnivariateRoundAir, UnivariateRoundTraceGenerator},
     },
-    system::{AirModule, BusInventory, Preflight, StackingPreflight},
+    system::{AirModule, BusIndexManager, BusInventory, Preflight, StackingPreflight},
 };
 
+mod bus;
 pub mod claims;
 pub mod opening;
 pub mod sumcheck;
@@ -28,11 +33,26 @@ pub mod univariate;
 
 pub struct StackingModule {
     bus_inventory: BusInventory,
+    // Internal buses
+    stacking_tidx_bus: StackingModuleTidxBus,
+    claim_coefficients_bus: ClaimCoefficientsBus,
+    sumcheck_claims_bus: SumcheckClaimsBus,
+    eq_base_bus: EqBaseBus,
+    eq_kernel_lookup_bus: EqKernelLookupBus,
+    eq_bits_lookup_bus: EqBitsLookupBus,
 }
 
 impl StackingModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        StackingModule { bus_inventory }
+    pub fn new(b: &mut BusIndexManager, bus_inventory: BusInventory) -> Self {
+        Self {
+            bus_inventory,
+            stacking_tidx_bus: StackingModuleTidxBus::new(b.new_bus_idx()),
+            claim_coefficients_bus: ClaimCoefficientsBus::new(b.new_bus_idx()),
+            sumcheck_claims_bus: SumcheckClaimsBus::new(b.new_bus_idx()),
+            eq_base_bus: EqBaseBus::new(b.new_bus_idx()),
+            eq_kernel_lookup_bus: EqKernelLookupBus::new(b.new_bus_idx()),
+            eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
+        }
     }
 }
 
@@ -42,37 +62,37 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
             column_claims_bus: self.bus_inventory.column_claims_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            stacking_tidx_bus: self.bus_inventory.stacking_tidx_bus,
-            claim_coefficients_bus: self.bus_inventory.claim_coefficients_bus,
-            sumcheck_claims_bus: self.bus_inventory.sumcheck_claims_bus,
-            eq_kernel_lookup_bus: self.bus_inventory.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: self.bus_inventory.eq_bits_lookup_bus,
+            stacking_tidx_bus: self.stacking_tidx_bus,
+            claim_coefficients_bus: self.claim_coefficients_bus,
+            sumcheck_claims_bus: self.sumcheck_claims_bus,
+            eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
+            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
         };
         let univariate_round_air = UnivariateRoundAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            stacking_tidx_bus: self.bus_inventory.stacking_tidx_bus,
-            sumcheck_claims_bus: self.bus_inventory.sumcheck_claims_bus,
-            eq_kernel_lookup_bus: self.bus_inventory.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: self.bus_inventory.eq_bits_lookup_bus,
+            stacking_tidx_bus: self.stacking_tidx_bus,
+            sumcheck_claims_bus: self.sumcheck_claims_bus,
+            eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
+            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
         };
         let sumcheck_rounds_air = SumcheckRoundsAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            stacking_tidx_bus: self.bus_inventory.stacking_tidx_bus,
-            sumcheck_claims_bus: self.bus_inventory.sumcheck_claims_bus,
-            eq_kernel_lookup_bus: self.bus_inventory.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: self.bus_inventory.eq_bits_lookup_bus,
+            stacking_tidx_bus: self.stacking_tidx_bus,
+            sumcheck_claims_bus: self.sumcheck_claims_bus,
+            eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
+            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
         };
         let stacking_claims_air = StackingClaimsAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             whir_module_bus: self.bus_inventory.whir_module_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            stacking_tidx_bus: self.bus_inventory.stacking_tidx_bus,
-            claim_coefficients_bus: self.bus_inventory.claim_coefficients_bus,
-            sumcheck_claims_bus: self.bus_inventory.sumcheck_claims_bus,
+            stacking_tidx_bus: self.stacking_tidx_bus,
+            claim_coefficients_bus: self.claim_coefficients_bus,
+            sumcheck_claims_bus: self.sumcheck_claims_bus,
         };
         vec![
             Arc::new(opening_air),

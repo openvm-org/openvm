@@ -71,12 +71,6 @@ pub struct InterpolateCubicAuxCols<T> {
 /// - r = s1 - p - q
 pub struct InterpolateCubicSubAir;
 
-impl InterpolateCubicSubAir {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl<AB: AirBuilder> SubAir<AB> for InterpolateCubicSubAir {
     type AirContext<'a>
         = (
