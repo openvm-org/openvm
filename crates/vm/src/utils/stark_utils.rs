@@ -115,7 +115,7 @@ where
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
-
+    let metered_cost_ctx = vm.build_metered_cost_ctx();
     /*
     Assertions for Pure Execution AOT
     */
@@ -174,7 +174,21 @@ where
             assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
         }
     }
+    /*
+    Assertions for Metered AOT Cost
+    */
+    {
+        let (cost, vm_state) = vm
+            .metered_cost_interpreter(&exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
 
+        let (aot_cost, aot_vm_state) = vm
+            .get_metered_cost_aot_instance(&exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+        assert_eq!(vm_state.instret(), aot_vm_state.instret());
+        assert_eq!(cost, aot_cost);
+    }
     /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
     to test AOT segments in addition to the equal assertions
     We would want to revert `stark_utils.rs` back to how it looked like in main
