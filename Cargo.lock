@@ -5459,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#5d6a874a811c7d1104641b0701a38107bbb7b98c"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#a413114c88a3f9da5bca29a1727e5a1d1a5ff2a1"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5491,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#5d6a874a811c7d1104641b0701a38107bbb7b98c"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#a413114c88a3f9da5bca29a1727e5a1d1a5ff2a1"
 dependencies = [
  "cc",
  "glob",
@@ -5500,7 +5500,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#5d6a874a811c7d1104641b0701a38107bbb7b98c"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#a413114c88a3f9da5bca29a1727e5a1d1a5ff2a1"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6247,7 +6247,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#5d6a874a811c7d1104641b0701a38107bbb7b98c"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#a413114c88a3f9da5bca29a1727e5a1d1a5ff2a1"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6277,7 +6277,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#5d6a874a811c7d1104641b0701a38107bbb7b98c"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=fix%2Fvpmm-order#a413114c88a3f9da5bca29a1727e5a1d1a5ff2a1"
 dependencies = [
  "dashmap",
  "derivative",
