@@ -128,7 +128,7 @@ pub struct StackingClaimsAir {
 impl StackingClaimsAir {
     pub fn new(buses: &BusInventory) -> Self {
         Self {
-            stacking_indices_bus: buses.stacking_widths_bus,
+            stacking_indices_bus: buses.stacking_indices_bus,
             whir_module_bus: buses.whir_module_bus,
             transcript_bus: buses.transcript_bus,
             stacking_tidx_bus: buses.stacking_tidx_bus,
