@@ -8,9 +8,6 @@ use openvm_circuit::{
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-// asm_run.s contains the assembly to run metered execution
-global_asm!(include_str!("asm_run.s"));
-
 /*
 rbx = vm_exec_state
 rbp = pre_compute_insns

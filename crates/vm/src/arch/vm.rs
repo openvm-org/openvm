@@ -12,6 +12,7 @@ use std::{
     collections::{HashMap, VecDeque},
     marker::PhantomData,
     sync::Arc,
+    path::Path
 };
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -228,7 +229,6 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
-    #[cfg(not(feature = "aot"))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
@@ -236,19 +236,19 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
-    pub fn instance(
+    pub fn aot_instance(
         &self,
-        exe: &VmExe<F>,
+        exe: &VmExe<F>
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
     }
 
-    pub fn aot_instance(
+    pub fn aot_instance_with_asm_name(
         &self,
         exe: &VmExe<F>,
+        asm_name: &String
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        AotInstance::new(&self.inventory, exe)
+        AotInstance::new_with_asm_name(&self.inventory, exe, asm_name)
     }
 }
 
@@ -259,22 +259,12 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
-    #[cfg(not(feature = "aot"))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
-    }
-
-    #[cfg(feature = "aot")]
-    pub fn metered_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
-        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
     // Crates an AOT instance for metered execution of the given `exe`.

@@ -8,9 +8,6 @@ use openvm_circuit::{
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-// asm_run.s contains the assembly to run pure execution
-global_asm!(include_str!("asm_run.s"));
-
 extern "C" {
     fn asm_run_internal(
         vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
