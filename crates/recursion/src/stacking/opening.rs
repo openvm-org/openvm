@@ -11,7 +11,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{
-    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
     proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -79,8 +79,6 @@ impl OpeningClaimsTraceGenerator {
 
         let stacked_height = 1usize << vk.inner.params.n_stack;
 
-        let mut current_lambda_pow = EF::ONE;
-
         let mut current_commit_idx = 0usize;
         let mut current_col_idx = 0usize;
         let mut current_row_idx = 0usize;
@@ -93,6 +91,7 @@ impl OpeningClaimsTraceGenerator {
                 col_idx,
                 col_claim,
                 rot_claim,
+                lambda_pow,
             } = claim;
             let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
             cols.is_valid = F::ONE;
@@ -107,8 +106,7 @@ impl OpeningClaimsTraceGenerator {
 
             cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
             cols.lambda = from_fn(|i| preflight.stacking.lambda.as_base_slice()[i]);
-            cols.lambda_pow = from_fn(|i| current_lambda_pow.as_base_slice()[i]);
-            current_lambda_pow *= preflight.stacking.lambda * preflight.stacking.lambda;
+            cols.lambda_pow = *lambda_pow;
 
             cols.commit_idx = F::from_canonical_usize(current_commit_idx);
             cols.stacked_col_idx = F::from_canonical_usize(current_col_idx);
@@ -211,6 +209,7 @@ where
                 col_idx: local.col_idx,
                 col_claim: local.col_claim,
                 rot_claim: local.rot_claim,
+                lambda_pow: local.lambda_pow,
             },
             local.is_valid,
         );
