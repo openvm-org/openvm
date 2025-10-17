@@ -59,8 +59,11 @@ pub extern "C" fn set_instret_and_pc(
         .set_instret_and_pc(final_instret, final_pc);
 }
 
-// extern handler for the pure execution mode
-// calls the correct function handler based on `cur_pc`
+/// extern handler for the pure execution mode
+/// calls the correct function handler based on `cur_pc`
+///
+/// returns 1 if we should terminate and *pc otherwise
+/// this is safe because *pc is always a multiple of 4
 #[no_mangle]
 pub extern "C" fn extern_handler(
     vm_exec_state_ptr: *mut c_void,
