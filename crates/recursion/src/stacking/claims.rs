@@ -19,11 +19,14 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ClaimCoefficientsBus, ClaimCoefficientsMessage, StackingIndexMessage, StackingIndicesBus,
-        StackingModuleTidxBus, StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
-        TranscriptBus, TranscriptBusMessage, WhirModuleBus, WhirModuleMessage,
+        StackingIndexMessage, StackingIndicesBus, TranscriptBus, TranscriptBusMessage,
+        WhirModuleBus, WhirModuleMessage,
     },
-    system::{BusInventory, Preflight},
+    stacking::bus::{
+        ClaimCoefficientsBus, ClaimCoefficientsMessage, StackingModuleTidxBus,
+        StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
+    },
+    system::Preflight,
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -123,19 +126,6 @@ pub struct StackingClaimsAir {
     pub stacking_tidx_bus: StackingModuleTidxBus,
     pub claim_coefficients_bus: ClaimCoefficientsBus,
     pub sumcheck_claims_bus: SumcheckClaimsBus,
-}
-
-impl StackingClaimsAir {
-    pub fn new(buses: &BusInventory) -> Self {
-        Self {
-            stacking_indices_bus: buses.stacking_indices_bus,
-            whir_module_bus: buses.whir_module_bus,
-            transcript_bus: buses.transcript_bus,
-            stacking_tidx_bus: buses.stacking_tidx_bus,
-            claim_coefficients_bus: buses.claim_coefficients_bus,
-            sumcheck_claims_bus: buses.sumcheck_claims_bus,
-        }
-    }
 }
 
 impl BaseAirWithPublicValues<F> for StackingClaimsAir {}
