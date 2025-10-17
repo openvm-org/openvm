@@ -30,15 +30,9 @@ mod dummy;
 
 pub trait AirModule<TS: FiatShamirTranscript> {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
-    fn run_preflight(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    );
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>);
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>>;
@@ -60,12 +54,6 @@ impl BusIndexManager {
         self.bus_idx_max = self.bus_idx_max.checked_add(1).unwrap();
         idx
     }
-}
-
-pub struct VerifierCircuit<TS: FiatShamirTranscript> {
-    modules: Vec<Box<dyn AirModule<TS>>>,
-    range_checker: Arc<RangeCheckerAir<8>>,
-    pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
 }
 
 #[derive(Clone, Debug)]
@@ -267,8 +255,14 @@ impl BusInventory {
     }
 }
 
-impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
-    fn default() -> Self {
+pub struct VerifierCircuit<TS: FiatShamirTranscript> {
+    modules: Vec<Box<dyn AirModule<TS>>>,
+    range_checker: Arc<RangeCheckerAir<8>>,
+    pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
+}
+
+impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
+    pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
 
@@ -278,12 +272,13 @@ impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
             bus_inventory.range_checker_bus,
         ));
 
-        let transcript_module = TranscriptModule::new(bus_inventory.clone());
-        let proof_shape_module = ProofShapeModule::new(bus_inventory.clone());
-        let gkr_module = GkrModule::new(&mut b, bus_inventory.clone());
-        let batch_constraint_module = BatchConstraintModule::new(bus_inventory.clone());
-        let stacking_module = StackingModule::new(&mut b, bus_inventory.clone());
-        let whir_module = WhirModule::new(bus_inventory.clone());
+        let transcript_module = TranscriptModule::new(child_mvk.clone(), bus_inventory.clone());
+        let proof_shape_module = ProofShapeModule::new(child_mvk.clone(), bus_inventory.clone());
+        let gkr_module = GkrModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let batch_constraint_module =
+            BatchConstraintModule::new(child_mvk.clone(), bus_inventory.clone());
+        let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let whir_module = WhirModule::new(child_mvk.clone(), bus_inventory.clone());
 
         let modules: Vec<Box<dyn AirModule<TS>>> = vec![
             Box::new(transcript_module),
@@ -299,9 +294,7 @@ impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
             pow_2_checker,
         }
     }
-}
 
-impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
     pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let mut airs = vec![];
         for module in &self.modules {
@@ -312,30 +305,20 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         airs
     }
 
-    pub fn run_preflight(
-        &self,
-        sponge: TS,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-    ) -> Preflight<TS> {
+    pub fn run_preflight(&self, sponge: TS, proof: &Proof) -> Preflight<TS> {
         let mut preflight = Preflight::<TS>::new(sponge);
         for module in self.modules.iter() {
-            module.run_preflight(vk, proof, &mut preflight);
+            module.run_preflight(proof, &mut preflight);
         }
         preflight
     }
 
-    pub fn generate_proof_inputs(
-        &self,
-        sponge: TS,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-    ) -> Vec<AirProofRawInput<F>> {
-        let preflight = self.run_preflight(sponge, vk, proof);
+    pub fn generate_proof_inputs(&self, sponge: TS, proof: &Proof) -> Vec<AirProofRawInput<F>> {
+        let preflight = self.run_preflight(sponge, proof);
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {
-            let module_proof_inputs = module.generate_proof_inputs(vk, proof, &preflight);
+            let module_proof_inputs = module.generate_proof_inputs(proof, &preflight);
             debug_assert_eq!(
                 module_proof_inputs.len(),
                 module.airs().len(),

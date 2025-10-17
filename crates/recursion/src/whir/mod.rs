@@ -17,12 +17,13 @@ use crate::{
 mod dummy;
 
 pub struct WhirModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
 }
 
 impl WhirModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        WhirModule { bus_inventory }
+    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
+        WhirModule { mvk, bus_inventory }
     }
 }
 
@@ -38,12 +39,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
         vec![Arc::new(whir_air)]
     }
 
-    fn run_preflight(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    ) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
         let ts = &mut preflight.transcript;
         let WhirProof {
             whir_sumcheck_polys,
@@ -65,7 +61,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
         debug_assert_eq!(codeword_commits.len(), num_whir_rounds - 1);
 
         for i in 0..num_whir_rounds {
-            for _ in 0..vk.inner.params.k_whir {
+            for _ in 0..self.mvk.inner.params.k_whir {
                 if let Some(evals) = sumcheck_poly_iter.next() {
                     for eval in evals {
                         ts.observe_ext(*eval);
@@ -86,7 +82,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             ts.observe(whir_pow_witnesses[i]);
             let _pow_bits = ts.sample();
 
-            for _ in 0..vk.inner.params.num_whir_queries {
+            for _ in 0..self.mvk.inner.params.num_whir_queries {
                 let _bits = ts.sample();
             }
             let _gamma = ts.sample_ext();
@@ -98,13 +94,12 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(&self.mvk, proof, preflight))),
             public_values: vec![],
         }]
     }
