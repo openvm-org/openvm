@@ -82,7 +82,7 @@ pub struct BusInventory {
     // Data buses
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub stacking_widths_bus: StackingIndicesBus,
+    pub stacking_indices_bus: StackingIndicesBus,
     pub commitments_bus: CommitmentsBus,
     pub public_values_bus: PublicValuesBus,
 
@@ -253,7 +253,7 @@ impl Default for BusInventory {
             // Data buses
             air_shape_bus: AirShapeBus::new(b.new_bus_idx()),
             air_part_shape_bus: AirPartShapeBus::new(b.new_bus_idx()),
-            stacking_widths_bus: StackingIndicesBus::new(b.new_bus_idx()),
+            stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
             commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
 

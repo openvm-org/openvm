@@ -35,7 +35,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
-            stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
+            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             _public_values_bus: self.bus_inventory.public_values_bus,
         };
         vec![Arc::new(proof_shape_air) as AirRef<_>]

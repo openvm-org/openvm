@@ -30,7 +30,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let whir_air = DummyWhirAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
-            stacking_widths_bus: self.bus_inventory.stacking_widths_bus,
+            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
