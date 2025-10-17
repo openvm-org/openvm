@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
-#[cfg(not(feature = "tco"))]
+#[cfg(feature = "aot")]
 use super::aot::AotInstance;
 use super::{
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
@@ -236,7 +236,7 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(not(feature = "tco"))]
+    #[cfg(feature = "aot")]
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
@@ -244,7 +244,7 @@ where
         AotInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(not(feature = "tco"))]
+    #[cfg(feature = "aot")]
     pub fn aot_instance_with_asm_name(
         &self,
         exe: &VmExe<F>,
@@ -270,7 +270,7 @@ where
     }
 
     // Crates an AOT instance for metered execution of the given `exe`.
-    #[cfg(not(feature = "tco"))]
+    #[cfg(feature = "aot")]
     pub fn metered_aot_instance(
         &self,
         exe: &VmExe<F>,
@@ -430,7 +430,7 @@ where
     }
 
     // Pure AOT execution
-    #[cfg(not(feature = "tco"))]
+    #[cfg(feature = "aot")]
     pub fn get_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -456,7 +456,7 @@ where
     }
 
     // Metered AOT execution
-    #[cfg(not(feature = "tco"))]
+    #[cfg(feature = "aot")]
     pub fn get_metered_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,

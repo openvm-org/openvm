@@ -13,11 +13,15 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig
     },
     system::memory::{MemoryImage, CHUNK},
 };
+#[cfg(feature = "aot")]
+use crate::system::memory::online::GuestMemory;
+#[cfg(feature = "aot")]
+use crate::arch::{SystemConfig, VmState};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -86,6 +90,71 @@ where
 /// If `debug` is true, runs the debug prover.
 //
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
+#[cfg(feature = "aot")]
+pub fn check_aot_equivalence<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    config: &VB::VmConfig,
+    exe: &VmExe<Val<E::SC>>,
+    input: &Streams<Val<E::SC>>,
+) -> eyre::Result<()>
+where
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+{
+    let metered_ctx = vm.build_metered_ctx(&exe);
+    /*
+    Assertions for Pure Execution AOT
+    */
+    let interp_state_pure = vm
+        .interpreter(&exe)?
+        .execute(input.clone(), None)
+        .expect("Failed to execute");
+
+    let aot_state_pure = vm
+        .get_aot_instance(&exe)?
+        .execute(input.clone(), None)
+        .expect("Failed to execute");
+
+    let system_config: &SystemConfig = config.as_ref();
+    let addr_spaces = &system_config.memory_config.addr_spaces;
+    let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
+        assert_eq!(lhs.pc(), rhs.pc());
+        assert_eq!(lhs.instret(), rhs.instret());
+        for r in 0..addr_spaces[1].num_cells {
+            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+            assert_eq!(a, b);
+        }
+    };
+    assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+
+    /*
+    Assertions for Metered AOT
+    */
+    let (aot_segments, aot_state_metered) = vm
+        .get_metered_aot_instance(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    let (segments, interp_state_metered) = vm
+        .metered_interpreter(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    assert_vm_state_eq(&interp_state_metered, &aot_state_metered);
+    
+    assert_eq!(segments.len(), aot_segments.len());
+    for i in 0..segments.len() {
+        assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+        assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+        assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+    }
+    Ok(())
+}
+
 #[allow(clippy::type_complexity)]
 pub fn air_test_impl<E, VB>(
     fri_params: FriParameters,
@@ -116,71 +185,12 @@ where
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
-    /*
-    Assertions for Pure Execution AOT
-    */
-    {
-        let interp_state = vm
-            .interpreter(&exe)?
-            .execute(input.clone(), None)
-            .expect("Failed to execute");
+    #[cfg(feature = "aot")]
+    check_aot_equivalence(&vm, &config, &exe, &input)?;
 
-        let aot_state = vm
-            .get_aot_instance(&exe)?
-            .execute(input.clone(), None)
-            .expect("Failed to execute");
 
-        assert_eq!(interp_state.pc(), aot_state.pc());
-        assert_eq!(interp_state.instret(), aot_state.instret());
-
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-
-        for r in 0..addr_spaces[1].num_cells {
-            let interp = unsafe { interp_state.memory.read::<u8, 1>(1, r as u32) };
-            let aot_interp = unsafe { aot_state.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(interp, aot_interp);
-        }
-    }
-
-    /*
-    Assertions for Metered AOT
-    */
-    {
-        let (aot_segments, aot_state) = vm
-            .get_metered_aot_instance(&exe)?
-            .execute_metered(input.clone(), metered_ctx.clone())?;
-
-        let (segments, interp_state) = vm
-            .metered_interpreter(&exe)?
-            .execute_metered(input.clone(), metered_ctx.clone())?;
-
-        assert_eq!(interp_state.pc(), aot_state.pc());
-        assert_eq!(interp_state.instret(), aot_state.instret());
-
-        let system_config: &SystemConfig = config.as_ref();
-        let addr_spaces = &system_config.memory_config.addr_spaces;
-
-        for r in 0..addr_spaces[1].num_cells {
-            let interp = unsafe { interp_state.memory.read::<u8, 1>(1, r as u32) };
-            let aot_interp = unsafe { aot_state.memory.read::<u8, 1>(1, r as u32) };
-            assert_eq!(interp, aot_interp);
-        }
-
-        assert_eq!(segments.len(), aot_segments.len());
-        for i in 0..segments.len() {
-            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
-            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
-            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
-        }
-    }
-
-    /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
-    to test AOT segments in addition to the equal assertions
-    We would want to revert `stark_utils.rs` back to how it looked like in main
-    */
     let (segments, _) = vm
-        .get_metered_aot_instance(&exe)?
+        .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);

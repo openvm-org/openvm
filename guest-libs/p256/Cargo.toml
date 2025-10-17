@@ -71,6 +71,7 @@ cuda = [
     "openvm-sha256-circuit/cuda",
 ]
 tco = ["openvm-circuit/tco"]
+aot = ["openvm-circuit/aot"]
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 num-bigint = { workspace = true }

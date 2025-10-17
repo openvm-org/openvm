@@ -1,3 +1,4 @@
+#![cfg(feature = "aot")]
 use std::{ffi::c_void, process::Command};
 
 use libloading::Library;

@@ -39,6 +39,7 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 cuda = [ "openvm-rv32im-circuit/cuda" ]
 tco = ["openvm-circuit/tco"]
+aot = ["openvm-circuit/aot"]
 touchemall = [ 
     "cuda",
     "openvm-circuit/touchemall",

@@ -757,6 +757,7 @@ fn test_vm_pure_execution_non_continuation() {
 }
 
 #[test]
+#[cfg(feature = "aot")]
 fn test_vm_pure_execution_non_continuation_aot() {
     type F = BabyBear;
     let n = 6;
