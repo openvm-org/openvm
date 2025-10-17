@@ -155,7 +155,8 @@ where
         )?;
         let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
             pre_compute_insns.into_boxed_slice();
-            let init_memory = exe.init_memory.clone();
+            
+        let init_memory = exe.init_memory.clone();
 
         Ok(Self {
             system_config: inventory.config().clone(),
@@ -295,8 +296,10 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let src_asm_bridge_dir =
-            std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
+        let cur_dir = std::env::current_dir().unwrap();
+        let root_dir = cur_dir.parent().unwrap().parent().unwrap().parent().unwrap();
+
+        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
         // ar rcs libasm_runtime.a asm_run.o
@@ -341,7 +344,7 @@ where
             .args([
                 "rustc",
                 "--release",
-                &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name),
+                &format!("--target-dir={}/target/{}", root_dir.to_str().unwrap(), asm_name),
                 "--",
                 "-L",
                 src_asm_bridge_dir_str,
@@ -357,11 +360,12 @@ where
             status.code()
         );
 
-        let lib_path_exact = src_asm_bridge_dir
+        let lib_path = root_dir
+            .join("target")
             .join(asm_name)
             .join("release")
             .join("libasm_bridge_metered.so");
-        let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };
+        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
 
         let program = &exe.program;
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
