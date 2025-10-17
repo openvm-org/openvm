@@ -1,0 +1,15 @@
+[package]
+name = "asm_bridge_metered_cost"
+version.workspace = true 
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+openvm-circuit = { workspace = true, features = ["test-utils"], default-features = false}
+openvm-stark-sdk = { workspace = true, default-features = false}
+openvm-instructions.workspace = true

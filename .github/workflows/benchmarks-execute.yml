@@ -48,6 +48,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Install architecture specific tools
         run: |
@@ -66,7 +67,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features tco
+        run: cargo $TOOLCHAIN codspeed build --profile maxperf
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
@@ -90,6 +91,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Install architecture specific tools
         run: |
@@ -108,7 +110,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --features tco
+        run: cargo $TOOLCHAIN codspeed build
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:

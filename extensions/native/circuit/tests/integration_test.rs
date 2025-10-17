@@ -15,7 +15,7 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
-        VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
+        VmExecutor, VmInstance, VmState, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{
@@ -757,6 +757,74 @@ fn test_vm_pure_execution_non_continuation() {
 }
 
 #[test]
+fn test_vm_pure_execution_non_continuation_aot() {
+    type F = BabyBear;
+    let n = 6;
+    /*
+    Instruction 0 assigns word[0]_4 to n.
+    Instruction 4 terminates
+    The remainder is a loop that decrements word[0]_4 until it reaches 0, then terminates.
+    Instruction 1 checks if word[0]_4 is 0 yet, and if so sets pc to 5 in order to terminate
+    Instruction 2 decrements word[0]_4 (using word[1]_4)
+    Instruction 3 uses JAL as a simple jump to go back to instruction 1 (repeating the loop).
+     */
+    let instructions: Vec<Instruction<F>> = vec![
+        // word[0]_4 <- word[n]_0
+        Instruction::large_from_isize(ADD.global_opcode(), 0, n, 0, 4, 0, 0, 0),
+        // if word[0]_4 == 0 then pc += 3 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            3 * DEFAULT_PC_STEP as isize,
+            4,
+            0,
+        ),
+        // word[0]_4 <- word[0]_4 - word[1]_4
+        Instruction::large_from_isize(SUB.global_opcode(), 0, 0, 1, 4, 4, 0, 0),
+        // word[2]_4 <- pc + DEFAULT_PC_STEP, pc -= 2 * DEFAULT_PC_STEP
+        Instruction::from_isize(
+            JAL.global_opcode(),
+            2,
+            -2 * DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let executor = VmExecutor::new(test_native_config()).unwrap();
+    let mut aot_instance = executor.aot_instance(&exe).unwrap();
+    let vm_state = aot_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
+
+    // eyeball check
+    println!("[AOT] instret: {}", vm_state.instret());
+    println!("[AOT] pc: {}", vm_state.pc());
+    let memory = vm_state.memory;
+    unsafe { println!("[AOT] memory [0]_4 = {:?}", memory.read::<u32, 4>(4, 0)) };
+
+    let interp_instance = executor.instance(&exe).unwrap();
+    let vm_state = interp_instance
+        .execute(vec![], None)
+        .expect("Failed to execute");
+
+    println!("[Interpreter] instret: {}", vm_state.instret());
+    println!("[Interpreter] pc: {}", vm_state.pc());
+    let memory = vm_state.memory;
+    unsafe {
+        println!(
+            "[Interpreter] memory [0]_4 = {:?}",
+            memory.read::<u32, 4>(4, 0)
+        );
+    };
+}
+
+#[test]
 fn test_vm_pure_execution_continuation() {
     type F = BabyBear;
     let instructions: Vec<Instruction<F>> = vec![
@@ -892,6 +960,147 @@ fn test_vm_execute_native_chips() {
         .expect("Failed to execute");
 }
 
+#[test]
+fn test_vm_execute_native_chips_aot() {
+    type F = BabyBear;
+
+    let instructions = vec![
+        // Field Arithmetic operations (FieldArithmeticChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::large_from_isize(DIV.global_opcode(), 3, 20, 5, 4, 0, 0, 0),
+        // Field Extension operations (FieldExtensionChip)
+        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
+        Instruction::from_isize(FE4SUB.global_opcode(), 12, 8, 4, 4, 4),
+        Instruction::from_isize(BBE4MUL.global_opcode(), 16, 12, 8, 4, 4),
+        Instruction::from_isize(BBE4DIV.global_opcode(), 20, 16, 12, 4, 4),
+        // Branch operations (NativeBranchEqChip)
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BEQ).global_opcode(),
+            0,
+            0,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        Instruction::from_isize(
+            NativeBranchEqualOpcode(BNE).global_opcode(),
+            1,
+            2,
+            DEFAULT_PC_STEP as isize,
+            4,
+            4,
+        ),
+        // JAL operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeJalOpcode::JAL.global_opcode(),
+            24,
+            DEFAULT_PC_STEP as isize,
+            0,
+            4,
+            0,
+        ),
+        // Range check operation (JalRangeCheckChip)
+        Instruction::from_isize(
+            NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
+            0,
+            10,
+            8,
+            4,
+            0,
+        ),
+        // Load/Store operations (NativeLoadStoreChip)
+        Instruction::from_isize(STOREW.global_opcode(), 0, 0, 28, 4, 4),
+        Instruction::from_isize(LOADW.global_opcode(), 32, 0, 28, 4, 4),
+        Instruction::from_isize(
+            PHANTOM.global_opcode(),
+            0,
+            0,
+            NativePhantom::HintInput as isize,
+            0,
+            0,
+        ),
+        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
+        // Cast to field operation (CastFChip)
+        Instruction::from_usize(CastfOpcode::CASTF.global_opcode(), [36, 40, 0, 2, 4]),
+        // Poseidon2 operations (Poseidon2Chip)
+        Instruction::new(
+            Poseidon2Opcode::PERM_POS2.global_opcode(),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::ZERO,
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        Instruction::new(
+            Poseidon2Opcode::COMP_POS2.global_opcode(),
+            F::from_canonical_usize(52),
+            F::from_canonical_usize(44),
+            F::from_canonical_usize(48),
+            F::from_canonical_usize(4),
+            F::from_canonical_usize(4),
+            F::ZERO,
+            F::ZERO,
+        ),
+        // FRI operation (FriReducedOpeningChip)
+        Instruction::large_from_isize(ADD.global_opcode(), 60, 64, 0, 4, 4, 0, 0), /* a_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 64, 68, 0, 4, 4, 0, 0), /* b_pointer_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 68, 2, 0, 4, 0, 0, 0), /* length_pointer (value 2), */
+        Instruction::large_from_isize(ADD.global_opcode(), 72, 1, 0, 4, 0, 0, 0), //alpha_pointer
+        Instruction::large_from_isize(ADD.global_opcode(), 76, 80, 0, 4, 4, 0, 0), /* result_pointer, */
+        Instruction::large_from_isize(ADD.global_opcode(), 80, 1, 0, 4, 0, 0, 0), /* is_init (value 1) , */
+        Instruction::from_usize(
+            FriOpcode::FRI_REDUCED_OPENING.global_opcode(),
+            [60, 64, 68, 72, 76, 0, 80],
+        ),
+        // Terminate
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::from_instructions(&instructions));
+    let input_stream: Vec<Vec<F>> = vec![vec![]];
+
+    let executor = VmExecutor::new(test_rv32_with_kernels_config()).unwrap();
+    let instance = executor.instance(&exe).unwrap();
+    let vm_state = instance
+        .execute(input_stream.clone(), None)
+        .expect("Failed to execute");
+
+    // eyeball check
+    println!("[Interpreter] instret: {}", vm_state.instret());
+    println!("[Interpreter] pc: {}", vm_state.pc());
+    let interp_memory = vm_state.memory;
+
+    // setup the aot instance
+    let mut aot_instance = executor.aot_instance(&exe).unwrap();
+    let vm_state = aot_instance
+        .execute(input_stream, None)
+        .expect("Failed to execute");
+
+    // eyeball check
+    println!("[AOT] instret: {}", vm_state.instret());
+    println!("[AOT] pc: {}", vm_state.pc());
+    let aot_memory = vm_state.memory;
+
+    for r in 0..25 {
+        unsafe {
+            println!(
+                "[Interpreter] memory [4*{}:4]_4 = {:?}",
+                r,
+                interp_memory.read::<u32, 4>(4, 4 * r)
+            );
+            println!(
+                "[AOT] memory [4*{}:4]_4 = {:?}",
+                r,
+                aot_memory.read::<u32, 4>(4, 4 * r)
+            );
+        };
+    }
+}
+
 // This test ensures that metered execution never segments when continuations is disabled
 #[test]
 fn test_single_segment_executor_no_segmentation() {
@@ -927,6 +1136,26 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
+#[cfg(target_arch = "x86_64")]
+fn compare_vm_states(
+    vm_state1: &VmState<BabyBear>,
+    vm_state2: &VmState<BabyBear>,
+    memory_dimensions: openvm_circuit::system::memory::dimensions::MemoryDimensions,
+) {
+    assert_eq!(vm_state1.instret(), vm_state2.instret());
+    assert_eq!(vm_state1.pc(), vm_state2.pc());
+    use openvm_circuit::{
+        arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+    };
+
+    let hasher = vm_poseidon2_hasher::<BabyBear>();
+
+    let tree1 = MerkleTree::from_memory(&vm_state1.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&vm_state2.memory.memory, &memory_dimensions, &hasher);
+
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+}
+
 #[test]
 fn test_vm_execute_metered_cost_native_chips() {
     type F = BabyBear;
@@ -936,7 +1165,7 @@ fn test_vm_execute_metered_cost_native_chips() {
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
     let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
 
     let instructions = vec![
         // Field Arithmetic operations (FieldArithmeticChip)
@@ -957,11 +1186,30 @@ fn test_vm_execute_metered_cost_native_chips() {
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
     let (cost, vm_state) = instance
-        .execute_metered_cost(vec![], ctx)
+        .execute_metered_cost(vec![], ctx.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state.instret(), instructions.len() as u64);
     assert!(cost > 0);
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut aot_instance = vm
+            .executor()
+            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .unwrap();
+        let (aot_cost, aot_vm_state) = aot_instance
+            .execute_metered_cost(vec![], ctx.clone())
+            .expect("Failed to execute");
+        assert_eq!(aot_vm_state.instret(), instructions.len() as u64);
+        assert!(aot_cost > 0);
+        assert_eq!(cost, aot_cost);
+        compare_vm_states(
+            &aot_vm_state,
+            &vm_state,
+            config.clone().system.memory_config.memory_dimensions(),
+        );
+    }
 }
 
 #[test]
@@ -994,7 +1242,7 @@ fn test_vm_execute_metered_cost_halt() {
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
     let (cost1, vm_state1) = instance1
-        .execute_metered_cost(vec![], ctx)
+        .execute_metered_cost(vec![], ctx.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state1.instret(), instructions.len() as u64);
@@ -1006,9 +1254,156 @@ fn test_vm_execute_metered_cost_halt() {
         .unwrap();
     let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
     let (cost2, vm_state2) = instance2
-        .execute_metered_cost(vec![], ctx2)
+        .execute_metered_cost(vec![], ctx2.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state2.instret(), 1);
     assert!(cost2 < cost1);
+
+    let executor_idx_to_air_idx3 = vm.executor_idx_to_air_idx();
+    let instance3 = vm
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx3)
+        .unwrap();
+    let ctx3 = vm.build_metered_cost_ctx().with_max_execution_cost(100);
+    let (cost3, vm_state3) = instance3
+        .execute_metered_cost(vec![], ctx3.clone())
+        .expect("Failed to execute");
+
+    assert_eq!(vm_state3.instret(), 3);
+    assert!(cost2 < cost3);
+    assert!(cost3 < cost1);
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut aot_instance1 = vm
+            .executor()
+            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .unwrap();
+        let (aot_cost1, aot_vm_state1) = aot_instance1
+            .execute_metered_cost(vec![], ctx.clone())
+            .expect("Failed to execute");
+        assert_eq!(aot_vm_state1.instret(), instructions.len() as u64);
+        assert_eq!(aot_cost1, cost1);
+
+        let mut aot_instance2 = vm
+            .executor()
+            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx2)
+            .unwrap();
+        let (aot_cost2, aot_vm_state2) = aot_instance2
+            .execute_metered_cost(vec![], ctx2.clone())
+            .expect("Failed to execute");
+        assert_eq!(aot_vm_state2.instret(), 1);
+        assert_eq!(aot_cost2, cost2);
+
+        let mut aot_instance3 = vm
+            .executor()
+            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx3)
+            .unwrap();
+        let (aot_cost3, aot_vm_state3) = aot_instance3
+            .execute_metered_cost(vec![], ctx3.clone())
+            .expect("Failed to execute");
+        assert_eq!(aot_vm_state3.instret(), 3);
+        assert_eq!(aot_cost3, cost3);
+
+        assert!(aot_cost2 < aot_cost1);
+        assert!(aot_cost2 < aot_cost3);
+        assert!(aot_cost3 < aot_cost1);
+
+        compare_vm_states(
+            &aot_vm_state1,
+            &vm_state1,
+            config.clone().system.memory_config.memory_dimensions(),
+        );
+        compare_vm_states(
+            &aot_vm_state2,
+            &vm_state2,
+            config.clone().system.memory_config.memory_dimensions(),
+        );
+        compare_vm_states(
+            &aot_vm_state3,
+            &vm_state3,
+            config.clone().system.memory_config.memory_dimensions(),
+        );
+    }
+}
+
+#[test]
+fn test_vm_execute_metered_cost_resume_parity() {
+    type F = BabyBear;
+
+    setup_tracing();
+    let config = test_native_config();
+
+    let engine = TestEngine::new(FriParameters::new_for_testing(3));
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
+
+    // Simple multi-instruction program to ensure we can suspend and then resume to completion.
+    let instructions = vec![
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::<F>::from_instructions(&instructions));
+
+    // Create interpreter instance and suspend after very small budget
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let interp_instance = vm
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap();
+    let ctx_suspend = vm.build_metered_cost_ctx().with_max_execution_cost(0);
+    let (_cost_suspend_interp, vm_state_suspend_interp) = interp_instance
+        .execute_metered_cost(vec![], ctx_suspend.clone())
+        .expect("Failed to execute");
+    assert_eq!(vm_state_suspend_interp.instret(), 1);
+
+    // Do the same with AOT, compare suspended states, then resume both to completion
+    #[cfg(target_arch = "x86_64")]
+    {
+        let mut aot_instance = vm
+            .executor()
+            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
+            .unwrap();
+        let (_aot_cost_suspend, vm_state_suspend_aot) = aot_instance
+            .execute_metered_cost(vec![], ctx_suspend)
+            .expect("Failed to execute");
+        assert_eq!(vm_state_suspend_aot.instret(), 1);
+
+        // Suspended states should already match
+        compare_vm_states(
+            &vm_state_suspend_aot,
+            &vm_state_suspend_interp,
+            config.clone().system.memory_config.memory_dimensions(),
+        );
+
+        // Resume with unlimited budget
+        let ctx_unlimited = vm.build_metered_cost_ctx();
+        let (_cost_interp_resume, vm_state_final_interp) = interp_instance
+            .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited.clone())
+            .expect("Failed to resume interp");
+
+        let (_cost_aot_resume, vm_state_final_aot) = aot_instance
+            .execute_metered_cost_from_state(vm_state_suspend_aot, ctx_unlimited)
+            .expect("Failed to resume aot");
+
+        // Final states must be identical
+        compare_vm_states(
+            &vm_state_final_aot,
+            &vm_state_final_interp,
+            config.system.memory_config.memory_dimensions(),
+        );
+    }
+
+    // On non-x86_64, at least verify interpreter resume doesn't panic
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let ctx_unlimited = vm.build_metered_cost_ctx();
+        let _ = interp_instance
+            .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited)
+            .expect("Failed to resume interp");
+    }
 }

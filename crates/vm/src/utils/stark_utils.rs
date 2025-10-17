@@ -13,8 +13,8 @@ use openvm_stark_sdk::{
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -110,14 +110,93 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
+    let metered_cost_ctx = vm.build_metered_cost_ctx();
+    /*
+    Assertions for Pure Execution AOT
+    */
+    {
+        let interp_state = vm
+            .interpreter(&exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        let aot_state = vm
+            .get_aot_instance(&exe)?
+            .execute(input.clone(), None)
+            .expect("Failed to execute");
+
+        assert_eq!(interp_state.pc(), aot_state.pc());
+        assert_eq!(interp_state.instret(), aot_state.instret());
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+
+        for r in 0..addr_spaces[1].num_cells {
+            let interp = unsafe { interp_state.memory.read::<u8, 1>(1, r as u32) };
+            let aot_interp = unsafe { aot_state.memory.read::<u8, 1>(1, r as u32) };
+            assert_eq!(interp, aot_interp);
+        }
+    }
+
+    /*
+    Assertions for Metered AOT
+    */
+    {
+        let (aot_segments, aot_state) = vm
+            .get_metered_aot_instance(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        let (segments, interp_state) = vm
+            .metered_interpreter(&exe)?
+            .execute_metered(input.clone(), metered_ctx.clone())?;
+
+        assert_eq!(interp_state.pc(), aot_state.pc());
+        assert_eq!(interp_state.instret(), aot_state.instret());
+
+        let system_config: &SystemConfig = config.as_ref();
+        let addr_spaces = &system_config.memory_config.addr_spaces;
+
+        for r in 0..addr_spaces[1].num_cells {
+            let interp = unsafe { interp_state.memory.read::<u8, 1>(1, r as u32) };
+            let aot_interp = unsafe { aot_state.memory.read::<u8, 1>(1, r as u32) };
+            assert_eq!(interp, aot_interp);
+        }
+
+        assert_eq!(segments.len(), aot_segments.len());
+        for i in 0..segments.len() {
+            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+        }
+    }
+    /*
+    Assertions for Metered AOT Cost
+    */
+    {
+        let (cost, vm_state) = vm
+            .metered_cost_interpreter(&exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+        let (aot_cost, aot_vm_state) = vm
+            .get_metered_cost_aot_instance(&exe)?
+            .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+        assert_eq!(vm_state.instret(), aot_vm_state.instret());
+        assert_eq!(cost, aot_cost);
+    }
+    /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
+    to test AOT segments in addition to the equal assertions
+    We would want to revert `stark_utils.rs` back to how it looked like in main
+    */
     let (segments, _) = vm
-        .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx)?;
+        .get_metered_aot_instance(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
     let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
