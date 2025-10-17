@@ -226,6 +226,7 @@ pub struct ColumnClaimsMessage<T> {
     pub col_idx: T,
     pub col_claim: [T; D_EF],
     pub rot_claim: [T; D_EF],
+    pub lambda_pow: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(ColumnClaimsBus, ColumnClaimsMessage);
