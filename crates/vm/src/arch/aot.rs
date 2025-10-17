@@ -51,7 +51,7 @@ where
     where
         E: Executor<F>,
     {
-        let default_name = String::from("asm_run");
+        let default_name = String::from("asm_x86_run");
         Self::new_with_asm_name(inventory, exe, &default_name)
     }
 
@@ -270,7 +270,7 @@ where
     where
         E: MeteredExecutor<F>,
     {
-        let default_name = String::from("asm_run");
+        let default_name = String::from("asm_x86_run");
         Self::new_metered_with_asm_name(inventory, exe, executor_idx_to_air_idx, &default_name)
     }
 
