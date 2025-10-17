@@ -78,7 +78,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
             builder,
             local.proof_idx,
             local.air_shape_bus_msg.clone(),
-            AB::Expr::TWO * local.has_air_shape_bus_msg,
+            local.has_air_shape_bus_msg,
         );
         // TODO: We should probably send common main with AirShapeBus and only use this for
         // preprocessed/cached?
@@ -86,7 +86,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyProofShapeAir {
             builder,
             local.proof_idx,
             local.air_part_shape_bus_msg.clone(),
-            AB::Expr::TWO * local.has_air_part_shape_bus_msg,
+            local.has_air_part_shape_bus_msg,
         );
         self.commitments_bus.send(
             builder,
