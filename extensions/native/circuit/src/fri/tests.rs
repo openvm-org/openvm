@@ -1,7 +1,12 @@
 use std::borrow::BorrowMut;
 
 use itertools::Itertools;
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+    Arena, PreflightExecutor,
+};
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_native_compiler::{conversion::AS, FriOpcode::FRI_REDUCED_OPENING};
 use openvm_stark_backend::{
@@ -15,28 +20,52 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use test_case::test_case;
 
 use super::{
     super::field_extension::FieldExtension, elem_to_ext, FriReducedOpeningAir,
-    FriReducedOpeningChip, FriReducedOpeningStep, EXT_DEG,
+    FriReducedOpeningChip, FriReducedOpeningExecutor, EXT_DEG,
 };
+#[cfg(feature = "cuda")]
+use crate::fri::{FriReducedOpeningChipGpu, FriReducedOpeningRecordMut};
 use crate::{
-    fri::{WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
+    fri::{FriReducedOpeningFiller, WorkloadCols, OVERALL_WIDTH, WL_WIDTH},
     write_native_array,
 };
 
 const MAX_INS_CAPACITY: usize = 1024;
 type F = BabyBear;
+type Harness =
+    TestChipHarness<F, FriReducedOpeningExecutor, FriReducedOpeningAir, FriReducedOpeningChip<F>>;
 
-fn create_test_chip(tester: &VmChipTestBuilder<F>) -> FriReducedOpeningChip<F> {
-    let mut chip = FriReducedOpeningChip::<F>::new(
-        FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        FriReducedOpeningStep::new(),
-        tester.memory_helper(),
-    );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+fn create_test_chip(tester: &VmChipTestBuilder<F>) -> Harness {
+    let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let step = FriReducedOpeningExecutor::new();
+    let chip = FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.memory_helper());
 
-    chip
+    Harness::with_capacity(step, air, chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+fn create_test_harness(
+    tester: &GpuChipTestBuilder,
+) -> GpuTestChipHarness<
+    F,
+    FriReducedOpeningExecutor,
+    FriReducedOpeningAir,
+    FriReducedOpeningChipGpu,
+    FriReducedOpeningChip<F>,
+> {
+    let air = FriReducedOpeningAir::new(tester.execution_bridge(), tester.memory_bridge());
+    let executor = FriReducedOpeningExecutor;
+
+    let cpu_chip =
+        FriReducedOpeningChip::new(FriReducedOpeningFiller, tester.dummy_memory_helper());
+    let gpu_chip =
+        FriReducedOpeningChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
 
 fn compute_fri_mat_opening<F: Field>(
@@ -56,11 +85,15 @@ fn compute_fri_mat_opening<F: Field>(
     result
 }
 
-fn set_and_execute(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut FriReducedOpeningChip<F>,
+fn set_and_execute<E, RA>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
-) {
+) where
+    E: PreflightExecutor<F, RA>,
+    RA: Arena,
+{
     let len = rng.gen_range(1..=28);
     let a_ptr = gen_pointer(rng, len);
     let b_ptr = gen_pointer(rng, len);
@@ -83,7 +116,7 @@ fn set_and_execute(
         vec_a.push(a);
         vec_b.push(b);
         if !is_init {
-            tester.streams.hint_space[0].push(a);
+            tester.streams_mut().hint_space[0].push(a);
         } else {
             tester.write(AS::Native as usize, a_ptr + i, [a]);
         }
@@ -91,7 +124,8 @@ fn set_and_execute(
     }
 
     tester.execute(
-        chip,
+        executor,
+        arena,
         &Instruction::from_usize(
             FRI_REDUCED_OPENING.global_opcode(),
             [
@@ -126,15 +160,49 @@ fn set_and_execute(
 fn fri_mat_opening_air_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
     let num_ops = 28; // non-power-of-2 to also test padding
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+        );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(28)]
+fn test_fri_tracegen(num_ops: usize) {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_test_harness(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+        );
+    }
+
+    harness
+        .dense_arena
+        .get_record_seeker::<FriReducedOpeningRecordMut<F>, _>()
+        .transfer_to_matrix_arena(&mut harness.matrix_arena);
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -148,9 +216,14 @@ fn fri_mat_opening_air_test() {
 fn run_negative_fri_mat_opening_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
-    let mut chip = create_test_chip(&tester);
+    let mut harness = create_test_chip(&tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+    );
 
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut values = trace.row_slice(0).to_vec();
@@ -164,7 +237,7 @@ fn run_negative_fri_mat_opening_test() {
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(VerificationError::OodEvaluationMismatch);
 }

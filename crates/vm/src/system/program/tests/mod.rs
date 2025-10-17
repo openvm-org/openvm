@@ -1,6 +1,7 @@
-use std::iter;
+use std::{iter, sync::Arc};
 
 use openvm_instructions::{
+    exe::VmExe,
     instruction::Instruction,
     program::{Program, DEFAULT_PC_STEP},
     LocalOpcode,
@@ -10,15 +11,19 @@ use openvm_native_compiler::{
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
+    config::StarkGenericConfig,
+    engine::StarkEngine,
     p3_field::FieldAlgebra,
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::types::AirProvingContext,
+    Chip,
 };
 use openvm_stark_sdk::{
     any_rap_arc_vec,
     config::{
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
         baby_bear_poseidon2_root::BabyBearPoseidon2RootConfig,
+        FriParameters,
     },
     dummy_airs::interaction::dummy_interaction_air::DummyInteractionAir,
     engine::StarkFriEngine,
@@ -29,30 +34,48 @@ use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::VmCommittedExe, ProgramBus, ProgramChip},
+    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
 };
 
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 assert_impl_all!(VmCommittedExe<BabyBearPoseidon2RootConfig>: Serialize, DeserializeOwned);
 
 fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
-    let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
-    let mut chip = ProgramChip::new_with_program(program.clone(), bus);
     let mut execution_frequencies = vec![0; program.len()];
     for pc_idx in execution {
         execution_frequencies[pc_idx as usize] += 1;
-        chip.get_instruction(pc_idx * DEFAULT_PC_STEP).unwrap();
     }
-    let program_air = chip.air;
-    let program_proof_input = chip.generate_air_proof_input(None);
+    let filtered_exec_frequencies: Vec<_> = program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter(|(_, entry)| entry.is_some())
+        .map(|(i, _)| execution_frequencies[i])
+        .collect();
+    let original_height = filtered_exec_frequencies.len();
+
+    let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
+    let program_air = ProgramAir::new(bus);
+
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let exe = VmExe::new(program);
+    let committed_exe =
+        VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, engine.config().pcs());
+    let cached = committed_exe.get_committed_trace();
+    let chip = ProgramChip {
+        filtered_exec_frequencies,
+        cached: Some(cached),
+    };
+    let ctx = chip.generate_proving_ctx(());
 
     let counter_air = DummyInteractionAir::new(9, true, bus.inner.index);
     let mut program_cells = vec![];
+    let program = &committed_exe.exe.program;
     for (index, frequency) in execution_frequencies.into_iter().enumerate() {
         let option = program.get_instruction_and_debug_info(index);
         if let Some((instruction, _)) = option {
             program_cells.extend([
-                BabyBear::from_canonical_usize(frequency), // hacky: we should switch execution_frequencies into hashmap
+                BabyBear::from_canonical_u32(frequency),
                 BabyBear::from_canonical_usize(index * (DEFAULT_PC_STEP as usize)),
                 instruction.opcode.to_field(),
                 instruction.a,
@@ -68,23 +91,20 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
 
     // Pad program cells with zeroes to make height a power of two.
     let width = 10;
-    let original_height = program.num_defined_instructions();
     let desired_height = original_height.next_power_of_two();
     let cells_to_add = (desired_height - original_height) * width;
     program_cells.extend(iter::repeat_n(BabyBear::ZERO, cells_to_add));
 
-    let counter_trace = RowMajorMatrix::new(program_cells, 10);
+    let counter_trace = Arc::new(RowMajorMatrix::new(program_cells, 10));
     println!("trace height = {}", original_height);
     println!("counter trace height = {}", counter_trace.height());
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        any_rap_arc_vec!(program_air, counter_air),
-        vec![
-            program_proof_input,
-            AirProofInput::simple_no_pis(counter_trace),
-        ],
-    )
-    .expect("Verification failed");
+    engine
+        .run_test(
+            any_rap_arc_vec!(program_air, counter_air),
+            vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
+        )
+        .expect("Verification failed");
 }
 
 #[test]
@@ -178,21 +198,25 @@ fn test_program_negative() {
     ];
     let bus = ProgramBus::new(READ_INSTRUCTION_BUS);
     let program = Program::from_instructions(&instructions);
+    let program_air = ProgramAir::new(bus);
 
-    let mut chip = ProgramChip::new_with_program(program, bus);
     let execution_frequencies = vec![1; instructions.len()];
-    for pc_idx in 0..instructions.len() {
-        chip.get_instruction(pc_idx as u32 * DEFAULT_PC_STEP)
-            .unwrap();
-    }
-    let program_air = chip.air;
-    let program_proof_input = chip.generate_air_proof_input(None);
+    let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1));
+    let exe = VmExe::new(program);
+    let committed_exe =
+        VmCommittedExe::<BabyBearPoseidon2Config>::commit(exe, engine.config().pcs());
+    let cached = committed_exe.get_committed_trace();
+    let chip = ProgramChip {
+        filtered_exec_frequencies: execution_frequencies.clone(),
+        cached: Some(cached),
+    };
+    let ctx = chip.generate_proving_ctx(());
 
     let counter_air = DummyInteractionAir::new(7, true, bus.inner.index);
     let mut program_rows = vec![];
     for (pc_idx, instruction) in instructions.iter().enumerate() {
         program_rows.extend(vec![
-            BabyBear::from_canonical_usize(execution_frequencies[pc_idx]),
+            BabyBear::from_canonical_u32(execution_frequencies[pc_idx]),
             BabyBear::from_canonical_usize(pc_idx * DEFAULT_PC_STEP as usize),
             instruction.opcode.to_field(),
             instruction.a,
@@ -204,15 +228,14 @@ fn test_program_negative() {
     }
     let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
     counter_trace.row_mut(1)[1] = BabyBear::ZERO;
+    let counter_trace = Arc::new(counter_trace);
 
-    BabyBearPoseidon2Engine::run_test_fast(
-        any_rap_arc_vec!(program_air, counter_air),
-        vec![
-            program_proof_input,
-            AirProofInput::simple_no_pis(counter_trace),
-        ],
-    )
-    .expect("Verification failed");
+    engine
+        .run_test(
+            any_rap_arc_vec!(program_air, counter_air),
+            vec![ctx, AirProvingContext::simple_no_pis(counter_trace)],
+        )
+        .expect("Verification failed");
 }
 
 #[test]
@@ -265,7 +288,7 @@ fn test_program_with_undefined_instructions() {
         )),
     ];
 
-    let program = Program::new_without_debug_infos_with_option(&instructions, DEFAULT_PC_STEP, 0);
+    let program = Program::new_without_debug_infos_with_option(&instructions, 0);
 
     interaction_test(program, vec![0, 2, 5]);
 }

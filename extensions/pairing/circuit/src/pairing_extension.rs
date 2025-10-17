@@ -2,12 +2,14 @@ use derive_more::derive::From;
 use num_bigint::BigUint;
 use num_traits::{FromPrimitive, Zero};
 use openvm_circuit::{
-    arch::{VmExtension, VmInventory, VmInventoryBuilder, VmInventoryError},
-    system::phantom::PhantomChip,
+    arch::{
+        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutorInventoryBuilder, ExecutorInventoryError, VmCircuitExtension, VmExecutionExtension,
+        VmProverExtension,
+    },
+    system::phantom::PhantomExecutor,
 };
-use openvm_circuit_derive::{AnyEnum, InsExecutorE1, InsExecutorE2, InstructionExecutor};
-use openvm_circuit_primitives::bitwise_op_lookup::SharedBitwiseOperationLookupChip;
-use openvm_circuit_primitives_derive::{Chip, ChipUsageGetter};
+use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
 use openvm_ecc_circuit::CurveConfig;
 use openvm_instructions::PhantomDiscriminant;
 use openvm_pairing_guest::{
@@ -17,7 +19,7 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{config::StarkGenericConfig, engine::StarkEngine, p3_field::Field};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -57,38 +59,48 @@ impl PairingCurve {
     }
 }
 
-#[derive(Clone, Debug, derive_new::new, Serialize, Deserialize)]
+#[derive(Clone, Debug, From, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, AnyEnum, InsExecutorE1, InsExecutorE2)]
-pub enum PairingExtensionExecutor<F: PrimeField32> {
-    Phantom(PhantomChip<F>),
+#[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+pub enum PairingExtensionExecutor<F: Field> {
+    Phantom(PhantomExecutor<F>),
 }
 
-#[derive(ChipUsageGetter, Chip, AnyEnum, From)]
-pub enum PairingExtensionPeriphery<F: PrimeField32> {
-    BitwiseOperationLookup(SharedBitwiseOperationLookupChip<8>),
-    Phantom(PhantomChip<F>),
-}
-
-impl<F: PrimeField32> VmExtension<F> for PairingExtension {
+impl<F: Field> VmExecutionExtension<F> for PairingExtension {
     type Executor = PairingExtensionExecutor<F>;
-    type Periphery = PairingExtensionPeriphery<F>;
 
-    fn build(
+    fn extend_execution(
         &self,
-        builder: &mut VmInventoryBuilder<F>,
-    ) -> Result<VmInventory<Self::Executor, Self::Periphery>, VmInventoryError> {
-        let inventory = VmInventory::new();
-
-        builder.add_phantom_sub_executor(
+        inventory: &mut ExecutorInventoryBuilder<F, PairingExtensionExecutor<F>>,
+    ) -> Result<(), ExecutorInventoryError> {
+        inventory.add_phantom_sub_executor(
             phantom::PairingHintSubEx,
             PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
         )?;
+        Ok(())
+    }
+}
 
-        Ok(inventory)
+impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for PairingExtension {
+    fn extend_circuit(&self, _inventory: &mut AirInventory<SC>) -> Result<(), AirInventoryError> {
+        Ok(())
+    }
+}
+
+pub struct PairingProverExt;
+impl<E, RA> VmProverExtension<E, RA, PairingExtension> for PairingProverExt
+where
+    E: StarkEngine,
+{
+    fn extend_prover(
+        &self,
+        _: &PairingExtension,
+        _inventory: &mut ChipInventory<E::SC, RA, E::PB>,
+    ) -> Result<(), ChipInventoryError> {
+        Ok(())
     }
 }
 
@@ -112,14 +124,14 @@ pub(crate) mod phantom {
         pairing::{FinalExp, MultiMillerLoop},
     };
     use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
-    use openvm_stark_backend::p3_field::PrimeField32;
+    use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
     pub struct PairingHintSubEx;
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for PairingHintSubEx {
+    impl<F: Field> PhantomSubExecutor<F> for PairingHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -136,7 +148,7 @@ pub(crate) mod phantom {
         }
     }
 
-    fn hint_pairing<F: PrimeField32>(
+    fn hint_pairing<F: Field>(
         memory: &GuestMemory,
         hint_stream: &mut VecDeque<F>,
         rs1: u32,
@@ -258,6 +270,9 @@ pub(crate) mod phantom {
     where
         Fp::Repr: From<[u8; N]>,
     {
+        // SAFETY:
+        // - RV32_MEMORY_AS consists of `u8`s
+        // - RV32_MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory

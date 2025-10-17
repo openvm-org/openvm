@@ -5,10 +5,11 @@ mod tests {
     use eyre::Result;
     use num_bigint::BigUint;
     use openvm_algebra_circuit::{
-        Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
+        Fp2Extension, Rv32ModularBuilder, Rv32ModularConfig, Rv32ModularWithFp2Builder,
+        Rv32ModularWithFp2Config,
     };
     use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-    use openvm_circuit::utils::{air_test, test_system_config_with_continuations};
+    use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
@@ -23,7 +24,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32modular_config(moduli: Vec<BigUint>) -> Rv32ModularConfig {
         let mut config = Rv32ModularConfig::new(moduli);
-        config.system = test_system_config_with_continuations();
+        config.system = test_system_config();
         config
     }
 
@@ -32,7 +33,7 @@ mod tests {
         moduli_with_names: Vec<(String, BigUint)>,
     ) -> Rv32ModularWithFp2Config {
         let mut config = Rv32ModularWithFp2Config::new(moduli_with_names);
-        config.system = test_system_config_with_continuations();
+        *config.as_mut() = test_system_config();
         config
     }
 
@@ -51,7 +52,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -67,7 +68,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -94,18 +95,14 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
     }
 
     #[test]
     fn test_complex_redundant_modulus() -> Result<()> {
         let config = Rv32ModularWithFp2Config {
-            system: test_system_config_with_continuations(),
-            base: Default::default(),
-            mul: Default::default(),
-            io: Default::default(),
-            modular: ModularExtension::new(vec![
+            modular: test_rv32modular_config(vec![
                 BigUint::from_str("998244353").unwrap(),
                 BigUint::from_str("1000000007").unwrap(),
                 BigUint::from_str("1000000009").unwrap(),
@@ -130,7 +127,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
     }
 
@@ -150,7 +147,7 @@ mod tests {
                 .with_extension(Fp2TranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularWithFp2Builder, config, openvm_exe);
         Ok(())
     }
 
@@ -179,7 +176,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )
         .unwrap();
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
     }
 
     #[test]
@@ -194,7 +191,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(ModularTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 }

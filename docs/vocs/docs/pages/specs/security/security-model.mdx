@@ -1,0 +1,91 @@
+# Security Model
+
+This section describes the security model, security parameters, and cryptographic
+assumptions for OpenVM. For a technical overview of the OpenVM design, see the
+[whitepaper](https://openvm.dev/whitepaper.pdf). 
+
+## Cryptographic Security
+
+OpenVM targets 100 bits of security and relies upon a FRI-based backend for STARK 
+proofs and a halo2-based backend for EVM proofs. 
+
+### Cryptographic Assumptions
+
+The STARKs for OpenVM use FRI over the BabyBear field as implemented in [Plonky3](https://github.com/Plonky3/Plonky3)
+with [logUp](https://eprint.iacr.org/2022/1530.pdf) for lookup arguments. We 
+use the following assumptions in our soundness analysis:
+
+- We use proof-of-work grinding to increase bits of security as described in 
+[Section 3.11.3 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
+- We use proof-of-work grinding to boost logUp soundness as described in
+[Section 4 of our analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+- We analyze STARK soundness under the toy problem conjecture from [Conjecture 1 of the ethSTARK paper](https://eprint.iacr.org/2021/582.pdf).
+
+The EVM proofs for OpenVM use halo2 with a KZG backend as originally designed by [ZCash](https://zcash.github.io/halo2/)
+and forked by [PSE](https://github.com/privacy-scaling-explorations/halo2) and [Axiom](https://github.com/axiom-crypto/halo2).
+It relies on a one-time universal trusted setup, for which we use the [Perpetual Powers of Tau](https://github.com/privacy-scaling-explorations/perpetualpowersoftau) 
+ setup run by the Ethereum Foundation, specifically this [challenge](https://github.com/privacy-scaling-explorations/perpetualpowersoftau/blob/master/0084_jpwang_response/README.md). 
+To learn more about this trusted setup, see the [Details on Universal Trusted Setup](#details-on-universal-trusted-setup) section.
+
+### Security Parameters
+
+We now specify security parameters used in the proofs:
+
+* **STARK proofs**: `app`, `leaf`, `internal`, `root`
+* **EVM proofs**: `static_verifier`
+
+involved in the [Continuations Design](/specs/architecture/continuations) under default settings.
+These parameters are of two types:
+
+* **FRI parameters**: `log_blowup`, `num_queries`, and `proof_of_work_bits` control the soundness of the FRI
+argument used to generate proofs for the STARKs.
+* **logUp parameters**: `max_interaction_count`, `log_max_message_length`, and `log_up_pow_bits` are parameters
+controlling the soundness of the logUp argument as described in [our soundness analysis](https://github.com/openvm-org/stark-backend/blob/main/docs/Soundness_of_Interactions_via_LogUp.pdf).
+
+The concrete parameter values used by OpenVM are specified in the table below.
+
+| Proof | Type | Security Bits | `log_blowup` | `num_queries` | `proof_of_work_bits` | `max_interaction_count` | `log_max_message_length` | `log_up_pow_bits` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `app` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `leaf` | STARK | 100 | 1 | 100 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `internal` | STARK | 100 | 2 | 44 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `root` | STARK | 100 | 3 | 30 | 16 | `15 * 2^27 + 1` | 7 | 16 |
+| `static_verifier` | Halo2 | 100+ | -- | -- | -- | -- | -- | -- |
+
+### Details on Universal Trusted Setup
+
+The [challenge file](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085) for our universal trusted setup
+was converted from its original format compatible with `snarkjs` and the Groth16 proof system to a format usable by halo2 using 
+the following [open-source code](https://github.com/axiom-crypto/phase2-bn254/blob/halo2/powersoftau/src/bin/convert_to_halo2.rs).
+
+To verify the conversion of the file [`challenge_0085`](https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085), download the file and run:
+
+```bash
+git clone https://github.com/axiom-crypto/phase2-bn254.git
+cd phase2-bn254
+git switch halo2
+# https://github.com/axiom-crypto/phase2-bn254/commit/0bd58f1311bdb54329686e4d0914006d602e0082
+cd powersoftau
+
+wget https://pse-trusted-setup-ppot.s3.eu-central-1.amazonaws.com/challenge_0085
+
+cargo build --release --bin convert_to_halo2
+time cargo run --release --bin convert_to_halo2 -- challenge_0085 28 2097152
+```
+
+To reduce the time of conversion, only the the first `2^25` powers were converted. For convenience, the resulting 
+halo2-compatible trusted setup files are hosted below by [Axiom](https://axiom.xyz) (`k` means `2^k` powers of tau):
+
+| k   | Link                                                                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 15  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_15.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_15.srs) |
+| 16  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_16.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_16.srs) |
+| 17  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_17.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_17.srs) |
+| 18  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_18.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_18.srs) |
+| 19  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_19.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_19.srs) |
+| 20  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_20.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_20.srs) |
+| 21  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_21.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_21.srs) |
+| 22  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_22.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_22.srs) |
+| 23  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_23.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_23.srs) |
+| 24  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_24.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_24.srs) |
+| 25  | [https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_25.srs](https://axiom-crypto.s3.amazonaws.com/challenge_0085/kzg_bn254_25.srs) |

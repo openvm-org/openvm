@@ -90,7 +90,7 @@ OUTPUT_PATH="metrics.json" cargo run --release --bin <benchmark_name>
 ```
 
 where `<benchmark_name>.rs` is one of the files in [`src/bin`](../../benchmarks/prove/src/bin).
-The `OUTPUT_PATH` environmental variable should be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
+The `OUTPUT_PATH` environment variable should be set to the file path where you want the collected metrics to be written to. If unset, then metrics are not printed to file.
 
 To run a benchmark with the leaf aggregation, add `--features aggregation` to the above command.
 
@@ -120,10 +120,10 @@ for more detailed profiling we generate special flamegraphs that visualize VM-sp
 The benchmark must be run with special configuration so that additional metrics are collected for profiling. Note that the additional metric collection will slow down the benchmark. To run a benchmark with the additional profiling, run the following command:
 
 ```bash
-OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features profiling -- --profiling
+OUTPUT_PATH="metrics.json" GUEST_SYMBOLS_PATH="guest.syms" cargo run --release --bin <benchmark_name> --features perf-metrics -- --profiling
 ```
 
-Add `--features aggregation,profiling` to run with leaf aggregation. The `profiling` feature tells the VM to run with additional metric collection. The `--profiling` CLI argument tells the script to build the guest program with `profile=profiling` so that the guest program is compiled without stripping debug symbols. When the `profiling` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
+Add `--features aggregation,perf-metrics` to run with leaf aggregation. The `perf-metrics` feature tells the VM to run with additional metric collection. The `--profiling` CLI argument tells the script to build the guest program with `profile=profiling` so that the guest program is compiled without stripping debug symbols. When the `perf-metrics` feature is enabled, the `GUEST_SYMBOLS_PATH` environment variable must be set to the file path where function symbols of the guest program will be exported. Those symbols are then used to annotate the flamegraph with function names.
 
 After the collected metrics are written to `$OUTPUT_PATH`, these flamegraphs can be generated if you have [inferno-flamegraph](https://crates.io/crates/inferno) installed. Install via
 
@@ -181,19 +181,19 @@ For execution benchmarks, the ELF files need to be compiled before running the b
 
 ```bash
 # Build all benchmark ELFs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs
 
 # Build specific benchmark ELFs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- fibonacci_recursive fibonacci_iterative
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- fibonacci_recursive fibonacci_iterative
 
 # Skip specific programs
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --skip keccak256 sha256
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --skip keccak256 sha256
 
 # Force rebuild even if ELFs already exist (overwrite)
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --force
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --force
 
 # Set build profile (debug or release)
-cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-binaries -- --profile debug
+cargo run --package openvm-benchmarks-utils --bin build-elfs --features build-elfs -- --profile debug
 ```
 
 ## Profiling Execution

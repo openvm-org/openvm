@@ -1,8 +1,11 @@
 use std::{array, borrow::BorrowMut};
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, VmChipTestBuilder},
-    InstructionExecutor, VmAirWrapper,
+use openvm_circuit::{
+    arch::{
+        testing::{memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder},
+        Arena, ExecutionBridge, PreflightExecutor,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -22,46 +25,75 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
-
-use super::{
-    core::{run_eq, BranchEqualStep},
-    BranchEqualCoreCols, Rv32BranchEqualChip,
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32BranchAdapterRecord, BranchEqualCoreRecord, Rv32BranchEqualChipGpu},
+    openvm_circuit::arch::{
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
 };
+
+use super::{core::run_eq, BranchEqualCoreCols, Rv32BranchEqualChip};
 use crate::{
     adapters::{
-        Rv32BranchAdapterAir, Rv32BranchAdapterStep, RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
+        Rv32BranchAdapterAir, Rv32BranchAdapterExecutor, Rv32BranchAdapterFiller,
+        RV32_REGISTER_NUM_LIMBS, RV_B_TYPE_IMM_BITS,
     },
     branch_eq::fast_run_eq,
     test_utils::get_verification_error,
-    BranchEqualCoreAir,
+    BranchEqualCoreAir, BranchEqualFiller, Rv32BranchEqualAir, Rv32BranchEqualExecutor,
 };
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
 const ABS_MAX_IMM: i32 = 1 << (RV_B_TYPE_IMM_BITS - 1);
+type Harness =
+    TestChipHarness<F, Rv32BranchEqualExecutor, Rv32BranchEqualAir, Rv32BranchEqualChip<F>>;
 
-fn create_test_chip(tester: &mut VmChipTestBuilder<F>) -> Rv32BranchEqualChip<F> {
-    let mut chip = Rv32BranchEqualChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
-        ),
-        BranchEqualStep::new(
-            Rv32BranchAdapterStep::new(),
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (
+    Rv32BranchEqualAir,
+    Rv32BranchEqualExecutor,
+    Rv32BranchEqualChip<F>,
+) {
+    let air = Rv32BranchEqualAir::new(
+        Rv32BranchAdapterAir::new(execution_bridge, memory_bridge),
+        BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+    );
+    let executor = Rv32BranchEqualExecutor::new(
+        Rv32BranchAdapterExecutor,
+        BranchEqualOpcode::CLASS_OFFSET,
+        DEFAULT_PC_STEP,
+    );
+    let chip = Rv32BranchEqualChip::new(
+        BranchEqualFiller::new(
+            Rv32BranchAdapterFiller,
             BranchEqualOpcode::CLASS_OFFSET,
             DEFAULT_PC_STEP,
         ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(tester: &mut VmChipTestBuilder<F>) -> Harness {
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
-
-    chip
+    Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: BranchEqualOpcode,
     a: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -83,7 +115,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 
     let initial_pc = rng.gen_range(imm.unsigned_abs()..(1 << (PC_BITS - 1)));
     tester.execute_with_pc(
-        chip,
+        executor,
+        arena,
         &Instruction::from_isize(
             opcode.global_opcode(),
             rs1 as isize,
@@ -96,8 +129,8 @@ fn set_and_execute<E: InstructionExecutor<F>>(
     );
 
     let cmp_result = fast_run_eq(opcode, &a, &b);
-    let from_pc = tester.execution.last_from_pc().as_canonical_u32() as i32;
-    let to_pc = tester.execution.last_to_pc().as_canonical_u32() as i32;
+    let from_pc = tester.last_from_pc().as_canonical_u32() as i32;
+    let to_pc = tester.last_to_pc().as_canonical_u32() as i32;
     let pc_inc = if cmp_result { imm } else { 4 };
 
     assert_eq!(to_pc, from_pc + pc_inc);
@@ -115,13 +148,22 @@ fn set_and_execute<E: InstructionExecutor<F>>(
 fn rand_rv32_branch_eq_test(opcode: BranchEqualOpcode, num_ops: usize) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, opcode, None, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
     }
 
-    let tester = tester.build().load(chip).finalize();
+    let tester = tester.build().load(harness).finalize();
     tester.simple_test().expect("Verification failed");
 }
 
@@ -144,11 +186,12 @@ fn run_negative_branch_eq_test(
     let imm = 16i32;
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         opcode,
         Some(a),
@@ -156,7 +199,7 @@ fn run_negative_branch_eq_test(
         Some(imm),
     );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut BranchEqualCoreCols<F, RV32_REGISTER_NUM_LIMBS> =
@@ -173,7 +216,7 @@ fn run_negative_branch_eq_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
+        .load_and_prank_trace(harness, modify_trace)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
@@ -278,13 +321,14 @@ fn rv32_bne_invalid_inv_marker_negative_test() {
 fn execute_roundtrip_sanity_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let mut chip = create_test_chip(&mut tester);
+    let mut harness = create_harness(&mut tester);
 
     let x = [19, 4, 179, 60];
     let y = [19, 32, 180, 60];
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         BranchEqualOpcode::BEQ,
         Some(x),
@@ -294,7 +338,8 @@ fn execute_roundtrip_sanity_test() {
 
     set_and_execute(
         &mut tester,
-        &mut chip,
+        &mut harness.executor,
+        &mut harness.arena,
         &mut rng,
         BranchEqualOpcode::BNE,
         Some(x),
@@ -332,4 +377,72 @@ fn run_ne_sanity_test() {
         diff_val * (F::from_canonical_u8(x[diff_idx]) - F::from_canonical_u8(y[diff_idx])),
         F::ONE
     );
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32BranchEqualExecutor,
+    Rv32BranchEqualAir,
+    Rv32BranchEqualChipGpu,
+    Rv32BranchEqualChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test_case(BranchEqualOpcode::BEQ, 100)]
+#[test_case(BranchEqualOpcode::BNE, 100)]
+fn test_cuda_rand_beq_tracegen(opcode: BranchEqualOpcode, num_ops: usize) {
+    let mut tester = GpuChipTestBuilder::default();
+    let mut rng = create_seeded_rng();
+
+    let mut harness = create_cuda_harness(&tester);
+
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv32BranchAdapterRecord,
+        &'a mut BranchEqualCoreRecord<RV32_REGISTER_NUM_LIMBS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32BranchAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

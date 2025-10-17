@@ -1,14 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_bigint_transpiler::Rv32BranchEqual256Opcode;
-use openvm_circuit::arch::{
-    execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-    E2PreCompute, ExecuteFunc,
-    ExecutionError::InvalidInstruction,
-    MatrixRecordArena, NewVmChipWrapper, StepExecutorE1, StepExecutorE2, VmAirWrapper,
-    VmSegmentState,
-};
-use openvm_circuit_derive::{TraceFiller, TraceStep};
+use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
@@ -16,29 +9,18 @@ use openvm_instructions::{
     riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
     LocalOpcode,
 };
-use openvm_rv32_adapters::{Rv32HeapBranchAdapterAir, Rv32HeapBranchAdapterStep};
-use openvm_rv32im_circuit::{BranchEqualCoreAir, BranchEqualStep};
+use openvm_rv32_adapters::Rv32HeapBranchAdapterExecutor;
+use openvm_rv32im_circuit::BranchEqualExecutor;
 use openvm_rv32im_transpiler::BranchEqualOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::INT256_NUM_LIMBS;
+use crate::{common::bytes_to_u64_array, Rv32BranchEqual256Executor, INT256_NUM_LIMBS};
 
-/// BranchEqual256
-pub type Rv32BranchEqual256Air = VmAirWrapper<
-    Rv32HeapBranchAdapterAir<2, INT256_NUM_LIMBS>,
-    BranchEqualCoreAir<INT256_NUM_LIMBS>,
->;
-#[derive(TraceStep, TraceFiller)]
-pub struct Rv32BranchEqual256Step(BaseStep);
-pub type Rv32BranchEqual256Chip<F> =
-    NewVmChipWrapper<F, Rv32BranchEqual256Air, Rv32BranchEqual256Step, MatrixRecordArena<F>>;
+type AdapterExecutor = Rv32HeapBranchAdapterExecutor<2, INT256_NUM_LIMBS>;
 
-type BaseStep = BranchEqualStep<Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>, INT256_NUM_LIMBS>;
-type AdapterStep = Rv32HeapBranchAdapterStep<2, INT256_NUM_LIMBS>;
-
-impl Rv32BranchEqual256Step {
-    pub fn new(adapter_step: AdapterStep, offset: usize, pc_step: u32) -> Self {
-        Self(BaseStep::new(adapter_step, offset, pc_step))
+impl Rv32BranchEqual256Executor {
+    pub fn new(adapter_step: AdapterExecutor, offset: usize, pc_step: u32) -> Self {
+        Self(BranchEqualExecutor::new(adapter_step, offset, pc_step))
     }
 }
 
@@ -50,101 +32,150 @@ struct BranchEqPreCompute {
     b: u8,
 }
 
-impl<F: PrimeField32> StepExecutorE1<F> for Rv32BranchEqual256Step {
+macro_rules! dispatch {
+    ($execute_impl:ident, $local_opcode:ident) => {
+        match $local_opcode {
+            BranchEqualOpcode::BEQ => Ok($execute_impl::<_, _, false>),
+            BranchEqualOpcode::BNE => Ok($execute_impl::<_, _, true>),
+        }
+    };
+}
+
+impl<F: PrimeField32> Executor<F> for Rv32BranchEqual256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchEqPreCompute>()
     }
 
-    fn pre_compute_e1<Ctx>(
+    #[cfg(not(feature = "tco"))]
+    fn pre_compute<Ctx>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E1ExecutionCtx,
+        Ctx: ExecutionCtxTrait,
     {
         let data: &mut BranchEqPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BranchEqualOpcode::BEQ => execute_e1_impl::<_, _, false>,
-            BranchEqualOpcode::BNE => execute_e1_impl::<_, _, true>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e1_handler, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn handler<Ctx>(
+        &self,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: ExecutionCtxTrait,
+    {
+        let data: &mut BranchEqPreCompute = data.borrow_mut();
+        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, local_opcode)
     }
 }
 
-impl<F: PrimeField32> StepExecutorE2<F> for Rv32BranchEqual256Step {
-    fn e2_pre_compute_size(&self) -> usize {
+impl<F: PrimeField32> MeteredExecutor<F> for Rv32BranchEqual256Executor {
+    fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchEqPreCompute>>()
     }
 
-    fn pre_compute_e2<Ctx>(
+    #[cfg(not(feature = "tco"))]
+    fn metered_pre_compute<Ctx>(
         &self,
         chip_idx: usize,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> openvm_circuit::arch::Result<ExecuteFunc<F, Ctx>>
+    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
     where
-        Ctx: E2ExecutionCtx,
+        Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<BranchEqPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            BranchEqualOpcode::BEQ => execute_e2_impl::<_, _, false>,
-            BranchEqualOpcode::BNE => execute_e2_impl::<_, _, true>,
-        };
-        Ok(fn_ptr)
+        dispatch!(execute_e2_handler, local_opcode)
+    }
+
+    #[cfg(feature = "tco")]
+    fn metered_handler<Ctx>(
+        &self,
+        chip_idx: usize,
+        pc: u32,
+        inst: &Instruction<F>,
+        data: &mut [u8],
+    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    where
+        Ctx: MeteredExecutionCtxTrait,
+    {
+        let data: &mut E2PreCompute<BranchEqPreCompute> = data.borrow_mut();
+        data.chip_idx = chip_idx as u32;
+        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, local_opcode)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &BranchEqPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs2_ptr = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs1 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
-    let rs2 = vm_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
+    let rs1_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
+    let rs2_ptr = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs1_ptr));
+    let rs2 =
+        exec_state.vm_read::<u8, INT256_NUM_LIMBS>(RV32_MEMORY_AS, u32::from_le_bytes(rs2_ptr));
     let cmp_result = u256_eq(rs1, rs2);
     if cmp_result ^ IS_NE {
-        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
+        *pc = (*pc as isize + pre_compute.imm) as u32;
     } else {
-        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
+        *pc = pc.wrapping_add(DEFAULT_PC_STEP);
     }
 
-    vm_state.instret += 1;
+    *instret += 1;
 }
 
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_NE: bool>(
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _instret_end: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &BranchEqPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_NE>(pre_compute, vm_state);
+    execute_e12_impl::<F, CTX, IS_NE>(pre_compute, instret, pc, exec_state);
 }
 
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_NE: bool>(
+#[create_handler]
+#[inline(always)]
+unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
+    instret: &mut u64,
+    pc: &mut u32,
+    _arg: u64,
+    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<BranchEqPreCompute> = pre_compute.borrow();
-    vm_state
+    exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, vm_state);
+    execute_e12_impl::<F, CTX, IS_NE>(&pre_compute.data, instret, pc, exec_state);
 }
 
-impl Rv32BranchEqual256Step {
+impl Rv32BranchEqual256Executor {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BranchEqPreCompute,
-    ) -> openvm_circuit::arch::Result<BranchEqualOpcode> {
+    ) -> Result<BranchEqualOpcode, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -162,7 +193,7 @@ impl Rv32BranchEqual256Step {
         };
         let e_u32 = e.as_canonical_u32();
         if d.as_canonical_u32() != RV32_REGISTER_AS || e_u32 != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
+            return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BranchEqPreCompute {
             imm,
@@ -177,8 +208,8 @@ impl Rv32BranchEqual256Step {
 }
 
 fn u256_eq(rs1: [u8; INT256_NUM_LIMBS], rs2: [u8; INT256_NUM_LIMBS]) -> bool {
-    let rs1_u64: [u64; 4] = unsafe { std::mem::transmute(rs1) };
-    let rs2_u64: [u64; 4] = unsafe { std::mem::transmute(rs2) };
+    let rs1_u64: [u64; 4] = bytes_to_u64_array(rs1);
+    let rs2_u64: [u64; 4] = bytes_to_u64_array(rs2);
     for i in 0..4 {
         if rs1_u64[i] != rs2_u64[i] {
             return false;

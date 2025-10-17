@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::{
@@ -134,10 +134,13 @@ pub struct BranchNativeAdapterRecord<F> {
     pub reads_aux: [MemoryReadAuxRecord; 2],
 }
 
-#[derive(derive_new::new)]
-pub struct BranchNativeAdapterStep;
+#[derive(derive_new::new, Clone, Copy)]
+pub struct BranchNativeAdapterExecutor;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for BranchNativeAdapterStep
+#[derive(derive_new::new)]
+pub struct BranchNativeAdapterFiller;
+
+impl<F> AdapterTraceExecutor<F> for BranchNativeAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -147,7 +150,7 @@ where
     type RecordMut<'a> = &'a mut BranchNativeAdapterRecord<F>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -155,33 +158,23 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
         let &Instruction { a, b, d, e, .. } = instruction;
 
         record.ptrs[0] = a;
-        let rs1 = tracing_read_or_imm_native(
-            memory,
-            d.as_canonical_u32(),
-            a,
-            &mut record.reads_aux[0].prev_timestamp,
-        );
+        let rs1 = tracing_read_or_imm_native(memory, d, a, &mut record.reads_aux[0].prev_timestamp);
         record.ptrs[1] = b;
-        let rs2 = tracing_read_or_imm_native(
-            memory,
-            e.as_canonical_u32(),
-            b,
-            &mut record.reads_aux[1].prev_timestamp,
-        );
+        let rs2 = tracing_read_or_imm_native(memory, e, b, &mut record.reads_aux[1].prev_timestamp);
         [rs1, rs2]
     }
 
     #[inline(always)]
     fn write(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
@@ -190,9 +183,14 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for BranchNativeAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for BranchNativeAdapterFiller {
+    const WIDTH: usize = size_of::<BranchNativeAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &BranchNativeAdapterRecord<F> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut BranchNativeAdapterCols<F> = adapter_row.borrow_mut();

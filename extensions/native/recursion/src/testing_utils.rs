@@ -1,22 +1,7 @@
-use inner::build_verification_program;
-use openvm_circuit::{
-    arch::{
-        execution_mode::e1::E1Ctx, instructions::program::Program, interpreter::InterpretedInstance,
-    },
-    utils::execute_and_prove_program,
-};
-use openvm_native_circuit::{test_native_config, NativeConfig};
-use openvm_native_compiler::conversion::CompilerOptions;
-use openvm_stark_backend::{
-    config::{Com, Domain, PcsProof, PcsProverData, StarkGenericConfig},
-    engine::VerificationData,
-    p3_commit::PolynomialSpace,
-    verifier::VerificationError,
-};
+use openvm_circuit::{arch::instructions::program::Program, utils::air_test_impl};
+use openvm_stark_backend::engine::VerificationData;
 use openvm_stark_sdk::{
-    config::baby_bear_poseidon2::BabyBearPoseidon2Config,
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
-    p3_baby_bear::BabyBear,
+    config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
     utils::ProofInputForTest,
 };
 
@@ -25,6 +10,7 @@ use crate::hints::InnerVal;
 type InnerSC = BabyBearPoseidon2Config;
 
 pub mod inner {
+    use openvm_native_circuit::{test_native_config, NativeCpuBuilder};
     use openvm_native_compiler::conversion::CompilerOptions;
     use openvm_stark_sdk::{
         config::{
@@ -46,12 +32,12 @@ pub mod inner {
 
         let advice = new_from_inner_multi_vk(&vk);
         cfg_if::cfg_if! {
-            if #[cfg(feature = "bench-metrics")] {
+            if #[cfg(feature = "metrics")] {
                 let start = std::time::Instant::now();
             }
         }
         let program = VerifierProgram::build_with_options(advice, &fri_params, compiler_options);
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("verify_program_compile_ms").set(start.elapsed().as_millis() as f64);
 
         let mut input_stream = Vec::new();
@@ -76,40 +62,17 @@ pub mod inner {
             ))
             .unwrap();
 
-        recursive_stark_test(
-            vparams,
-            CompilerOptions::default(),
+        let compiler_options = CompilerOptions::default();
+        let (program, witness_stream) = build_verification_program(vparams, compiler_options);
+        air_test_impl::<BabyBearPoseidon2Engine, _>(
+            fri_params,
+            NativeCpuBuilder,
             test_native_config(),
-            &BabyBearPoseidon2Engine::new(fri_params),
+            program,
+            witness_stream,
+            1,
+            true,
         )
         .unwrap();
     }
-}
-
-/// 1. Builds the recursive verification program to verify `vparams`
-/// 2. Execute and proves the program in VM with `AggSC` config using `engine`.
-///
-/// The `vparams` must be from the BabyBearPoseidon2 stark config for the recursion
-/// program to work at the moment.
-#[allow(clippy::type_complexity)]
-pub fn recursive_stark_test<AggSC: StarkGenericConfig, E: StarkFriEngine<AggSC>>(
-    vparams: VerificationDataWithFriParams<InnerSC>,
-    compiler_options: CompilerOptions,
-    vm_config: NativeConfig,
-    engine: &E,
-) -> Result<VerificationDataWithFriParams<AggSC>, VerificationError>
-where
-    Domain<AggSC>: PolynomialSpace<Val = BabyBear>,
-    Domain<AggSC>: Send + Sync,
-    PcsProverData<AggSC>: Send + Sync,
-    Com<AggSC>: Send + Sync,
-    PcsProof<AggSC>: Send + Sync,
-{
-    let (program, witness_stream) = build_verification_program(vparams, compiler_options);
-
-    let interpreter = InterpretedInstance::new(vm_config.clone(), program.clone());
-    interpreter
-        .execute(E1Ctx::new(None), witness_stream.clone())
-        .unwrap();
-    execute_and_prove_program(program, witness_stream, vm_config, engine)
 }

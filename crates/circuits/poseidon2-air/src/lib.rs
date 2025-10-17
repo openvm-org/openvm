@@ -28,6 +28,9 @@ pub use babybear::*;
 pub use config::*;
 pub use permute::*;
 
+#[cfg(all(feature = "cuda", test))]
+mod cuda_abi;
+
 #[cfg(test)]
 mod tests;
 
@@ -42,7 +45,7 @@ pub const BABY_BEAR_POSEIDON2_SBOX_DEGREE: u64 = 7;
 
 /// `SBOX_REGISTERS` affects the max constraint degree of the AIR. See [p3_poseidon2_air] for more
 /// details.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Poseidon2SubChip<F: Field, const SBOX_REGISTERS: usize> {
     // This is Arc purely because Poseidon2Air cannot derive Clone
     pub air: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,

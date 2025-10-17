@@ -1,15 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
-        ExecutionError,
-        ExecutionError::InvalidInstruction,
-        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
-        RecordArena, Result, SizedRecord, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
-        VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         offline_checker::{
             MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
@@ -44,6 +36,13 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{read_rv32_register, tracing_read, tracing_write};
+
+mod execution;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
@@ -319,9 +318,17 @@ pub struct Rv32HintStoreRecordMut<'a> {
 /// Has debug assertions to make sure the above works as expected.
 impl<'a> CustomBorrow<'a, Rv32HintStoreRecordMut<'a>, Rv32HintStoreLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: Rv32HintStoreLayout) -> Rv32HintStoreRecordMut<'a> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits
+        // - size_of::<Rv32HintStoreRecordHeader>() is guaranteed <= self.len() by layout
+        //   precondition
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<Rv32HintStoreRecordHeader>()) };
 
+        // SAFETY:
+        // - rest contains bytes that will be interpreted as Rv32HintStoreVar records
+        // - align_to_mut ensures proper alignment for Rv32HintStoreVar type
+        // - The layout guarantees sufficient space for layout.metadata.num_words records
         let (_, vars, _) = unsafe { rest.align_to_mut::<Rv32HintStoreVar>() };
         Rv32HintStoreRecordMut {
             inner: header_buf.borrow_mut(),
@@ -351,33 +358,24 @@ impl SizedRecord<Rv32HintStoreLayout> for Rv32HintStoreRecordMut<'_> {
     }
 }
 
-pub struct Rv32HintStoreStep {
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32HintStoreExecutor {
+    pub pointer_max_bits: usize,
+    pub offset: usize,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct Rv32HintStoreFiller {
     pointer_max_bits: usize,
-    offset: usize,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
-impl Rv32HintStoreStep {
-    pub fn new(
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        pointer_max_bits: usize,
-        offset: usize,
-    ) -> Self {
-        Self {
-            pointer_max_bits,
-            offset,
-            bitwise_lookup_chip,
-        }
-    }
-}
-
-impl<F, CTX> TraceStep<F, CTX> for Rv32HintStoreStep
+impl<F, RA> PreflightExecutor<F, RA> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
+    for<'buf> RA:
+        RecordArena<'buf, MultiRowLayout<Rv32HintStoreMetadata>, Rv32HintStoreRecordMut<'buf>>,
 {
-    type RecordLayout = MultiRowLayout<Rv32HintStoreMetadata>;
-    type RecordMut<'a> = Rv32HintStoreRecordMut<'a>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         if opcode == HINT_STOREW.global_opcode().as_usize() {
             String::from("HINT_STOREW")
@@ -388,15 +386,11 @@ where
         }
     }
 
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode, a, b, d, e, ..
         } = instruction;
@@ -415,7 +409,7 @@ where
             read_rv32_register(state.memory.data(), a)
         };
 
-        let record = arena.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
+        let record = state.ctx.alloc(MultiRowLayout::new(Rv32HintStoreMetadata {
             num_words: num_words as usize,
         }));
 
@@ -440,7 +434,7 @@ where
             record.inner.num_words_ptr = u32::MAX;
         } else {
             record.inner.num_words_ptr = a;
-            tracing_read::<_, RV32_REGISTER_NUM_LIMBS>(
+            tracing_read::<RV32_REGISTER_NUM_LIMBS>(
                 state.memory,
                 RV32_REGISTER_AS,
                 record.inner.num_words_ptr,
@@ -480,7 +474,7 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
+impl<F: PrimeField32> TraceFiller<F> for Rv32HintStoreFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -492,11 +486,16 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
         }
 
         let width = trace.width;
+        debug_assert_eq!(width, size_of::<Rv32HintStoreCols<u8>>());
         let mut trace = &mut trace.values[..width * rows_used];
         let mut sizes = Vec::with_capacity(rows_used);
         let mut chunks = Vec::with_capacity(rows_used);
 
         while !trace.is_empty() {
+            // SAFETY:
+            // - caller ensures `trace` contains a valid record representation that was previously
+            //   written by the executor
+            // - header is the first element of the record
             let record: &Rv32HintStoreRecordHeader =
                 unsafe { get_record_from_slice(&mut trace, ()) };
             let (chunk, rest) = trace.split_at_mut(width * record.num_words as usize);
@@ -513,6 +512,12 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
             .par_iter_mut()
             .zip(sizes.par_iter())
             .for_each(|(chunk, &num_words)| {
+                // SAFETY:
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - chunk contains a valid Rv32HintStoreRecordMut with the exact layout specified
+                // - get_record_from_slice will correctly split the buffer into header and variable
+                //   components based on this layout
                 let record: Rv32HintStoreRecordMut = unsafe {
                     get_record_from_slice(
                         chunk,
@@ -600,162 +605,4 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for Rv32HintStoreStep {
     }
 }
 
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct HintStorePreCompute {
-    c: u32,
-    a: u8,
-    b: u8,
-}
-
-impl<F> StepExecutorE1<F> for Rv32HintStoreStep
-where
-    F: PrimeField32,
-{
-    #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<HintStorePreCompute>()
-    }
-
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e1_impl::<_, _, true>,
-            HINT_BUFFER => execute_e1_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
-    }
-}
-
-impl<F> StepExecutorE2<F> for Rv32HintStoreStep
-where
-    F: PrimeField32,
-{
-    fn e2_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<HintStorePreCompute>>()
-    }
-
-    fn pre_compute_e2<Ctx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
-    where
-        Ctx: E2ExecutionCtx,
-    {
-        let pre_compute: &mut E2PreCompute<HintStorePreCompute> = data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        let fn_ptr = match local_opcode {
-            HINT_STOREW => execute_e2_impl::<_, _, true>,
-            HINT_BUFFER => execute_e2_impl::<_, _, false>,
-        };
-        Ok(fn_ptr)
-    }
-}
-
-/// Return the number of used rows.
-#[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
-    pre_compute: &HintStorePreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
-) -> u32 {
-    let mem_ptr_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = u32::from_le_bytes(mem_ptr_limbs);
-
-    let num_words = if IS_HINT_STOREW {
-        1
-    } else {
-        let num_words_limbs = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-        u32::from_le_bytes(num_words_limbs)
-    };
-    debug_assert_ne!(num_words, 0);
-
-    if vm_state.streams.hint_stream.len() < RV32_REGISTER_NUM_LIMBS * num_words as usize {
-        vm_state.exit_code = Err(ExecutionError::HintOutOfBounds { pc: vm_state.pc });
-        return 0;
-    }
-
-    for word_index in 0..num_words {
-        let data: [u8; RV32_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-            vm_state
-                .streams
-                .hint_stream
-                .pop_front()
-                .unwrap()
-                .as_canonical_u32() as u8
-        });
-        vm_state.vm_write(
-            RV32_MEMORY_AS,
-            mem_ptr + (RV32_REGISTER_NUM_LIMBS as u32 * word_index),
-            &data,
-        );
-    }
-
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
-    num_words
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, const IS_HINT_STOREW: bool>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &HintStorePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, const IS_HINT_STOREW: bool>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
-    let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, vm_state);
-    vm_state
-        .ctx
-        .on_height_change(pre_compute.chip_idx as usize, height_delta);
-}
-
-impl Rv32HintStoreStep {
-    #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut HintStorePreCompute,
-    ) -> Result<Rv32HintStoreOpcode> {
-        let &Instruction {
-            opcode,
-            a,
-            b,
-            c,
-            d,
-            e,
-            ..
-        } = inst;
-        if d.as_canonical_u32() != RV32_REGISTER_AS || e.as_canonical_u32() != RV32_MEMORY_AS {
-            return Err(InvalidInstruction(pc));
-        }
-        *data = {
-            HintStorePreCompute {
-                c: c.as_canonical_u32(),
-                a: a.as_canonical_u32() as u8,
-                b: b.as_canonical_u32() as u8,
-            }
-        };
-        Ok(Rv32HintStoreOpcode::from_usize(
-            opcode.local_opcode_idx(self.offset),
-        ))
-    }
-}
-
-pub type Rv32HintStoreChip<F> =
-    NewVmChipWrapper<F, Rv32HintStoreAir, Rv32HintStoreStep, MatrixRecordArena<F>>;
+pub type Rv32HintStoreChip<F> = VmChipWrapper<F, Rv32HintStoreFiller>;

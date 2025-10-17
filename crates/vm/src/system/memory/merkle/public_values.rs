@@ -1,9 +1,11 @@
+use itertools::Itertools;
 use openvm_stark_backend::{p3_field::PrimeField32, p3_util::log2_strict_usize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tracing::instrument;
 
 use crate::{
-    arch::{hasher::Hasher, ADDR_SPACE_OFFSET},
+    arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET},
     system::memory::{
         dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, MemoryImage,
     },
@@ -22,7 +24,7 @@ pub struct UserPublicValuesProof<const CHUNK: usize, F> {
     /// Proof of the path from the root of public values to the memory root in the format of
     /// sequence of sibling node hashes.
     pub proof: Vec<[F; CHUNK]>,
-    /// Raw public values. Its length should be a power of two * CHUNK.
+    /// Raw public values. Its length should be (a power of two) * CHUNK.
     pub public_values: Vec<F>,
     /// Merkle root of public values. The computation of this value follows the same logic of
     /// `MemoryNode`. The merkle tree doesn't pad because the length `public_values` implies the
@@ -46,8 +48,9 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
     /// Computes the proof of the public values from the final memory state.
     /// Assumption:
     /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
-    // PERF[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
-    // this
+    // TODO[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
+    // this. We should make this a function within SystemChipComplex
+    #[instrument(name = "compute_user_public_values_proof", skip_all)]
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
@@ -60,7 +63,10 @@ impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
             hasher,
             final_memory,
         );
-        let public_values = extract_public_values(num_public_values, final_memory);
+        let public_values = extract_public_values(num_public_values, final_memory)
+            .iter()
+            .map(|&x| F::from_canonical_u8(x))
+            .collect_vec();
         let public_values_commit = hasher.merkle_root(&public_values);
         UserPublicValuesProof {
             proof,
@@ -159,18 +165,15 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     proof
 }
 
-pub fn extract_public_values<F: PrimeField32>(
-    num_public_values: usize,
-    final_memory: &MemoryImage,
-) -> Vec<F> {
-    let mut public_values: Vec<F> = {
-        // TODO: make constant for public values cell size
-        assert_eq!(final_memory.cell_size[PUBLIC_VALUES_AS as usize], 1);
+pub fn extract_public_values(num_public_values: usize, final_memory: &MemoryImage) -> Vec<u8> {
+    let mut public_values: Vec<u8> = {
+        assert_eq!(
+            final_memory.config[PUBLIC_VALUES_AS as usize].layout,
+            MemoryCellType::U8
+        );
         final_memory.mem[PUBLIC_VALUES_AS as usize]
             .as_slice()
-            .iter()
-            .map(|&x| F::from_canonical_u8(x))
-            .collect()
+            .to_vec()
     };
 
     assert!(
@@ -190,7 +193,7 @@ mod tests {
 
     use super::UserPublicValuesProof;
     use crate::{
-        arch::{hasher::poseidon2::vm_poseidon2_hasher, SystemConfig},
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, MemoryConfig, SystemConfig},
         system::memory::{
             merkle::{public_values::PUBLIC_VALUES_AS, tree::MerkleTree},
             online::GuestMemory,
@@ -201,13 +204,15 @@ mod tests {
     type F = BabyBear;
     #[test]
     fn test_public_value_happy_path() {
-        let mut vm_config = SystemConfig::default();
+        let mut vm_config = SystemConfig::default().without_continuations();
         vm_config.memory_config.addr_space_height = 4;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
         let num_public_values = 16;
+        let mut addr_spaces_config = MemoryConfig::empty_address_space_configs(4);
+        addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         let mut memory = GuestMemory {
-            memory: AddressMap::new(vec![0, 0, 0, num_public_values]),
+            memory: AddressMap::new(addr_spaces_config),
         };
         unsafe {
             memory.write::<u8, 4>(PUBLIC_VALUES_AS, 12, [0, 0, 0, 1]);

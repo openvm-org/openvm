@@ -20,6 +20,8 @@ impl AlignedBuf {
                 layout,
             };
         }
+        // TODO[jpw]: replace `alloc` with `allocate` once the `Allocator` trait is stabilized.
+        //            (see https://doc.rust-lang.org/alloc/alloc/fn.alloc.html)
         // SAFETY: `len` is nonzero
         let ptr = unsafe { alloc(layout) };
         if ptr.is_null() {
@@ -54,6 +56,9 @@ impl AlignedBuf {
 impl Drop for AlignedBuf {
     fn drop(&mut self) {
         if self.layout.size() != 0 {
+            // SAFETY:
+            // - self.ptr was allocated with self.layout
+            // - Pointer and layout are valid from creation
             unsafe {
                 dealloc(self.ptr, self.layout);
             }

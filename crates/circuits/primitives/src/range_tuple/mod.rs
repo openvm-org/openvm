@@ -16,17 +16,21 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::{Field, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 
 mod bus;
+pub use bus::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 pub mod tests;
-
-pub use bus::*;
 
 #[repr(C)]
 #[derive(Default, Copy, Clone, AlignedBorrow)]
@@ -105,8 +109,7 @@ pub struct RangeTupleCheckerChip<const N: usize> {
     pub count: Vec<Arc<AtomicU32>>,
 }
 
-#[derive(Debug, Clone)]
-pub struct SharedRangeTupleCheckerChip<const N: usize>(Arc<RangeTupleCheckerChip<N>>);
+pub type SharedRangeTupleCheckerChip<const N: usize> = Arc<RangeTupleCheckerChip<N>>;
 
 impl<const N: usize> RangeTupleCheckerChip<N> {
     pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
@@ -154,61 +157,19 @@ impl<const N: usize> RangeTupleCheckerChip<N> {
         let rows = self
             .count
             .iter()
-            .map(|c| F::from_canonical_u32(c.load(std::sync::atomic::Ordering::SeqCst)))
+            .map(|c| F::from_canonical_u32(c.swap(0, std::sync::atomic::Ordering::Relaxed)))
             .collect::<Vec<_>>();
         RowMajorMatrix::new(rows, 1)
     }
 }
 
-impl<const N: usize> SharedRangeTupleCheckerChip<N> {
-    pub fn new(bus: RangeTupleCheckerBus<N>) -> Self {
-        Self(Arc::new(RangeTupleCheckerChip::new(bus)))
-    }
-    pub fn bus(&self) -> &RangeTupleCheckerBus<N> {
-        self.0.bus()
-    }
-
-    pub fn sizes(&self) -> &[u32; N] {
-        self.0.sizes()
-    }
-
-    pub fn add_count(&self, ids: &[u32]) {
-        self.0.add_count(ids);
-    }
-
-    pub fn clear(&self) {
-        self.0.clear();
-    }
-
-    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        self.0.generate_trace()
-    }
-}
-
-impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for RangeTupleCheckerChip<N>
+impl<R, SC: StarkGenericConfig, const N: usize> Chip<R, CpuBackend<SC>> for RangeTupleCheckerChip<N>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(trace)
-    }
-}
-
-impl<SC: StarkGenericConfig, const N: usize> Chip<SC> for SharedRangeTupleCheckerChip<N>
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        self.0.air()
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        self.0.generate_air_proof_input()
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
@@ -224,29 +185,5 @@ impl<const N: usize> ChipUsageGetter for RangeTupleCheckerChip<N> {
     }
     fn trace_width(&self) -> usize {
         NUM_RANGE_TUPLE_COLS
-    }
-}
-
-impl<const N: usize> ChipUsageGetter for SharedRangeTupleCheckerChip<N> {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn constant_trace_height(&self) -> Option<usize> {
-        self.0.constant_trace_height()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
-impl<const N: usize> AsRef<RangeTupleCheckerChip<N>> for SharedRangeTupleCheckerChip<N> {
-    fn as_ref(&self) -> &RangeTupleCheckerChip<N> {
-        &self.0
     }
 }

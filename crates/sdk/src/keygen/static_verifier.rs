@@ -1,7 +1,9 @@
+use openvm_circuit::arch::{SingleSegmentVmProver, VirtualMachineError};
 use openvm_continuations::{
     static_verifier::{StaticVerifierConfig, StaticVerifierPvHandler},
     verifier::root::types::RootVmVerifierInput,
 };
+use openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS;
 use openvm_native_compiler::prelude::*;
 use openvm_native_recursion::{
     halo2::{verifier::Halo2VerifierProvingKey, Halo2Params, Halo2Prover},
@@ -10,11 +12,7 @@ use openvm_native_recursion::{
 };
 use openvm_stark_sdk::openvm_stark_backend::{p3_field::FieldAlgebra, proof::Proof};
 
-use crate::{
-    keygen::RootVerifierProvingKey,
-    prover::{vm::SingleSegmentVmProver, RootVerifierLocalProver},
-    RootSC, F, SC,
-};
+use crate::{keygen::RootVerifierProvingKey, prover::RootVerifierLocalProver, RootSC, F, SC};
 
 impl RootVerifierProvingKey {
     /// Keygen the static verifier for this root verifier.
@@ -43,23 +41,21 @@ impl RootVerifierProvingKey {
         }
     }
 
-    pub fn generate_dummy_root_proof(&self, dummy_internal_proof: Proof<SC>) -> Proof<RootSC> {
-        let prover = RootVerifierLocalProver::new(self.clone());
+    pub fn generate_dummy_root_proof(
+        &self,
+        dummy_internal_proof: Proof<SC>,
+    ) -> Result<Proof<RootSC>, VirtualMachineError> {
+        let mut prover = RootVerifierLocalProver::new(self)?;
         // 2 * DIGEST_SIZE for exe_commit and leaf_commit
-        let num_public_values = prover
-            .root_verifier_pk
-            .vm_pk
-            .vm_config
-            .system
-            .num_public_values
-            - 2 * DIGEST_SIZE;
+        let num_public_values = prover.vm_config().as_ref().num_public_values - 2 * DIGEST_SIZE;
         SingleSegmentVmProver::prove(
-            &prover,
+            &mut prover,
             RootVmVerifierInput {
                 proofs: vec![dummy_internal_proof],
                 public_values: vec![F::ZERO; num_public_values],
             }
             .write(),
+            NATIVE_MAX_TRACE_HEIGHTS,
         )
     }
 }

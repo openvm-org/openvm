@@ -973,6 +973,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
+    let mut max_block_size = 4;
+
     for (mod_idx, item) in items.into_iter().enumerate() {
         let modulus = item.value();
         let modulus_bytes = string_to_bytes(&modulus);
@@ -987,6 +989,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         } else {
             panic!("limbs must be at most 48");
         }
+
+        max_block_size = max_block_size.max(block_size);
 
         let block_size = proc_macro::Literal::usize_unsuffixed(block_size);
         let block_size = syn::Lit::new(block_size.to_string().parse::<_>().unwrap());
@@ -1152,6 +1156,9 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
     }
 
+    let max_block_size = proc_macro::Literal::usize_unsuffixed(max_block_size);
+    let max_block_size = syn::Lit::new(max_block_size.to_string().parse::<_>().unwrap());
+
     let total_limbs_cnt = two_modular_limbs_flattened_list.len();
     let cnt_limbs_list_len = limb_list_borders.len();
     TokenStream::from(quote::quote_spanned! { span.into() =>
@@ -1162,7 +1169,10 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         }
         #[allow(non_snake_case, non_upper_case_globals)]
         pub mod openvm_intrinsics_meta_do_not_type_this_by_yourself {
-            pub const two_modular_limbs_list: [u8; #total_limbs_cnt] = [#(#two_modular_limbs_flattened_list),*];
+            #[repr(C, align(#max_block_size))]
+            pub struct Aligned<T>(pub T);
+
+            pub const two_modular_limbs_list: Aligned<[u8; #total_limbs_cnt]> = Aligned([#(#two_modular_limbs_flattened_list),*]);
             pub const limb_list_borders: [usize; #cnt_limbs_list_len] = [#(#limb_list_borders),*];
         }
     })

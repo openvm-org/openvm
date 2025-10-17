@@ -29,7 +29,7 @@ use util::{tracing_read_or_imm_native, tracing_write_native};
 
 use super::memory::{online::TracingMemory, MemoryAuxColsFactory};
 use crate::{
-    arch::{get_record_from_slice, AdapterTraceFiller, AdapterTraceStep},
+    arch::{get_record_from_slice, AdapterTraceExecutor, AdapterTraceFiller},
     system::memory::offline_checker::{MemoryReadAuxRecord, MemoryWriteAuxRecord},
 };
 
@@ -169,12 +169,20 @@ pub struct NativeAdapterRecord<F, const R: usize, const W: usize> {
 /// R reads(R<=2), W writes(W<=1).
 /// Operands: b for the first read, c for the second read, a for the first write.
 /// If an operand is not used, its address space and pointer should be all 0.
-#[derive(Debug, derive_new::new)]
-pub struct NativeAdapterStep<F, const R: usize, const W: usize> {
+#[derive(Clone, Debug)]
+pub struct NativeAdapterExecutor<F, const R: usize, const W: usize> {
     _phantom: PhantomData<F>,
 }
 
-impl<F, CTX, const R: usize, const W: usize> AdapterTraceStep<F, CTX> for NativeAdapterStep<F, R, W>
+impl<F, const R: usize, const W: usize> Default for NativeAdapterExecutor<F, R, W> {
+    fn default() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, const R: usize, const W: usize> AdapterTraceExecutor<F> for NativeAdapterExecutor<F, R, W>
 where
     F: PrimeField32,
 {
@@ -184,7 +192,7 @@ where
     type RecordMut<'a> = &'a mut NativeAdapterRecord<F, R, W>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -192,7 +200,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -210,7 +218,7 @@ where
                 let addr_space = if i == 0 { e } else { f };
                 reads[i][0] = tracing_read_or_imm_native(
                     memory,
-                    addr_space.as_canonical_u32(),
+                    addr_space,
                     *ptr_or_imm,
                     &mut read_aux.prev_timestamp,
                 );
@@ -221,7 +229,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -243,11 +251,16 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX, const R: usize, const W: usize> AdapterTraceFiller<F, CTX>
-    for NativeAdapterStep<F, R, W>
+impl<F: PrimeField32, const R: usize, const W: usize> AdapterTraceFiller<F>
+    for NativeAdapterExecutor<F, R, W>
 {
+    const WIDTH: usize = size_of::<NativeAdapterCols<u8, R, W>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &NativeAdapterRecord<F, R, W> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeAdapterCols<_, R, W> = adapter_row.borrow_mut();

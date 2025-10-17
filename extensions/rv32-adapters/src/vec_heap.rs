@@ -7,7 +7,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VecHeapAdapterInterface, VmAdapterAir,
     },
     system::memory::{
@@ -290,8 +290,8 @@ pub struct Rv32VecHeapAdapterRecord<
     pub writes_aux: [MemoryWriteBytesAuxRecord<WRITE_SIZE>; BLOCKS_PER_WRITE],
 }
 
-#[derive(derive_new::new)]
-pub struct Rv32VecHeapAdapterStep<
+#[derive(derive_new::new, Clone, Copy)]
+pub struct Rv32VecHeapAdapterExecutor<
     const NUM_READS: usize,
     const BLOCKS_PER_READ: usize,
     const BLOCKS_PER_WRITE: usize,
@@ -299,20 +299,35 @@ pub struct Rv32VecHeapAdapterStep<
     const WRITE_SIZE: usize,
 > {
     pointer_max_bits: usize,
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32VecHeapAdapterFiller<
+    const NUM_READS: usize,
+    const BLOCKS_PER_READ: usize,
+    const BLOCKS_PER_WRITE: usize,
+    const READ_SIZE: usize,
+    const WRITE_SIZE: usize,
+> {
+    pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceStep<F, CTX>
-    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    > AdapterTraceExecutor<F>
+    for Rv32VecHeapAdapterExecutor<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
     const WIDTH: usize = Rv32VecHeapAdapterCols::<
         F,
@@ -333,14 +348,14 @@ impl<
     >;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32VecHeapAdapterRecord<
             NUM_READS,
@@ -376,7 +391,7 @@ impl<
 
         // Read memory values
         from_fn(|i| {
-            assert!(
+            debug_assert!(
                 (record.rs_vals[i] + (READ_SIZE * BLOCKS_PER_READ - 1) as u32)
                     < (1 << self.pointer_max_bits) as u32
             );
@@ -393,7 +408,7 @@ impl<
 
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut &mut Rv32VecHeapAdapterRecord<
@@ -406,7 +421,7 @@ impl<
     ) {
         debug_assert_eq!(instruction.e.as_canonical_u32(), RV32_MEMORY_AS);
 
-        assert!(
+        debug_assert!(
             record.rd_val as usize + WRITE_SIZE * BLOCKS_PER_WRITE - 1
                 < (1 << self.pointer_max_bits)
         );
@@ -427,16 +442,33 @@ impl<
 
 impl<
         F: PrimeField32,
-        CTX,
         const NUM_READS: usize,
         const BLOCKS_PER_READ: usize,
         const BLOCKS_PER_WRITE: usize,
         const READ_SIZE: usize,
         const WRITE_SIZE: usize,
-    > AdapterTraceFiller<F, CTX>
-    for Rv32VecHeapAdapterStep<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE, READ_SIZE, WRITE_SIZE>
+    > AdapterTraceFiller<F>
+    for Rv32VecHeapAdapterFiller<
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >
 {
+    const WIDTH: usize = Rv32VecHeapAdapterCols::<
+        F,
+        NUM_READS,
+        BLOCKS_PER_READ,
+        BLOCKS_PER_WRITE,
+        READ_SIZE,
+        WRITE_SIZE,
+    >::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &Rv32VecHeapAdapterRecord<
             NUM_READS,
             BLOCKS_PER_READ,

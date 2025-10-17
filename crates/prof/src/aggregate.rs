@@ -117,6 +117,23 @@ impl GroupedMetrics {
         })
     }
 
+    /// Validates that E1, metered, and preflight instruction counts all match each other
+    fn validate_instruction_counts(group_summaries: &HashMap<MetricName, Stats>) {
+        let e1_insns = group_summaries.get(EXECUTE_E1_INSNS_LABEL);
+        let metered_insns = group_summaries.get(EXECUTE_METERED_INSNS_LABEL);
+        let preflight_insns = group_summaries.get(EXECUTE_PREFLIGHT_INSNS_LABEL);
+
+        if let (Some(e1_insns), Some(preflight_insns)) = (e1_insns, preflight_insns) {
+            assert_eq!(e1_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+        if let (Some(e1_insns), Some(metered_insns)) = (e1_insns, metered_insns) {
+            assert_eq!(e1_insns.sum.val as u64, metered_insns.sum.val as u64);
+        }
+        if let (Some(metered_insns), Some(preflight_insns)) = (metered_insns, preflight_insns) {
+            assert_eq!(metered_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        }
+    }
+
     pub fn aggregate(&self) -> AggregateMetrics {
         let by_group: HashMap<String, _> = self
             .by_group
@@ -133,6 +150,11 @@ impl GroupedMetrics {
                         (metric_name.clone(), summary)
                     })
                     .collect();
+
+                if !group_name.contains("keygen") {
+                    Self::validate_instruction_counts(&group_summaries);
+                }
+
                 (group_name.clone(), group_summaries)
             })
             .collect();
@@ -355,7 +377,7 @@ impl AggregateMetrics {
                             metric_name, summary.avg, "-", "-", "-",
                         )?;
                     } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
-                        || metric_name == EXECUTE_E3_INSN_MI_S_LABEL
+                        || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
                         || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
                     {
                         // skip sum because it is misleading
@@ -462,14 +484,17 @@ impl BenchmarkOutput {
 }
 
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
-pub const CELLS_USED_LABEL: &str = "main_cells_used";
-pub const CYCLES_LABEL: &str = "total_cycles";
+pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
+pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
+pub const EXECUTE_E1_INSNS_LABEL: &str = "execute_e1_insns";
+pub const EXECUTE_METERED_INSNS_LABEL: &str = "execute_metered_insns";
+pub const EXECUTE_PREFLIGHT_INSNS_LABEL: &str = "execute_preflight_insns";
 pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
 pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
-pub const EXECUTE_E3_TIME_LABEL: &str = "execute_e3_time_ms";
-pub const EXECUTE_E3_INSN_MI_S_LABEL: &str = "execute_e3_insn_mi/s";
+pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
+pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
 pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
@@ -478,14 +503,15 @@ pub const PROVE_EXCL_TRACE_TIME_LABEL: &str = "stark_prove_excluding_trace_time_
 
 pub const VM_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
-    CELLS_USED_LABEL,
-    CYCLES_LABEL,
+    MAIN_CELLS_USED_LABEL,
+    TOTAL_CELLS_USED_LABEL,
     EXECUTE_E1_TIME_LABEL,
     EXECUTE_E1_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
-    EXECUTE_E3_TIME_LABEL,
-    EXECUTE_E3_INSN_MI_S_LABEL,
+    EXECUTE_PREFLIGHT_INSNS_LABEL,
+    EXECUTE_PREFLIGHT_TIME_LABEL,
+    EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,

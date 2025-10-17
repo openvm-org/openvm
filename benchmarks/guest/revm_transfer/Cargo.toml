@@ -1,13 +1,12 @@
-[workspace]
 [package]
 name = "openvm-revm-transfer"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
+openvm = { workspace = true, features = ["std"] }
+openvm-keccak256.workspace = true
 revm = { version = "18.0.0", default-features = false }
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
-openvm-keccak256-guest = { path = "../../../extensions/keccak256/guest", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 alloy-primitives = { version = "0.8.10", default-features = false, features = [
     "native-keccak",
@@ -20,8 +19,3 @@ derive_more = { version = "1.0.0", default-features = false, features = [
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

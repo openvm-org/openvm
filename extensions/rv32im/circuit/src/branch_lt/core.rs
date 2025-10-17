@@ -1,14 +1,7 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        ImmInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
@@ -17,9 +10,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::BranchLessThanOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -201,26 +192,33 @@ pub struct BranchLessThanCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usi
     pub local_opcode: u8,
 }
 
-#[derive(derive_new::new)]
-pub struct BranchLessThanStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[derive(Clone, Copy, derive_new::new)]
+pub struct BranchLessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+
+#[derive(Clone, derive_new::new)]
+pub struct BranchLessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub offset: usize,
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
+    for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static
-        + for<'a> AdapterTraceStep<F, CTX, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    A: 'static + AdapterTraceExecutor<F, ReadData: Into<[[u8; NUM_LIMBS]; 2]>, WriteData = ()>,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (
+            A::RecordMut<'buf>,
+            &'buf mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
+        ),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (
-        A::RecordMut<'a>,
-        &'a mut BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS>,
-    );
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!(
             "{:?}",
@@ -228,18 +226,14 @@ where
         )
     }
 
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction { opcode, c: imm, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -263,15 +257,19 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for BranchLessThanFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // BranchLessThanCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
 
+        // SAFETY: core_row contains a valid BranchLessThanCoreRecord written by the executor
+        // during trace generation
         let record: &BranchLessThanCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
@@ -354,182 +352,6 @@ where
         core_row.cmp_result = F::from_bool(cmp_result);
         core_row.b = record.b.map(F::from_canonical_u8);
         core_row.a = record.a.map(F::from_canonical_u8);
-    }
-}
-
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct BranchLePreCompute {
-    imm: isize,
-    a: u8,
-    b: u8,
-}
-
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE1<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<BranchLePreCompute>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let data: &mut BranchLePreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            BranchLessThanOpcode::BLT => execute_e1_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => execute_e1_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => execute_e1_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => execute_e1_impl::<_, _, BgeuOp>,
-        };
-        Ok(fn_ptr)
-    }
-}
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> StepExecutorE2<F>
-    for BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn e2_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<BranchLePreCompute>>()
-    }
-
-    fn pre_compute_e2<Ctx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
-    where
-        Ctx: E2ExecutionCtx,
-    {
-        let data: &mut E2PreCompute<BranchLePreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            BranchLessThanOpcode::BLT => execute_e2_impl::<_, _, BltOp>,
-            BranchLessThanOpcode::BLTU => execute_e2_impl::<_, _, BltuOp>,
-            BranchLessThanOpcode::BGE => execute_e2_impl::<_, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => execute_e2_impl::<_, _, BgeuOp>,
-        };
-        Ok(fn_ptr)
-    }
-}
-
-#[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
-    pre_compute: &BranchLePreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32);
-    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let jmp = <OP as BranchLessThanOp>::compute(rs1, rs2);
-    if jmp {
-        vm_state.pc = (vm_state.pc as isize + pre_compute.imm) as u32;
-    } else {
-        vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    };
-    vm_state.instret += 1;
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: BranchLessThanOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &BranchLePreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: BranchLessThanOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &E2PreCompute<BranchLePreCompute> = pre_compute.borrow();
-    vm_state
-        .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
-}
-
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
-    BranchLessThanStep<A, NUM_LIMBS, LIMB_BITS>
-{
-    #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut BranchLePreCompute,
-    ) -> Result<BranchLessThanOpcode> {
-        let &Instruction {
-            opcode, a, b, c, d, ..
-        } = inst;
-        let local_opcode = BranchLessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let c = c.as_canonical_u32();
-        let imm = if F::ORDER_U32 - c < c {
-            -((F::ORDER_U32 - c) as isize)
-        } else {
-            c as isize
-        };
-        if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(InvalidInstruction(pc));
-        }
-        *data = BranchLePreCompute {
-            imm,
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-        };
-        Ok(local_opcode)
-    }
-}
-
-trait BranchLessThanOp {
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool;
-}
-struct BltOp;
-struct BltuOp;
-struct BgeOp;
-struct BgeuOp;
-
-impl BranchLessThanOp for BltOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = i32::from_le_bytes(rs1);
-        let rs2 = i32::from_le_bytes(rs2);
-        rs1 < rs2
-    }
-}
-impl BranchLessThanOp for BltuOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = u32::from_le_bytes(rs1);
-        let rs2 = u32::from_le_bytes(rs2);
-        rs1 < rs2
-    }
-}
-impl BranchLessThanOp for BgeOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = i32::from_le_bytes(rs1);
-        let rs2 = i32::from_le_bytes(rs2);
-        rs1 >= rs2
-    }
-}
-impl BranchLessThanOp for BgeuOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> bool {
-        let rs1 = u32::from_le_bytes(rs1);
-        let rs2 = u32::from_le_bytes(rs2);
-        rs1 >= rs2
     }
 }
 

@@ -3,7 +3,7 @@ use openvm_instructions::{riscv::RV32_IMM_AS, NATIVE_AS};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
-    arch::{execution_mode::E1ExecutionCtx, VmStateMut},
+    arch::{execution_mode::ExecutionCtxTrait, VmStateMut},
     system::memory::{offline_checker::MemoryWriteAuxCols, online::GuestMemory},
 };
 
@@ -49,7 +49,7 @@ pub fn memory_read_native_from_state<Ctx, F, const N: usize>(
 ) -> [F; N]
 where
     F: PrimeField32,
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 
@@ -64,7 +64,7 @@ pub fn memory_read_or_imm_native_from_state<Ctx, F>(
 ) -> F
 where
     F: PrimeField32,
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     debug_assert!(addr_space == RV32_IMM_AS || addr_space == NATIVE_AS);
 
@@ -83,7 +83,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
     data: [F; N],
 ) where
     F: PrimeField32,
-    Ctx: E1ExecutionCtx,
+    Ctx: ExecutionCtxTrait,
 {
     state.ctx.on_memory_operation(NATIVE_AS, ptr, N as u32);
 
@@ -95,7 +95,7 @@ pub fn memory_write_native_from_state<Ctx, F, const N: usize>(
 /// access.
 #[inline(always)]
 pub fn timed_read_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
 ) -> (u32, [F; BLOCK_SIZE])
 where
@@ -108,7 +108,7 @@ where
 
 #[inline(always)]
 pub fn timed_write_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
 ) -> (u32, [F; BLOCK_SIZE])
@@ -121,9 +121,10 @@ where
 }
 
 /// Reads register value at `ptr` from memory and records the previous timestamp.
+/// Reads are only done from address space [NATIVE_AS].
 #[inline(always)]
 pub fn tracing_read_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     prev_timestamp: &mut u32,
 ) -> [F; BLOCK_SIZE]
@@ -136,9 +137,10 @@ where
 }
 
 /// Writes `ptr, vals` into memory and records the previous timestamp and data.
+/// Writes are only done to address space [NATIVE_AS].
 #[inline(always)]
 pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
     prev_timestamp: &mut u32,
@@ -154,7 +156,7 @@ pub fn tracing_write_native<F, const BLOCK_SIZE: usize>(
 /// Writes `ptr, vals` into memory and records the previous timestamp and data.
 #[inline(always)]
 pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
-    memory: &mut TracingMemory<F>,
+    memory: &mut TracingMemory,
     ptr: u32,
     vals: [F; BLOCK_SIZE],
     cols: &mut MemoryWriteAuxCols<F, BLOCK_SIZE>,
@@ -170,8 +172,8 @@ pub fn tracing_write_native_inplace<F, const BLOCK_SIZE: usize>(
 /// If the read is an immediate, the previous timestamp will be set to `u32::MAX`.
 #[inline(always)]
 pub fn tracing_read_or_imm_native<F>(
-    memory: &mut TracingMemory<F>,
-    addr_space: u32,
+    memory: &mut TracingMemory,
+    addr_space: F,
     ptr_or_imm: F,
     prev_timestamp: &mut u32,
 ) -> F
@@ -179,12 +181,12 @@ where
     F: PrimeField32,
 {
     debug_assert!(
-        addr_space == RV32_IMM_AS || addr_space == NATIVE_AS,
+        addr_space == F::ZERO || addr_space == F::from_canonical_u32(NATIVE_AS),
         "addr_space={} is not valid",
         addr_space
     );
 
-    if addr_space == RV32_IMM_AS {
+    if addr_space == F::ZERO {
         *prev_timestamp = u32::MAX;
         memory.increment_timestamp();
         ptr_or_imm

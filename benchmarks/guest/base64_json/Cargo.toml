@@ -1,19 +1,13 @@
-[workspace]
 [package]
-version = "0.1.0"
 name = "openvm-json-program"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
+openvm = { workspace = true, features = ["std"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 serde = { version = "1.0.214", default-features = false, features = ["derive"] }
 serde-json-core = "0.6.0"
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

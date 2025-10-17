@@ -6,6 +6,7 @@ use openvm_continuations::verifier::{
 use openvm_native_circuit::NativeConfig;
 use openvm_native_compiler::{conversion::CompilerOptions, ir::DIGEST_SIZE};
 use openvm_stark_sdk::config::FriParameters;
+use openvm_transpiler::transpiler::Transpiler;
 use serde::{Deserialize, Serialize};
 
 mod global;
@@ -16,10 +17,19 @@ pub const DEFAULT_LEAF_LOG_BLOWUP: usize = 1;
 pub const DEFAULT_INTERNAL_LOG_BLOWUP: usize = 2;
 pub const DEFAULT_ROOT_LOG_BLOWUP: usize = 3;
 
+#[cfg(not(feature = "legacy-v1-3-evm-verifier"))]
+pub const DEFAULT_HALO2_VERIFIER_K: usize = 23;
+#[cfg(feature = "legacy-v1-3-evm-verifier")]
+pub const DEFAULT_HALO2_VERIFIER_K: usize = 24;
+
 // Aggregation Tree Defaults
-const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
-const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
-const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
+pub const DEFAULT_NUM_CHILDREN_LEAF: usize = 1;
+pub const DEFAULT_NUM_CHILDREN_INTERNAL: usize = 3;
+pub const DEFAULT_MAX_INTERNAL_WRAPPER_LAYERS: usize = 4;
+
+pub trait TranspilerConfig<F> {
+    fn transpiler(&self) -> Transpiler<F>;
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AppConfig<VC> {
@@ -33,16 +43,8 @@ pub struct AppConfig<VC> {
     pub compiler_options: CompilerOptions,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AggConfig {
-    /// STARK aggregation config
-    pub agg_stark_config: AggStarkConfig,
-    /// STARK-to-SNARK and SNARK-to-SNARK aggregation config
-    pub halo2_config: Halo2Config,
-}
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct AggStarkConfig {
+pub struct AggregationConfig {
     pub max_num_user_public_values: usize,
     pub leaf_fri_params: FriParameters,
     pub internal_fri_params: FriParameters,
@@ -55,7 +57,7 @@ pub struct AggStarkConfig {
     pub root_max_constraint_degree: usize,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Halo2Config {
     /// Log degree for the outer recursion verifier circuit.
     pub verifier_k: usize,
@@ -121,7 +123,7 @@ impl<VC> AppConfig<VC> {
     }
 }
 
-impl Default for AggStarkConfig {
+impl Default for AggregationConfig {
     fn default() -> Self {
         Self {
             max_num_user_public_values: DEFAULT_MAX_NUM_PUBLIC_VALUES,
@@ -141,20 +143,17 @@ impl Default for AggStarkConfig {
     }
 }
 
-impl Default for AggConfig {
+impl Default for Halo2Config {
     fn default() -> Self {
         Self {
-            agg_stark_config: AggStarkConfig::default(),
-            halo2_config: Halo2Config {
-                verifier_k: 24,
-                wrapper_k: None,
-                profiling: false,
-            },
+            verifier_k: DEFAULT_HALO2_VERIFIER_K,
+            wrapper_k: None,
+            profiling: false,
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppFriParams {
     pub fri_params: FriParameters,
 }
@@ -175,7 +174,7 @@ impl From<FriParameters> for AppFriParams {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LeafFriParams {
     pub fri_params: FriParameters,
 }
@@ -196,9 +195,9 @@ impl From<FriParameters> for LeafFriParams {
     }
 }
 
-const SBOX_SIZE: usize = 7;
+pub const SBOX_SIZE: usize = 7;
 
-impl AggStarkConfig {
+impl AggregationConfig {
     pub fn leaf_vm_config(&self) -> NativeConfig {
         let mut config = NativeConfig::aggregation(
             VmVerifierPvs::<u8>::width(),

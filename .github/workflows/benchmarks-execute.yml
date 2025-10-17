@@ -1,9 +1,9 @@
 name: "Execution benchmarks"
 
 on:
+  workflow_call:
   push:
-    # TODO(ayush): remove after feat/new-execution is merged
-    branches: ["main", "feat/new-execution"]
+    branches: ["main"]
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -20,11 +20,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-execute-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
+  S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
+  JEMALLOC_SYS_WITH_MALLOC_CONF: "retain:true,background_thread:true,metadata_thp:always,thp:always,dirty_decay_ms:10000,muzzy_decay_ms:10000,abort_conf:true"
+  TOOLCHAIN: "+nightly-2025-08-19"
 
 jobs:
   codspeed-walltime-benchmarks:
@@ -39,12 +42,22 @@ jobs:
       CODSPEED_RUNNER_MODE: walltime
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp "${{ env.S3_FIXTURES_PATH }}/*" benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -53,35 +66,40 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo codspeed build --profile maxperf
+        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features tco
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo codspeed run
+          run: cargo $TOOLCHAIN codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
-        env:
-          CODSPEED_RUNNER_MODE: walltime
 
   codspeed-instrumentation-benchmarks:
     name: Run codspeed instrumentation benchmarks
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - family=m5a.xlarge
-      - image=ubuntu24-full-x64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=m5a.xlarge/image=ubuntu24-full-x64/extras=s3-cache
     if: github.event_name != 'pull_request'
 
     env:
       CODSPEED_RUNNER_MODE: instrumentation
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Pull fixtures from S3
+        run: |
+          mkdir -p benchmarks/fixtures
+          s5cmd cp "${{ env.S3_FIXTURES_PATH }}/*" benchmarks/fixtures/ || echo "No fixtures found in S3"
 
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
@@ -90,12 +108,10 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo codspeed build
+        run: cargo $TOOLCHAIN codspeed build --features tco
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
           working-directory: benchmarks/execute
-          run: cargo codspeed run
+          run: cargo $TOOLCHAIN codspeed run
           token: ${{ secrets.CODSPEED_TOKEN }}
-        env:
-          CODSPEED_RUNNER_MODE: instrumentation

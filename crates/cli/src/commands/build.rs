@@ -10,9 +10,11 @@ use itertools::izip;
 use openvm_build::{
     build_generic, get_package, get_workspace_packages, get_workspace_root, GuestOptions,
 };
-use openvm_circuit::arch::{InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME};
-use openvm_sdk::{fs::write_exe_to_file, Sdk};
-use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
+use openvm_circuit::arch::{
+    instructions::exe::VmExe, InitFileGenerator, OPENVM_DEFAULT_INIT_FILE_NAME,
+};
+use openvm_sdk::{config::TranspilerConfig, fs::write_object_to_file};
+use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE, FromElf};
 
 use crate::util::{
     get_manifest_path_and_dir, get_target_dir, get_target_output_dir, read_config_toml_or_default,
@@ -432,17 +434,17 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
         let transpiler = app_config.app_vm_config.transpiler();
         let data = read(elf_path.clone())?;
         let elf = Elf::decode(&data, MEM_SIZE as u32)?;
-        let exe = Sdk::new().transpile(elf, transpiler)?;
+        let exe = VmExe::from_elf(elf, transpiler)?;
 
         let target_name = if target.is_example() {
-            &format!("examples/{}", target.name)
+            PathBuf::from("examples").join(&target.name)
         } else {
-            &target.name
+            PathBuf::from(&target.name)
         };
-        let file_name = format!("{}.vmexe", target_name);
+        let file_name = target_name.with_extension("vmexe");
         let file_path = target_output_dir.join(&file_name);
 
-        write_exe_to_file(exe, &file_path)?;
+        write_object_to_file(&file_path, exe)?;
         if let Some(output_dir) = &build_args.output_dir {
             create_dir_all(output_dir)?;
             copy(file_path, output_dir.join(file_name))?;

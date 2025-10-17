@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
@@ -134,11 +134,14 @@ pub struct ConvertAdapterRecord<F, const READ_SIZE: usize, const WRITE_SIZE: usi
     pub write_aux: MemoryWriteBytesAuxRecord<WRITE_SIZE>,
 }
 
-#[derive(derive_new::new)]
-pub struct ConvertAdapterStep<const READ_SIZE: usize, const WRITE_SIZE: usize>;
+#[derive(derive_new::new, Clone, Copy)]
+pub struct ConvertAdapterExecutor<const READ_SIZE: usize, const WRITE_SIZE: usize>;
 
-impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceStep<F, CTX>
-    for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+#[derive(derive_new::new)]
+pub struct ConvertAdapterFiller<const READ_SIZE: usize, const WRITE_SIZE: usize>;
+
+impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceExecutor<F>
+    for ConvertAdapterExecutor<READ_SIZE, WRITE_SIZE>
 {
     const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
     type ReadData = [F; READ_SIZE];
@@ -146,7 +149,7 @@ impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> Adap
     type RecordMut<'a> = &'a mut ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -154,7 +157,7 @@ impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> Adap
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -173,7 +176,7 @@ impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> Adap
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -194,11 +197,16 @@ impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize> Adap
     }
 }
 
-impl<F: PrimeField32, CTX, const READ_SIZE: usize, const WRITE_SIZE: usize>
-    AdapterTraceFiller<F, CTX> for ConvertAdapterStep<READ_SIZE, WRITE_SIZE>
+impl<F: PrimeField32, const READ_SIZE: usize, const WRITE_SIZE: usize> AdapterTraceFiller<F>
+    for ConvertAdapterFiller<READ_SIZE, WRITE_SIZE>
 {
+    const WIDTH: usize = size_of::<ConvertAdapterCols<u8, READ_SIZE, WRITE_SIZE>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut row_slice: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &ConvertAdapterRecord<F, READ_SIZE, WRITE_SIZE> =
             unsafe { get_record_from_slice(&mut row_slice, ()) };
         let adapter_row: &mut ConvertAdapterCols<F, READ_SIZE, WRITE_SIZE> = row_slice.borrow_mut();

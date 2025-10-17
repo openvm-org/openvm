@@ -1,15 +1,24 @@
-use openvm_circuit::arch::{MatrixRecordArena, NewVmChipWrapper, VmAirWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
-use crate::adapters::{NativeVectorizedAdapterAir, NativeVectorizedAdapterStep};
+use crate::adapters::{
+    NativeVectorizedAdapterAir, NativeVectorizedAdapterExecutor, NativeVectorizedAdapterFiller,
+};
 
 mod core;
+mod execution;
 pub use core::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
 
 pub type FieldExtensionAir =
     VmAirWrapper<NativeVectorizedAdapterAir<EXT_DEG>, FieldExtensionCoreAir>;
-pub type FieldExtensionStep = FieldExtensionCoreStep<NativeVectorizedAdapterStep<EXT_DEG>>;
+pub type FieldExtensionExecutor =
+    FieldExtensionCoreExecutor<NativeVectorizedAdapterExecutor<EXT_DEG>>;
 pub type FieldExtensionChip<F> =
-    NewVmChipWrapper<F, FieldExtensionAir, FieldExtensionStep, MatrixRecordArena<F>>;
+    VmChipWrapper<F, FieldExtensionCoreFiller<NativeVectorizedAdapterFiller<EXT_DEG>>>;

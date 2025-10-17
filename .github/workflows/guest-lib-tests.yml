@@ -1,6 +1,7 @@
 name: Guest Library Tests
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -13,14 +14,16 @@ on:
       - "guest-libs/**"
       - "Cargo.toml"
       - ".github/workflows/guest-lib-tests.yml"
+      - "crates/sdk/guest/fib/**"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
 
 jobs:
   integration-tests:
@@ -35,19 +38,17 @@ jobs:
           - { name: "ruint", path: "ruint" }
           - { name: "pairing", path: "pairing" }
           - { name: "verify_stark", path: "verify_stark" }
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - tag=crate-${{ matrix.crate.name }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -73,9 +74,9 @@ jobs:
       - name: Run ${{ matrix.crate.name }} guest library tests
         working-directory: guest-libs/${{ matrix.crate.path }}
         run: |
-          rustup component add rust-src --toolchain nightly-2025-02-14
-          FEATURE_ARGS=""
+          rustup component add rust-src --toolchain nightly-2025-08-02
+          PAIRING_FEATURE_ARGS=""
           if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            FEATURE_ARGS="--features=bn254,bls12_381"
+            PAIRING_FEATURE_ARGS="--features=bn254,bls12_381"
           fi
-          cargo nextest run --cargo-profile=fast $FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast $PAIRING_FEATURE_ARGS --no-tests=pass --test-threads=1

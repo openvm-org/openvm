@@ -1,12 +1,12 @@
+use getset::WithSetters;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
 
-/// Check segment every 100 instructions.
-const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 100;
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-const DEFAULT_MAX_TRACE_HEIGHT: u32 = (1 << 23) - 100;
-const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
+pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -16,10 +16,13 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, WithSetters)]
 pub struct SegmentationLimits {
+    #[getset(set_with = "pub")]
     pub max_trace_height: u32,
+    #[getset(set_with = "pub")]
     pub max_cells: usize,
+    #[getset(set_with = "pub")]
     pub max_interactions: usize,
 }
 
@@ -33,27 +36,65 @@ impl Default for SegmentationLimits {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
-    instret_last_segment_check: u64,
     pub(crate) air_names: Vec<String>,
-    widths: Vec<usize>,
+    pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
-    segment_check_insns: u64,
-    segmentation_limits: SegmentationLimits,
+    pub(crate) segmentation_limits: SegmentationLimits,
+    pub instret_last_segment_check: u64,
+    #[getset(set_with = "pub")]
+    pub segment_check_insns: u64,
+    /// Checkpoint of trace heights at last known state where all thresholds satisfied
+    pub(crate) checkpoint_trace_heights: Vec<u32>,
+    /// Instruction count at the checkpoint
+    checkpoint_instret: u64,
 }
 
 impl SegmentationCtx {
-    pub fn new(air_names: Vec<String>, widths: Vec<usize>, interactions: Vec<usize>) -> Self {
+    pub fn new(
+        air_names: Vec<String>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
+        segmentation_limits: SegmentationLimits,
+    ) -> Self {
+        assert_eq!(air_names.len(), widths.len());
+        assert_eq!(air_names.len(), interactions.len());
+
+        let num_airs = air_names.len();
         Self {
             segments: Vec::new(),
             air_names,
             widths,
             interactions,
+            segmentation_limits,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            segmentation_limits: SegmentationLimits::default(),
             instret_last_segment_check: 0,
+            checkpoint_trace_heights: vec![0; num_airs],
+            checkpoint_instret: 0,
+        }
+    }
+
+    pub fn new_with_default_segmentation_limits(
+        air_names: Vec<String>,
+        widths: Vec<usize>,
+        interactions: Vec<usize>,
+    ) -> Self {
+        assert_eq!(air_names.len(), widths.len());
+        assert_eq!(air_names.len(), interactions.len());
+
+        let num_airs = air_names.len();
+        Self {
+            segments: Vec::new(),
+            air_names,
+            widths,
+            interactions,
+            segmentation_limits: SegmentationLimits::default(),
+            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
+            instret_last_segment_check: 0,
+            checkpoint_trace_heights: vec![0; num_airs],
+            checkpoint_instret: 0,
         }
     }
 
@@ -69,65 +110,95 @@ impl SegmentationCtx {
         self.segmentation_limits.max_interactions = max_interactions;
     }
 
-    pub fn set_segment_check_insns(&mut self, segment_check_insns: u64) {
-        self.segment_check_insns = segment_check_insns;
+    /// Calculate the maximum trace height and corresponding air name
+    #[inline(always)]
+    fn calculate_max_trace_height_with_name(&self, trace_heights: &[u32]) -> (u32, &str) {
+        trace_heights
+            .iter()
+            .enumerate()
+            .map(|(i, &height)| (height.next_power_of_two(), i))
+            .max_by_key(|(height, _)| *height)
+            .map(|(height, idx)| (height, self.air_names[idx].as_str()))
+            .unwrap_or((0, "unknown"))
     }
 
     /// Calculate the total cells used based on trace heights and widths
+    #[inline(always)]
     fn calculate_total_cells(&self, trace_heights: &[u32]) -> usize {
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+
         trace_heights
             .iter()
-            .zip(&self.widths)
-            .map(|(&height, &width)| height as usize * width)
+            .zip(self.widths.iter())
+            .map(|(&height, &width)| height.next_power_of_two() as usize * width)
             .sum()
     }
 
-    /// Calculate the total interactions based on trace heights and interaction counts
+    /// Calculate the total interactions based on trace heights
+    /// All padding rows contribute a single message to the interactions (+1) since
+    /// we assume chips don't send/receive with nonzero multiplicity on padding rows.
+    #[inline(always)]
     fn calculate_total_interactions(&self, trace_heights: &[u32]) -> usize {
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
+
         trace_heights
             .iter()
-            .zip(&self.interactions)
-            // We add 1 for the zero messages from the padding rows
+            .zip(self.interactions.iter())
             .map(|(&height, &interactions)| (height + 1) as usize * interactions)
             .sum()
     }
 
+    #[inline(always)]
     fn should_segment(
         &self,
         instret: u64,
         trace_heights: &[u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
+        debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
+        debug_assert_eq!(trace_heights.len(), self.air_names.len());
+        debug_assert_eq!(trace_heights.len(), self.widths.len());
+        debug_assert_eq!(trace_heights.len(), self.interactions.len());
+
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
         let num_insns = instret - instret_start;
+
         // Segment should contain at least one cycle
         if num_insns == 0 {
             return false;
         }
-        for (i, &height) in trace_heights.iter().enumerate() {
-            // Only segment if the height is not constant and exceeds the maximum height
-            if !is_trace_height_constant[i] && height > self.segmentation_limits.max_trace_height {
+
+        let mut total_cells = 0;
+        for (i, ((padded_height, width), is_constant)) in trace_heights
+            .iter()
+            .map(|&height| height.next_power_of_two())
+            .zip(self.widths.iter())
+            .zip(is_trace_height_constant.iter())
+            .enumerate()
+        {
+            // Only segment if the height is not constant and exceeds the maximum height after
+            // padding
+            if !is_constant && padded_height > self.segmentation_limits.max_trace_height {
+                let air_name = unsafe { self.air_names.get_unchecked(i) };
                 tracing::info!(
-                    "Segment {:2} | instret {:9} | chip {} ({}) height ({:8}) > max ({:8})",
-                    self.segments.len(),
+                    "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     i,
-                    self.air_names[i],
-                    height,
+                    air_name,
+                    padded_height,
                     self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
+            total_cells += padded_height as usize * width;
         }
 
-        let total_cells = self.calculate_total_cells(trace_heights);
         if total_cells > self.segmentation_limits.max_cells {
             tracing::info!(
-                "Segment {:2} | instret {:9} | total cells ({:10}) > max ({:10})",
-                self.segments.len(),
+                "instret {:10} | total cells ({:10}) > max ({:10})",
                 instret,
                 total_cells,
                 self.segmentation_limits.max_cells
@@ -138,8 +209,7 @@ impl SegmentationCtx {
         let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > self.segmentation_limits.max_interactions {
             tracing::info!(
-                "Segment {:2} | instret {:9} | total interactions ({:11}) > max ({:11})",
-                self.segments.len(),
+                "instret {:10} | total interactions ({:10}) > max ({:10})",
                 instret,
                 total_interactions,
                 self.segmentation_limits.max_interactions
@@ -150,55 +220,138 @@ impl SegmentationCtx {
         false
     }
 
+    #[inline(always)]
     pub fn check_and_segment(
         &mut self,
         instret: u64,
-        trace_heights: &[u32],
+        trace_heights: &mut [u32],
         is_trace_height_constant: &[bool],
     ) -> bool {
-        // Avoid checking segment too often.
-        if instret < self.instret_last_segment_check + self.segment_check_insns {
-            return false;
+        let should_seg = self.should_segment(instret, trace_heights, is_trace_height_constant);
+
+        if should_seg {
+            self.create_segment_from_checkpoint(instret, trace_heights, is_trace_height_constant);
+        } else {
+            self.update_checkpoint(instret, trace_heights);
         }
 
-        let ret = self.should_segment(instret, trace_heights, is_trace_height_constant);
-        if ret {
-            self.segment(instret, trace_heights);
-        }
         self.instret_last_segment_check = instret;
-        ret
+        should_seg
     }
 
-    /// Try segment if there is at least one cycle
-    pub fn segment(&mut self, instret: u64, trace_heights: &[u32]) {
+    #[inline(always)]
+    fn create_segment_from_checkpoint(
+        &mut self,
+        instret: u64,
+        trace_heights: &mut [u32],
+        is_trace_height_constant: &[bool],
+    ) {
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
+
+        let (segment_instret, segment_heights) = if self.checkpoint_instret > instret_start {
+            (
+                self.checkpoint_instret,
+                self.checkpoint_trace_heights.clone(),
+            )
+        } else {
+            // No valid checkpoint, use current values
+            (instret, trace_heights.to_vec())
+        };
+
+        // Reset current trace heights and checkpoint
+        self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
+        self.checkpoint_instret = 0;
+
+        let num_insns = segment_instret - instret_start;
+        self.create_segment::<false>(instret_start, num_insns, segment_heights);
+    }
+
+    /// Resets trace heights by subtracting segment heights
+    #[inline(always)]
+    fn reset_trace_heights(
+        &self,
+        trace_heights: &mut [u32],
+        segment_heights: &[u32],
+        is_trace_height_constant: &[bool],
+    ) {
+        for ((trace_height, &segment_height), &is_trace_height_constant) in trace_heights
+            .iter_mut()
+            .zip(segment_heights.iter())
+            .zip(is_trace_height_constant.iter())
+        {
+            if !is_trace_height_constant {
+                *trace_height = trace_height.checked_sub(segment_height).unwrap();
+            }
+        }
+    }
+
+    /// Updates the checkpoint with current safe state
+    #[inline(always)]
+    fn update_checkpoint(&mut self, instret: u64, trace_heights: &[u32]) {
+        self.checkpoint_trace_heights.copy_from_slice(trace_heights);
+        self.checkpoint_instret = instret;
+    }
+
+    /// Try segment if there is at least one instruction
+    #[inline(always)]
+    pub fn create_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
+        let instret_start = self
+            .segments
+            .last()
+            .map_or(0, |s| s.instret_start + s.num_insns);
+
         let num_insns = instret - instret_start;
+        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+    }
+
+    /// Push a new segment with logging
+    #[inline(always)]
+    fn create_segment<const IS_FINAL: bool>(
+        &mut self,
+        instret_start: u64,
+        num_insns: u64,
+        trace_heights: Vec<u32>,
+    ) {
+        debug_assert!(
+            num_insns > 0,
+            "Segment should contain at least one instruction"
+        );
+
+        self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
         self.segments.push(Segment {
             instret_start,
             num_insns,
-            trace_heights: trace_heights.to_vec(),
+            trace_heights,
         });
     }
 
-    pub fn add_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
+    /// Log segment information
+    #[inline(always)]
+    fn log_segment_info<const IS_FINAL: bool>(
+        &self,
+        instret_start: u64,
+        num_insns: u64,
+        trace_heights: &[u32],
+    ) {
+        let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
+        let total_cells = self.calculate_total_cells(trace_heights);
+        let total_interactions = self.calculate_total_interactions(trace_heights);
+
+        let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
+
         tracing::info!(
-            "Segment {:2} | instret {:9} | terminated",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:10} cells | {:10} interactions | {:8} max height ({}){}",
             self.segments.len(),
-            instret,
-        );
-        // Add the last segment
-        let instret_start = self
-            .segments
-            .last()
-            .map_or(0, |s| s.instret_start + s.num_insns);
-        let segment = Segment {
             instret_start,
-            num_insns: instret - instret_start,
-            trace_heights: trace_heights.to_vec(),
-        };
-        self.segments.push(segment);
+            num_insns,
+            total_cells,
+            total_interactions,
+            max_trace_height,
+            air_name,
+            final_marker
+        );
     }
 }

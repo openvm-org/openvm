@@ -5,20 +5,21 @@ use openvm_circuit::{
     arch::ExecutionBridge,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_derive::{InsExecutorE1, InsExecutorE2, InstructionExecutor};
 use openvm_circuit_primitives::{
-    bitwise_op_lookup::SharedBitwiseOperationLookupChip,
+    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    Chip, ChipUsageGetter,
 };
 use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_mod_circuit_builder::{
-    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldVariable,
+    ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
+    FieldExpressionFiller, FieldVariable,
 };
-use openvm_rv32_adapters::{Rv32VecHeapAdapterAir, Rv32VecHeapAdapterStep};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_rv32_adapters::{
+    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+};
 
-use super::{ModularAir, ModularChip, ModularStep};
+use super::{ModularAir, ModularChip, ModularExecutor};
+use crate::FieldExprVecHeapExecutor;
 
 pub fn addsub_expr(
     config: ExprBuilderConfig,
@@ -32,12 +33,12 @@ pub fn addsub_expr(
     let x2 = ExprBuilder::new_input(builder.clone());
     let x3 = x1.clone() + x2.clone();
     let x4 = x1.clone() - x2.clone();
-    let is_add_flag = builder.borrow_mut().new_flag();
-    let is_sub_flag = builder.borrow_mut().new_flag();
+    let is_add_flag = (*builder).borrow_mut().new_flag();
+    let is_sub_flag = (*builder).borrow_mut().new_flag();
     let x5 = FieldVariable::select(is_sub_flag, &x4, &x1);
     let mut x6 = FieldVariable::select(is_add_flag, &x3, &x5);
     x6.save_output();
-    let builder = builder.borrow().clone();
+    let builder = (*builder).borrow().clone();
 
     (
         FieldExpr::new(builder, range_bus, true),
@@ -46,58 +47,78 @@ pub fn addsub_expr(
     )
 }
 
-#[derive(Chip, ChipUsageGetter, InstructionExecutor, InsExecutorE1, InsExecutorE2)]
-pub struct ModularAddSubChip<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>(
-    pub ModularChip<F, BLOCKS, BLOCK_SIZE>,
-);
+fn gen_base_expr(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+) -> (FieldExpr, Vec<usize>, Vec<usize>) {
+    let (expr, is_add_flag, is_sub_flag) = addsub_expr(config, range_checker_bus);
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    ModularAddSubChip<F, BLOCKS, BLOCK_SIZE>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        execution_bridge: ExecutionBridge,
-        memory_bridge: MemoryBridge,
-        mem_helper: SharedMemoryHelper<F>,
-        pointer_max_bits: usize,
-        config: ExprBuilderConfig,
-        offset: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-        range_checker: SharedVariableRangeCheckerChip,
-    ) -> Self {
-        let (expr, is_add_flag, is_sub_flag) = addsub_expr(config, range_checker.bus());
+    let local_opcode_idx = vec![
+        Rv32ModularArithmeticOpcode::ADD as usize,
+        Rv32ModularArithmeticOpcode::SUB as usize,
+        Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
+    ];
+    let opcode_flag_idx = vec![is_add_flag, is_sub_flag];
 
-        let local_opcode_idx = vec![
-            Rv32ModularArithmeticOpcode::ADD as usize,
-            Rv32ModularArithmeticOpcode::SUB as usize,
-            Rv32ModularArithmeticOpcode::SETUP_ADDSUB as usize,
-        ];
-        let opcode_flag_idx = vec![is_add_flag, is_sub_flag];
-        let air = ModularAir::new(
-            Rv32VecHeapAdapterAir::new(
-                execution_bridge,
-                memory_bridge,
-                bitwise_lookup_chip.bus(),
-                pointer_max_bits,
-            ),
-            FieldExpressionCoreAir::new(
-                expr.clone(),
-                offset,
-                local_opcode_idx.clone(),
-                opcode_flag_idx.clone(),
-            ),
-        );
+    (expr, local_opcode_idx, opcode_flag_idx)
+}
 
-        let step = ModularStep::new(
-            Rv32VecHeapAdapterStep::new(pointer_max_bits, bitwise_lookup_chip),
+pub fn get_modular_addsub_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    exec_bridge: ExecutionBridge,
+    mem_bridge: MemoryBridge,
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    bitwise_lookup_bus: BitwiseOperationLookupBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> ModularAir<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    ModularAir::new(
+        Rv32VecHeapAdapterAir::new(
+            exec_bridge,
+            mem_bridge,
+            bitwise_lookup_bus,
+            pointer_max_bits,
+        ),
+        FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
+    )
+}
+
+pub fn get_modular_addsub_step<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    range_checker_bus: VariableRangeCheckerBus,
+    pointer_max_bits: usize,
+    offset: usize,
+) -> ModularExecutor<BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+
+    FieldExprVecHeapExecutor(FieldExpressionExecutor::new(
+        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        expr,
+        offset,
+        local_opcode_idx,
+        opcode_flag_idx,
+        "ModularAddSub",
+    ))
+}
+
+pub fn get_modular_addsub_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+    config: ExprBuilderConfig,
+    mem_helper: SharedMemoryHelper<F>,
+    range_checker: SharedVariableRangeCheckerChip,
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    pointer_max_bits: usize,
+) -> ModularChip<F, BLOCKS, BLOCK_SIZE> {
+    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+    ModularChip::new(
+        FieldExpressionFiller::new(
+            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
             expr,
-            offset,
             local_opcode_idx,
             opcode_flag_idx,
             range_checker,
-            "ModularAddSub",
             false,
-        );
-        Self(ModularChip::new(air, step, mem_helper))
-    }
+        ),
+        mem_helper,
+    )
 }

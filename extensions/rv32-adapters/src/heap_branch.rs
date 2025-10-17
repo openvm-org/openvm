@@ -6,7 +6,7 @@ use std::{
 use itertools::izip;
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -175,47 +175,46 @@ pub struct Rv32HeapBranchAdapterRecord<const NUM_READS: usize> {
     pub heap_read_aux: [MemoryReadAuxRecord; NUM_READS],
 }
 
-pub struct Rv32HeapBranchAdapterStep<const NUM_READS: usize, const READ_SIZE: usize> {
+#[derive(Clone, Copy)]
+pub struct Rv32HeapBranchAdapterExecutor<const NUM_READS: usize, const READ_SIZE: usize> {
     pub pointer_max_bits: usize,
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
+}
+
+#[derive(derive_new::new)]
+pub struct Rv32HeapBranchAdapterFiller<const NUM_READS: usize, const READ_SIZE: usize> {
+    pub pointer_max_bits: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
 }
 
 impl<const NUM_READS: usize, const READ_SIZE: usize>
-    Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+    Rv32HeapBranchAdapterExecutor<NUM_READS, READ_SIZE>
 {
-    pub fn new(
-        pointer_max_bits: usize,
-        bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
-    ) -> Self {
+    pub fn new(pointer_max_bits: usize) -> Self {
         assert!(NUM_READS <= 2);
         assert!(
             RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS - pointer_max_bits < RV32_CELL_BITS,
             "pointer_max_bits={pointer_max_bits} needs to be large enough for high limb range check"
         );
-        Self {
-            pointer_max_bits,
-            bitwise_lookup_chip,
-        }
+        Self { pointer_max_bits }
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceStep<F, CTX>
-    for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceExecutor<F>
+    for Rv32HeapBranchAdapterExecutor<NUM_READS, READ_SIZE>
 {
     const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
     type ReadData = [[u8; READ_SIZE]; NUM_READS];
     type WriteData = ();
     type RecordMut<'a> = &'a mut Rv32HeapBranchAdapterRecord<NUM_READS>;
 
-    fn start(pc: u32, memory: &TracingMemory<F>, adapter_record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, adapter_record: &mut Self::RecordMut<'_>) {
         adapter_record.from_pc = pc;
         adapter_record.from_timestamp = memory.timestamp;
     }
 
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -237,7 +236,9 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> Adapt
 
         // Read memory values
         from_fn(|i| {
-            assert!(record.rs_vals[i] as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits));
+            debug_assert!(
+                record.rs_vals[i] as usize + READ_SIZE - 1 < (1 << self.pointer_max_bits)
+            );
             tracing_read(
                 memory,
                 RV32_MEMORY_AS,
@@ -249,7 +250,7 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> Adapt
 
     fn write(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _data: Self::WriteData,
         _record: &mut Self::RecordMut<'_>,
@@ -258,10 +259,15 @@ impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize> Adapt
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_READS: usize, const READ_SIZE: usize>
-    AdapterTraceFiller<F, CTX> for Rv32HeapBranchAdapterStep<NUM_READS, READ_SIZE>
+impl<F: PrimeField32, const NUM_READS: usize, const READ_SIZE: usize> AdapterTraceFiller<F>
+    for Rv32HeapBranchAdapterFiller<NUM_READS, READ_SIZE>
 {
+    const WIDTH: usize = Rv32HeapBranchAdapterCols::<F, NUM_READS, READ_SIZE>::width();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &Rv32HeapBranchAdapterRecord<NUM_READS> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let cols: &mut Rv32HeapBranchAdapterCols<F, NUM_READS, READ_SIZE> =

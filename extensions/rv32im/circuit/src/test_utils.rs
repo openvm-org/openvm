@@ -1,4 +1,4 @@
-use openvm_circuit::arch::testing::{memory::gen_pointer, VmChipTestBuilder};
+use openvm_circuit::arch::testing::{memory::gen_pointer, TestBuilder};
 use openvm_instructions::{instruction::Instruction, VmOpcode};
 use openvm_stark_backend::{p3_field::FieldAlgebra, verifier::VerificationError};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -9,7 +9,7 @@ use super::adapters::{RV32_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
 pub fn rv32_rand_write_register_or_imm<const NUM_LIMBS: usize>(
-    tester: &mut VmChipTestBuilder<BabyBear>,
+    tester: &mut impl TestBuilder<BabyBear>,
     rs1_writes: [u8; NUM_LIMBS],
     rs2_writes: [u8; NUM_LIMBS],
     imm: Option<usize>,

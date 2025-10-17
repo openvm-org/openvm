@@ -11,16 +11,21 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 
 mod bus;
+pub use bus::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 mod tests;
-
-pub use bus::*;
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
@@ -112,10 +117,8 @@ pub struct BitwiseOperationLookupChip<const NUM_BITS: usize> {
     pub count_xor: Vec<AtomicU32>,
 }
 
-#[derive(Clone)]
-pub struct SharedBitwiseOperationLookupChip<const NUM_BITS: usize>(
-    Arc<BitwiseOperationLookupChip<NUM_BITS>>,
-);
+pub type SharedBitwiseOperationLookupChip<const NUM_BITS: usize> =
+    Arc<BitwiseOperationLookupChip<NUM_BITS>>;
 
 impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     pub fn new(bus: BitwiseOperationLookupBus) -> Self {
@@ -159,15 +162,17 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
         }
     }
 
+    /// Generates trace and resets all internal counters to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count_range.len() * NUM_BITWISE_OP_LOOKUP_COLS);
         for (n, row) in rows.chunks_mut(NUM_BITWISE_OP_LOOKUP_COLS).enumerate() {
             let cols: &mut BitwiseOperationLookupCols<F> = row.borrow_mut();
             cols.mult_range = F::from_canonical_u32(
-                self.count_range[n].load(std::sync::atomic::Ordering::SeqCst),
+                self.count_range[n].swap(0, std::sync::atomic::Ordering::SeqCst),
             );
-            cols.mult_xor =
-                F::from_canonical_u32(self.count_xor[n].load(std::sync::atomic::Ordering::SeqCst));
+            cols.mult_xor = F::from_canonical_u32(
+                self.count_xor[n].swap(0, std::sync::atomic::Ordering::SeqCst),
+            );
         }
         RowMajorMatrix::new(rows, NUM_BITWISE_OP_LOOKUP_COLS)
     }
@@ -177,57 +182,13 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
     }
 }
 
-impl<const NUM_BITS: usize> SharedBitwiseOperationLookupChip<NUM_BITS> {
-    pub fn new(bus: BitwiseOperationLookupBus) -> Self {
-        Self(Arc::new(BitwiseOperationLookupChip::new(bus)))
-    }
-    pub fn bus(&self) -> BitwiseOperationLookupBus {
-        self.0.bus()
-    }
-
-    pub fn air_width(&self) -> usize {
-        self.0.air_width()
-    }
-
-    pub fn request_range(&self, x: u32, y: u32) {
-        self.0.request_range(x, y);
-    }
-
-    pub fn request_xor(&self, x: u32, y: u32) -> u32 {
-        self.0.request_xor(x, y)
-    }
-
-    pub fn clear(&self) {
-        self.0.clear()
-    }
-
-    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        self.0.generate_trace()
-    }
-}
-
-impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
+impl<R, SC: StarkGenericConfig, const NUM_BITS: usize> Chip<R, CpuBackend<SC>>
     for BitwiseOperationLookupChip<NUM_BITS>
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    /// Generates trace and resets all internal counters to 0.
+    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(trace)
-    }
-}
-
-impl<SC: StarkGenericConfig, const NUM_BITS: usize> Chip<SC>
-    for SharedBitwiseOperationLookupChip<NUM_BITS>
-{
-    fn air(&self) -> AirRef<SC> {
-        self.0.air()
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        self.0.generate_air_proof_input()
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
@@ -243,31 +204,5 @@ impl<const NUM_BITS: usize> ChipUsageGetter for BitwiseOperationLookupChip<NUM_B
     }
     fn trace_width(&self) -> usize {
         NUM_BITWISE_OP_LOOKUP_COLS
-    }
-}
-
-impl<const NUM_BITS: usize> ChipUsageGetter for SharedBitwiseOperationLookupChip<NUM_BITS> {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn constant_trace_height(&self) -> Option<usize> {
-        self.0.constant_trace_height()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
-impl<const NUM_BITS: usize> AsRef<BitwiseOperationLookupChip<NUM_BITS>>
-    for SharedBitwiseOperationLookupChip<NUM_BITS>
-{
-    fn as_ref(&self) -> &BitwiseOperationLookupChip<NUM_BITS> {
-        &self.0
     }
 }

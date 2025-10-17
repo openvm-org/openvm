@@ -1,0 +1,4 @@
+[advisories]
+  # an older version of tracing-subscriber 0.2.25 is used in ark-bn254 but it is an optional dependency that is not included in the crate graph even with all features enabled
+  # unfortunately cargo audit includes optional dependencies from Cargo.lock even if they are not in the crate graph
+  ignore = ["RUSTSEC-2025-0055"]

@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface,
     },
     system::{
@@ -185,13 +185,16 @@ pub struct NativeLoadStoreAdapterRecord<F, const NUM_CELLS: usize> {
     pub data_write: MemoryWriteAuxRecord<F, NUM_CELLS>,
 }
 
-#[derive(derive_new::new)]
-pub struct NativeLoadStoreAdapterStep<const NUM_CELLS: usize> {
+#[derive(derive_new::new, Clone, Copy)]
+pub struct NativeLoadStoreAdapterExecutor<const NUM_CELLS: usize> {
     offset: usize,
 }
 
-impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
-    for NativeLoadStoreAdapterStep<NUM_CELLS>
+#[derive(derive_new::new)]
+pub struct NativeLoadStoreAdapterFiller<const NUM_CELLS: usize>;
+
+impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceExecutor<F>
+    for NativeLoadStoreAdapterExecutor<NUM_CELLS>
 {
     const WIDTH: usize = std::mem::size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
     type ReadData = (F, [F; NUM_CELLS]);
@@ -199,7 +202,7 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     type RecordMut<'a> = &'a mut NativeLoadStoreAdapterRecord<F, NUM_CELLS>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp();
     }
@@ -207,7 +210,7 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -266,7 +269,7 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -282,11 +285,16 @@ impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const NUM_CELLS: usize> AdapterTraceFiller<F, CTX>
-    for NativeLoadStoreAdapterStep<NUM_CELLS>
+impl<F: PrimeField32, const NUM_CELLS: usize> AdapterTraceFiller<F>
+    for NativeLoadStoreAdapterFiller<NUM_CELLS>
 {
+    const WIDTH: usize = size_of::<NativeLoadStoreAdapterCols<u8, NUM_CELLS>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &NativeLoadStoreAdapterRecord<F, NUM_CELLS> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeLoadStoreAdapterCols<F, NUM_CELLS> = adapter_row.borrow_mut();

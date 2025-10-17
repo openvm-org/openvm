@@ -53,6 +53,7 @@ rand.workspace = true
 num-bigint.workspace = true
 num-traits.workspace = true
 halo2curves-axiom = { workspace = true }
+openvm-pairing = { path = ".", features = ["halo2curves"] }
 
 [features]
 default = []
@@ -61,6 +62,13 @@ halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
 # only enable for the curves you use as it affects the init! macro
 bn254 = ["openvm-pairing-guest/bn254"]
 bls12_381 = ["openvm-pairing-guest/bls12_381"]
+
+# Internal feature for testing only.
+cuda = [
+    "openvm-algebra-circuit/cuda",
+    "openvm-pairing-circuit/cuda",
+    "openvm-ecc-circuit/cuda",
+]
 
 [package.metadata.cargo-shear]
 ignored = ["openvm", "openvm-custom-insn"]

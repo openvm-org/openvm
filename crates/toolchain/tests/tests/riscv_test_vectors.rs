@@ -1,10 +1,7 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
-use openvm_circuit::{
-    arch::{execution_mode::e1::E1Ctx, instructions::exe::VmExe, interpreter::InterpretedInstance},
-    utils::air_test,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -39,9 +36,9 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                         .with_extension(Rv32MTranspilerExtension)
                         .with_extension(Rv32IoTranspilerExtension),
                 )?;
-                let interpreter = InterpretedInstance::new(config.clone(), exe);
-                let state = interpreter.execute(E1Ctx::new(None), vec![])?;
-                state.exit_code?;
+                let executor = VmExecutor::new(config.clone())?;
+                let interpreter = executor.instance(&exe)?;
+                let _state = interpreter.execute(vec![], None)?;
                 Ok(())
             });
 
@@ -56,9 +53,13 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
     Ok(())
 }
 
+// Running Prove tests only when CUDA is enabled because it is slow on CPU
 #[test]
 #[ignore = "long prover tests"]
 fn test_rv32im_riscv_vector_prove() -> Result<()> {
+    use openvm_circuit::utils::air_test;
+    use openvm_rv32im_circuit::Rv32ImBuilder;
+
     let config = Rv32ImConfig::default();
     let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
@@ -81,7 +82,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(config.clone(), exe);
+                air_test(Rv32ImBuilder, config.clone(), exe);
             });
 
             match result {

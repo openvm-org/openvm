@@ -28,3 +28,6 @@ halo2curves-axiom = { workspace = true }
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
+tco = ["openvm-ecc-circuit/tco"]
+cuda = ["openvm-ecc-circuit/cuda", "openvm-sdk/cuda"]
+touchemall = ["cuda", "openvm-ecc-circuit/touchemall"]

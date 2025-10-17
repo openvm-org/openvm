@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -163,10 +163,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv32BaseAluAdapterAir {
     }
 }
 
+#[derive(Clone, derive_new::new)]
+pub struct Rv32BaseAluAdapterExecutor<const LIMB_BITS: usize>;
+
 #[derive(derive_new::new)]
-pub struct Rv32BaseAluAdapterStep<const LIMB_BITS: usize> {
-    // TODO(arayi): use reference to bitwise lookup chip with lifetimes instead
-    pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
+pub struct Rv32BaseAluAdapterFiller<const LIMB_BITS: usize> {
+    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
 }
 
 // Intermediate type that should not be copied or cloned and should be directly written to
@@ -187,8 +189,8 @@ pub struct Rv32BaseAluAdapterRecord {
     pub writes_aux: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceExecutor<F>
+    for Rv32BaseAluAdapterExecutor<LIMB_BITS>
 {
     const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
     type ReadData = [[u8; RV32_REGISTER_NUM_LIMBS]; 2];
@@ -196,7 +198,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     type RecordMut<'a> = &'a mut Rv32BaseAluAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut &mut Rv32BaseAluAdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv32BaseAluAdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -205,7 +207,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut &mut Rv32BaseAluAdapterRecord,
     ) -> Self::ReadData {
@@ -246,7 +248,7 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut &mut Rv32BaseAluAdapterRecord,
@@ -267,9 +269,11 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
-    for Rv32BaseAluAdapterStep<LIMB_BITS>
+impl<F: PrimeField32, const LIMB_BITS: usize> AdapterTraceFiller<F>
+    for Rv32BaseAluAdapterFiller<LIMB_BITS>
 {
+    const WIDTH: usize = size_of::<Rv32BaseAluAdapterCols<u8>>();
+
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY: the following is highly unsafe. We are going to cast `adapter_row` to a record
         // buffer, and then do an _overlapping_ write to the `adapter_row` as a row of field
@@ -278,12 +282,13 @@ impl<F: PrimeField32, CTX, const LIMB_BITS: usize> AdapterTraceFiller<F, CTX>
         // - Do not overwrite any reference in `record` before it has already been used or moved
         // - alignment of `F` must be >= alignment of Record (AlignedBytesBorrow will panic
         //   otherwise)
+        // - adapter_row contains a valid Rv32BaseAluAdapterRecord representation
+        // - get_record_from_slice correctly interprets the bytes as Rv32BaseAluAdapterRecord
         let record: &Rv32BaseAluAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32BaseAluAdapterCols<F> = adapter_row.borrow_mut();
 
         // We must assign in reverse
-        // TODO[jpw]: is there a way to not hardcode?
         const TIMESTAMP_DELTA: u32 = 2;
         let mut timestamp = record.from_timestamp + TIMESTAMP_DELTA;
 

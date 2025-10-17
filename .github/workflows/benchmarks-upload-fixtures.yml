@@ -1,0 +1,39 @@
+name: "Upload benchmark fixtures"
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  S3_FIXTURES_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/fixtures
+
+jobs:
+  generate-fixtures:
+    name: Generate and upload benchmark fixtures
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=64cpu-linux-arm64/family=m7/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Generate fixtures
+        run: cargo r -r --bin generate-fixtures --features generate-fixtures
+
+      - name: Upload fixtures to S3
+        run: |
+          if [ -d "benchmarks/fixtures" ]; then
+            s5cmd cp benchmarks/fixtures/ ${{ env.S3_FIXTURES_PATH }}/
+          else
+            echo "No fixtures directory found"
+            exit 1
+          fi

@@ -5,7 +5,7 @@ use std::{
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, MinimalInstruction, VmAdapterAir,
     },
     system::{
@@ -134,11 +134,14 @@ pub struct NativeVectorizedAdapterRecord<F, const N: usize> {
     pub write_aux: MemoryWriteAuxRecord<F, N>,
 }
 
-#[derive(derive_new::new)]
-pub struct NativeVectorizedAdapterStep<const N: usize>;
+#[derive(derive_new::new, Clone, Copy)]
+pub struct NativeVectorizedAdapterExecutor<const N: usize>;
 
-impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
-    for NativeVectorizedAdapterStep<N>
+#[derive(derive_new::new)]
+pub struct NativeVectorizedAdapterFiller<const N: usize>;
+
+impl<F: PrimeField32, const N: usize> AdapterTraceExecutor<F>
+    for NativeVectorizedAdapterExecutor<N>
 {
     const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
     type ReadData = [[F; N]; 2];
@@ -146,7 +149,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     type RecordMut<'a> = &'a mut NativeVectorizedAdapterRecord<F, N>;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp();
     }
@@ -154,7 +157,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -181,7 +184,7 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -201,11 +204,14 @@ impl<F: PrimeField32, CTX, const N: usize> AdapterTraceStep<F, CTX>
     }
 }
 
-impl<F: PrimeField32, CTX, const N: usize> AdapterTraceFiller<F, CTX>
-    for NativeVectorizedAdapterStep<N>
-{
+impl<F: PrimeField32, const N: usize> AdapterTraceFiller<F> for NativeVectorizedAdapterFiller<N> {
+    const WIDTH: usize = size_of::<NativeVectorizedAdapterCols<u8, N>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
         let record: &NativeVectorizedAdapterRecord<F, N> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut NativeVectorizedAdapterCols<F, N> = adapter_row.borrow_mut();

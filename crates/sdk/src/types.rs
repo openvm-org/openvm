@@ -1,22 +1,26 @@
-use std::io::Cursor;
+use std::{io::Cursor, sync::Arc};
 
+use derive_more::derive::From;
 use eyre::Result;
+use openvm::platform::memory::MEM_SIZE;
+use openvm_circuit::arch::instructions::exe::VmExe;
 use openvm_continuations::{verifier::internal::types::VmStarkProof, SC};
 use openvm_stark_backend::proof::Proof;
+use openvm_transpiler::elf::Elf;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 #[cfg(feature = "evm-prove")]
 use {
-    crate::commit::CommitBytes,
+    crate::commit::{AppExecutionCommit, CommitBytes},
     itertools::Itertools,
     openvm_native_recursion::halo2::{wrapper::EvmVerifierByteCode, Fr, RawEvmProof},
-    std::iter::{once, repeat},
+    std::iter::{once, repeat_n},
     thiserror::Error,
 };
 
 use crate::{
     codec::{decode_vec, encode_slice, Decode, Encode},
-    commit::AppExecutionCommit,
+    OPENVM_VERSION,
 };
 
 /// Number of bytes in a Bn254Fr.
@@ -26,6 +30,25 @@ pub const NUM_BN254_ACCUMULATOR: usize = 12;
 /// Number of Bn254Fr in `proof` field for a circuit with only 1 advice column.
 #[cfg(feature = "evm-prove")]
 const NUM_BN254_PROOF: usize = 43;
+
+#[derive(From)]
+pub enum ExecutableFormat {
+    Elf(Elf),
+    VmExe(VmExe<crate::F>),
+    SharedVmExe(Arc<VmExe<crate::F>>),
+}
+
+impl<'a> From<&'a [u8]> for ExecutableFormat {
+    fn from(bytes: &'a [u8]) -> Self {
+        let elf = Elf::decode(bytes, MEM_SIZE.try_into().unwrap()).expect("Invalid ELF bytes");
+        ExecutableFormat::Elf(elf)
+    }
+}
+impl From<Vec<u8>> for ExecutableFormat {
+    fn from(bytes: Vec<u8>) -> Self {
+        ExecutableFormat::from(&bytes[..])
+    }
+}
 
 #[cfg(feature = "evm-prove")]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -52,6 +75,9 @@ pub struct ProofData {
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct EvmProof {
+    /// The openvm major and minor version v{}.{}. The proof format will not change on patch
+    /// versions.
+    pub version: String,
     #[serde(flatten)]
     /// Bn254Fr public value app commits.
     pub app_commit: AppExecutionCommit,
@@ -88,6 +114,7 @@ impl EvmProof {
             user_public_values,
             app_commit,
             proof_data,
+            version: _,
         } = self;
 
         let ProofData { accumulator, proof } = proof_data;
@@ -151,6 +178,7 @@ impl TryFrom<RawEvmProof> for EvmProof {
         };
 
         Ok(Self {
+            version: format!("v{}", OPENVM_VERSION),
             app_commit,
             user_public_values,
             proof_data: ProofData {
@@ -169,6 +197,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
             mut app_commit,
             user_public_values,
             proof_data,
+            version: _,
         } = evm_openvm_proof;
 
         app_commit.app_exe_commit.reverse();
@@ -195,7 +224,7 @@ impl TryFrom<EvmProof> for RawEvmProof {
 
             let user_public_values = user_public_values
                 .into_iter()
-                .flat_map(|byte| once(byte).chain(repeat(0).take(31)))
+                .flat_map(|byte| once(byte).chain(repeat_n(0, 31)))
                 .collect::<Vec<_>>();
 
             let mut ret = Vec::new();
@@ -215,33 +244,35 @@ impl TryFrom<EvmProof> for RawEvmProof {
     }
 }
 
+/// Struct purely for encoding and decoding of [VmStarkProof].
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct VmStarkProofBytes {
-    #[serde(flatten)]
-    pub app_commit: AppExecutionCommit,
+pub struct VersionedVmStarkProof {
+    /// The openvm major and minor version v{}.{}. The proof format will not change on patch
+    /// versions.
+    pub version: String,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub user_public_values: Vec<u8>,
     #[serde_as(as = "serde_with::hex::Hex")]
     pub proof: Vec<u8>,
 }
 
-impl VmStarkProofBytes {
-    pub fn new(app_commit: AppExecutionCommit, proof: VmStarkProof<SC>) -> Result<Self> {
+impl VersionedVmStarkProof {
+    pub fn new(proof: VmStarkProof<SC>) -> Result<Self> {
         let mut user_public_values = Vec::new();
         encode_slice(&proof.user_public_values, &mut user_public_values)?;
         Ok(Self {
-            app_commit,
+            version: format!("v{}", OPENVM_VERSION),
             user_public_values,
-            proof: proof.proof.encode_to_vec()?,
+            proof: proof.inner.encode_to_vec()?,
         })
     }
 }
 
-impl TryFrom<VmStarkProofBytes> for VmStarkProof<SC> {
+impl TryFrom<VersionedVmStarkProof> for VmStarkProof<SC> {
     type Error = std::io::Error;
-    fn try_from(proof: VmStarkProofBytes) -> Result<Self, std::io::Error> {
-        let VmStarkProofBytes {
+    fn try_from(proof: VersionedVmStarkProof) -> Result<Self, std::io::Error> {
+        let VersionedVmStarkProof {
             proof,
             user_public_values,
             ..
@@ -250,7 +281,7 @@ impl TryFrom<VmStarkProofBytes> for VmStarkProof<SC> {
         let user_public_values = decode_vec(&mut reader)?;
         Ok(Self {
             user_public_values,
-            proof: Proof::decode_from_bytes(&proof)?,
+            inner: Proof::decode_from_bytes(&proof)?,
         })
     }
 }

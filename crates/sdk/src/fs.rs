@@ -4,109 +4,18 @@ use std::{
 };
 
 use eyre::{Report, Result};
-use openvm_circuit::arch::{instructions::exe::VmExe, ContinuationVmProof, VmConfig};
-use openvm_continuations::verifier::root::types::RootVmVerifierInput;
 #[cfg(feature = "evm-prove")]
 use openvm_native_recursion::halo2::wrapper::EvmVerifierByteCode;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::{
-    codec::{Decode, Encode},
-    keygen::{AggStarkProvingKey, AppProvingKey, AppVerifyingKey},
-    F, SC,
-};
+use crate::codec::{Decode, Encode};
 #[cfg(feature = "evm-prove")]
-use crate::{
-    keygen::Halo2ProvingKey,
-    types::{EvmHalo2Verifier, EvmProof},
-    OPENVM_VERSION,
-};
+use crate::{types::EvmHalo2Verifier, OPENVM_VERSION};
 
 pub const EVM_HALO2_VERIFIER_INTERFACE_NAME: &str = "IOpenVmHalo2Verifier.sol";
 pub const EVM_HALO2_VERIFIER_PARENT_NAME: &str = "Halo2Verifier.sol";
 pub const EVM_HALO2_VERIFIER_BASE_NAME: &str = "OpenVmHalo2Verifier.sol";
 pub const EVM_VERIFIER_ARTIFACT_FILENAME: &str = "verifier.bytecode.json";
-
-pub fn read_exe_from_file<P: AsRef<Path>>(path: P) -> Result<VmExe<F>> {
-    read_from_file_bitcode(&path)
-}
-
-pub fn write_exe_to_file<P: AsRef<Path>>(exe: VmExe<F>, path: P) -> Result<()> {
-    write_to_file_bitcode(&path, exe)
-}
-
-pub fn read_app_pk_from_file<VC: VmConfig<F>, P: AsRef<Path>>(
-    path: P,
-) -> Result<AppProvingKey<VC>> {
-    read_from_file_bitcode(&path)
-}
-
-pub fn write_app_pk_to_file<VC: VmConfig<F>, P: AsRef<Path>>(
-    app_pk: AppProvingKey<VC>,
-    path: P,
-) -> Result<()> {
-    write_to_file_bitcode(&path, app_pk)
-}
-
-pub fn read_app_vk_from_file<P: AsRef<Path>>(path: P) -> Result<AppVerifyingKey> {
-    read_from_file_bitcode(&path)
-}
-
-pub fn write_app_vk_to_file<P: AsRef<Path>>(app_vk: AppVerifyingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(&path, app_vk)
-}
-
-pub fn read_app_proof_from_file<P: AsRef<Path>>(path: P) -> Result<ContinuationVmProof<SC>> {
-    decode_from_file(&path)
-}
-
-pub fn write_app_proof_to_file<P: AsRef<Path>>(
-    proof: ContinuationVmProof<SC>,
-    path: P,
-) -> Result<()> {
-    encode_to_file(&path, proof)
-}
-
-pub fn read_root_verifier_input_from_file<P: AsRef<Path>>(
-    path: P,
-) -> Result<RootVmVerifierInput<SC>> {
-    decode_from_file(&path)
-}
-
-pub fn write_root_verifier_input_to_file<P: AsRef<Path>>(
-    input: RootVmVerifierInput<SC>,
-    path: P,
-) -> Result<()> {
-    encode_to_file(&path, input)
-}
-
-pub fn read_agg_stark_pk_from_file<P: AsRef<Path>>(path: P) -> Result<AggStarkProvingKey> {
-    read_from_file_bitcode(&path)
-}
-
-pub fn write_agg_stark_pk_to_file<P: AsRef<Path>>(pk: &AggStarkProvingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(&path, pk)
-}
-
-#[cfg(feature = "evm-prove")]
-pub fn read_agg_halo2_pk_from_file<P: AsRef<Path>>(path: P) -> Result<Halo2ProvingKey> {
-    read_from_file_bitcode(&path)
-}
-
-#[cfg(feature = "evm-prove")]
-pub fn write_agg_halo2_pk_to_file<P: AsRef<Path>>(pk: &Halo2ProvingKey, path: P) -> Result<()> {
-    write_to_file_bitcode(&path, pk)
-}
-
-#[cfg(feature = "evm-prove")]
-pub fn read_evm_proof_from_file<P: AsRef<Path>>(path: P) -> Result<EvmProof> {
-    read_from_file_json(&path)
-}
-
-#[cfg(feature = "evm-prove")]
-pub fn write_evm_proof_to_file<P: AsRef<Path>>(proof: EvmProof, path: P) -> Result<()> {
-    write_to_file_json(&path, proof)
-}
 
 #[cfg(feature = "evm-prove")]
 pub fn read_evm_halo2_verifier_from_folder<P: AsRef<Path>>(folder: P) -> Result<EvmHalo2Verifier> {
@@ -193,7 +102,7 @@ pub fn write_object_to_file<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> R
     write_to_file_bitcode(path, data)
 }
 
-pub fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
+fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> Result<T> {
     let ret = read(&path)
         .map_err(|e| read_error(&path, e.into()))
         .and_then(|data| {
@@ -202,7 +111,7 @@ pub fn read_from_file_bitcode<T: DeserializeOwned, P: AsRef<Path>>(path: P) -> R
     Ok(ret)
 }
 
-pub fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
+fn write_to_file_bitcode<T: Serialize, P: AsRef<Path>>(path: P, data: T) -> Result<()> {
     if let Some(parent) = path.as_ref().parent() {
         create_dir_all(parent).map_err(|e| write_error(&path, e.into()))?;
     }

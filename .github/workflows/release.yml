@@ -1,0 +1,57 @@
+# Workflow to upload release artifacts such as proving keys. In the future pre-built binaries will also be added to this workflow.
+name: Upload Release Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g., v1.4.0)"
+        required: true
+        default: "v1.4.0"
+        type: string
+
+env:
+  S3_BUCKET: openvm-public-artifacts-us-east-1
+
+jobs:
+  upload-setup:
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=64cpu-linux-x64/extras=s3-cache/disk=large
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@v5
+
+      - name: Set version
+        run: echo "version=${{ github.event.inputs.version || 'v1.4.0' }}" >> $GITHUB_ENV
+
+      - name: Install solc # svm should support arm64 linux
+        run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Checkout and test tagged version
+      - name: Checkout tagged version
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.version }}
+
+      - name: Build tagged CLI
+        run: cargo install --force --locked --path crates/cli cargo-openvm
+
+      - name: Run setup from tagged version
+        run: |
+          cargo openvm setup --evm
+
+      - name: Install s5cmd
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
+      - name: Sync ~/.openvm with S3 bucket in tagged dir
+        run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/

@@ -5,7 +5,7 @@ use proc_macro::TokenStream;
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
-    parse_macro_input, Expr, ExprPath, Path, Token,
+    parse_macro_input, ExprPath, LitStr, Token,
 };
 
 /// This macro generates the code to setup the elliptic curve for a given modular type. Also it
@@ -28,9 +28,8 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
     let span = proc_macro::Span::call_site();
 
     for item in items.into_iter() {
-        let struct_name = item.name.to_string();
-        let struct_name = syn::Ident::new(&struct_name, span.into());
-        let struct_path: syn::Path = syn::parse_quote!(#struct_name);
+        let struct_name_str = item.name.to_string();
+        let struct_name = syn::Ident::new(&struct_name_str, span.into());
         let mut intmod_type: Option<syn::Path> = None;
         let mut const_a: Option<syn::Expr> = None;
         let mut const_b: Option<syn::Expr> = None;
@@ -71,16 +70,7 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         macro_rules! create_extern_func {
             ($name:ident) => {
                 let $name = syn::Ident::new(
-                    &format!(
-                        "{}_{}",
-                        stringify!($name),
-                        struct_path
-                            .segments
-                            .iter()
-                            .map(|x| x.ident.to_string())
-                            .collect::<Vec<_>>()
-                            .join("_")
-                    ),
+                    &format!("{}_{}", stringify!($name), struct_name_str),
                     span.into(),
                 );
             };
@@ -89,13 +79,13 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
         create_extern_func!(sw_double_extern_func);
         create_extern_func!(sw_setup_extern_func);
 
-        let group_ops_mod_name = format_ident!("{}_ops", struct_name.to_string().to_lowercase());
+        let group_ops_mod_name = format_ident!("{}_ops", struct_name_str.to_lowercase());
 
         let result = TokenStream::from(quote::quote_spanned! { span.into() =>
             extern "C" {
                 fn #sw_add_ne_extern_func(rd: usize, rs1: usize, rs2: usize);
                 fn #sw_double_extern_func(rd: usize, rs1: usize);
-                fn #sw_setup_extern_func();
+                fn #sw_setup_extern_func(uninit: *mut core::ffi::c_void, p1: *const u8, p2: *const u8);
             }
 
             #[derive(Eq, PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -196,8 +186,21 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 #[cfg(target_os = "zkvm")]
                 fn set_up_once() {
                     static is_setup: ::openvm_ecc_guest::once_cell::race::OnceBool = ::openvm_ecc_guest::once_cell::race::OnceBool::new();
+
                     is_setup.get_or_init(|| {
-                        unsafe { #sw_setup_extern_func(); }
+                        // p1 is (x1, y1), and x1 must be the modulus.
+                        // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
+                        let modulus_bytes = <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
+                        let mut one = [0u8; <<Self as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
+                        one[0] = 1;
+                        let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#struct_name as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
+                        // p1 should be (p, a)
+                        let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
+                        // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
+                        let p2 = [one.as_ref(), one.as_ref()].concat();
+                        let mut uninit: core::mem::MaybeUninit<[Self; 2]> = core::mem::MaybeUninit::uninit();
+
+                        unsafe { #sw_setup_extern_func(uninit.as_mut_ptr() as *mut core::ffi::c_void, p1.as_ptr(), p2.as_ptr()); }
                         <#intmod_type as openvm_algebra_guest::IntMod>::set_up_once();
                         true
                     });
@@ -410,23 +413,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 }
 
 struct SwDefine {
-    items: Vec<Path>,
+    items: Vec<String>,
 }
 
 impl Parse for SwDefine {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let items = input.parse_terminated(<Expr as Parse>::parse, Token![,])?;
+        let items = input.parse_terminated(<LitStr as Parse>::parse, Token![,])?;
         Ok(Self {
-            items: items
-                .into_iter()
-                .map(|e| {
-                    if let Expr::Path(p) = e {
-                        p.path
-                    } else {
-                        panic!("expected path");
-                    }
-                })
-                .collect(),
+            items: items.into_iter().map(|e| e.value()).collect(),
         })
     }
 }
@@ -439,19 +433,15 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
 
     let span = proc_macro::Span::call_site();
 
-    for (ec_idx, item) in items.into_iter().enumerate() {
-        let str_path = item
-            .segments
-            .iter()
-            .map(|x| x.ident.to_string())
-            .collect::<Vec<_>>()
-            .join("_");
+    for (ec_idx, struct_id) in items.into_iter().enumerate() {
+        // Unique identifier shared by sw_define! and sw_init! used for naming the extern funcs.
+        // Currently it's just the struct type name.
         let add_ne_extern_func =
-            syn::Ident::new(&format!("sw_add_ne_extern_func_{}", str_path), span.into());
+            syn::Ident::new(&format!("sw_add_ne_extern_func_{}", struct_id), span.into());
         let double_extern_func =
-            syn::Ident::new(&format!("sw_double_extern_func_{}", str_path), span.into());
+            syn::Ident::new(&format!("sw_double_extern_func_{}", struct_id), span.into());
         let setup_extern_func =
-            syn::Ident::new(&format!("sw_setup_extern_func_{}", str_path), span.into());
+            syn::Ident::new(&format!("sw_setup_extern_func_{}", struct_id), span.into());
 
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
@@ -481,30 +471,18 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
             }
 
             #[no_mangle]
-            extern "C" fn #setup_extern_func() {
+            extern "C" fn #setup_extern_func(uninit: *mut core::ffi::c_void, p1: *const u8, p2: *const u8) {
                 #[cfg(target_os = "zkvm")]
                 {
-                    use super::#item;
-                    // p1 is (x1, y1), and x1 must be the modulus.
-                    // y1 can be anything for SetupEcAdd, but must equal `a` for SetupEcDouble
-                    let modulus_bytes = <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::MODULUS;
-                    let mut one = [0u8; <<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::Coordinate as openvm_algebra_guest::IntMod>::NUM_LIMBS];
-                    one[0] = 1;
-                    let curve_a_bytes = openvm_algebra_guest::IntMod::as_le_bytes(&<#item as openvm_ecc_guest::weierstrass::WeierstrassPoint>::CURVE_A);
-                    // p1 should be (p, a)
-                    let p1 = [modulus_bytes.as_ref(), curve_a_bytes.as_ref()].concat();
-                    // (EcAdd only) p2 is (x2, y2), and x1 - x2 has to be non-zero to avoid division over zero in add.
-                    let p2 = [one.as_ref(), one.as_ref()].concat();
-                    let mut uninit: core::mem::MaybeUninit<[#item; 2]> = core::mem::MaybeUninit::uninit();
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_ecc_guest::OPCODE,
                         funct3 = ::openvm_ecc_guest::SW_FUNCT3 as usize,
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
                                 * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        rd = In uninit.as_mut_ptr(),
-                        rs1 = In p1.as_ptr(),
-                        rs2 = In p2.as_ptr()
+                        rd = In uninit,
+                        rs1 = In p1,
+                        rs2 = In p2
                     );
                     openvm::platform::custom_insn_r!(
                         opcode = ::openvm_ecc_guest::OPCODE,
@@ -512,10 +490,12 @@ pub fn sw_init(input: TokenStream) -> TokenStream {
                         funct7 = ::openvm_ecc_guest::SwBaseFunct7::SwSetup as usize
                             + #ec_idx
                                 * (::openvm_ecc_guest::SwBaseFunct7::SHORT_WEIERSTRASS_MAX_KINDS as usize),
-                        rd = In uninit.as_mut_ptr(),
-                        rs1 = In p1.as_ptr(),
+                        rd = In uninit,
+                        rs1 = In p1,
                         rs2 = Const "x0" // will be parsed as 0 and therefore transpiled to SETUP_EC_DOUBLE
                     );
+
+
                 }
             }
         });

@@ -16,17 +16,22 @@ use openvm_stark_backend::{
     p3_air::{Air, BaseAir, PairBuilder},
     p3_field::{Field, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{get_air_name, BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use tracing::instrument;
 
 mod bus;
+pub use bus::*;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
+
 #[cfg(test)]
 pub mod tests;
-
-pub use bus::*;
 
 #[derive(Default, AlignedBorrow, Copy, Clone)]
 #[repr(C)]
@@ -102,8 +107,7 @@ pub struct VariableRangeCheckerChip {
     pub count: Vec<AtomicU32>,
 }
 
-#[derive(Clone)]
-pub struct SharedVariableRangeCheckerChip(Arc<VariableRangeCheckerChip>);
+pub type SharedVariableRangeCheckerChip = Arc<VariableRangeCheckerChip>;
 
 impl VariableRangeCheckerChip {
     pub fn new(bus: VariableRangeCheckerBus) -> Self {
@@ -153,12 +157,13 @@ impl VariableRangeCheckerChip {
         }
     }
 
+    /// Generates trace and resets the internal counters all to 0.
     pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
         let mut rows = F::zero_vec(self.count.len() * NUM_VARIABLE_RANGE_COLS);
         for (n, row) in rows.chunks_mut(NUM_VARIABLE_RANGE_COLS).enumerate() {
             let cols: &mut VariableRangeCols<F> = row.borrow_mut();
             cols.mult =
-                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
+                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_VARIABLE_RANGE_COLS)
     }
@@ -186,60 +191,15 @@ impl VariableRangeCheckerChip {
     }
 }
 
-impl SharedVariableRangeCheckerChip {
-    pub fn new(bus: VariableRangeCheckerBus) -> Self {
-        Self(Arc::new(VariableRangeCheckerChip::new(bus)))
-    }
-
-    pub fn bus(&self) -> VariableRangeCheckerBus {
-        self.0.bus()
-    }
-
-    pub fn range_max_bits(&self) -> usize {
-        self.0.range_max_bits()
-    }
-
-    pub fn air_width(&self) -> usize {
-        self.0.air_width()
-    }
-
-    pub fn add_count(&self, value: u32, max_bits: usize) {
-        self.0.add_count(value, max_bits)
-    }
-
-    pub fn clear(&self) {
-        self.0.clear()
-    }
-
-    pub fn generate_trace<F: Field>(&self) -> RowMajorMatrix<F> {
-        self.0.generate_trace()
-    }
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for VariableRangeCheckerChip
+// We allow any `R` type so this can work with arbitrary record arenas.
+impl<R, SC: StarkGenericConfig> Chip<R, CpuBackend<SC>> for VariableRangeCheckerChip
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air)
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    /// Generates trace and resets the internal counters all to 0.
+    fn generate_proving_ctx(&self, _: R) -> AirProvingContext<CpuBackend<SC>> {
         let trace = self.generate_trace::<Val<SC>>();
-        AirProofInput::simple_no_pis(trace)
-    }
-}
-
-impl<SC: StarkGenericConfig> Chip<SC> for SharedVariableRangeCheckerChip
-where
-    Val<SC>: PrimeField32,
-{
-    fn air(&self) -> AirRef<SC> {
-        self.0.air()
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
-        self.0.generate_air_proof_input()
+        AirProvingContext::simple_no_pis(Arc::new(trace))
     }
 }
 
@@ -255,29 +215,5 @@ impl ChipUsageGetter for VariableRangeCheckerChip {
     }
     fn trace_width(&self) -> usize {
         NUM_VARIABLE_RANGE_COLS
-    }
-}
-
-impl ChipUsageGetter for SharedVariableRangeCheckerChip {
-    fn air_name(&self) -> String {
-        self.0.air_name()
-    }
-
-    fn constant_trace_height(&self) -> Option<usize> {
-        self.0.constant_trace_height()
-    }
-
-    fn current_trace_height(&self) -> usize {
-        self.0.current_trace_height()
-    }
-
-    fn trace_width(&self) -> usize {
-        self.0.trace_width()
-    }
-}
-
-impl AsRef<VariableRangeCheckerChip> for SharedVariableRangeCheckerChip {
-    fn as_ref(&self) -> &VariableRangeCheckerChip {
-        &self.0
     }
 }
