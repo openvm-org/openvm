@@ -108,24 +108,16 @@ pub struct GkrModule {
 }
 
 impl GkrModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        // TODO: Move to the central bus inventory or have bus inventory share the next available
-        // index
-        let mut bus_manager = BusIndexManager::new();
-        // TODO: fix this
-        for _ in 0..20 {
-            bus_manager.new_bus_idx();
-        }
-
+    pub fn new(b: &mut BusIndexManager, bus_inventory: BusInventory) -> Self {
         GkrModule {
             bus_inventory,
-            layer_input_bus: GkrLayerInputBus::new(bus_manager.new_bus_idx()),
-            layer_output_bus: GkrLayerOutputBus::new(bus_manager.new_bus_idx()),
-            sumcheck_input_bus: GkrSumcheckInputBus::new(bus_manager.new_bus_idx()),
-            sumcheck_output_bus: GkrSumcheckOutputBus::new(bus_manager.new_bus_idx()),
-            sumcheck_challenge_bus: GkrSumcheckChallengeBus::new(bus_manager.new_bus_idx()),
-            xi_sampler_input_bus: GkrXiSamplerInputBus::new(bus_manager.new_bus_idx()),
-            xi_sampler_output_bus: GkrXiSamplerOutputBus::new(bus_manager.new_bus_idx()),
+            layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
+            layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),
+            sumcheck_input_bus: GkrSumcheckInputBus::new(b.new_bus_idx()),
+            sumcheck_output_bus: GkrSumcheckOutputBus::new(b.new_bus_idx()),
+            sumcheck_challenge_bus: GkrSumcheckChallengeBus::new(b.new_bus_idx()),
+            xi_sampler_input_bus: GkrXiSamplerInputBus::new(b.new_bus_idx()),
+            xi_sampler_output_bus: GkrXiSamplerOutputBus::new(b.new_bus_idx()),
         }
     }
 }

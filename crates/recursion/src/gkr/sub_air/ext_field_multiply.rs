@@ -65,12 +65,6 @@ pub struct ExtFieldMultAuxCols<T> {
 /// - z3 = x0*y3 + x1*y2 + x2*y1 + x3*y0
 pub struct ExtFieldMultiplySubAir;
 
-impl ExtFieldMultiplySubAir {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl<AB: AirBuilder> SubAir<AB> for ExtFieldMultiplySubAir {
     type AirContext<'a>
         = (
