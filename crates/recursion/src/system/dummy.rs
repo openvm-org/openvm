@@ -115,11 +115,11 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
             for (part, width) in widths.enumerate() {
                 for col in 0..*width {
                     let (col_claim, rot_claim) =
-                        proof.batch_constraint_proof.column_openings[sort_idx][part][col];
+                        proof.batch_constraint_proof.column_openings[sort_idx][part + 1][col];
                     column_claims_bus_msgs.push(ColumnClaimsMessage {
                         idx: F::from_canonical_usize(i),
                         sort_idx: F::from_canonical_usize(sort_idx),
-                        part_idx: F::from_canonical_usize(part),
+                        part_idx: F::from_canonical_usize(part + 1),
                         col_idx: F::from_canonical_usize(col),
                         col_claim: col_claim.as_base_slice().try_into().unwrap(),
                         rot_claim: rot_claim.as_base_slice().try_into().unwrap(),
