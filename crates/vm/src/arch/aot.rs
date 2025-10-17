@@ -43,7 +43,7 @@ where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for pure execution
+    /// Creates a new instance for pure execution
     pub fn new<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -55,7 +55,7 @@ where
         Self::new_with_asm_name(inventory, exe, &default_name)
     }
 
-    /// Creates a new interpreter instance for pure execution
+    /// Creates a new instance for pure execution
     /// Specify the name of the asm file
     pub fn new_with_asm_name<E>(
         inventory: &'a ExecutorInventory<E>,
@@ -69,6 +69,9 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let cur_dir = std::env::current_dir().unwrap();
+        let root_dir = cur_dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
@@ -109,12 +112,14 @@ where
             status.code()
         );
 
+        // library goes to `workspace_dir/target/{asm_name}/release/libasm_bridge.so` 
+
         let status = Command::new("cargo")
             .current_dir(&src_asm_bridge_dir)
             .args([
                 "rustc",
                 "--release",
-                &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name),
+                &format!("--target-dir={}/target/{}", root_dir.to_str().unwrap(), asm_name),
                 "--",
                 "-L",
                 src_asm_bridge_dir_str,
@@ -130,17 +135,19 @@ where
             status.code()
         );
 
-        let lib_path_exact = src_asm_bridge_dir
+        let lib_path = root_dir
+            .join("target")
             .join(asm_name)
             .join("release")
             .join("libasm_bridge.so");
-        let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };
+
+        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
+        
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-
         let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
             program,
             inventory,
@@ -148,7 +155,7 @@ where
         )?;
         let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
             pre_compute_insns.into_boxed_slice();
-        let init_memory = exe.init_memory.clone();
+            let init_memory = exe.init_memory.clone();
 
         Ok(Self {
             system_config: inventory.config().clone(),
