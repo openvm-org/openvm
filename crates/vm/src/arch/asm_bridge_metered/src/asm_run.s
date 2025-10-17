@@ -1,3 +1,4 @@
+.intel_syntax noprefix
 .code64
 .section .text
 .global asm_run_internal

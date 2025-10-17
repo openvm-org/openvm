@@ -165,6 +165,9 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
 
+    let temp_dir = tempfile::tempdir()?;
+    let target_dir = temp_dir.path();
+
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
@@ -173,6 +176,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
 
     let mut aot_instance = executor.aot_instance(&exe)?;
     let aot_state = aot_instance.execute(vec![], None)?;
+
 
     // check that the VM state are equal
     assert_eq!(interp_state.instret(), aot_state.instret());
@@ -208,6 +212,35 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
         interp_state.streams.hint_space,
         aot_state.streams.hint_space
     );
+
+    Ok(())
+}
+
+
+#[test_case("tests/data/rv32im-exp-from-as")]
+fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
+    let elf = get_elf(elf_path)?;
+    let exe = VmExe::from_elf(
+        elf,
+        Transpiler::<F>::default()
+            .with_extension(Rv32ITranspilerExtension)
+            .with_extension(Rv32MTranspilerExtension)
+            .with_extension(Rv32IoTranspilerExtension),
+    )?;
+
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");        
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config.clone())?;
+
+    let interpreter = executor.instance(&exe)?;
+    let interp_state = interpreter.execute(vec![], None)?;
+
+    let asm_name = String::from("asm_run");
+    let mut aot_instance = executor.aot_instance_with_asm_name(&exe, &asm_name)?;
+    let aot_state = aot_instance.execute(vec![], None)?;
+
+    assert_eq!(interp_state.instret(), aot_state.instret());
+    assert_eq!(interp_state.pc(), aot_state.pc());
 
     Ok(())
 }
