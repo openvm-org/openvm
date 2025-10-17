@@ -13,10 +13,12 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
-        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
-        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingSumcheckRandomnessBus,
-        TranscriptBus, WhirModuleBus, XiRandomnessBus,
+        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ClaimCoefficientsBus,
+        ColumnClaimsBus, CommitmentsBus, ConstraintSumcheckRandomnessBus, EqBaseBus,
+        EqBitsLookupBus, EqKernelLookupBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
+        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingModuleTidxBus,
+        StackingSumcheckRandomnessBus, SumcheckClaimsBus, TranscriptBus, WhirModuleBus,
+        XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
@@ -95,6 +97,14 @@ pub struct BusInventory {
     // Peripheral buses
     pub range_checker_bus: RangeCheckerBus,
     pub power_of_two_bus: PowerCheckerBus,
+
+    // Stacking module internal buses
+    pub stacking_tidx_bus: StackingModuleTidxBus,
+    pub claim_coefficients_bus: ClaimCoefficientsBus,
+    pub sumcheck_claims_bus: SumcheckClaimsBus,
+    pub eq_base_bus: EqBaseBus,
+    pub eq_kernel_lookup_bus: EqKernelLookupBus,
+    pub eq_bits_lookup_bus: EqBitsLookupBus,
 }
 
 #[derive(Debug, Default)]
@@ -206,8 +216,11 @@ pub struct BatchConstraintPreflight {
 
 #[derive(Debug, Default)]
 pub struct StackingPreflight {
+    pub intermediate_tidx: [usize; 3],
     pub post_tidx: usize,
+    pub univariate_poly_rand_eval: EF,
     pub stacking_batching_challenge: EF,
+    pub lambda: EF,
     pub sumcheck_rnd: Vec<EF>,
 }
 
@@ -245,6 +258,14 @@ impl Default for BusInventory {
             // Peripheral buses
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
             power_of_two_bus: PowerCheckerBus::new(b.new_bus_idx()),
+
+            // Stacking module internal buses
+            stacking_tidx_bus: StackingModuleTidxBus::new(b.new_bus_idx()),
+            claim_coefficients_bus: ClaimCoefficientsBus::new(b.new_bus_idx()),
+            sumcheck_claims_bus: SumcheckClaimsBus::new(b.new_bus_idx()),
+            eq_base_bus: EqBaseBus::new(b.new_bus_idx()),
+            eq_kernel_lookup_bus: EqKernelLookupBus::new(b.new_bus_idx()),
+            eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
         }
     }
 }
