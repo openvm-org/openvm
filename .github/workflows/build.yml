@@ -23,6 +23,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Run build
         run: |

@@ -69,6 +69,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
       - uses: taiki-e/install-action@nextest
 
       - name: Run ${{ matrix.crate.name }} guest library tests
