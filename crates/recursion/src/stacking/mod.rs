@@ -32,6 +32,7 @@ pub mod sumcheck;
 pub mod univariate;
 
 pub struct StackingModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
     // Internal buses
     stacking_tidx_bus: StackingModuleTidxBus,
@@ -43,8 +44,13 @@ pub struct StackingModule {
 }
 
 impl StackingModule {
-    pub fn new(b: &mut BusIndexManager, bus_inventory: BusInventory) -> Self {
+    pub fn new(
+        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        b: &mut BusIndexManager,
+        bus_inventory: BusInventory,
+    ) -> Self {
         Self {
+            mvk,
             bus_inventory,
             stacking_tidx_bus: StackingModuleTidxBus::new(b.new_bus_idx()),
             claim_coefficients_bus: ClaimCoefficientsBus::new(b.new_bus_idx()),
@@ -102,12 +108,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
         ]
     }
 
-    fn run_preflight(
-        &self,
-        _vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    ) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
         let mut sumcheck_rnd = vec![];
         let mut intermediate_tidx = [0; 3];
 
@@ -160,7 +161,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
@@ -168,28 +168,28 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(OpeningClaimsTraceGenerator::generate_trace(
-                    vk, proof, preflight,
+                    &self.mvk, proof, preflight,
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(UnivariateRoundTraceGenerator::generate_trace(
-                    vk, proof, preflight,
+                    proof, preflight,
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(SumcheckRoundsTraceGenerator::generate_trace(
-                    vk, proof, preflight,
+                    proof, preflight,
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(StackingClaimsTraceGenerator::generate_trace(
-                    vk, proof, preflight,
+                    proof, preflight,
                 ))),
                 public_values: vec![],
             },

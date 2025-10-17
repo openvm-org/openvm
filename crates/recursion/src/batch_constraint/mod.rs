@@ -18,12 +18,13 @@ use crate::{
 mod dummy;
 
 pub struct BatchConstraintModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
 }
 
 impl BatchConstraintModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        BatchConstraintModule { bus_inventory }
+    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
+        BatchConstraintModule { mvk, bus_inventory }
     }
 }
 
@@ -42,12 +43,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
         vec![Arc::new(sumcheck_air) as AirRef<_>]
     }
 
-    fn run_preflight(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    ) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
         let ts = &mut preflight.transcript;
         let BatchConstraintProof {
             numerator_term_per_air,
@@ -85,7 +81,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
 
         // Common main
         for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let width = &vk.inner.per_air[*air_id].params.width;
+            let width = &self.mvk.inner.per_air[*air_id].params.width;
 
             for col_idx in 0..width.common_main {
                 let (col_opening, rot_opening) = column_openings[sort_idx][0][col_idx];
@@ -95,7 +91,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
         }
 
         for (sort_idx, (air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let width = &vk.inner.per_air[*air_id].params.width;
+            let width = &self.mvk.inner.per_air[*air_id].params.width;
             let widths = width.preprocessed.iter().chain(width.cached_mains.iter());
 
             for (i, w) in widths.enumerate() {
@@ -115,13 +111,12 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(&self.mvk, proof, preflight))),
             public_values: vec![],
         }]
     }

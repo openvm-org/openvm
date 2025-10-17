@@ -18,12 +18,13 @@ use crate::{
 mod dummy;
 
 pub struct ProofShapeModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
 }
 
 impl ProofShapeModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        Self { bus_inventory }
+    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
+        Self { mvk, bus_inventory }
     }
 }
 
@@ -41,17 +42,12 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
         vec![Arc::new(proof_shape_air) as AirRef<_>]
     }
 
-    fn run_preflight(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    ) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
         let ts = &mut preflight.transcript;
-        ts.observe_commit(vk.pre_hash);
+        ts.observe_commit(self.mvk.pre_hash);
         ts.observe_commit(proof.common_main_commit);
 
-        let vk = &vk.inner;
+        let vk = &self.mvk.inner;
 
         let mut num_common_main_cells = 0;
 
@@ -123,13 +119,12 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(&self.mvk, proof, preflight))),
             public_values: vec![],
         }]
     }

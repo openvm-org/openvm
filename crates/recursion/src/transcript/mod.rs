@@ -15,12 +15,13 @@ use crate::{
 mod dummy;
 
 pub struct TranscriptModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     pub bus_inventory: BusInventory,
 }
 
 impl TranscriptModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
-        Self { bus_inventory }
+    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
+        Self { mvk, bus_inventory }
     }
 }
 
@@ -33,23 +34,16 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
         vec![Arc::new(transcript_air)]
     }
 
-    fn run_preflight(
-        &self,
-        _vk: &MultiStarkVerifyingKeyV2,
-        _proof: &Proof,
-        _preflight: &mut Preflight<TS>,
-    ) {
-    }
+    fn run_preflight(&self, _proof: &Proof, _preflight: &mut Preflight<TS>) {}
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
+            common_main: Some(Arc::new(dummy::generate_trace(&self.mvk, proof, preflight))),
             public_values: vec![],
         }]
     }

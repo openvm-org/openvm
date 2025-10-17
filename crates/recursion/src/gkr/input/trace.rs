@@ -4,7 +4,6 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     F,
-    keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
 };
@@ -13,7 +12,6 @@ use super::GkrInputCols;
 use crate::system::Preflight;
 
 pub fn generate_trace<TS: FiatShamirTranscript>(
-    _vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {

@@ -2,16 +2,12 @@ use core::borrow::BorrowMut;
 
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{
-    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, EF, F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
 
 use super::GkrLayerCols;
 use crate::system::Preflight;
 
 pub fn generate_trace<TS: FiatShamirTranscript>(
-    _vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
     preflight: &Preflight<TS>,
 ) -> RowMajorMatrix<F> {

@@ -96,6 +96,7 @@ mod sumcheck;
 mod xi_sampler;
 
 pub struct GkrModule {
+    mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
     // Internal buses
     xi_sampler_input_bus: GkrXiSamplerInputBus,
@@ -108,8 +109,13 @@ pub struct GkrModule {
 }
 
 impl GkrModule {
-    pub fn new(b: &mut BusIndexManager, bus_inventory: BusInventory) -> Self {
+    pub fn new(
+        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        b: &mut BusIndexManager,
+        bus_inventory: BusInventory,
+    ) -> Self {
         GkrModule {
+            mvk,
             bus_inventory,
             layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
             layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),
@@ -175,12 +181,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         ]
     }
 
-    fn run_preflight(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &mut Preflight<TS>,
-    ) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
         let GkrProof {
             q0_claim,
             claims_per_layer,
@@ -286,7 +287,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         }
 
         let post_layer_tidx = ts.len();
-        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + vk.inner.params.l_skip {
+        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + self.mvk.inner.params.l_skip {
             xi.push((ts.len(), ts.sample_ext()));
         }
 
@@ -302,7 +303,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
 
     fn generate_proof_inputs(
         &self,
-        vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
         preflight: &Preflight<TS>,
     ) -> Vec<AirProofRawInput<F>> {
@@ -310,25 +310,25 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
             // GkrInputAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(input::generate_trace(vk, proof, preflight))),
+                common_main: Some(Arc::new(input::generate_trace(proof, preflight))),
                 public_values: vec![],
             },
             // GkrLayerAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(layer::generate_trace(vk, proof, preflight))),
+                common_main: Some(Arc::new(layer::generate_trace(proof, preflight))),
                 public_values: vec![],
             },
             // GkrLayerSumcheckAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(vk, proof, preflight))),
+                common_main: Some(Arc::new(sumcheck::generate_trace(proof, preflight))),
                 public_values: vec![],
             },
             // GkrXiSamplerAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(xi_sampler::generate_trace(vk, proof, preflight))),
+                common_main: Some(Arc::new(xi_sampler::generate_trace(proof, preflight))),
                 public_values: vec![],
             },
             // AirProofRawInput {
