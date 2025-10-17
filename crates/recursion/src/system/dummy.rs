@@ -3,7 +3,7 @@ use core::iter::zip;
 
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
-    D_EF, EF, F,
+    EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
@@ -24,12 +24,6 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
         &self,
         proof: &Proof,
     ) -> Vec<BatchConstraintModuleMessage<F>> {
-        let tidx = self.proof_shape.post_tidx;
-        let alpha_logup: [F; D_EF] = self.transcript.data[tidx..tidx + D_EF].try_into().unwrap();
-        let beta_logup: [F; D_EF] = self.transcript.data[tidx + D_EF..tidx + 2 * D_EF]
-            .try_into()
-            .unwrap();
-
         let gkr_input_layer_claim =
             if let Some(last_layer_claims) = proof.gkr_proof.claims_per_layer.last() {
                 let &GkrLayerClaims {
@@ -50,9 +44,9 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
             };
 
         vec![BatchConstraintModuleMessage {
+            // Skip grinding nonce observation and grinding challenge sampling
+            tidx_alpha_beta: F::from_canonical_usize(self.proof_shape.post_tidx) + F::TWO,
             tidx: F::from_canonical_usize(self.gkr.post_tidx),
-            alpha_logup,
-            beta_logup,
             n_max: F::from_canonical_usize(self.proof_shape.n_max),
             gkr_input_layer_claim,
         }]
