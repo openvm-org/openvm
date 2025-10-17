@@ -1,4 +1,4 @@
-use std::{ffi::c_void, process::Command, path::Path};
+use std::{ffi::c_void, path::Path, process::Command};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -55,19 +55,19 @@ where
         Self::new_with_asm_name(inventory, exe, &default_name)
     }
 
-    /// Creates a new interpreter instance for pure execution 
+    /// Creates a new interpreter instance for pure execution
     /// Specify the name of the asm file
     pub fn new_with_asm_name<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
-        asm_name: &String,      // name of the asm file we write into
+        asm_name: &String, // name of the asm file we write into
     ) -> Result<Self, StaticProgramError>
     where
         E: Executor<F>,
-    {   
+    {
         // source asm_bridge directory
-        // this is fixed 
-        // can unwrap because its fixed and guaranteed to exist      
+        // this is fixed
+        // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
@@ -79,7 +79,11 @@ where
         // as src/asm_run.s -o asm_run.o
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
-            .args([&format!("src/{}.s", asm_name), "-o", &format!("{}.o", asm_name)])
+            .args([
+                &format!("src/{}.s", asm_name),
+                "-o",
+                &format!("{}.o", asm_name),
+            ])
             .status()
             .expect("Failed to assemble the file into an object file");
 
@@ -88,10 +92,14 @@ where
             "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
             status.code()
         );
-        
+
         let status = Command::new("ar")
             .current_dir(&src_asm_bridge_dir)
-            .args(["rcs", &format!("lib{}.a", asm_name), &format!("{}.o", asm_name)])
+            .args([
+                "rcs",
+                &format!("lib{}.a", asm_name),
+                &format!("{}.o", asm_name),
+            ])
             .status()
             .expect("Create a static library");
 
@@ -100,10 +108,19 @@ where
             "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
             status.code()
         );
-        
+
         let status = Command::new("cargo")
             .current_dir(&src_asm_bridge_dir)
-            .args(["rustc", "--release", &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name), "--", "-L", src_asm_bridge_dir_str, "-l", &format!("static={}", asm_name)])
+            .args([
+                "rustc",
+                "--release",
+                &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name),
+                "--",
+                "-L",
+                src_asm_bridge_dir_str,
+                "-l",
+                &format!("static={}", asm_name),
+            ])
             .status()
             .expect("Creating the dynamic library");
 
@@ -113,7 +130,10 @@ where
             status.code()
         );
 
-        let lib_path_exact = src_asm_bridge_dir.join(&format!("{}", asm_name)).join("release").join("libasm_bridge.so");
+        let lib_path_exact = src_asm_bridge_dir
+            .join(&format!("{}", asm_name))
+            .join("release")
+            .join("libasm_bridge.so");
         let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
@@ -132,8 +152,8 @@ where
 
         Ok(Self {
             system_config: inventory.config().clone(),
-            pre_compute_buf: pre_compute_buf,
-            pre_compute_insns_box: pre_compute_insns_box,
+            pre_compute_buf,
+            pre_compute_insns_box,
             pc_start: exe.pc_start,
             init_memory,
             lib,
@@ -265,10 +285,11 @@ where
         E: MeteredExecutor<F>,
     {
         // source asm_bridge directory
-        // this is fixed 
-        // can unwrap because its fixed and guaranteed to exist   
+        // this is fixed
+        // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
+        let src_asm_bridge_dir =
+            std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
         // ar rcs libasm_runtime.a asm_run.o
@@ -278,7 +299,11 @@ where
         // as src/asm_run.s -o asm_run.o
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
-            .args([&format!("src/{}.s", asm_name), "-o", &format!("{}.o", asm_name)])
+            .args([
+                &format!("src/{}.s", asm_name),
+                "-o",
+                &format!("{}.o", asm_name),
+            ])
             .status()
             .expect("Failed to assemble the file into an object file");
 
@@ -290,7 +315,11 @@ where
 
         let status = Command::new("ar")
             .current_dir(&src_asm_bridge_dir)
-            .args(["rcs", &format!("lib{}.a", asm_name), &format!("{}.o", asm_name)])
+            .args([
+                "rcs",
+                &format!("lib{}.a", asm_name),
+                &format!("{}.o", asm_name),
+            ])
             .status()
             .expect("Create a static library");
 
@@ -299,10 +328,19 @@ where
             "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
             status.code()
         );
-        
+
         let status = Command::new("cargo")
             .current_dir(&src_asm_bridge_dir)
-            .args(["rustc", "--release", &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name), "--", "-L", src_asm_bridge_dir_str, "-l", &format!("static={}", asm_name)])
+            .args([
+                "rustc",
+                "--release",
+                &format!("--target-dir={}/{}", src_asm_bridge_dir_str, asm_name),
+                "--",
+                "-L",
+                src_asm_bridge_dir_str,
+                "-l",
+                &format!("static={}", asm_name),
+            ])
             .status()
             .expect("Creating the dynamic library");
 
@@ -312,7 +350,10 @@ where
             status.code()
         );
 
-        let lib_path_exact = src_asm_bridge_dir.join(&format!("{}", asm_name)).join("release").join("libasm_bridge_metered.so");
+        let lib_path_exact = src_asm_bridge_dir
+            .join(&format!("{}", asm_name))
+            .join("release")
+            .join("libasm_bridge_metered.so");
         let lib = unsafe { Library::new(&lib_path_exact).expect("Failed to load library") };
 
         let program = &exe.program;

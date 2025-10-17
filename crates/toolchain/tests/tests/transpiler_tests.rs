@@ -88,7 +88,6 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let mut aot_instance = executor.aot_instance(&exe)?;
     let aot_state = aot_instance.execute(vec![], None)?;
 
-
     // check that the VM state are equal
     assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
@@ -127,7 +126,6 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-
 #[test_case("tests/data/rv32im-exp-from-as")]
 fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;
@@ -139,7 +137,7 @@ fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
 
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");        
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 

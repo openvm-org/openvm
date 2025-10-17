@@ -11,8 +11,8 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
+    path::Path,
     sync::Arc,
-    path::Path
 };
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -238,7 +238,7 @@ where
 
     pub fn aot_instance(
         &self,
-        exe: &VmExe<F>
+        exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
     }
@@ -246,7 +246,7 @@ where
     pub fn aot_instance_with_asm_name(
         &self,
         exe: &VmExe<F>,
-        asm_name: &String
+        asm_name: &String,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new_with_asm_name(&self.inventory, exe, asm_name)
     }
