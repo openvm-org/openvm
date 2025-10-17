@@ -85,6 +85,8 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
     ) -> Vec<ColumnClaimsMessage<F>> {
         let mut i = 0;
         let mut column_claims_bus_msgs = vec![];
+        let lambda_squared = self.stacking.lambda * self.stacking.lambda;
+        let mut current_lambda_pow = EF::ONE;
         for (sort_idx, (air_id, _)) in self.proof_shape.sorted_trace_vdata.iter().enumerate() {
             let vk = &vk.inner.per_air[*air_id];
             for col in 0..vk.params.width.common_main {
@@ -97,7 +99,9 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
                     col_idx: F::from_canonical_usize(col),
                     col_claim: col_claim.as_base_slice().try_into().unwrap(),
                     rot_claim: rot_claim.as_base_slice().try_into().unwrap(),
+                    lambda_pow: current_lambda_pow.as_base_slice().try_into().unwrap(),
                 });
+                current_lambda_pow *= lambda_squared;
                 i += 1
             }
         }
@@ -117,7 +121,9 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
                         col_idx: F::from_canonical_usize(col),
                         col_claim: col_claim.as_base_slice().try_into().unwrap(),
                         rot_claim: rot_claim.as_base_slice().try_into().unwrap(),
+                        lambda_pow: current_lambda_pow.as_base_slice().try_into().unwrap(),
                     });
+                    current_lambda_pow *= lambda_squared;
                     i += 1;
                 }
             }
