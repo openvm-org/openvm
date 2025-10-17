@@ -11,7 +11,6 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
-    path::Path,
     sync::Arc,
 };
 
@@ -43,7 +42,6 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
 use super::{
-    aot::AotInstance,
     execution_mode::{ExecutionCtx, MeteredCostCtx, MeteredCtx, PreflightCtx, Segment},
     hasher::poseidon2::vm_poseidon2_hasher,
     interpreter::InterpretedInstance,
