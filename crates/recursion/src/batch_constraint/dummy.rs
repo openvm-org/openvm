@@ -8,7 +8,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{
-    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
     proof::Proof,
 };
 use stark_recursion_circuit_derive::AlignedBorrow;
@@ -142,10 +142,17 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
     let mut air_part_shape_bus_msgs = preflight.air_part_bus_msgs(vk).into_iter();
     let mut column_claims_bus_msgs = preflight.column_claims_messages(vk, proof).into_iter();
     let mut transcript_msgs = preflight
+        // Sample alpha and beta
         .transcript_msgs(
+            preflight.proof_shape.post_tidx + 2,
+            preflight.proof_shape.post_tidx + 2 + 2 * D_EF,
+        )
+        .into_iter()
+        .chain(preflight.transcript_msgs(
             preflight.gkr.post_tidx,
             preflight.batch_constraint.post_tidx,
-        )
+        ))
+        .collect::<Vec<_>>()
         .into_iter();
 
     let num_valid_rows = [
