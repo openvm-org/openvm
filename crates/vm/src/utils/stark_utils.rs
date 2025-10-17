@@ -86,10 +86,7 @@ where
     final_memory
 }
 
-/// Executes and proves the VM and returns the final memory state.
-/// If `debug` is true, runs the debug prover.
-//
-// Same implementation as VmLocalProver, but we need to do something special to run the debug prover
+// Compares the output of the interpreter and the AOT instance for pure and metered execution
 #[cfg(feature = "aot")]
 pub fn check_aot_equivalence<E, VB>(
     vm: &VirtualMachine<E, VB>,
@@ -155,6 +152,10 @@ where
     Ok(())
 }
 
+/// Executes and proves the VM and returns the final memory state.
+/// If `debug` is true, runs the debug prover.
+//
+// Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 #[allow(clippy::type_complexity)]
 pub fn air_test_impl<E, VB>(
     fri_params: FriParameters,

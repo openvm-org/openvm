@@ -67,7 +67,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build --profile maxperf
+        run: cargo $TOOLCHAIN codspeed build --profile maxperf --features aot
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
@@ -110,7 +110,7 @@ jobs:
 
       - name: Build benchmarks
         working-directory: benchmarks/execute
-        run: cargo $TOOLCHAIN codspeed build
+        run: cargo $TOOLCHAIN codspeed build --features aot
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
