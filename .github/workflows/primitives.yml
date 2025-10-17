@@ -42,6 +42,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
       - uses: taiki-e/install-action@nextest
 
       - name: Set CPU tests environment variables

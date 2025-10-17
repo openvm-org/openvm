@@ -48,6 +48,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Install architecture specific tools
         run: |
@@ -90,6 +91,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Install architecture specific tools
         run: |

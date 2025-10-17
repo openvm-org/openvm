@@ -29,6 +29,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Generate docs
         run: |
@@ -101,6 +102,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          shared-key: "v1"
 
       - name: Verify CUDA setup
         run: |
