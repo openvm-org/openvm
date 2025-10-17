@@ -1544,13 +1544,14 @@ library LibString {
         assembly {
             // We don't need to zero right pad the string,
             // since this is our own custom non-standard packing scheme.
-            result := mul(
-                // Load the length and the bytes.
-                mload(add(a, 0x1f)),
-                // `length != 0 && length < 32`. Abuses underflow.
-                // Assumes that the length is valid and within the block gas limit.
-                lt(sub(mload(a), 1), 0x1f)
-            )
+            result :=
+                mul(
+                    // Load the length and the bytes.
+                    mload(add(a, 0x1f)),
+                    // `length != 0 && length < 32`. Abuses underflow.
+                    // Assumes that the length is valid and within the block gas limit.
+                    lt(sub(mload(a), 1), 0x1f)
+                )
         }
     }
 
