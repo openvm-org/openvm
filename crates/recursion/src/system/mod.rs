@@ -13,12 +13,10 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
-        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ClaimCoefficientsBus,
-        ColumnClaimsBus, CommitmentsBus, ConstraintSumcheckRandomnessBus, EqBaseBus,
-        EqBitsLookupBus, EqKernelLookupBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
-        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingModuleTidxBus,
-        StackingSumcheckRandomnessBus, SumcheckClaimsBus, TranscriptBus, WhirModuleBus,
-        XiRandomnessBus,
+        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
+        ConstraintSumcheckRandomnessBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
+        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingSumcheckRandomnessBus,
+        TranscriptBus, WhirModuleBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
@@ -97,14 +95,6 @@ pub struct BusInventory {
     // Peripheral buses
     pub range_checker_bus: RangeCheckerBus,
     pub power_of_two_bus: PowerCheckerBus,
-
-    // Stacking module internal buses
-    pub stacking_tidx_bus: StackingModuleTidxBus,
-    pub claim_coefficients_bus: ClaimCoefficientsBus,
-    pub sumcheck_claims_bus: SumcheckClaimsBus,
-    pub eq_base_bus: EqBaseBus,
-    pub eq_kernel_lookup_bus: EqKernelLookupBus,
-    pub eq_bits_lookup_bus: EqBitsLookupBus,
 }
 
 #[derive(Debug, Default)]
@@ -237,10 +227,8 @@ pub struct StackingPreflight {
 #[derive(Debug, Default)]
 pub struct WhirPreflight {}
 
-impl Default for BusInventory {
-    fn default() -> Self {
-        let mut b = BusIndexManager::new();
-
+impl BusInventory {
+    fn new(b: &mut BusIndexManager) -> Self {
         Self {
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
 
@@ -268,14 +256,7 @@ impl Default for BusInventory {
             // Peripheral buses
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
             power_of_two_bus: PowerCheckerBus::new(b.new_bus_idx()),
-
             // Stacking module internal buses
-            stacking_tidx_bus: StackingModuleTidxBus::new(b.new_bus_idx()),
-            claim_coefficients_bus: ClaimCoefficientsBus::new(b.new_bus_idx()),
-            sumcheck_claims_bus: SumcheckClaimsBus::new(b.new_bus_idx()),
-            eq_base_bus: EqBaseBus::new(b.new_bus_idx()),
-            eq_kernel_lookup_bus: EqKernelLookupBus::new(b.new_bus_idx()),
-            eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -288,7 +269,8 @@ impl BusInventory {
 
 impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
     fn default() -> Self {
-        let bus_inventory = BusInventory::default();
+        let mut b = BusIndexManager::new();
+        let bus_inventory = BusInventory::new(&mut b);
 
         let range_checker = Arc::new(RangeCheckerAir::<8>::new(bus_inventory.range_checker_bus));
         let pow_2_checker = Arc::new(PowerCheckerAir::<2, 32>::new(
@@ -298,9 +280,9 @@ impl<TS: FiatShamirTranscript> Default for VerifierCircuit<TS> {
 
         let transcript_module = TranscriptModule::new(bus_inventory.clone());
         let proof_shape_module = ProofShapeModule::new(bus_inventory.clone());
-        let gkr_module = GkrModule::new(bus_inventory.clone());
+        let gkr_module = GkrModule::new(&mut b, bus_inventory.clone());
         let batch_constraint_module = BatchConstraintModule::new(bus_inventory.clone());
-        let stacking_module = StackingModule::new(bus_inventory.clone());
+        let stacking_module = StackingModule::new(&mut b, bus_inventory.clone());
         let whir_module = WhirModule::new(bus_inventory.clone());
 
         let modules: Vec<Box<dyn AirModule<TS>>> = vec![

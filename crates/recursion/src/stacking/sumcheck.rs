@@ -19,12 +19,15 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, EqBitsLookupBus,
-        EqKernelLookupBus, StackingModuleTidxBus, StackingModuleTidxMessage,
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, SumcheckClaimsBus,
-        SumcheckClaimsMessage, TranscriptBus, TranscriptBusMessage,
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus,
+        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
+        TranscriptBusMessage,
     },
-    system::{BusInventory, Preflight},
+    stacking::bus::{
+        EqBitsLookupBus, EqKernelLookupBus, StackingModuleTidxBus, StackingModuleTidxMessage,
+        SumcheckClaimsBus, SumcheckClaimsMessage,
+    },
+    system::Preflight,
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -122,20 +125,6 @@ pub struct SumcheckRoundsAir {
     pub sumcheck_claims_bus: SumcheckClaimsBus,
     pub eq_kernel_lookup_bus: EqKernelLookupBus,
     pub eq_bits_lookup_bus: EqBitsLookupBus,
-}
-
-impl SumcheckRoundsAir {
-    pub fn new(buses: &BusInventory) -> Self {
-        Self {
-            constraint_randomness_bus: buses.constraint_randomness_bus,
-            stacking_randomness_bus: buses.stacking_randomness_bus,
-            transcript_bus: buses.transcript_bus,
-            stacking_tidx_bus: buses.stacking_tidx_bus,
-            sumcheck_claims_bus: buses.sumcheck_claims_bus,
-            eq_kernel_lookup_bus: buses.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: buses.eq_bits_lookup_bus,
-        }
-    }
 }
 
 impl BaseAirWithPublicValues<F> for SumcheckRoundsAir {}

@@ -104,8 +104,8 @@ impl GkrLayerSumcheckAir {
             sumcheck_input_bus,
             sumcheck_output_bus,
             sumcheck_challenge_bus,
-            _cubic_interpolation: InterpolateCubicSubAir::new(),
-            _ext_field_multiply: ExtFieldMultiplySubAir::new(),
+            _cubic_interpolation: InterpolateCubicSubAir,
+            _ext_field_multiply: ExtFieldMultiplySubAir,
         }
     }
 }
