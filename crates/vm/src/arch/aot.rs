@@ -20,6 +20,12 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+/// The assembly bridge build process requires the following tools:
+/// GNU Binutils (provides `as` and `ar`)
+/// Rust toolchain
+/// Verify installation by `as --version`, `ar --version` and `cargo --version`
+/// Refer to AOT.md for further clarification about AOT
+///  
 pub struct AotInstance<'a, F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
