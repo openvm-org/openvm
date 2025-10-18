@@ -70,8 +70,7 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let cur_dir = std::env::current_dir().unwrap();
-        let root_dir = cur_dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
         
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
@@ -156,7 +155,7 @@ where
         )?;
         let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
             pre_compute_insns.into_boxed_slice();
-            
+
         let init_memory = exe.init_memory.clone();
 
         Ok(Self {
@@ -270,7 +269,7 @@ where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for metered execution.
+    /// Creates a new instance for metered execution.
     pub fn new_metered<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -297,8 +296,7 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let cur_dir = std::env::current_dir().unwrap();
-        let root_dir = cur_dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
 
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();

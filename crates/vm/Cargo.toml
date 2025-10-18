@@ -40,7 +40,7 @@ static_assertions.workspace = true
 getset.workspace = true
 dashmap.workspace = true
 cfg-if.workspace = true
-libloading = "0.8"
+libloading = { workspace = true, optional = true }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
@@ -82,7 +82,7 @@ test-utils = ["dep:openvm-stark-sdk"]
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
 # Ahead-of-time execution
-aot = []
+aot = ["dep:libloading"]
 # Disable bounds checking in memory operations for performance
 unprotected = []
 # performance features:
