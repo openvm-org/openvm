@@ -64,7 +64,6 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-
 #[cfg(feature = "aot")]
 #[test_case("tests/data/rv32im-exp-from-as")]
 #[test_case("tests/data/rv32im-fib-from-as")]
@@ -77,7 +76,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32MTranspilerExtension)
             .with_extension(Rv32IoTranspilerExtension),
     )?;
-    
+
     let config = Rv32ImConfig::default();
     let executor = VmExecutor::new(config.clone())?;
 
@@ -86,7 +85,6 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
 
     let mut aot_instance = executor.aot_instance(&exe)?;
     let aot_state = aot_instance.execute(vec![], None)?;
-
 
     // check that the VM state are equal
     assert_eq!(interp_state.instret(), aot_state.instret());
@@ -122,11 +120,10 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
         interp_state.streams.hint_space,
         aot_state.streams.hint_space
     );
-    
+
     Ok(())
 }
 
-/*
 #[cfg(feature = "aot")]
 #[test_case("tests/data/rv32im-exp-from-as")]
 fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
@@ -155,7 +152,6 @@ fn test_rv32im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
 
     Ok(())
 }
-*/
 
 #[test_case("tests/data/rv32im-exp-from-as")]
 #[test_case("tests/data/rv32im-fib-from-as")]
