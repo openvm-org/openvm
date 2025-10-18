@@ -70,8 +70,12 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
-        
+        let root_dir = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
+
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
@@ -112,14 +116,18 @@ where
             status.code()
         );
 
-        // library goes to `workspace_dir/target/{asm_name}/release/libasm_bridge.so` 
+        // library goes to `workspace_dir/target/{asm_name}/release/libasm_bridge.so`
 
         let status = Command::new("cargo")
             .current_dir(&src_asm_bridge_dir)
             .args([
                 "rustc",
                 "--release",
-                &format!("--target-dir={}/target/{}", root_dir.to_str().unwrap(), asm_name),
+                &format!(
+                    "--target-dir={}/target/{}",
+                    root_dir.to_str().unwrap(),
+                    asm_name
+                ),
                 "--",
                 "-L",
                 src_asm_bridge_dir_str,
@@ -142,7 +150,7 @@ where
             .join("libasm_bridge.so");
 
         let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-        
+
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
@@ -296,9 +304,14 @@ where
         // this is fixed
         // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir).parent().unwrap().parent().unwrap();
+        let root_dir = std::path::Path::new(manifest_dir)
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap();
 
-        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
+        let src_asm_bridge_dir =
+            std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
         // ar rcs libasm_runtime.a asm_run.o
@@ -343,7 +356,11 @@ where
             .args([
                 "rustc",
                 "--release",
-                &format!("--target-dir={}/target/{}", root_dir.to_str().unwrap(), asm_name),
+                &format!(
+                    "--target-dir={}/target/{}",
+                    root_dir.to_str().unwrap(),
+                    asm_name
+                ),
                 "--",
                 "-L",
                 src_asm_bridge_dir_str,

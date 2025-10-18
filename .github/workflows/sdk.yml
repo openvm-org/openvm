@@ -38,7 +38,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-          shared-key: "v1"
       - uses: taiki-e/install-action@nextest
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version

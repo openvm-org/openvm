@@ -10,18 +10,18 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+#[cfg(feature = "aot")]
+use crate::arch::{SystemConfig, VmState};
+#[cfg(feature = "aot")]
+use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
-#[cfg(feature = "aot")]
-use crate::system::memory::online::GuestMemory;
-#[cfg(feature = "aot")]
-use crate::arch::{SystemConfig, VmState};
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -119,7 +119,8 @@ where
 
     let system_config: &SystemConfig = config.as_ref();
     let addr_spaces = &system_config.memory_config.addr_spaces;
-    let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>, rhs: &VmState<Val<E::SC>, GuestMemory>| {
+    let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
+                              rhs: &VmState<Val<E::SC>, GuestMemory>| {
         assert_eq!(lhs.pc(), rhs.pc());
         assert_eq!(lhs.instret(), rhs.instret());
         for r in 0..addr_spaces[1].num_cells {
@@ -142,7 +143,7 @@ where
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     assert_vm_state_eq(&interp_state_metered, &aot_state_metered);
-    
+
     assert_eq!(segments.len(), aot_segments.len());
     for i in 0..segments.len() {
         assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
@@ -188,7 +189,6 @@ where
 
     #[cfg(feature = "aot")]
     check_aot_equivalence(&vm, &config, &exe, &input)?;
-
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
