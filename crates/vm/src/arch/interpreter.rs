@@ -66,7 +66,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
 }
 
 #[cfg_attr(feature = "tco", allow(dead_code))]
-struct PreComputeInstruction<'a, F, Ctx> {
+pub struct PreComputeInstruction<'a, F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,
     pub pre_compute: &'a [u8],
 }
@@ -529,14 +529,14 @@ where
     }
 }
 
-fn alloc_pre_compute_buf<F>(program: &Program<F>, pre_compute_max_size: usize) -> AlignedBuf {
+pub fn alloc_pre_compute_buf<F>(program: &Program<F>, pre_compute_max_size: usize) -> AlignedBuf {
     let base_idx = get_pc_index(program.pc_base);
     let padded_program_len = base_idx + program.instructions_and_debug_infos.len();
     let buf_len = padded_program_len * pre_compute_max_size;
     AlignedBuf::uninit(buf_len, pre_compute_max_size)
 }
 
-fn split_pre_compute_buf<'a, F>(
+pub fn split_pre_compute_buf<'a, F>(
     program: &Program<F>,
     pre_compute_buf: &'a mut AlignedBuf,
     pre_compute_max_size: usize,
@@ -575,6 +575,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
             break;
         }
         let pc_index = get_pc_index(pc);
+
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
             unsafe { (inst.handler)(inst.pre_compute, &mut instret, &mut pc, arg, exec_state) };
@@ -669,7 +670,7 @@ unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
     exec_state.exit_code = Err(ExecutionError::Unreachable(pc));
 }
 
-fn get_pre_compute_max_size<F, E: Executor<F>>(
+pub fn get_pre_compute_max_size<F, E: Executor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -695,7 +696,7 @@ fn get_pre_compute_max_size<F, E: Executor<F>>(
         .next_power_of_two()
 }
 
-fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
+pub fn get_metered_pre_compute_max_size<F, E: MeteredExecutor<F>>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
 ) -> usize {
@@ -729,7 +730,7 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
 }
 
 #[cfg(not(feature = "tco"))]
-fn get_pre_compute_instructions<'a, F, Ctx, E>(
+pub fn get_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
@@ -785,7 +786,7 @@ where
 }
 
 #[cfg(not(feature = "tco"))]
-fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
+pub fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],

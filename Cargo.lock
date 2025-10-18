@@ -840,6 +840,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "asm_bridge"
+version = "1.4.1-rc.1"
+dependencies = [
+ "cc",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-stark-sdk",
+]
+
+[[package]]
+name = "asm_bridge_metered"
+version = "1.4.1-rc.1"
+dependencies = [
+ "cc",
+ "openvm-circuit",
+ "openvm-instructions",
+ "openvm-stark-sdk",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5376,6 +5396,7 @@ dependencies = [
  "getset",
  "itertools 0.14.0",
  "libc",
+ "libloading",
  "memmap2",
  "metrics",
  "openvm-circuit",

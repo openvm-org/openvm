@@ -36,6 +36,7 @@ metrics.workspace = true
 default = ["parallel", "jemalloc", "metrics"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
+aot = ["openvm-sdk/aot"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
 async = ["openvm-sdk/async"]

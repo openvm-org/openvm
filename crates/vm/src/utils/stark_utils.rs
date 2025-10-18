@@ -10,6 +10,10 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 
+#[cfg(feature = "aot")]
+use crate::arch::{SystemConfig, VmState};
+#[cfg(feature = "aot")]
+use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
@@ -82,6 +86,73 @@ where
     final_memory
 }
 
+// Compares the output of the interpreter and the AOT instance for pure and metered execution
+#[cfg(feature = "aot")]
+pub fn check_aot_equivalence<E, VB>(
+    vm: &VirtualMachine<E, VB>,
+    config: &VB::VmConfig,
+    exe: &VmExe<Val<E::SC>>,
+    input: &Streams<Val<E::SC>>,
+) -> eyre::Result<()>
+where
+    E: StarkFriEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E>,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
+{
+    let metered_ctx = vm.build_metered_ctx(&exe);
+    /*
+    Assertions for Pure Execution AOT
+    */
+    let interp_state_pure = vm
+        .interpreter(&exe)?
+        .execute(input.clone(), None)
+        .expect("Failed to execute");
+
+    let aot_state_pure = vm
+        .get_aot_instance(&exe)?
+        .execute(input.clone(), None)
+        .expect("Failed to execute");
+
+    let system_config: &SystemConfig = config.as_ref();
+    let addr_spaces = &system_config.memory_config.addr_spaces;
+    let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
+                              rhs: &VmState<Val<E::SC>, GuestMemory>| {
+        assert_eq!(lhs.pc(), rhs.pc());
+        assert_eq!(lhs.instret(), rhs.instret());
+        for r in 0..addr_spaces[1].num_cells {
+            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+            assert_eq!(a, b);
+        }
+    };
+    assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+
+    /*
+    Assertions for Metered AOT
+    */
+    let (aot_segments, aot_state_metered) = vm
+        .get_metered_aot_instance(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    let (segments, interp_state_metered) = vm
+        .metered_interpreter(&exe)?
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
+    assert_vm_state_eq(&interp_state_metered, &aot_state_metered);
+
+    assert_eq!(segments.len(), aot_segments.len());
+    for i in 0..segments.len() {
+        assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
+        assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
+        assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
+    }
+    Ok(())
+}
+
 /// Executes and proves the VM and returns the final memory state.
 /// If `debug` is true, runs the debug prover.
 //
@@ -110,14 +181,19 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
+    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
+
+    #[cfg(feature = "aot")]
+    check_aot_equivalence(&vm, &config, &exe, &input)?;
+
     let (segments, _) = vm
         .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx)?;
+        .execute_metered(input.clone(), metered_ctx.clone())?;
+
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
     let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;

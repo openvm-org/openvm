@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         platform:
-          - { runner: "64cpu-linux-arm64", image: "arm64-rust-riscv-dev-32gb" }
+          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
           - { runner: "test-gpu-nvidia", image: "ubuntu24-gpu-x64" }
 
     runs-on:
@@ -66,10 +66,6 @@ jobs:
           tar -xJf gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
           rm gcc.tar.xz
-      - name: Download and install risc64-elf-gcc
-        if: matrix.platform.image == 'arm64-rust-riscv-dev-32gb'
-        run: | # custom image has riscv-gnu-toolchain binary pre-built
-          echo "/opt/riscv/bin" >> $GITHUB_PATH
 
       - name: Run Makefile
         working-directory: crates/toolchain/tests/rv32im-test-vectors

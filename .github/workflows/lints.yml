@@ -1,16 +1,13 @@
 name: Lint Workspace
-
 on:
   push:
     branches: ["main"]
   pull_request:
     branches: ["**"]
   workflow_call:
-
 concurrency:
   group: ${{ github.workflow_ref }}-lints-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
-
 jobs:
   lint:
     name: Lint
@@ -19,27 +16,24 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
-
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
           ignore_words_file: .codespellignore
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
+          key: v1
 
       - name: Generate docs
         run: |
           cargo doc --workspace  --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
-
       - name: Run fmt
         run: |
           rustup install nightly
           rustup component add --toolchain nightly rustfmt
           cargo +nightly fmt --all -- --check
-
       - name: Run clippy
         run: |
           # list of all unique features across workspace generated using:
@@ -47,7 +41,6 @@ jobs:
           # (exclude mimalloc since it conflicts with jemalloc)
           cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics nightly-features panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
-
       - name: Run fmt, clippy for guest
         run: |
           # Find all directories named "programs" and include additional static paths
@@ -72,20 +65,16 @@ jobs:
               echo "Skipping $crate_path as it does not contain a Cargo.toml"
             fi
           done
-
       - name: Install cargo-binstall
         uses: cargo-bins/cargo-binstall@main
-
       - name: Cargo shear
         run: |
           cargo binstall --no-confirm --force cargo-shear --version 1.1.9
           cargo shear
-
       - name: Cargo audit
         run: |
           cargo binstall --no-confirm --force cargo-audit
           cargo audit
-
   lint-cuda:
     name: Lint CUDA
     runs-on:
@@ -93,7 +82,6 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
-
       - run: | # avoid cross-device link error
           rustup component remove clippy || true
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
@@ -101,26 +89,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
-
       - name: Verify CUDA setup
         run: |
           nvidia-smi
           nvidia-smi -L
           nvcc --version
-
       - name: Run fmt
         working-directory: crates
         run: |
           rustup install nightly
           rustup component add --toolchain nightly rustfmt
           cargo +nightly fmt --all -- --check
-
       - name: Run clippy
         run: |
           # includes GPU specific features cuda and touchemall
           cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs cuda default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics nightly-features panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils touchemall" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
-
       - name: Run clang-tidy
         run: |
           set -eux

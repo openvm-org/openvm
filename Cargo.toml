@@ -29,6 +29,8 @@ members = [
     "crates/toolchain/tests",
     "crates/continuations",
     "crates/vm",
+    "crates/vm/src/arch/asm_bridge",
+    "crates/vm/src/arch/asm_bridge_metered",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",
@@ -232,6 +234,7 @@ serde-big-array = "0.5.1"
 dashmap = "6.1.0"
 memmap2 = "0.9.5"
 libc = "0.2.175"
+libloading = "0.8"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
 
