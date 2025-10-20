@@ -451,7 +451,7 @@ impl<F> AotInstance<'_, F, MeteredCtx>
 where
     F: PrimeField32,
 {
-    /// Metered exeecution for the given `inputs`. Execution begins from the initial
+    /// Metered execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
     /// Returns the segmentation boundary data and the final VM state when execution stops.
@@ -521,7 +521,7 @@ where
     /// Metered cost execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
-    /// Returns the segmentation boundary data and the final VM state when execution stops.
+    /// Returns the cost and the final VM state when execution stops.
     ///
     /// Assumes the program doesn't jump to out of bounds pc
     pub fn execute_metered_cost(
@@ -575,5 +575,5 @@ where
         }
     }
 
-    // TODO: implement execute_metered_until_suspend for AOT if needed
+    // TODO: implement execute_metered_cost_until_suspend for AOT if needed
 }
