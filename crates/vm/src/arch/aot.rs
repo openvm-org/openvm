@@ -5,7 +5,6 @@ use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(not(feature = "tco"))]
 use crate::arch::interpreter::{
     get_metered_pre_compute_instructions, get_pre_compute_instructions, get_pre_compute_max_size,
 };
@@ -48,23 +47,6 @@ type AsmRunFn = unsafe extern "C" fn(
     from_state_instret: u64,
 );
 
-// Always provide `create_initial_vm_state` (used by multiple execution modes)
-impl<F, Ctx> AotInstance<'_, F, Ctx>
-where
-    F: PrimeField32,
-    Ctx: ExecutionCtxTrait,
-{
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
-    }
-}
-
-#[cfg(not(feature = "tco"))]
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
@@ -192,20 +174,6 @@ where
 
         let init_memory = exe.init_memory.clone();
 
-        let table_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
-            pre_compute_insns.into_boxed_slice();
-        let buf_ptr = table_box.as_ptr();
-        let box_handle_addr = &table_box as *const _;
-
-        /*
-        eprintln!(
-            "tid={:?} buf={:p} len={} (box_handle_on_stack={:p}) vm_exec_state={:p}",
-            std::thread::current().id(),
-            buf_ptr,
-            table_box.len()
-        );
-        */
-
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
@@ -214,6 +182,14 @@ where
             init_memory,
             lib,
         })
+    }
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+        VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        )
     }
 }
 
@@ -303,7 +279,6 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     }
 }
 
-#[cfg(not(feature = "tco"))]
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
@@ -432,11 +407,6 @@ where
 
         let init_memory = exe.init_memory.clone();
 
-        let table_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
-            pre_compute_insns.into_boxed_slice(); // todo: maybe rename this
-        let buf_ptr = table_box.as_ptr();
-        let box_handle_addr = &table_box as *const _;
-
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
@@ -514,13 +484,13 @@ where
 
     // TODO: implement execute_metered_until_suspend for AOT if needed
 }
-#[cfg(not(feature = "tco"))]
+
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
-    /// Creates a new interpreter instance for metered costexecution.
+    /// Creates a new instance for metered cost execution.
     pub fn new_metered_cost<E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
@@ -529,26 +499,101 @@ where
     where
         E: MeteredExecutor<F>,
     {
+        let default_name = String::from("asm_x86_run");
+        Self::new_metered_cost_with_asm_name(inventory, exe, executor_idx_to_air_idx, &default_name)
+    }
+
+    /// Creates a new interpreter instance for metered cost execution.
+    pub fn new_metered_cost_with_asm_name<E>(
+        inventory: &'a ExecutorInventory<E>,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        asm_name: &String,
+    ) -> Result<Self, StaticProgramError>
+    where
+        E: MeteredExecutor<F>,
+    {
+        // source asm_bridge directory
+        // this is fixed
+        // can unwrap because its fixed and guaranteed to exist
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let lib_path = std::path::Path::new(manifest_dir)
+        let root_dir = std::path::Path::new(manifest_dir)
             .parent()
             .unwrap()
             .parent()
-            .unwrap()
-            .join("target/release/libasm_bridge_metered_cost.so");
-        let asm_bridge_dir =
+            .unwrap();
+
+        let src_asm_bridge_dir =
             std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered_cost");
-        let status = Command::new("cargo")
-            .args(["build", "--release"])
-            .current_dir(&asm_bridge_dir)
+        let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
+
+        // ar rcs libasm_runtime.a asm_run.o
+        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge_metered_cost -l static=asm_runtime
+
+        // run the below command from the `src_asm_bridge_dir` directory
+        // as src/asm_run_cost.s -o asm_run_cost.o
+        let status = Command::new("as")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                &format!("src/{}.s", asm_name),
+                "-o",
+                &format!("{}.o", asm_name),
+            ])
             .status()
-            .expect("Failed to execute cargo");
+            .expect("Failed to assemble the file into an object file");
+
+        assert!(
+            status.success(),
+            "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
+            status.code()
+        );
+
+        let status = Command::new("ar")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                "rcs",
+                &format!("lib{}.a", asm_name),
+                &format!("{}.o", asm_name),
+            ])
+            .status()
+            .expect("Create a static library");
+
+        assert!(
+            status.success(),
+            "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
+            status.code()
+        );
+
+        let status = Command::new("cargo")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                "rustc",
+                "--release",
+                &format!(
+                    "--target-dir={}/target/{}",
+                    root_dir.to_str().unwrap(),
+                    asm_name
+                ),
+                "--",
+                "-L",
+                src_asm_bridge_dir_str,
+                "-l",
+                &format!("static={}", asm_name),
+            ])
+            .status()
+            .expect("Creating the dynamic library");
+
         assert!(
             status.success(),
             "Cargo build failed with exit code: {:?}",
             status.code()
         );
 
+        let lib_path = root_dir
+            .join("target")
+            .join(asm_name)
+            .join("release")
+            .join("libasm_bridge_metered_cost.so");
         let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
 
         let program = &exe.program;
@@ -593,7 +638,7 @@ where
         &mut self,
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCostCtx,
-    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_cost_from_state(vm_state, ctx)
     }
@@ -608,7 +653,7 @@ where
         &self,
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
 
@@ -640,5 +685,5 @@ where
         }
     }
 
-    // TODO: implement execute_metered_cost_until_suspend for AOT if needed
+    // TODO: implement execute_metered_until_suspend for AOT if needed
 }

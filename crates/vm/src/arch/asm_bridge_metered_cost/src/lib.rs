@@ -1,4 +1,3 @@
-use core::arch::global_asm;
 use std::ffi::c_void;
 
 use openvm_circuit::{
@@ -7,9 +6,6 @@ use openvm_circuit::{
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
-// asm_run.s contains the assembly to run metered execution
-global_asm!(include_str!("asm_run.s"));
 
 /*
 rbx = vm_exec_state
@@ -31,7 +27,6 @@ extern "C" {
 ///
 /// # Safety
 ///
-///
 /// This function is unsafe because:
 /// - `vm_exec_state_ptr` must be valid
 /// - `pre_compute_insns` must point to valid pre-compute instructions
@@ -51,6 +46,7 @@ pub unsafe extern "C" fn asm_run(
 }
 
 type F = BabyBear;
+type Ctx = MeteredCostCtx;
 
 // at the end of the execution, you want to store the instret and pc from the x86 registers
 // to update the vm state's pc and instret
@@ -62,7 +58,6 @@ pub extern "C" fn metered_cost_set_instret_and_pc(
     final_pc: u32,                         // rdx = final_pc
     final_instret: u64,                    // rcx = final_instret
 ) {
-    type Ctx = MeteredCostCtx;
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
@@ -78,10 +73,6 @@ pub extern "C" fn metered_cost_extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    println!("[AOT] cur_pc {} cur_instret {}", cur_pc, cur_instret);
-    type F = BabyBear;
-    type Ctx = MeteredCostCtx;
-
     let mut instret: Box<u64> = Box::new(cur_instret); // placeholder to call the handler function
     let mut pc: Box<u32> = Box::new(cur_pc);
 

@@ -13,6 +13,6 @@ ignored = ["cc"]
 crate-type = ["cdylib"]
 
 [dependencies]
-openvm-circuit = { workspace = true, features = ["test-utils"], default-features = false }
-openvm-stark-sdk = { workspace = true, default-features = false}
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }
 openvm-instructions.workspace = true
