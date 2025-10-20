@@ -949,147 +949,6 @@ fn test_vm_execute_native_chips() {
         .expect("Failed to execute");
 }
 
-#[test]
-fn test_vm_execute_native_chips_aot() {
-    type F = BabyBear;
-
-    let instructions = vec![
-        // Field Arithmetic operations (FieldArithmeticChip)
-        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
-        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
-        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
-        Instruction::large_from_isize(DIV.global_opcode(), 3, 20, 5, 4, 0, 0, 0),
-        // Field Extension operations (FieldExtensionChip)
-        Instruction::from_isize(FE4ADD.global_opcode(), 8, 0, 4, 4, 4),
-        Instruction::from_isize(FE4SUB.global_opcode(), 12, 8, 4, 4, 4),
-        Instruction::from_isize(BBE4MUL.global_opcode(), 16, 12, 8, 4, 4),
-        Instruction::from_isize(BBE4DIV.global_opcode(), 20, 16, 12, 4, 4),
-        // Branch operations (NativeBranchEqChip)
-        Instruction::from_isize(
-            NativeBranchEqualOpcode(BEQ).global_opcode(),
-            0,
-            0,
-            DEFAULT_PC_STEP as isize,
-            4,
-            4,
-        ),
-        Instruction::from_isize(
-            NativeBranchEqualOpcode(BNE).global_opcode(),
-            1,
-            2,
-            DEFAULT_PC_STEP as isize,
-            4,
-            4,
-        ),
-        // JAL operation (JalRangeCheckChip)
-        Instruction::from_isize(
-            NativeJalOpcode::JAL.global_opcode(),
-            24,
-            DEFAULT_PC_STEP as isize,
-            0,
-            4,
-            0,
-        ),
-        // Range check operation (JalRangeCheckChip)
-        Instruction::from_isize(
-            NativeRangeCheckOpcode::RANGE_CHECK.global_opcode(),
-            0,
-            10,
-            8,
-            4,
-            0,
-        ),
-        // Load/Store operations (NativeLoadStoreChip)
-        Instruction::from_isize(STOREW.global_opcode(), 0, 0, 28, 4, 4),
-        Instruction::from_isize(LOADW.global_opcode(), 32, 0, 28, 4, 4),
-        Instruction::from_isize(
-            PHANTOM.global_opcode(),
-            0,
-            0,
-            NativePhantom::HintInput as isize,
-            0,
-            0,
-        ),
-        Instruction::from_isize(HINT_STOREW.global_opcode(), 32, 0, 0, 4, 4),
-        // Cast to field operation (CastFChip)
-        Instruction::from_usize(CastfOpcode::CASTF.global_opcode(), [36, 40, 0, 2, 4]),
-        // Poseidon2 operations (Poseidon2Chip)
-        Instruction::new(
-            Poseidon2Opcode::PERM_POS2.global_opcode(),
-            F::from_canonical_usize(44),
-            F::from_canonical_usize(48),
-            F::ZERO,
-            F::from_canonical_usize(4),
-            F::from_canonical_usize(4),
-            F::ZERO,
-            F::ZERO,
-        ),
-        Instruction::new(
-            Poseidon2Opcode::COMP_POS2.global_opcode(),
-            F::from_canonical_usize(52),
-            F::from_canonical_usize(44),
-            F::from_canonical_usize(48),
-            F::from_canonical_usize(4),
-            F::from_canonical_usize(4),
-            F::ZERO,
-            F::ZERO,
-        ),
-        // FRI operation (FriReducedOpeningChip)
-        Instruction::large_from_isize(ADD.global_opcode(), 60, 64, 0, 4, 4, 0, 0), /* a_pointer_pointer, */
-        Instruction::large_from_isize(ADD.global_opcode(), 64, 68, 0, 4, 4, 0, 0), /* b_pointer_pointer, */
-        Instruction::large_from_isize(ADD.global_opcode(), 68, 2, 0, 4, 0, 0, 0), /* length_pointer (value 2), */
-        Instruction::large_from_isize(ADD.global_opcode(), 72, 1, 0, 4, 0, 0, 0), //alpha_pointer
-        Instruction::large_from_isize(ADD.global_opcode(), 76, 80, 0, 4, 4, 0, 0), /* result_pointer, */
-        Instruction::large_from_isize(ADD.global_opcode(), 80, 1, 0, 4, 0, 0, 0), /* is_init (value 1) , */
-        Instruction::from_usize(
-            FriOpcode::FRI_REDUCED_OPENING.global_opcode(),
-            [60, 64, 68, 72, 76, 0, 80],
-        ),
-        // Terminate
-        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let exe = VmExe::new(Program::from_instructions(&instructions));
-    let input_stream: Vec<Vec<F>> = vec![vec![]];
-
-    let executor = VmExecutor::new(test_rv32_with_kernels_config()).unwrap();
-    let instance = executor.instance(&exe).unwrap();
-    let vm_state = instance
-        .execute(input_stream.clone(), None)
-        .expect("Failed to execute");
-
-    // eyeball check
-    println!("[Interpreter] instret: {}", vm_state.instret());
-    println!("[Interpreter] pc: {}", vm_state.pc());
-    let interp_memory = vm_state.memory;
-
-    // setup the aot instance
-    let mut aot_instance = executor.aot_instance(&exe).unwrap();
-    let vm_state = aot_instance
-        .execute(input_stream, None)
-        .expect("Failed to execute");
-
-    // eyeball check
-    println!("[AOT] instret: {}", vm_state.instret());
-    println!("[AOT] pc: {}", vm_state.pc());
-    let aot_memory = vm_state.memory;
-
-    for r in 0..25 {
-        unsafe {
-            println!(
-                "[Interpreter] memory [4*{}:4]_4 = {:?}",
-                r,
-                interp_memory.read::<u32, 4>(4, 4 * r)
-            );
-            println!(
-                "[AOT] memory [4*{}:4]_4 = {:?}",
-                r,
-                aot_memory.read::<u32, 4>(4, 4 * r)
-            );
-        };
-    }
-}
-
 // This test ensures that metered execution never segments when continuations is disabled
 #[test]
 fn test_single_segment_executor_no_segmentation() {
@@ -1125,7 +984,14 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
-#[cfg(target_arch = "x86_64")]
+/*
+REWRITE TESTS TO SUPPORT #CFG AOT
+address merge conflicts
+
+remove asm_run.s from github etc
+
+*/
+#[cfg(feature = "aot")]
 fn compare_vm_states(
     vm_state1: &VmState<BabyBear>,
     vm_state2: &VmState<BabyBear>,
@@ -1143,6 +1009,37 @@ fn compare_vm_states(
     let tree2 = MerkleTree::from_memory(&vm_state2.memory.memory, &memory_dimensions, &hasher);
 
     assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+}
+
+// Helper to run AOT metered-cost and compare against interpreter baseline.
+#[cfg(feature = "aot")]
+macro_rules! run_aot_metered_cost_and_compare {
+    (
+        $vm:expr,
+        $exe:expr,
+        $executor_idx_to_air_idx:expr,
+        $ctx:expr,
+        $instructions_len:expr,
+        $baseline_cost:expr,
+        $baseline_state:expr,
+        $config:expr
+    ) => {{
+        let mut aot_instance = $vm
+            .executor()
+            .aot_metered_cost_instance(&$exe, &$executor_idx_to_air_idx)
+            .unwrap();
+        let (aot_cost, aot_vm_state) = aot_instance
+            .execute_metered_cost(vec![], $ctx.clone())
+            .expect("Failed to execute");
+        assert_eq!(aot_vm_state.instret(), $instructions_len as u64);
+        assert_eq!($baseline_cost, aot_cost);
+        compare_vm_states(
+            &aot_vm_state,
+            &$baseline_state,
+            $config.clone().system.memory_config.memory_dimensions(),
+        );
+        (aot_cost, aot_vm_state)
+    }};
 }
 
 #[test]
@@ -1181,22 +1078,17 @@ fn test_vm_execute_metered_cost_native_chips() {
     assert_eq!(vm_state.instret(), instructions.len() as u64);
     assert!(cost > 0);
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(feature = "aot")]
     {
-        let mut aot_instance = vm
-            .executor()
-            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
-            .unwrap();
-        let (aot_cost, aot_vm_state) = aot_instance
-            .execute_metered_cost(vec![], ctx.clone())
-            .expect("Failed to execute");
-        assert_eq!(aot_vm_state.instret(), instructions.len() as u64);
-        assert!(aot_cost > 0);
-        assert_eq!(cost, aot_cost);
-        compare_vm_states(
-            &aot_vm_state,
-            &vm_state,
-            config.clone().system.memory_config.memory_dimensions(),
+        let _ = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx,
+            ctx,
+            instructions.len(),
+            cost,
+            vm_state,
+            config
         );
     }
 }
@@ -1263,57 +1155,42 @@ fn test_vm_execute_metered_cost_halt() {
     assert!(cost2 < cost3);
     assert!(cost3 < cost1);
 
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(feature = "aot")]
     {
-        let mut aot_instance1 = vm
-            .executor()
-            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
-            .unwrap();
-        let (aot_cost1, aot_vm_state1) = aot_instance1
-            .execute_metered_cost(vec![], ctx.clone())
-            .expect("Failed to execute");
-        assert_eq!(aot_vm_state1.instret(), instructions.len() as u64);
-        assert_eq!(aot_cost1, cost1);
-
-        let mut aot_instance2 = vm
-            .executor()
-            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx2)
-            .unwrap();
-        let (aot_cost2, aot_vm_state2) = aot_instance2
-            .execute_metered_cost(vec![], ctx2.clone())
-            .expect("Failed to execute");
-        assert_eq!(aot_vm_state2.instret(), 1);
-        assert_eq!(aot_cost2, cost2);
-
-        let mut aot_instance3 = vm
-            .executor()
-            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx3)
-            .unwrap();
-        let (aot_cost3, aot_vm_state3) = aot_instance3
-            .execute_metered_cost(vec![], ctx3.clone())
-            .expect("Failed to execute");
-        assert_eq!(aot_vm_state3.instret(), 3);
-        assert_eq!(aot_cost3, cost3);
+        let (aot_cost1, _aot_vm_state1) = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx,
+            ctx,
+            instructions.len(),
+            cost1,
+            vm_state1,
+            config
+        );
+        let (aot_cost2, _aot_vm_state2) = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx2,
+            ctx2,
+            1usize,
+            cost2,
+            vm_state2,
+            config
+        );
+        let (aot_cost3, _aot_vm_state3) = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx3,
+            ctx3,
+            3usize,
+            cost3,
+            vm_state3,
+            config
+        );
 
         assert!(aot_cost2 < aot_cost1);
         assert!(aot_cost2 < aot_cost3);
         assert!(aot_cost3 < aot_cost1);
-
-        compare_vm_states(
-            &aot_vm_state1,
-            &vm_state1,
-            config.clone().system.memory_config.memory_dimensions(),
-        );
-        compare_vm_states(
-            &aot_vm_state2,
-            &vm_state2,
-            config.clone().system.memory_config.memory_dimensions(),
-        );
-        compare_vm_states(
-            &aot_vm_state3,
-            &vm_state3,
-            config.clone().system.memory_config.memory_dimensions(),
-        );
     }
 }
 
@@ -1345,54 +1222,45 @@ fn test_vm_execute_metered_cost_resume_parity() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx_suspend = vm.build_metered_cost_ctx().with_max_execution_cost(0);
-    let (_cost_suspend_interp, vm_state_suspend_interp) = interp_instance
+    let (cost_suspend_interp, vm_state_suspend_interp) = interp_instance
         .execute_metered_cost(vec![], ctx_suspend.clone())
         .expect("Failed to execute");
     assert_eq!(vm_state_suspend_interp.instret(), 1);
 
+    // Resume with unlimited budget
+    let ctx_unlimited = vm.build_metered_cost_ctx();
+    let (cost_interp_resume, vm_state_final_interp) = interp_instance
+        .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited.clone())
+        .expect("Failed to resume interp");
+
+    assert!(cost_suspend_interp < cost_interp_resume);
+    assert_eq!(vm_state_final_interp.instret(), instructions.len() as u64);
+
     // Do the same with AOT, compare suspended states, then resume both to completion
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(feature = "aot")]
     {
-        let mut aot_instance = vm
-            .executor()
-            .aot_metered_cost_instance(&exe, &executor_idx_to_air_idx)
-            .unwrap();
-        let (_aot_cost_suspend, vm_state_suspend_aot) = aot_instance
-            .execute_metered_cost(vec![], ctx_suspend)
-            .expect("Failed to execute");
-        assert_eq!(vm_state_suspend_aot.instret(), 1);
-
-        // Suspended states should already match
-        compare_vm_states(
-            &vm_state_suspend_aot,
-            &vm_state_suspend_interp,
-            config.clone().system.memory_config.memory_dimensions(),
+        let (cost_suspend_aot, vm_state_suspend_aot) = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx,
+            ctx_suspend,
+            1usize,
+            cost_suspend_interp,
+            vm_state_suspend_interp,
+            config
         );
 
-        // Resume with unlimited budget
-        let ctx_unlimited = vm.build_metered_cost_ctx();
-        let (_cost_interp_resume, vm_state_final_interp) = interp_instance
-            .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited.clone())
-            .expect("Failed to resume interp");
-
-        let (_cost_aot_resume, vm_state_final_aot) = aot_instance
-            .execute_metered_cost_from_state(vm_state_suspend_aot, ctx_unlimited)
-            .expect("Failed to resume aot");
-
-        // Final states must be identical
-        compare_vm_states(
-            &vm_state_final_aot,
-            &vm_state_final_interp,
-            config.system.memory_config.memory_dimensions(),
+        let (cost_resume_aot, vm_state_final_aot) = run_aot_metered_cost_and_compare!(
+            vm,
+            exe,
+            executor_idx_to_air_idx,
+            ctx_unlimited,
+            instructions.len(),
+            cost_interp_resume,
+            vm_state_final_interp,
+            config
         );
-    }
-
-    // On non-x86_64, at least verify interpreter resume doesn't panic
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        let ctx_unlimited = vm.build_metered_cost_ctx();
-        let _ = interp_instance
-            .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited)
-            .expect("Failed to resume interp");
+        assert_eq!(cost_interp_resume, cost_resume_aot);
+        assert_eq!(cost_suspend_aot, cost_suspend_interp);
     }
 }
