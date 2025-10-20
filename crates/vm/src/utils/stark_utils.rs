@@ -157,11 +157,11 @@ where
     */
     let (aot_cost, aot_state_metered_cost) = vm
         .get_metered_cost_aot_instance(&exe)?
-        .execute_metered_cost(input.clone(), metered_ctx.clone())?;
+        .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
 
     let (cost, interp_state_metered_cost) = vm
         .metered_cost_interpreter(&exe)?
-        .execute_metered_cost(input.clone(), metered_ctx.clone())?;
+        .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
 
     assert_vm_state_eq(&interp_state_metered_cost, &aot_state_metered_cost);
 
