@@ -859,9 +859,7 @@ fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
 }
 
 /// Errors if exit code is either error or terminated with non-successful exit code.
-pub fn check_exit_code(
-    exit_code: Result<Option<u32>, ExecutionError>,
-) -> Result<(), ExecutionError> {
+fn check_exit_code(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
     let exit_code = exit_code?;
     if let Some(exit_code) = exit_code {
         // This means execution did terminate

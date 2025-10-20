@@ -10,6 +10,7 @@ repository.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-openvm-circuit = { workspace = true, features = ["test-utils"], default-features = false}
-openvm-stark-sdk = { workspace = true, default-features = false}
+cc = "1.0"
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }
 openvm-instructions.workspace = true
