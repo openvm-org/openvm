@@ -1,10 +1,9 @@
 use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, interpreter::PreComputeInstruction, VmExecState},
+    arch::{execution_mode::ExecutionCtx, VmExecState},
     system::memory::online::GuestMemory,
 };
-use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 extern "C" {
@@ -42,8 +41,8 @@ pub unsafe extern "C" fn asm_run(
 type F = BabyBear;
 type Ctx = ExecutionCtx;
 
-/// At the end of the assembly execution, store the instret and pc from the x86 registers
-/// to the vm state's pc and instret for the pure execution mode
+// at the end of the execution, you want to store the instret and pc from the x86 registers
+// to update the vm state's pc and instret
 #[no_mangle]
 pub extern "C" fn set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
@@ -52,66 +51,31 @@ pub extern "C" fn set_instret_and_pc(
     final_instret: u64,                    // rcx = final_instret
 ) {
     // reference to vm_exec_state
-    let vm_exec_state_ref =
-        unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref
-        .vm_state
-        .set_instret_and_pc(final_instret, final_pc);
+    asm_bridge_utils::set_instret_and_pc_generic::<Ctx>(vm_exec_state_ptr, final_pc, final_instret);
 }
 
-/// extern handler for the pure execution mode
-/// calls the correct function handler based on `cur_pc`
-///
-/// returns 1 if we should terminate and *pc otherwise
-/// this is safe because *pc is always a multiple of 4
+/// # Safety
+/// - vm_exec_state_ptr must point to a valid VmExecState<F, GuestMemory, Ctx>.
+/// - pre_compute_insns_ptr must be a valid, contiguous array of PreComputeInstruction<'static, F,
+///   Ctx>.
+/// - cur_pc must be a valid PC for the current program.
 #[no_mangle]
-pub extern "C" fn extern_handler(
+pub unsafe extern "C" fn extern_handler(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
-    // it would be able to dereference instret and pc correctly
-    let mut instret: Box<u64> = Box::new(cur_instret);
-    let mut pc: Box<u32> = Box::new(cur_pc);
-
-    // reference to vm_exec_state
-    let vm_exec_state_ref =
-        unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-
-    // pointer to the first element of `pre_compute_insns`
-    let pre_compute_insns_base_ptr =
-        pre_compute_insns_ptr as *const PreComputeInstruction<'static, F, Ctx>;
-    let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
-
-    let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
-
-    let ctx = &vm_exec_state_ref.ctx;
-    // `arg` is a runtime constant that we want to keep in register
-    // - For pure execution it is `instret_end`
-    let arg = ctx.instret_end;
-
     unsafe {
-        (pre_compute_insns.handler)(
-            pre_compute_insns.pre_compute,
-            &mut instret,
-            &mut pc,
-            arg,
-            vm_exec_state_ref,
+        let (vm_ptr, pre_ptr, ctx_ptr) = asm_bridge_utils::extern_prep_generic::<Ctx>(
+            vm_exec_state_ptr,
+            pre_compute_insns_ptr,
+            cur_pc,
         );
-    };
-
-    match vm_exec_state_ref.exit_code {
-        Ok(None) => {
-            // execution continues
-            *pc
-        }
-        _ => {
-            // special indicator that we must terminate
-            // this won't collide with actual pc value because pc values are always multiple of 4
-            1
-        }
+        // `arg` is a runtime constant that we want to keep in register
+        // - For pure execution it is `instret_end`
+        let arg = (*ctx_ptr).instret_end;
+        asm_bridge_utils::extern_finish_generic::<Ctx>(vm_ptr, pre_ptr, cur_pc, cur_instret, arg)
     }
 }
 

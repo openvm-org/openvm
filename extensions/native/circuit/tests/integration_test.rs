@@ -1017,15 +1017,21 @@ macro_rules! run_aot_metered_cost_and_compare {
         $instructions_len:expr,
         $baseline_cost:expr,
         $baseline_state:expr,
-        $config:expr
+        $config:expr,
+        $resume_state:expr
     ) => {{
         let mut aot_instance = $vm
             .executor()
-            .aot_metered_cost_instance(&$exe, &$executor_idx_to_air_idx)
+            .metered_cost_aot_instance(&$exe, &$executor_idx_to_air_idx)
             .unwrap();
-        let (aot_cost, aot_vm_state) = aot_instance
-            .execute_metered_cost(vec![], $ctx.clone())
-            .expect("Failed to execute");
+            let (mut aot_cost, mut aot_vm_state) = aot_instance
+                .execute_metered_cost(vec![], $ctx.clone())
+                .expect("Failed to execute");
+        if $resume_state.is_some() {
+            (aot_cost, aot_vm_state) = aot_instance
+                .execute_metered_cost_from_state($resume_state.clone().unwrap(), $ctx.clone())
+                .expect("Failed to execute");
+        }
         assert_eq!(aot_vm_state.instret(), $instructions_len as u64);
         assert_eq!($baseline_cost, aot_cost);
         compare_vm_states(
@@ -1083,7 +1089,8 @@ fn test_vm_execute_metered_cost_native_chips() {
             instructions.len(),
             cost,
             vm_state,
-            config
+            config,
+            None::<VmState<F>>
         );
     }
 }
@@ -1160,7 +1167,8 @@ fn test_vm_execute_metered_cost_halt() {
             instructions.len(),
             cost1,
             vm_state1,
-            config
+            config,
+            None::<VmState<F>>
         );
         let (aot_cost2, _aot_vm_state2) = run_aot_metered_cost_and_compare!(
             vm,
@@ -1170,7 +1178,8 @@ fn test_vm_execute_metered_cost_halt() {
             1usize,
             cost2,
             vm_state2,
-            config
+            config,
+            None::<VmState<F>>
         );
         let (aot_cost3, _aot_vm_state3) = run_aot_metered_cost_and_compare!(
             vm,
@@ -1180,7 +1189,8 @@ fn test_vm_execute_metered_cost_halt() {
             3usize,
             cost3,
             vm_state3,
-            config
+            config,
+            None::<VmState<F>>
         );
 
         assert!(aot_cost2 < aot_cost1);
@@ -1225,7 +1235,7 @@ fn test_vm_execute_metered_cost_resume_parity() {
     // Resume with unlimited budget
     let ctx_unlimited = vm.build_metered_cost_ctx();
     let (cost_interp_resume, vm_state_final_interp) = interp_instance
-        .execute_metered_cost_from_state(vm_state_suspend_interp, ctx_unlimited.clone())
+        .execute_metered_cost_from_state(vm_state_suspend_interp.clone(), ctx_unlimited.clone())
         .expect("Failed to resume interp");
 
     assert!(cost_suspend_interp < cost_interp_resume);
@@ -1242,7 +1252,8 @@ fn test_vm_execute_metered_cost_resume_parity() {
             1usize,
             cost_suspend_interp,
             vm_state_suspend_interp,
-            config
+            config,
+            None::<VmState<F>>
         );
 
         let (cost_resume_aot, vm_state_final_aot) = run_aot_metered_cost_and_compare!(
@@ -1253,7 +1264,8 @@ fn test_vm_execute_metered_cost_resume_parity() {
             instructions.len(),
             cost_interp_resume,
             vm_state_final_interp,
-            config
+            config,
+            Some(vm_state_suspend_aot.clone())
         );
         assert_eq!(cost_interp_resume, cost_resume_aot);
         assert_eq!(cost_suspend_aot, cost_suspend_interp);
