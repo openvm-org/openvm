@@ -8,4 +8,5 @@ pub mod system;
 #[cfg(test)]
 mod tests;
 pub mod transcript;
+pub mod utils;
 pub mod whir;
