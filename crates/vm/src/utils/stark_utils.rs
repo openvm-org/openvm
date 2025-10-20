@@ -104,7 +104,7 @@ where
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     let metered_ctx = vm.build_metered_ctx(&exe);
-    let metered_cost_ctx = vm.build_metered_cost_ctx(&exe);
+    let metered_cost_ctx = vm.build_metered_cost_ctx();
     /*
     Assertions for Pure Execution AOT
     */
