@@ -153,6 +153,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
                 tidx: local.tidx_beg.into(),
                 n_logup: local.n_logup.into(),
                 n_max: local.n_max.into(),
+                n_global: local.n_global.into(),
             },
             local.is_real,
         );
