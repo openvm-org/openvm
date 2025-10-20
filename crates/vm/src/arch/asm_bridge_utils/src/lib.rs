@@ -1,9 +1,11 @@
-use openvm_circuit::arch::interpreter::PreComputeInstruction;
-use openvm_circuit::arch::{ExecutionCtxTrait, VmExecState};
-use openvm_circuit::system::memory::online::GuestMemory;
+use std::ffi::c_void;
+
+use openvm_circuit::{
+    arch::{interpreter::PreComputeInstruction, ExecutionCtxTrait, VmExecState},
+    system::memory::online::GuestMemory,
+};
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear as F;
-use std::ffi::c_void;
 
 pub fn set_instret_and_pc_generic<Ctx: ExecutionCtxTrait>(
     vm_exec_state_ptr: *mut c_void,
@@ -19,9 +21,8 @@ pub fn set_instret_and_pc_generic<Ctx: ExecutionCtxTrait>(
 
 /// # Safety
 /// - vm_exec_state_ptr must point to a valid VmExecState<F, GuestMemory, Ctx>.
-/// - pre_compute_insns_ptr must be a valid, contiguous array of
-///   PreComputeInstruction<'static, F, Ctx>.
-/// - cur_pc must be in-bounds (pc/DEFAULT_PC_STEP is a valid index).
+/// - pre_compute_insns_ptr must be a valid, contiguous array of PreComputeInstruction<'static, F,
+///   Ctx>.
 pub unsafe fn extern_prep_generic<Ctx: ExecutionCtxTrait>(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
@@ -40,10 +41,8 @@ pub unsafe fn extern_prep_generic<Ctx: ExecutionCtxTrait>(
 }
 
 /// # Safety
-/// - vm_exec_state_ptr and pre_compute_insn_ptr must come from extern_prep_generic
-///   for the same Ctx and program.
-/// - cur_pc/cur_instret must correspond to the provided state.
-/// - arg must be the correct runtime parameter for Ctx (e.g., max_execution_cost).
+/// - vm_exec_state_ptr and pre_compute_insn_ptr must come from extern_prep_generic for the same Ctx
+///   and program.
 pub unsafe fn extern_finish_generic<Ctx: ExecutionCtxTrait>(
     vm_exec_state_ptr: *mut VmExecState<F, GuestMemory, Ctx>,
     pre_compute_insn_ptr: *const PreComputeInstruction<'static, F, Ctx>,

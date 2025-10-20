@@ -63,8 +63,8 @@ pub extern "C" fn metered_cost_set_instret_and_pc(
 
 /// # Safety
 /// - vm_exec_state_ptr must point to VmExecState<F, GuestMemory, MeteredCostCtx>.
-/// - pre_compute_insns_ptr must be a valid, contiguous array of
-///   PreComputeInstruction<'static, F, MeteredCostCtx>.
+/// - pre_compute_insns_ptr must be a valid, contiguous array of PreComputeInstruction<'static, F,
+///   MeteredCostCtx>.
 /// - cur_pc must be a valid PC for the current program.
 #[no_mangle]
 pub unsafe extern "C" fn metered_cost_extern_handler(
