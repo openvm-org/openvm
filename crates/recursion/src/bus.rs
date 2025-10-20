@@ -74,6 +74,40 @@ macro_rules! define_typed_per_proof_permutation_bus {
                     .collect::<Vec<_>>();
                 self.0.receive(builder, message, enabled);
             }
+
+            /// Sends one interaction per message in the array.
+            #[inline]
+            #[allow(dead_code)]
+            pub fn send_each<AB, const N: usize>(
+                &self,
+                builder: &mut AB,
+                proof_idx: AB::Var,
+                messages: [$Msg<impl Into<AB::Expr> + Clone>; N],
+                enabled: impl Into<AB::Expr> + Clone,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                for msg in messages {
+                    self.send(builder, proof_idx, msg, enabled.clone());
+                }
+            }
+
+            /// Receives one interaction per message in the array.
+            #[inline]
+            #[allow(dead_code)]
+            pub fn receive_each<AB, const N: usize>(
+                &self,
+                builder: &mut AB,
+                proof_idx: AB::Var,
+                messages: [$Msg<impl Into<AB::Expr> + Clone>; N],
+                enabled: impl Into<AB::Expr> + Clone,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                for msg in messages {
+                    self.receive(builder, proof_idx, msg, enabled.clone());
+                }
+            }
         }
     };
 }
