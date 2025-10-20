@@ -354,7 +354,7 @@ where
         // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/<bridge_str> -l static=asm_runtime
 
         // run the below command from the `src_asm_bridge_dir` directory
-        // as src/asm_run_cost.s -o asm_run_cost.o
+        // as src/asm_run.s -o asm_run.o
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
             .args([
