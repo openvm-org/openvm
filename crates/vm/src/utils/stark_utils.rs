@@ -17,8 +17,8 @@ use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, SystemConfig,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
@@ -182,7 +182,6 @@ where
     setup_tracing();
     let engine = E::new(fri_params);
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
-    let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
@@ -193,47 +192,6 @@ where
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
-
-    let (segments, aot_vm_state) = vm
-        .aot_metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
-
-    let system_config: &SystemConfig = &config.as_ref();
-    let addr_spaces = &system_config.memory_config.addr_spaces;
-
-    assert_eq!(interp_segments, segments);
-
-    for r in 0..addr_spaces[1].num_cells {
-        let interp = unsafe { vm_state.memory.read::<u8, 1>(1, r as u32) };
-        let aot_interp = unsafe { aot_vm_state.memory.read::<u8, 1>(1, r as u32) };
-        assert_eq!(interp, aot_interp);
-    }
-
-    for r in 0..addr_spaces[2].num_cells {
-        let interp = unsafe { vm_state.memory.read::<u8, 1>(2, r as u32) };
-        let aot_interp = unsafe { aot_vm_state.memory.read::<u8, 1>(2, r as u32) };
-        assert_eq!(interp, aot_interp);
-    }
-
-    for r in 0..addr_spaces[3].num_cells {
-        let interp = unsafe { vm_state.memory.read::<u8, 1>(3, r as u32) };
-        let aot_interp = unsafe { aot_vm_state.memory.read::<u8, 1>(3, r as u32) };
-        assert_eq!(interp, aot_interp);
-    }
-
-    for r in 0..(addr_spaces[4].num_cells / 4) {
-        let interp = unsafe { vm_state.memory.read::<u32, 4>(4, 4 * r as u32) };
-        let aot_interp = unsafe { aot_vm_state.memory.read::<u32, 4>(4, 4 * r as u32) };
-        assert_eq!(interp, aot_interp);
-    }
-
-    /* TODO: this is a temporary change to use `get_metered_aot_instance` instead of `metered_interpreter`
-    to test AOT segments in addition to the equal assertions
-    We would want to revert `stark_utils.rs` back to how it looked like in main
-    */
-    let (segments, _) = vm
-        .get_metered_aot_instance(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
