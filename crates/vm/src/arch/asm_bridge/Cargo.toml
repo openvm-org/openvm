@@ -17,3 +17,4 @@ cc = "1.0"
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true }
 openvm-instructions.workspace = true
+asm_bridge_utils = { path = "../asm_bridge_utils" }
