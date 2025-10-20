@@ -5,6 +5,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::VmState;
 #[cfg(feature = "cuda")]
 use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 #[cfg(not(feature = "cuda"))]
@@ -15,7 +17,7 @@ use openvm_circuit::{
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
-        VmExecutor, VmInstance, VmState, PUBLIC_VALUES_AIR_ID,
+        VmExecutor, VmInstance, PUBLIC_VALUES_AIR_ID,
     },
     system::{memory::CHUNK, program::trace::VmCommittedExe},
     utils::{
