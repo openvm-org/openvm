@@ -984,13 +984,6 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
-/*
-REWRITE TESTS TO SUPPORT #CFG AOT
-address merge conflicts
-
-remove asm_run.s from github etc
-
-*/
 #[cfg(feature = "aot")]
 fn compare_vm_states(
     vm_state1: &VmState<BabyBear>,
