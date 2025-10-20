@@ -47,6 +47,7 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
     cols.n_logup = F::from_canonical_usize(n_logup);
     cols.n_max = F::from_canonical_usize(n_max);
     cols.l_skip = F::from_canonical_usize(l_skip);
+    cols.n_global = F::from_canonical_usize(n_global);
 
     cols.is_n_logup_zero = F::from_bool(n_logup == 0);
     cols.is_n_logup_equal_to_n_global = F::from_bool(n_logup == n_global);

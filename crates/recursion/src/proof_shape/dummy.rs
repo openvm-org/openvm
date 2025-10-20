@@ -125,6 +125,7 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         tidx: F::from_canonical_usize(preflight.proof_shape.post_tidx),
         n_logup: F::from_canonical_usize(preflight.proof_shape.n_logup),
         n_max: F::from_canonical_usize(preflight.proof_shape.n_max),
+        n_global: F::from_canonical_usize(preflight.proof_shape.n_global),
     }]
     .into_iter();
     let mut transcript_msgs = preflight

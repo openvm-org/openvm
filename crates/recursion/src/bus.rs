@@ -136,6 +136,7 @@ pub struct GkrModuleMessage<T> {
     pub tidx: T,
     pub n_logup: T,
     pub n_max: T,
+    pub n_global: T,
 }
 
 define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
