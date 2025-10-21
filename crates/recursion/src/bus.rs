@@ -1,3 +1,5 @@
+use openvm_stark_backend::interaction::InteractionBuilder;
+use p3_field::FieldAlgebra;
 use stark_backend_v2::{D_EF, DIGEST_SIZE};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
@@ -132,40 +134,6 @@ macro_rules! define_typed_per_proof_permutation_bus {
                     .collect::<Vec<_>>();
                 self.0.receive(builder, message, enabled);
             }
-
-            /// Sends one interaction per message in the array.
-            #[inline]
-            #[allow(dead_code)]
-            pub fn send_each<AB, const N: usize>(
-                &self,
-                builder: &mut AB,
-                proof_idx: AB::Var,
-                messages: [$Msg<impl Into<AB::Expr> + Clone>; N],
-                enabled: impl Into<AB::Expr> + Clone,
-            ) where
-                AB: openvm_stark_backend::interaction::InteractionBuilder,
-            {
-                for msg in messages {
-                    self.send(builder, proof_idx, msg, enabled.clone());
-                }
-            }
-
-            /// Receives one interaction per message in the array.
-            #[inline]
-            #[allow(dead_code)]
-            pub fn receive_each<AB, const N: usize>(
-                &self,
-                builder: &mut AB,
-                proof_idx: AB::Var,
-                messages: [$Msg<impl Into<AB::Expr> + Clone>; N],
-                enabled: impl Into<AB::Expr> + Clone,
-            ) where
-                AB: openvm_stark_backend::interaction::InteractionBuilder,
-            {
-                for msg in messages {
-                    self.receive(builder, proof_idx, msg, enabled.clone());
-                }
-            }
         }
     };
 }
@@ -241,6 +209,120 @@ pub struct TranscriptBusMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(TranscriptBus, TranscriptBusMessage);
+
+impl TranscriptBus {
+    pub fn observe<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        proof_idx: AB::Var,
+        tidx: impl Into<AB::Expr>,
+        value: impl Into<AB::Expr>,
+        is_enabled: impl Into<AB::Expr>,
+    ) {
+        self.receive(
+            builder,
+            proof_idx,
+            TranscriptBusMessage {
+                tidx: tidx.into(),
+                value: value.into(),
+                is_sample: AB::Expr::ZERO,
+            },
+            is_enabled,
+        )
+    }
+
+    pub fn observe_ext<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        proof_idx: AB::Var,
+        tidx: impl Into<AB::Expr>,
+        value: [impl Into<AB::Expr>; D_EF],
+        is_enabled: impl Into<AB::Expr>,
+    ) {
+        let tidx = tidx.into();
+        let is_enabled = is_enabled.into();
+        for (i, x) in value.into_iter().enumerate() {
+            self.receive(
+                builder,
+                proof_idx,
+                TranscriptBusMessage {
+                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    value: x.into(),
+                    is_sample: AB::Expr::ZERO,
+                },
+                is_enabled.clone(),
+            )
+        }
+    }
+
+    pub fn observe_commit<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        proof_idx: AB::Var,
+        tidx: impl Into<AB::Expr>,
+        commit: [impl Into<AB::Expr>; DIGEST_SIZE],
+        is_enabled: impl Into<AB::Expr>,
+    ) {
+        let tidx = tidx.into();
+        let is_enabled = is_enabled.into();
+        for (i, x) in commit.into_iter().enumerate() {
+            self.receive(
+                builder,
+                proof_idx,
+                TranscriptBusMessage {
+                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    value: x.into(),
+                    is_sample: AB::Expr::ZERO,
+                },
+                is_enabled.clone(),
+            )
+        }
+    }
+
+    pub fn sample<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        proof_idx: AB::Var,
+        tidx: impl Into<AB::Expr>,
+        value: impl Into<AB::Expr>,
+        is_enabled: impl Into<AB::Expr>,
+    ) {
+        self.receive(
+            builder,
+            proof_idx,
+            TranscriptBusMessage {
+                tidx: tidx.into(),
+                value: value.into(),
+                is_sample: AB::Expr::ONE,
+            },
+            is_enabled,
+        )
+    }
+
+    pub fn sample_ext<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        proof_idx: AB::Var,
+        tidx: impl Into<AB::Expr>,
+        value: [impl Into<AB::Expr>; D_EF],
+        is_enabled: impl Into<AB::Expr>,
+    ) {
+        let tidx = tidx.into();
+        let is_enabled = is_enabled.into();
+        for (i, x) in value.into_iter().enumerate() {
+            self.receive(
+                builder,
+                proof_idx,
+                TranscriptBusMessage {
+                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(i),
+                    value: x.into(),
+                    is_sample: AB::Expr::ONE,
+                },
+                is_enabled.clone(),
+            )
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
