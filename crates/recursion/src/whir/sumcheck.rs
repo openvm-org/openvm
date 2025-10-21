@@ -14,10 +14,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
-        TranscriptBusMessage,
-    },
+    bus::{StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus},
     system::Preflight,
     whir::bus::{
         WhirAlphaBus, WhirAlphaMessage, WhirEqAlphaUBus, WhirEqAlphaUMessage, WhirSumcheckBus,
@@ -81,42 +78,27 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckAir {
             local.is_first_in_group,
         );
 
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(i),
-                    value: local.ev1[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid,
-            );
-        }
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF + i),
-                    value: local.ev2[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid,
-            );
-        }
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF + i),
-                    value: local.alpha[i].into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_valid,
-            );
-        }
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx,
+            local.ev1,
+            local.is_valid,
+        );
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.ev2,
+            local.is_valid,
+        );
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.alpha,
+            local.is_valid,
+        );
 
         self.alpha_bus.add_key_with_lookups(
             builder,

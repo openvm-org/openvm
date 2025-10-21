@@ -14,7 +14,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{TranscriptBus, TranscriptBusMessage},
+    bus::TranscriptBus,
     system::Preflight,
     whir::bus::{
         ExpBitsLenBus, ExpBitsLenMessage, VerifyQueriesBus, VerifyQueriesBusMessage,
@@ -81,14 +81,11 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for WhirQueryAir {
             local.is_first_in_group,
         );
 
-        self.transcript_bus.receive(
+        self.transcript_bus.sample(
             builder,
             local.proof_idx,
-            TranscriptBusMessage {
-                tidx: local.tidx.into(),
-                value: local.sample.into(),
-                is_sample: AB::Expr::ONE,
-            },
+            local.tidx,
+            local.sample,
             local.is_valid,
         );
         self.query_bus.send(
