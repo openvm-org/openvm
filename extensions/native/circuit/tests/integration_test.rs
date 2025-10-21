@@ -1024,9 +1024,9 @@ macro_rules! run_aot_metered_cost_and_compare {
             .executor()
             .metered_cost_aot_instance(&$exe, &$executor_idx_to_air_idx)
             .unwrap();
-            let (mut aot_cost, mut aot_vm_state) = aot_instance
-                .execute_metered_cost(vec![], $ctx.clone())
-                .expect("Failed to execute");
+        let (mut aot_cost, mut aot_vm_state) = aot_instance
+            .execute_metered_cost(vec![], $ctx.clone())
+            .expect("Failed to execute");
         if $resume_state.is_some() {
             (aot_cost, aot_vm_state) = aot_instance
                 .execute_metered_cost_from_state($resume_state.clone().unwrap(), $ctx.clone())
