@@ -1,5 +1,5 @@
 #![cfg(feature = "aot")]
-use std::{ffi::c_void, process::Command};
+use std::{ffi::c_void, process::Command, fs};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -45,11 +45,163 @@ type AsmRunFn = unsafe extern "C" fn(
     from_state_instret: u64,
 );
 
+
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
+
+    fn push_external_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    push rbp\n";
+        asm_str += "    push rbx\n";
+        asm_str += "    push r12\n";
+        asm_str += "    push r13\n";
+        asm_str += "    push r14\n";
+        asm_str += "    push r15\n";
+        return asm_str;     
+    }
+    
+    fn pop_external_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    pop r15\n";
+        asm_str += "    pop r14\n";
+        asm_str += "    pop r13\n";
+        asm_str += "    pop r12\n";
+        asm_str += "    pop rbx\n";
+        asm_str += "    pop rbp\n";
+        return asm_str;
+    }
+    
+    fn debug_cur_sting(str: &String) {
+        println!("DEBUG");
+        println!("{}", str);
+    } 
+    
+    fn push_internal_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    push rax\n";
+        asm_str += "    push rcx\n";
+        asm_str += "    push rdx\n";
+        asm_str += "    push r8\n";
+        asm_str += "    push r9\n";
+        asm_str += "    push r10\n";
+        asm_str += "    push r11\n";
+
+        return asm_str; 
+    }
+    
+    fn pop_internal_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    pop r11\n";
+        asm_str += "    pop r10\n";
+        asm_str += "    pop r9\n";
+        asm_str += "    pop r8\n";
+        asm_str += "    pop rdx\n";
+        asm_str += "    pop rcx\n";
+        asm_str += "    pop rax\n";
+        
+        return asm_str; 
+    }
+
+    pub fn create_asm(exe: &VmExe<F>) -> String {
+        let mut asm_str = String::new();
+        // generate the assembly based on exe.program
+        
+        // header part
+        asm_str += ".intel_syntax noprefix\n";
+        asm_str += ".code64\n";
+        asm_str += ".section .text\n";
+        asm_str += ".global asm_run_internal\n";
+    
+        // asm_run_internal part
+        asm_str += "asm_run_internal:\n";
+        asm_str += &Self::push_external_registers();
+        asm_str += "    mov rbx, rdi\n";
+        asm_str += "    mov rbp, rsi\n";
+        asm_str += "    mov r13, rdx\n";
+        asm_str += "    mov r14, rcx\n";
+    
+        // asm_execute_pc_{pc_num}
+        // do fallback first for now but expand per instruction
+    
+        let pc_base = exe.program.pc_base;
+    
+        for i in 0..(pc_base / 4) { 
+            asm_str += &format!("asm_execute_pc_{}:", i * 4);
+            asm_str += "\n";
+            asm_str += "\n";
+        }
+    
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm_str += &format!("asm_execute_pc_{}:\n", pc);
+            asm_str += &Self::push_external_registers();
+            asm_str += &Self::push_internal_registers();
+    
+            // move in the function parameters to call should_suspend 
+            asm_str += "    mov rdi, r14\n";
+            asm_str += "    mov rsi, r13\n";
+            asm_str += "    mov rdx, rbx\n";
+            asm_str += "    call should_suspend\n";
+            asm_str += "    cmp rax, 1\n";
+            asm_str += &Self::pop_internal_registers();
+            asm_str += &Self::pop_external_registers();
+    
+            asm_str += "    je asm_run_end\n";
+    
+            asm_str += &Self::push_external_registers();
+            asm_str += &Self::push_internal_registers();
+    
+            asm_str += "    mov rdi, rbx\n";
+            asm_str += "    mov rsi, rbp\n";
+            asm_str += "    mov rdx, r13\n";
+            asm_str += "    mov rcx, r14\n";
+            
+            asm_str += "    call extern_handler\n";
+            asm_str += "    add r14, 1\n";
+            asm_str += "    cmp rax, 1\n";
+    
+            asm_str += &Self::pop_internal_registers();
+            asm_str += &Self::pop_external_registers();
+    
+            asm_str += "    je asm_run_end\n";
+            asm_str += "    mov r13, rax\n";
+            asm_str += "    lea rbx, [rip + map_pc_base]\n";        // rbx = base address
+            asm_str += "    movsxd rcx, [rbx + rax]\n";                // rcx = offset
+            asm_str += "    add rcx, rbx\n";
+            asm_str += "    jmp rcx\n";
+            asm_str += "\n";
+        }
+    
+        // asm_run_end part
+        asm_str += "asm_run_end:\n";
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, rbp\n";
+        asm_str += "    mov rdx, r13\n";
+        asm_str += "    mov rcx, r14\n";
+        asm_str += "    call set_instret_and_pc\n";
+        asm_str += "    xor rax, rax\n";
+        asm_str += &Self::pop_external_registers();
+        asm_str += "    ret\n";
+        asm_str += "\n";
+    
+        // map_pc_base part
+        asm_str += ".section .rodata\n";
+        asm_str += "map_pc_base:\n";
+    
+        for i in 0..(pc_base / 4) { 
+            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i * 4);
+        }
+    
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
+        }
+    
+        return asm_str;
+    }
+    
+
     /// Creates a new instance for pure execution
     pub fn new<E>(
         inventory: &'a ExecutorInventory<E>,
@@ -84,6 +236,8 @@ where
 
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
+
+        fs::write(format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name), Self::create_asm(&exe));
 
         // ar rcs libasm_runtime.a asm_run.o
         // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime
@@ -227,6 +381,10 @@ where
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
+
+        let instret_end = vm_exec_state.ctx.instret_end;
+
+        println!("what is instret_end {}", instret_end);
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
