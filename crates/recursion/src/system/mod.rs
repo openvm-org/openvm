@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::FieldExtensionAlgebra;
+use p3_field::{FieldExtensionAlgebra, PrimeField32};
 use stark_backend_v2::{
     D_EF, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -23,7 +23,7 @@ use crate::{
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
-    whir::WhirModule,
+    whir::{FoldRecord, WhirModule},
 };
 
 mod dummy;
@@ -134,6 +134,18 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
         sample
     }
 
+    pub fn sample_bits(&mut self, num_bits: usize) -> (F, u32)
+    where
+        F: PrimeField32,
+    {
+        let sample: F = self.sponge.sample();
+        let sample_u32 = sample.as_canonical_u32();
+        let bits = sample_u32 & ((1 << num_bits) - 1);
+        self.data.push(sample);
+        self.is_sample.push(true);
+        (sample, bits)
+    }
+
     pub fn sample_ext(&mut self) -> EF {
         let sample = self.sponge.sample_ext();
         self.data.extend_from_slice(sample.as_base_slice());
@@ -213,7 +225,26 @@ pub struct StackingPreflight {
 }
 
 #[derive(Debug, Default)]
-pub struct WhirPreflight {}
+pub struct WhirPreflight {
+    pub alphas: Vec<EF>,
+    pub z0s: Vec<EF>,
+    pub zj_roots: Vec<Vec<F>>,
+    pub zjs: Vec<Vec<F>>,
+    pub yjs: Vec<Vec<EF>>,
+    pub gammas: Vec<EF>,
+    pub pow_samples: Vec<F>,
+    pub queries: Vec<F>,
+    pub query_indices: Vec<u32>,
+    pub tidx_per_round: Vec<usize>,
+    pub query_tidx_per_round: Vec<usize>,
+    pub initial_claim_per_round: Vec<EF>,
+    pub post_sumcheck_claims: Vec<EF>,
+    pub pre_query_claims: Vec<EF>,
+    pub eq_partials: Vec<EF>,
+    pub fold_records: Vec<FoldRecord>,
+    pub initial_round_coset_vals: Vec<Vec<EF>>,
+    pub final_poly_at_u: EF,
+}
 
 impl BusInventory {
     fn new(b: &mut BusIndexManager) -> Self {
@@ -278,7 +309,7 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         let batch_constraint_module =
             BatchConstraintModule::new(child_mvk.clone(), bus_inventory.clone());
         let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
-        let whir_module = WhirModule::new(child_mvk.clone(), bus_inventory.clone());
+        let whir_module = WhirModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
 
         let modules: Vec<Box<dyn AirModule<TS>>> = vec![
             Box::new(transcript_module),
