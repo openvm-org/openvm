@@ -13,6 +13,17 @@ macro_rules! define_typed_lookup_bus {
                 Self(openvm_stark_backend::interaction::LookupBus::new(bus_index))
             }
 
+            pub fn lookup_key<AB>(
+                &self,
+                builder: &mut AB,
+                key: $Msg<impl Into<AB::Expr> + Clone>,
+                enabled: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                self.0.lookup_key(builder, key.to_vec(), enabled);
+            }
+
             #[inline]
             pub fn add_key_with_lookups<AB>(
                 &self,
@@ -22,6 +33,53 @@ macro_rules! define_typed_lookup_bus {
             ) where
                 AB: openvm_stark_backend::interaction::InteractionBuilder,
             {
+                self.0
+                    .add_key_with_lookups(builder, key.to_vec(), num_lookups);
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! define_typed_per_proof_lookup_bus {
+    ($Bus:ident, $Msg:ident) => {
+        #[derive(Copy, Clone, Debug)]
+        pub struct $Bus(openvm_stark_backend::interaction::LookupBus);
+
+        impl $Bus {
+            #[inline]
+            pub fn new(bus_index: openvm_stark_backend::interaction::BusIndex) -> Self {
+                Self(openvm_stark_backend::interaction::LookupBus::new(bus_index))
+            }
+
+            pub fn lookup_key<AB>(
+                &self,
+                builder: &mut AB,
+                proof_idx: impl Into<AB::Expr>,
+                key: $Msg<impl Into<AB::Expr> + Clone>,
+                enabled: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                let key = core::iter::once(proof_idx.into())
+                    .chain(key.to_vec().into_iter().map(|x| x.into()))
+                    .collect::<Vec<_>>();
+                self.0.lookup_key(builder, key.to_vec(), enabled);
+            }
+
+            #[inline]
+            pub fn add_key_with_lookups<AB>(
+                &self,
+                builder: &mut AB,
+                proof_idx: impl Into<AB::Expr>,
+                key: $Msg<impl Into<AB::Expr> + Clone>,
+                num_lookups: impl Into<AB::Expr>,
+            ) where
+                AB: openvm_stark_backend::interaction::InteractionBuilder,
+            {
+                let key = core::iter::once(proof_idx.into())
+                    .chain(key.to_vec().into_iter().map(|x| x.into()))
+                    .collect::<Vec<_>>();
                 self.0
                     .add_key_with_lookups(builder, key.to_vec(), num_lookups);
             }
