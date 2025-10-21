@@ -1,5 +1,6 @@
 #![cfg(feature = "aot")]
 use std::{ffi::c_void, process::Command, fs};
+use rand::Rng;
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
@@ -241,7 +242,8 @@ where
         E: Executor<F>,
     {
         let default_name = String::from("asm_x86_run");
-        Self::new_with_asm_name(inventory, exe, &default_name)
+        let random_name = format!("asm_x86_run_{}", rand::thread_rng().gen_range(0..1000000));
+        Self::new_with_asm_name(inventory, exe, &random_name)
     }
 
     /// Creates a new instance for pure execution
