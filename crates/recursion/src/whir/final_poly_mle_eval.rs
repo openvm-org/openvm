@@ -14,10 +14,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
-        TranscriptBusMessage,
-    },
+    bus::{StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus},
     system::Preflight,
     utils::ext_field_multiply,
     whir::bus::{
@@ -93,18 +90,13 @@ where
             },
             local.is_first,
         );
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(i),
-                    value: local.coeff[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid.into(),
-            );
-        }
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx,
+            local.coeff,
+            local.is_valid,
+        );
         self.final_poly_bus.send(
             builder,
             local.proof_idx,

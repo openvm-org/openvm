@@ -14,10 +14,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{
-        CommitmentsBus, CommitmentsBusMessage, TranscriptBus, TranscriptBusMessage, WhirModuleBus,
-        WhirModuleMessage,
-    },
+    bus::{CommitmentsBus, CommitmentsBusMessage, TranscriptBus, WhirModuleBus, WhirModuleMessage},
     system::Preflight,
     utils::ext_field_subtract,
     whir::bus::{
@@ -112,31 +109,6 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
             local.has_commitments_bus_msg,
         );
 
-        let observe = |builder: &mut AB, tidx: AB::Expr, value: AB::Expr, enabled: AB::Expr| {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx,
-                    value,
-                    is_sample: AB::Expr::ZERO,
-                },
-                enabled,
-            );
-        };
-        let sample = |builder: &mut AB, tidx: AB::Expr, value: AB::Expr, enabled: AB::Expr| {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx,
-                    value,
-                    is_sample: AB::Expr::ONE,
-                },
-                enabled,
-            );
-        };
-
         self.sumcheck_bus.send(
             builder,
             local.proof_idx,
@@ -152,34 +124,31 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
         let post_sumcheck_offset = 3 * self.k * D_EF;
         let mut non_final_round_offset = post_sumcheck_offset;
 
-        for i in 0..DIGEST_SIZE {
-            observe(
-                builder,
-                local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
-                local.commit[i].into(),
-                local.is_valid - local.is_last_round,
-            );
-            non_final_round_offset += 1;
-        }
+        self.transcript_bus.observe_commit(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.commit,
+            local.is_valid - local.is_last_round,
+        );
+        non_final_round_offset += DIGEST_SIZE;
 
-        for i in 0..D_EF {
-            sample(
-                builder,
-                local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
-                local.z0[i].into(),
-                local.is_valid - local.is_last_round,
-            );
-            non_final_round_offset += 1;
-        }
-        for i in 0..D_EF {
-            observe(
-                builder,
-                local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
-                local.y0[i].into(),
-                local.is_valid - local.is_last_round,
-            );
-            non_final_round_offset += 1;
-        }
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.z0,
+            local.is_valid - local.is_last_round,
+        );
+        non_final_round_offset += D_EF;
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(non_final_round_offset),
+            local.y0,
+            local.is_valid - local.is_last_round,
+        );
+        non_final_round_offset += D_EF;
         self.query_bus.send(
             builder,
             local.proof_idx,
@@ -219,14 +188,16 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
             + (AB::Expr::ONE - local.is_last_round)
                 * AB::Expr::from_canonical_usize(non_final_round_offset);
 
-        observe(
+        self.transcript_bus.observe(
             builder,
+            local.proof_idx,
             pow_tidx.clone(),
             local.pow_witness.into(),
             local.is_valid.into(),
         );
-        sample(
+        self.transcript_bus.sample(
             builder,
+            local.proof_idx,
             pow_tidx.clone() + AB::Expr::ONE,
             local.pow_sample.into(),
             local.is_valid.into(),
@@ -259,14 +230,13 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
             local.is_valid,
         );
 
-        for i in 0..D_EF {
-            sample(
-                builder,
-                pow_tidx.clone() + AB::Expr::from_canonical_usize(2 + self.num_queries + i),
-                local.gamma[i].into(),
-                local.is_valid.into(),
-            );
-        }
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            pow_tidx.clone() + AB::Expr::from_canonical_usize(2 + self.num_queries),
+            local.gamma,
+            local.is_valid.into(),
+        );
         self.gamma_bus.send(
             builder,
             local.proof_idx,

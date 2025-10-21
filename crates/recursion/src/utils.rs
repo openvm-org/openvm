@@ -76,22 +76,3 @@ pub fn assert_eq_array<AB, const N: usize>(
         builder.assert_eq(a, e);
     }
 }
-
-pub fn transcript_messages<F, const N: usize>(
-    tidx: impl Into<F>,
-    value: [impl Into<F>; N],
-    is_sample: impl Into<F>,
-) -> [TranscriptBusMessage<F>; N]
-where
-    F: FieldAlgebra,
-{
-    let tidx = tidx.into();
-    let value = value.map(Into::into);
-    let is_sample = is_sample.into();
-
-    core::array::from_fn(|j| TranscriptBusMessage {
-        tidx: tidx.clone() + F::from_canonical_usize(j),
-        value: value[j].clone(),
-        is_sample: is_sample.clone(),
-    })
-}
