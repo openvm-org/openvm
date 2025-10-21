@@ -66,6 +66,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
 
 
 #[cfg(feature = "aot")]
+#[test_case("tests/data/rv32im-exp-from-as")]
 #[test_case("tests/data/rv32im-fib-from-as")]
 fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let elf = get_elf(elf_path)?;

@@ -186,9 +186,11 @@ where
             
             asm_str += "    call extern_handler\n";
             asm_str += "    add r14, 1\n";
+            asm_str += "    mov r13, rax\n";
+            asm_str += "    AND rax, 1\n";
             asm_str += "    cmp rax, 1\n";
             
-            asm_str += "    mov r13, rax\n";
+            
     
             asm_str += &Self::pop_internal_registers();
     
@@ -203,6 +205,7 @@ where
     
         // asm_run_end part
         asm_str += "asm_run_end:\n";
+        asm_str += "    sub r13, 1\n";
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, rbp\n";
         asm_str += "    mov rdx, r13\n";
