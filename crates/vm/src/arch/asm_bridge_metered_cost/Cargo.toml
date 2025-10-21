@@ -1,6 +1,6 @@
 [package]
 name = "asm_bridge_metered_cost"
-version.workspace = true 
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 homepage.workspace = true
@@ -13,5 +13,7 @@ crate-type = ["cdylib"]
 cc = "1.0"
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true }
-openvm-instructions.workspace = true
 asm_bridge_utils = { path = "../asm_bridge_utils" }
+
+[package.metadata.cargo-shear]
+ignored = ["cc"]
