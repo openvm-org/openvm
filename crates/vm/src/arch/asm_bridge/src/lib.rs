@@ -116,7 +116,7 @@ pub extern "C" fn extern_handler(
             println!("extern_handler returns {}", 1);
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
-            1
+            (*pc) + 1
         }
     }
 }
