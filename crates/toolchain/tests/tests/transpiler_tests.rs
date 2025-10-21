@@ -86,7 +86,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let mut aot_instance = executor.aot_instance(&exe)?;
     let aot_state = aot_instance.execute(vec![], None)?;
 
-    /*
+
     // check that the VM state are equal
     assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
@@ -121,8 +121,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
         interp_state.streams.hint_space,
         aot_state.streams.hint_space
     );
-    */
-
+    
     Ok(())
 }
 

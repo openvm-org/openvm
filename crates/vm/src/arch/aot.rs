@@ -136,21 +136,47 @@ where
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
-            asm_str += &Self::push_external_registers();
-            asm_str += &Self::push_internal_registers();
+
+            /*
+            Invariant to be maintained before and after the call
+
+            rbx -> vm_exec_state_ptr
+            rbp -> pre_compute_insns_ptr
+            r13 -> cur_pc 
+            r14 -> cur_instret
+            */
     
-            // move in the function parameters to call should_suspend 
+            /*
+            call should_suspend with parameters
+            - cur_instret
+            - cur_pc 
+            - vm_exec_state_ptr
+            */
+
+            asm_str += &Self::push_internal_registers();
+
             asm_str += "    mov rdi, r14\n";
             asm_str += "    mov rsi, r13\n";
             asm_str += "    mov rdx, rbx\n";
+
+            /*
+            should_suspend may change 
+            rcx, rdx, r8, r9, r10, r11
+
+            rax holds the return value which is the next pc
+            */
+
             asm_str += "    call should_suspend\n";
             asm_str += "    cmp rax, 1\n";
+
+            /*
+
+            */
+
             asm_str += &Self::pop_internal_registers();
-            asm_str += &Self::pop_external_registers();
     
             asm_str += "    je asm_run_end\n";
     
-            asm_str += &Self::push_external_registers();
             asm_str += &Self::push_internal_registers();
     
             asm_str += "    mov rdi, rbx\n";
@@ -161,15 +187,16 @@ where
             asm_str += "    call extern_handler\n";
             asm_str += "    add r14, 1\n";
             asm_str += "    cmp rax, 1\n";
+            
+            asm_str += "    mov r13, rax\n";
     
             asm_str += &Self::pop_internal_registers();
-            asm_str += &Self::pop_external_registers();
     
             asm_str += "    je asm_run_end\n";
-            asm_str += "    mov r13, rax\n";
-            asm_str += "    lea rbx, [rip + map_pc_base]\n";        // rbx = base address
-            asm_str += "    movsxd rcx, [rbx + rax]\n";                // rcx = offset
-            asm_str += "    add rcx, rbx\n";
+            
+            asm_str += "    lea rdx, [rip + map_pc_base]\n";   
+            asm_str += "    movsxd rcx, [rdx + rax]\n";               
+            asm_str += "    add rcx, rdx\n";
             asm_str += "    jmp rcx\n";
             asm_str += "\n";
         }
