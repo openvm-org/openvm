@@ -44,7 +44,7 @@ The OpenVM ISA treats `[0:4]_1` as normal read/write memory and makes no guarant
 This section specifies the behavior of the transpiler for the default VM extensions with the custom RISC-V instructions specified [here](/specs/reference/riscv-custom-code). We use the following notation:
 
 - Let `ind(rd)` denote `4 * (register index)`, which is in `0..128`. In particular, it fits in one field element.
-- We use `itof` for the function that takes 12-bits (or 21-bits in case of J-type) to a signed integer and then mapping to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
+- We use `itof` for the function that sends an immediate to its signed integer representation, as specified in Section 2.3 of [RISC-V Instruction Set Manual Volume I: Unprivileged ISA](https://lf-riscv.atlassian.net/wiki/spaces/HOME/pages/16154769/RISC-V+Technical+Specifications) (signed 12-bit, 13-bit, 21-bits for I-type, B-type, J-type, respectively), and then maps it to the corresponding field element. So `0b11…11` goes to `-1` in `F`.
 - We use `sign_extend_24` to convert a 12-bit integer into a 24-bit integer via sign extension. We use this in conjunction with `utof`, which converts 24 bits into an unsigned integer and then maps it to the corresponding field element. Note that each 24-bit unsigned integer fits in one field element.
 - We use `sign_extend_16` for the analogous conversion into a 16-bit integer via sign extension.
 - We use `zero_extend_24` to convert an unsigned integer with at most 24 bits into a 24-bit unsigned integer by zero extension. This is used in conjunction with `utof` to convert unsigned integers to field elements.
