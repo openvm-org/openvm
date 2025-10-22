@@ -231,3 +231,12 @@ impl MemoryInventoryGPU {
         ret
     }
 }
+
+impl Drop for PersistentMemoryInventoryGPU {
+    fn drop(&mut self) {
+        // Drop merkle subtrees first so their individual streams synchronize before dropping the
+        // initial memory buffers. This prevents buffers from dropping before build_async completes.
+        self.merkle_tree.drop_subtrees();
+        self.initial_memory.clear();
+    }
+}
