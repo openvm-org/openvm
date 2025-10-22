@@ -67,11 +67,11 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
     init_config: &impl InitFileGenerator,
 ) -> Result<Elf> {
     let pkg = get_package(&manifest_dir);
-    let target_dir = tempdir()?;
+    let target_dir = Path::new(""); // tempdir()?;
     // Build guest with default features
     let guest_opts = GuestOptions::default()
         .with_features(features.clone())
-        .with_target_dir(target_dir.path());
+        .with_target_dir(target_dir);
     let features = features
         .into_iter()
         .map(|x| x.as_ref().to_string())
@@ -112,6 +112,6 @@ pub fn build_example_program_at_path_with_features<S: AsRef<str>>(
         })
         .expect("Could not find target binary");
     let data = read(&elf_path).with_context(|| format!("Path not found: {:?}", elf_path))?;
-    target_dir.close()?;
+    // target_dir.close()?;
     Elf::decode(&data, MEM_SIZE as u32)
 }
