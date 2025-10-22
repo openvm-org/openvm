@@ -87,6 +87,22 @@ pub enum StaticProgramError {
     ExecutorNotFound { opcode: VmOpcode },
 }
 
+#[cfg(feature = "aot")]  
+#[derive(Error, Debug)]  
+pub enum AotError {  
+    #[error("AOT compilation not supported for this opcode")]  
+    NotSupported,  
+      
+    #[error("No executor found for opcode {0}")]  
+    NoExecutorFound(VmOpcode),  
+      
+    #[error("Invalid instruction format")]  
+    InvalidInstruction,  
+      
+    #[error("Other AOT error: {0}")]  
+    Other(String),  
+}
+
 /// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
 /// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
@@ -154,6 +170,18 @@ pub trait Executor<F> {
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
+
+    #[cfg(feature = "aot")]  
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        false
+    }
+}
+
+#[cfg(feature = "aot")]  
+pub trait AotExecutor<F>: Executor<F> {
+    /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
+    /// AOT    
+    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;  
 }
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -189,6 +217,18 @@ pub trait MeteredExecutor<F> {
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
+
+    #[cfg(feature = "aot")]  
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        false
+    }
+}
+
+#[cfg(feature = "aot")]  
+pub trait AotMeteredExecutor<F>: MeteredExecutor<F> {
+    /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
+    /// AOT
+    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;  
 }
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
