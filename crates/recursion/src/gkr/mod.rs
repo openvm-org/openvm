@@ -27,7 +27,9 @@
 //!                                      ┆      ▼
 //!                                ┌─────────────────┐
 //!                                │                 │───────────────────► TranscriptBus
-//!   GkrModuleBus ───────────────►│   GkrInputAir   │
+//!                                │                 │
+//!  GkrModuleBus ────────────────►│   GkrInputAir   │───────────────────► ExpBitsLenBus
+//!                                │                 │
 //!                                │                 │───────────────────► BatchConstraintModuleBus
 //!                                └─────────────────┘
 //!                                      ┆      ▲
@@ -96,9 +98,12 @@ mod sumcheck;
 mod xi_sampler;
 
 pub struct GkrModule {
-    mvk: Arc<MultiStarkVerifyingKeyV2>,
+    // System Params
+    l_skip: usize,
+    logup_pow_bits: usize,
+    // Global bus inventory
     bus_inventory: BusInventory,
-    // Internal buses
+    // Module buses
     xi_sampler_input_bus: GkrXiSamplerInputBus,
     xi_sampler_output_bus: GkrXiSamplerOutputBus,
     layer_input_bus: GkrLayerInputBus,
@@ -115,7 +120,8 @@ impl GkrModule {
         bus_inventory: BusInventory,
     ) -> Self {
         GkrModule {
-            mvk,
+            l_skip: mvk.inner.params.l_skip,
+            logup_pow_bits: mvk.inner.params.logup_pow_bits,
             bus_inventory,
             layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
             layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),
@@ -131,9 +137,12 @@ impl GkrModule {
 impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let gkr_input_air = GkrInputAir {
+            l_skip: self.l_skip,
+            logup_pow_bits: self.logup_pow_bits,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             bc_module_bus: self.bus_inventory.bc_module_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             layer_input_bus: self.layer_input_bus,
             layer_output_bus: self.layer_output_bus,
             xi_sampler_input_bus: self.xi_sampler_input_bus,
@@ -165,19 +174,11 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
             xi_sampler_output_bus: self.xi_sampler_output_bus,
         };
 
-        // let dummy_air = dummy::DummyGkrRoundAir {
-        //     gkr_bus: self.bus_inventory.gkr_module_bus,
-        //     bc_module_bus: self.bus_inventory.bc_module_bus,
-        //     xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
-        //     transcript_bus: self.bus_inventory.transcript_bus,
-        // };
-
         vec![
             Arc::new(gkr_input_air) as AirRef<_>,
             Arc::new(gkr_layer_air) as AirRef<_>,
             Arc::new(gkr_sumcheck_air) as AirRef<_>,
             Arc::new(gkr_xi_sampler_air) as AirRef<_>,
-            // Arc::new(dummy_air) as AirRef<_>,
         ]
     }
 
@@ -287,7 +288,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         }
 
         let post_layer_tidx = ts.len();
-        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + self.mvk.inner.params.l_skip {
+        for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + self.l_skip {
             xi.push((ts.len(), ts.sample_ext()));
         }
 
@@ -331,11 +332,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
                 common_main: Some(Arc::new(xi_sampler::generate_trace(proof, preflight))),
                 public_values: vec![],
             },
-            // AirProofRawInput {
-            //     cached_mains: vec![],
-            //     common_main: Some(Arc::new(dummy::generate_trace(vk, proof, preflight))),
-            //     public_values: vec![],
-            // },
         ]
     }
 }
