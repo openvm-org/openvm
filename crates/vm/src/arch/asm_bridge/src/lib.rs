@@ -134,11 +134,11 @@ pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_
 }
 
 #[no_mangle]
-pub extern "C" fn get_vm_register_addr(exec_state_ptr: *mut c_void) -> *mut u32 {
+pub extern "C" fn get_vm_register_addr(exec_state_ptr: *mut c_void) -> *mut u64 {
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
     let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[1];
-    ptr.as_ptr() as *mut u32
+    ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
 
 #[no_mangle]

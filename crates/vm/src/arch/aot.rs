@@ -24,6 +24,23 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+
+const REG_AUX: &str = "r11";
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
+
+
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
 /// Rust toolchain
@@ -156,6 +173,48 @@ where
         // asm_str += &Self::pop_xmm_regs();
         
         asm_str
+    }   
+
+    /*
+    fn sync_vm_registers() -> String  {
+        let mut asm_str = String::new();
+        for r in 0..16 {
+            asm_str += &format!("");
+            asm_str += &format!("   mov xmm{}, \n", r);
+        }
+    }
+    */
+
+    // r15 stores vm_register_address
+    fn rv32_regs_to_xmm() -> String {
+        let mut asm_str = String::new();
+
+        for r in 0..16 {
+            asm_str += &format!("   movq xmm{}, [r15 + 8*{}]\n", r, r);
+        }
+
+        asm_str
+    }
+
+    fn xmm_to_rv32_regs() -> String {
+        let mut asm_str = String::new();
+        
+        for r in 0..16 { 
+            // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
+            asm_str += &format!("   movq [r15 + 8*{}], xmm{}\n", r, r);
+        }
+
+        asm_str
+    }
+
+    fn initialize_xmm_regs() -> String {
+        let mut asm_str = String::new();
+
+        for r in 0..16 {
+            asm_str += &format!("   pxor xmm{}, xmm{}\n", r, r);
+        }
+
+        asm_str
     }
 
     pub fn create_asm(exe: &VmExe<F>) -> String {
@@ -180,10 +239,9 @@ where
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    call get_vm_register_addr\n";
         asm_str += "    mov r15, rax\n";
-
-        asm_str += "    mov rdi, rax\n";
-        asm_str += "    call debug_vm_register_addr\n";
         asm_str += &Self::pop_internal_registers();
+
+        asm_str += &Self::initialize_xmm_regs();
     
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
@@ -199,57 +257,12 @@ where
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /*
             if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
-                /*
-                ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. Overflow is ignored and the lower 32-bits are written to the destination.
-                */
-                asm_str += &format!("asm_execute_pc_{}:\n", pc);
-                
-                let a = instruction.a;
-                let b = instruction.b;
-                let c = instruction.c;
-                let e = instruction.e; 
-
-                if e == F::ZERO {
-                    // perform the operation
-                    asm_str += &format!("   movaps xmm{} xmm{}\n", a, b);
-                    asm_str += &format!("   addps xmm{}, {}\n", a, c);
-
-                    // sync the register
-                    asm_str += &format!("   mov [r15 + {}], xmm{}\n", a, a);
-                } else {
-                    // perform the operation
-                    asm_str += &format!("   movaps xmm{} xmm{}\n", a, b);
-                    asm_str += &format!("   addps xmm{}, xmm{}\n", a, c);
-
-                    // sync the register
-                    asm_str += &format!("   mov [r15 + {}], xmm{}\n", a, a);
-                }
-
-                // increase pc by 4
-                asm_str += &format!("   add r13, 4\n");
-                // increase instret
-                asm_str += &format!("   add r14, 1\n");
-            } else {
-            */
+                // Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
+                // Overflow is ignored and the lower 32-bits are written to the destination.
 
                 asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
-                /*
-                Invariant to be maintained before and after the call
-
-                rbx -> vm_exec_state_ptr
-                rbp -> pre_compute_insns_ptr
-                r13 -> cur_pc 
-                r14 -> cur_instret
-                */
-        
-                /*
-                call should_suspend with parameters
-                - cur_instret
-                - cur_pc 
-                - vm_exec_state_ptr
-                */
-
+                asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_internal_registers();
 
                 asm_str += "    mov rdi, r14\n";
@@ -266,34 +279,125 @@ where
                 asm_str += "    call should_suspend\n";
                 asm_str += "    cmp rax, 1\n";
 
-                /*
-
-                */
-
                 asm_str += &Self::pop_internal_registers();
+                asm_str += &Self::rv32_regs_to_xmm();
         
                 asm_str += "    je asm_run_end\n";
-        
-                asm_str += &Self::push_internal_registers();
-        
-                asm_str += "    mov rdi, rbx\n";
-                asm_str += "    mov rsi, rbp\n";
-                asm_str += "    mov rdx, r13\n";
-                asm_str += "    mov rcx, r14\n";
                 
-                asm_str += "    call extern_handler\n";
-                asm_str += "    add r14, 1\n";
-                asm_str += "    mov r13, rax\n";
-                asm_str += "    AND rax, 1\n";
-                asm_str += "    cmp rax, 1\n";
-                
-                asm_str += &Self::pop_internal_registers();
-                asm_str += "    je asm_run_end\n";
-                asm_str += "    lea rdx, [rip + map_pc_base]\n";   
-                asm_str += "    movsxd rcx, [rdx + rax]\n";               
-                asm_str += "    add rcx, rdx\n";
-                asm_str += "    jmp rcx\n";
-                asm_str += "\n";
+                let a: u32 = instruction.a.as_canonical_u32();
+                let b: u32 = instruction.b.as_canonical_u32();
+                let c: u32 = instruction.c.as_canonical_u32();
+                let e: u32 = instruction.e.as_canonical_u32();
+
+                assert_eq!((a % 4), 0);
+                assert_eq!((b % 4), 0);
+
+                // perform the operation
+                if e == 0 {
+                    // reg_a = xmm_b + c (immediate)
+
+                    if (b/4)%2 == 0 {
+                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", b/8);                                            
+                    } else {
+                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", (b/4 - 1)/2);
+                    }
+                    
+                    asm_str += &format!("   add {REG_A}, {c}\n");
+
+                    // place back from general register to xmm register
+                    if (a/4)%2 == 0 {
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", a/8, a/8);
+                    } else {
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", (a/4 - 1)/2, (a/4 - 1)/2);
+                    }
+                    
+                } else {
+                    // reg_a = xmm_b + reg_c
+                    if (b/4)%2 == 0 {
+                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", b/8);                                            
+                    } else {
+                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", (b/4 - 1)/2);
+                    }
+
+                    asm_str += &format!("   vmovq {REG_C}, xmm{}\n", c/4);
+                    asm_str += &format!("   add {REG_A}, {REG_C}\n");
+
+                    // place back from general register to xmm register
+                    if (a/4)%2 == 0 {
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", a/8, a/8);
+                    } else {
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", (a/4 - 1)/2, (a/4 - 1)/2);
+                    }
+                }
+
+                // increment pc
+                asm_str += &format!("   add {REG_PC}, 4\n");
+                asm_str += &format!("   add {REG_INSTRET}, 1\n");
+
+                continue;
+            }
+            */
+
+            asm_str += &format!("asm_execute_pc_{}:\n", pc);
+
+            /*
+            Invariant to be maintained before and after the call
+
+            rbx -> vm_exec_state_ptr
+            rbp -> pre_compute_insns_ptr
+            r13 -> cur_pc 
+            r14 -> cur_instret
+            */
+    
+            /*
+            call should_suspend with parameters
+            - cur_instret
+            - cur_pc 
+            - vm_exec_state_ptr
+            */
+
+            asm_str += &Self::xmm_to_rv32_regs();
+            asm_str += &Self::push_internal_registers();
+
+            asm_str += "    mov rdi, r14\n";
+            asm_str += "    mov rsi, r13\n";
+            asm_str += "    mov rdx, rbx\n";
+
+            /*
+            should_suspend may change 
+            rcx, rdx, r8, r9, r10, r11
+
+            rax holds the return value which is the next pc
+            */
+
+            asm_str += "    call should_suspend\n";
+            asm_str += "    cmp rax, 1\n";
+
+            asm_str += &Self::pop_internal_registers();
+    
+            asm_str += "    je asm_run_end\n";
+    
+            asm_str += &Self::push_internal_registers();
+    
+            asm_str += "    mov rdi, rbx\n";
+            asm_str += "    mov rsi, rbp\n";
+            asm_str += "    mov rdx, r13\n";
+            asm_str += "    mov rcx, r14\n";
+            
+            asm_str += "    call extern_handler\n";
+            asm_str += "    add r14, 1\n";
+            asm_str += "    mov r13, rax\n";
+            asm_str += "    AND rax, 1\n";
+            asm_str += "    cmp rax, 1\n";
+            
+            asm_str += &Self::pop_internal_registers();
+            asm_str += &Self::rv32_regs_to_xmm();
+            asm_str += "    je asm_run_end\n";
+            asm_str += "    lea rdx, [rip + map_pc_base]\n";   
+            asm_str += "    movsxd rcx, [rdx + rax]\n";               
+            asm_str += "    add rcx, rdx\n";
+            asm_str += "    jmp rcx\n";
+            asm_str += "\n";
 
         }
     
