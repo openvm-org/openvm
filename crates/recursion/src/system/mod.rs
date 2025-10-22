@@ -14,9 +14,9 @@ use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
-        ConstraintSumcheckRandomnessBus, GkrModuleBus, PowerCheckerBus, PublicValuesBus,
-        RangeCheckerBus, StackingIndicesBus, StackingModuleBus, StackingSumcheckRandomnessBus,
-        TranscriptBus, WhirModuleBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus, PowerCheckerBus,
+        PublicValuesBus, RangeCheckerBus, StackingIndicesBus, StackingModuleBus,
+        StackingSumcheckRandomnessBus, TranscriptBus, WhirModuleBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
@@ -79,6 +79,9 @@ pub struct BusInventory {
 
     // Claims buses
     pub column_claims_bus: ColumnClaimsBus,
+
+    // Exp bits length bus
+    pub exp_bits_len_bus: ExpBitsLenBus,
 
     // Peripheral buses
     pub range_checker_bus: RangeCheckerBus,
@@ -271,6 +274,8 @@ impl BusInventory {
 
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
+
+            exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
 
             // Peripheral buses
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),

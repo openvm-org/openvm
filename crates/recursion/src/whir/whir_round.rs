@@ -14,14 +14,17 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{CommitmentsBus, CommitmentsBusMessage, TranscriptBus, WhirModuleBus, WhirModuleMessage},
+    bus::{
+        CommitmentsBus, CommitmentsBusMessage, ExpBitsLenBus, ExpBitsLenMessage, TranscriptBus,
+        WhirModuleBus, WhirModuleMessage,
+    },
     system::Preflight,
     utils::ext_field_subtract,
     whir::bus::{
-        ExpBitsLenBus, ExpBitsLenMessage, FinalPolyMleEvalBus, FinalPolyMleEvalMessage,
-        FinalPolyQueryEvalBus, FinalPolyQueryEvalMessage, VerifyQueriesBus,
-        VerifyQueriesBusMessage, WhirGammaBus, WhirGammaMessage, WhirQueryBus, WhirQueryBusMessage,
-        WhirSumcheckBus, WhirSumcheckBusMessage,
+        FinalPolyMleEvalBus, FinalPolyMleEvalMessage, FinalPolyQueryEvalBus,
+        FinalPolyQueryEvalMessage, VerifyQueriesBus, VerifyQueriesBusMessage, WhirGammaBus,
+        WhirGammaMessage, WhirQueryBus, WhirQueryBusMessage, WhirSumcheckBus,
+        WhirSumcheckBusMessage,
     },
 };
 

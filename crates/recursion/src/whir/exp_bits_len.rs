@@ -14,8 +14,8 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
+    bus::{ExpBitsLenBus, ExpBitsLenMessage},
     system::Preflight,
-    whir::bus::{ExpBitsLenBus, ExpBitsLenMessage},
 };
 
 #[repr(C)]
