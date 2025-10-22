@@ -21,6 +21,7 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+openvm-rv32im-transpiler = { workspace = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -57,7 +58,7 @@ test-case.workspace = true
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
 openvm-native-compiler.workspace = true
-openvm-rv32im-transpiler.workspace = true
+
 
 [features]
 default = ["parallel", "jemalloc"]

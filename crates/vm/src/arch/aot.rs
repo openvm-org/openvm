@@ -6,6 +6,9 @@ use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_instructions::LocalOpcode;
+
 use crate::{
     arch::{
         execution_mode::{ExecutionCtx, MeteredCtx, Segment},
@@ -61,7 +64,8 @@ where
         asm_str += "    push r13\n";
         asm_str += "    push r14\n";
         asm_str += "    push r15\n";
-        return asm_str;     
+        
+        asm_str
     }
     
     fn pop_external_registers() -> String {
@@ -72,13 +76,59 @@ where
         asm_str += "    pop r12\n";
         asm_str += "    pop rbx\n";
         asm_str += "    pop rbp\n";
-        return asm_str;
+    
+        asm_str
     }
     
     fn debug_cur_sting(str: &String) {
         println!("DEBUG");
         println!("{}", str);
     } 
+
+    fn push_xmm_regs() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    sub rsp, 16*16";
+        asm_str += "    movaps [rsp + 0*16], xmm0\n";
+        asm_str += "    movaps [rsp + 1*16], xmm1\n";
+        asm_str += "    movaps [rsp + 2*16], xmm2\n";
+        asm_str += "    movaps [rsp + 3*16], xmm3\n";
+        asm_str += "    movaps [rsp + 4*16], xmm4\n";
+        asm_str += "    movaps [rsp + 5*16], xmm5\n";
+        asm_str += "    movaps [rsp + 6*16], xmm6\n";
+        asm_str += "    movaps [rsp + 7*16], xmm7\n";
+        asm_str += "    movaps [rsp + 8*16], xmm8\n";
+        asm_str += "    movaps [rsp + 9*16], xmm9\n";
+        asm_str += "    movaps [rsp + 10*16], xmm10\n";
+        asm_str += "    movaps [rsp + 11*16], xmm11\n";
+        asm_str += "    movaps [rsp + 12*16], xmm12\n";
+        asm_str += "    movaps [rsp + 13*16], xmm13\n";
+        asm_str += "    movaps [rsp + 14*16], xmm14\n";
+        asm_str += "    movaps [rsp + 15*16], xmm15\n";
+
+        asm_str
+    }
+    fn pop_xmm_regs() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    movaps xmm0, [rsp + 0*16]\n";
+        asm_str += "    movaps xmm1, [rsp + 1*16]\n";
+        asm_str += "    movaps xmm2, [rsp + 2*16]\n";
+        asm_str += "    movaps xmm3, [rsp + 3*16]\n";
+        asm_str += "    movaps xmm4, [rsp + 4*16]\n";
+        asm_str += "    movaps xmm5, [rsp + 5*16]\n";
+        asm_str += "    movaps xmm6, [rsp + 6*16]\n";
+        asm_str += "    movaps xmm7, [rsp + 7*16]\n";
+        asm_str += "    movaps xmm8, [rsp + 8*16]\n";
+        asm_str += "    movaps xmm9, [rsp + 9*16]\n";
+        asm_str += "    movaps xmm10, [rsp + 10*16]\n";
+        asm_str += "    movaps xmm11, [rsp + 11*16]\n";
+        asm_str += "    movaps xmm12, [rsp + 12*16]\n";
+        asm_str += "    movaps xmm13, [rsp + 13*16]\n";
+        asm_str += "    movaps xmm14, [rsp + 14*16]\n";
+        asm_str += "    movaps xmm15, [rsp + 15*16]\n";
+        asm_str += "    add rsp, 16*16\n";
+
+        asm_str
+    }
     
     fn push_internal_registers() -> String {
         let mut asm_str = String::new();
@@ -89,8 +139,9 @@ where
         asm_str += "    push r9\n";
         asm_str += "    push r10\n";
         asm_str += "    push r11\n";
+        // asm_str += &Self::push_xmm_regs();
 
-        return asm_str; 
+        asm_str
     }
     
     fn pop_internal_registers() -> String {
@@ -102,8 +153,9 @@ where
         asm_str += "    pop rdx\n";
         asm_str += "    pop rcx\n";
         asm_str += "    pop rax\n";
+        // asm_str += &Self::pop_xmm_regs();
         
-        return asm_str; 
+        asm_str
     }
 
     pub fn create_asm(exe: &VmExe<F>) -> String {
@@ -123,6 +175,15 @@ where
         asm_str += "    mov rbp, rsi\n";
         asm_str += "    mov r13, rdx\n";
         asm_str += "    mov r14, rcx\n";
+
+        asm_str += &Self::push_internal_registers();
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    call get_vm_register_addr\n";
+        asm_str += "    mov r15, rax\n";
+
+        asm_str += "    mov rdi, rax\n";
+        asm_str += "    call debug_vm_register_addr\n";
+        asm_str += &Self::pop_internal_registers();
     
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
@@ -136,72 +197,104 @@ where
         }
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            asm_str += &format!("asm_execute_pc_{}:\n", pc);
-
             /*
-            Invariant to be maintained before and after the call
+            if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
+                /*
+                ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. Overflow is ignored and the lower 32-bits are written to the destination.
+                */
+                asm_str += &format!("asm_execute_pc_{}:\n", pc);
+                
+                let a = instruction.a;
+                let b = instruction.b;
+                let c = instruction.c;
+                let e = instruction.e; 
 
-            rbx -> vm_exec_state_ptr
-            rbp -> pre_compute_insns_ptr
-            r13 -> cur_pc 
-            r14 -> cur_instret
-            */
-    
-            /*
-            call should_suspend with parameters
-            - cur_instret
-            - cur_pc 
-            - vm_exec_state_ptr
-            */
+                if e == F::ZERO {
+                    // perform the operation
+                    asm_str += &format!("   movaps xmm{} xmm{}\n", a, b);
+                    asm_str += &format!("   addps xmm{}, {}\n", a, c);
 
-            asm_str += &Self::push_internal_registers();
+                    // sync the register
+                    asm_str += &format!("   mov [r15 + {}], xmm{}\n", a, a);
+                } else {
+                    // perform the operation
+                    asm_str += &format!("   movaps xmm{} xmm{}\n", a, b);
+                    asm_str += &format!("   addps xmm{}, xmm{}\n", a, c);
 
-            asm_str += "    mov rdi, r14\n";
-            asm_str += "    mov rsi, r13\n";
-            asm_str += "    mov rdx, rbx\n";
+                    // sync the register
+                    asm_str += &format!("   mov [r15 + {}], xmm{}\n", a, a);
+                }
 
-            /*
-            should_suspend may change 
-            rcx, rdx, r8, r9, r10, r11
-
-            rax holds the return value which is the next pc
-            */
-
-            asm_str += "    call should_suspend\n";
-            asm_str += "    cmp rax, 1\n";
-
-            /*
-
+                // increase pc by 4
+                asm_str += &format!("   add r13, 4\n");
+                // increase instret
+                asm_str += &format!("   add r14, 1\n");
+            } else {
             */
 
-            asm_str += &Self::pop_internal_registers();
-    
-            asm_str += "    je asm_run_end\n";
-    
-            asm_str += &Self::push_internal_registers();
-    
-            asm_str += "    mov rdi, rbx\n";
-            asm_str += "    mov rsi, rbp\n";
-            asm_str += "    mov rdx, r13\n";
-            asm_str += "    mov rcx, r14\n";
-            
-            asm_str += "    call extern_handler\n";
-            asm_str += "    add r14, 1\n";
-            asm_str += "    mov r13, rax\n";
-            asm_str += "    AND rax, 1\n";
-            asm_str += "    cmp rax, 1\n";
-            
-            
-    
-            asm_str += &Self::pop_internal_registers();
-    
-            asm_str += "    je asm_run_end\n";
-            
-            asm_str += "    lea rdx, [rip + map_pc_base]\n";   
-            asm_str += "    movsxd rcx, [rdx + rax]\n";               
-            asm_str += "    add rcx, rdx\n";
-            asm_str += "    jmp rcx\n";
-            asm_str += "\n";
+                asm_str += &format!("asm_execute_pc_{}:\n", pc);
+
+                /*
+                Invariant to be maintained before and after the call
+
+                rbx -> vm_exec_state_ptr
+                rbp -> pre_compute_insns_ptr
+                r13 -> cur_pc 
+                r14 -> cur_instret
+                */
+        
+                /*
+                call should_suspend with parameters
+                - cur_instret
+                - cur_pc 
+                - vm_exec_state_ptr
+                */
+
+                asm_str += &Self::push_internal_registers();
+
+                asm_str += "    mov rdi, r14\n";
+                asm_str += "    mov rsi, r13\n";
+                asm_str += "    mov rdx, rbx\n";
+
+                /*
+                should_suspend may change 
+                rcx, rdx, r8, r9, r10, r11
+
+                rax holds the return value which is the next pc
+                */
+
+                asm_str += "    call should_suspend\n";
+                asm_str += "    cmp rax, 1\n";
+
+                /*
+
+                */
+
+                asm_str += &Self::pop_internal_registers();
+        
+                asm_str += "    je asm_run_end\n";
+        
+                asm_str += &Self::push_internal_registers();
+        
+                asm_str += "    mov rdi, rbx\n";
+                asm_str += "    mov rsi, rbp\n";
+                asm_str += "    mov rdx, r13\n";
+                asm_str += "    mov rcx, r14\n";
+                
+                asm_str += "    call extern_handler\n";
+                asm_str += "    add r14, 1\n";
+                asm_str += "    mov r13, rax\n";
+                asm_str += "    AND rax, 1\n";
+                asm_str += "    cmp rax, 1\n";
+                
+                asm_str += &Self::pop_internal_registers();
+                asm_str += "    je asm_run_end\n";
+                asm_str += "    lea rdx, [rip + map_pc_base]\n";   
+                asm_str += "    movsxd rcx, [rdx + rax]\n";               
+                asm_str += "    add rcx, rdx\n";
+                asm_str += "    jmp rcx\n";
+                asm_str += "\n";
+
         }
     
         // asm_run_end part

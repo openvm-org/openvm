@@ -72,7 +72,6 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    println!("extern_handler vm_exec_state_ptr {:p}", vm_exec_state_ptr);
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
@@ -108,12 +107,10 @@ pub extern "C" fn extern_handler(
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
-            println!("extern_handler returns {}", *pc);
             // execution continues
             *pc
         }
         _ => {
-            println!("extern_handler returns {}", 1);
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
             (*pc) + 1
@@ -123,7 +120,6 @@ pub extern "C" fn extern_handler(
 
 #[no_mangle]
 pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
-    println!("should_suspend exec_state_ptr {:p}", exec_state_ptr);
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
@@ -131,10 +127,30 @@ pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_
     let instret_end = vm_exec_state_ref.ctx.instret_end;
 
     if instret >= instret_end {
-        println!("should suspend returns true");
         1 // should suspend is `true`
     } else {
-        println!("should suspend returns false");
         0 // should suspend is `false`
     }
+}
+
+#[no_mangle]
+pub extern "C" fn get_vm_register_addr(exec_state_ptr: *mut c_void) -> *mut u32 {
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[1];
+    ptr.as_ptr() as *mut u32
+}
+
+#[no_mangle]
+pub extern "C" fn debug_vm_register_addr(mmap_ptr: *mut u32) {
+    let first_val = unsafe {
+        *mmap_ptr
+    };
+
+    let second_val = unsafe {
+        *(mmap_ptr.wrapping_add(1))
+    };
+
+    println!("first value {}", first_val);
+    println!("second value {}", second_val);
 }
