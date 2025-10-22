@@ -43,7 +43,7 @@ pub struct GkrInputCols<T> {
 
     // Grinding
     pub logup_pow_witness: T,
-    pub logup_pow_challenge: T,
+    pub logup_pow_sample: T,
 
     pub n_logup: T,
     pub n_max: T,
@@ -179,7 +179,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.proof_idx,
             TranscriptBusMessage {
                 tidx: local.tidx_beg.into() + AB::Expr::ONE,
-                value: local.logup_pow_challenge.into(),
+                value: local.logup_pow_sample.into(),
                 is_sample: AB::Expr::ONE,
             },
             local.is_real,
@@ -202,15 +202,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
 
         // 4. ExpBitsLenBus
         // 4a. Check proof-of-work using `ExpBitsLenBus`.
-        // self.exp_bits_len_bus.lookup_key(
-        //     builder,
-        //     ExpBitsLenMessage {
-        //         base: AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::GENERATOR),
-        //         bit_src: local.logup_pow_witness.into(),
-        //         num_bits: AB::Expr::from_canonical_usize(self.logup_pow_bits),
-        //         result: AB::Expr::ONE,
-        //     },
-        //     local.is_enabled,
-        // );
+        self.exp_bits_len_bus.lookup_key(
+            builder,
+            ExpBitsLenMessage {
+                base: AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::GENERATOR),
+                bit_src: local.logup_pow_sample.into(),
+                num_bits: AB::Expr::from_canonical_usize(self.logup_pow_bits),
+                result: AB::Expr::ONE,
+            },
+            local.is_real,
+        );
     }
 }

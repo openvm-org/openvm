@@ -14,6 +14,7 @@ use stark_backend_v2::{
 };
 
 use crate::{
+    primitives::exp_bits_len::ExpBitsLenAir,
     system::{AirModule, BusIndexManager, BusInventory, Preflight, WhirPreflight},
     whir::{
         bus::{
@@ -21,7 +22,6 @@ use crate::{
             WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus, WhirGammaBus,
             WhirQueryBus, WhirSumcheckBus,
         },
-        exp_bits_len::ExpBitsLenAir,
         final_poly_mle_eval::FinalPoleMleEvalAir,
         final_poly_query_eval::FinalPolyQueryEvalAir,
         folding::WhirFoldingAir,
@@ -34,7 +34,6 @@ use crate::{
 };
 
 mod bus;
-mod exp_bits_len;
 mod final_poly_mle_eval;
 mod final_poly_query_eval;
 mod folding;
@@ -47,6 +46,7 @@ mod whir_round;
 pub struct WhirModule {
     mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
+    exp_bits_len_air: Arc<ExpBitsLenAir>,
 
     // "execution" buses
     sumcheck_bus: WhirSumcheckBus,
@@ -69,6 +69,7 @@ impl WhirModule {
         mvk: Arc<MultiStarkVerifyingKeyV2>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
+        exp_bits_len_air: Arc<ExpBitsLenAir>,
     ) -> Self {
         let sumcheck_bus = WhirSumcheckBus::new(b.new_bus_idx());
         let alpha_bus = WhirAlphaBus::new(b.new_bus_idx());
@@ -84,6 +85,7 @@ impl WhirModule {
         Self {
             mvk,
             bus_inventory,
+            exp_bits_len_air,
             sumcheck_bus,
             verify_queries_bus,
             verify_query_bus,
@@ -162,9 +164,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             final_poly_bus: self.final_poly_bus,
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
         };
-        let exp_bits_len_air = ExpBitsLenAir {
-            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
-        };
         vec![
             Arc::new(whir_round_air),
             Arc::new(whir_sumcheck_air),
@@ -174,7 +173,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             Arc::new(folding_air),
             Arc::new(final_poly_mle_eval_air),
             Arc::new(final_poly_query_eval_air),
-            Arc::new(exp_bits_len_air),
         ]
     }
 
@@ -271,7 +269,15 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             };
 
             ts.observe(whir_pow_witnesses[i]);
-            pow_samples.push(ts.sample());
+            let pow_sample = ts.sample();
+            pow_samples.push(pow_sample);
+
+            self.exp_bits_len_air.add_exp_bits_len(
+                F::GENERATOR,
+                pow_sample,
+                F::from_canonical_usize(self.mvk.inner.params.whir_pow_bits),
+                F::ONE,
+            );
 
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
@@ -297,9 +303,19 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
 
             pre_query_claims.push(claim);
             let omega = F::two_adic_generator(log_rs_domain_size);
+            let m = self.mvk.inner.params.n_stack
+                + self.mvk.inner.params.l_skip
+                + self.mvk.inner.params.log_blowup;
             for (query_idx, index) in round_query_indices.into_iter().enumerate() {
                 let zj_root = omega.exp_u64(index as u64);
                 let zj = zj_root.exp_power_of_2(k_whir);
+
+                self.exp_bits_len_air.add_exp_bits_len(
+                    F::two_adic_generator(log_rs_domain_size - k_whir),
+                    round_queries[query_idx],
+                    F::from_canonical_usize(log_rs_domain_size - k_whir),
+                    zj_root,
+                );
 
                 let yj = if i == 0 {
                     let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
@@ -441,13 +457,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(final_poly_query_eval::generate_trace(
-                    &self.mvk, proof, preflight,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(exp_bits_len::generate_trace(
                     &self.mvk, proof, preflight,
                 ))),
                 public_values: vec![],
