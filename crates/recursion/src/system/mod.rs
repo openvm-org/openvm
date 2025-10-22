@@ -19,7 +19,7 @@ use crate::{
         StackingSumcheckRandomnessBus, TranscriptBus, WhirModuleBus, XiRandomnessBus,
     },
     gkr::GkrModule,
-    primitives::{pow::PowerCheckerAir, range::RangeCheckerAir},
+    primitives::{exp_bits_len::ExpBitsLenAir, pow::PowerCheckerAir, range::RangeCheckerAir},
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
@@ -295,6 +295,7 @@ pub struct VerifierCircuit<TS: FiatShamirTranscript> {
     modules: Vec<Box<dyn AirModule<TS>>>,
     range_checker: Arc<RangeCheckerAir<8>>,
     pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
+    exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
 impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
@@ -307,14 +308,25 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
             bus_inventory.power_of_two_bus,
             bus_inventory.range_checker_bus,
         ));
+        let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
 
         let transcript_module = TranscriptModule::new(child_mvk.clone(), bus_inventory.clone());
         let proof_shape_module = ProofShapeModule::new(child_mvk.clone(), bus_inventory.clone());
-        let gkr_module = GkrModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let gkr_module = GkrModule::new(
+            child_mvk.clone(),
+            &mut b,
+            bus_inventory.clone(),
+            exp_bits_len_air.clone(),
+        );
         let batch_constraint_module =
             BatchConstraintModule::new(child_mvk.clone(), bus_inventory.clone());
         let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
-        let whir_module = WhirModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let whir_module = WhirModule::new(
+            child_mvk.clone(),
+            &mut b,
+            bus_inventory.clone(),
+            exp_bits_len_air.clone(),
+        );
 
         let modules: Vec<Box<dyn AirModule<TS>>> = vec![
             Box::new(transcript_module),
@@ -328,6 +340,7 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
             modules,
             range_checker,
             pow_2_checker,
+            exp_bits_len_air,
         }
     }
 
@@ -338,6 +351,7 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         }
         airs.push(self.range_checker.clone());
         airs.push(self.pow_2_checker.clone());
+        airs.push(self.exp_bits_len_air.clone());
         airs
     }
 
@@ -367,6 +381,7 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         }
         proof_inputs.push(self.range_checker.generate_proof_input());
         proof_inputs.push(self.pow_2_checker.generate_proof_input());
+        proof_inputs.push(self.exp_bits_len_air.generate_proof_input());
         proof_inputs
     }
 }
