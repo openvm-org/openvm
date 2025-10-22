@@ -1,10 +1,7 @@
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::{
-    define_typed_lookup_bus, define_typed_per_proof_lookup_bus,
-    define_typed_per_proof_permutation_bus,
-};
+use crate::{define_typed_per_proof_lookup_bus, define_typed_per_proof_permutation_bus};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -121,14 +118,3 @@ pub struct FinalPolyQueryEvalMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(FinalPolyQueryEvalBus, FinalPolyQueryEvalMessage);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
-pub struct ExpBitsLenMessage<T> {
-    pub base: T,
-    pub bit_src: T,
-    pub num_bits: T,
-    pub result: T,
-}
-
-define_typed_lookup_bus!(ExpBitsLenBus, ExpBitsLenMessage);

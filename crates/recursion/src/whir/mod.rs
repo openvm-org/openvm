@@ -17,9 +17,9 @@ use crate::{
     system::{AirModule, BusIndexManager, BusInventory, Preflight, WhirPreflight},
     whir::{
         bus::{
-            ExpBitsLenBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
-            VerifyQueryBus, WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus,
-            WhirGammaBus, WhirQueryBus, WhirSumcheckBus,
+            FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus, VerifyQueryBus,
+            WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus, WhirGammaBus,
+            WhirQueryBus, WhirSumcheckBus,
         },
         exp_bits_len::ExpBitsLenAir,
         final_poly_mle_eval::FinalPoleMleEvalAir,
@@ -62,8 +62,6 @@ pub struct WhirModule {
     query_bus: WhirQueryBus,
     eq_alpha_u_bus: WhirEqAlphaUBus,
     final_poly_bus: WhirFinalPolyBus,
-
-    exp_bits_len_bus: ExpBitsLenBus,
 }
 
 impl WhirModule {
@@ -83,7 +81,6 @@ impl WhirModule {
         let final_poly_mle_eval_bus = FinalPolyMleEvalBus::new(b.new_bus_idx());
         let final_poly_query_eval_bus = FinalPolyQueryEvalBus::new(b.new_bus_idx());
         let final_poly_bus = WhirFinalPolyBus::new(b.new_bus_idx());
-        let exp_bits_len_bus = ExpBitsLenBus::new(b.new_bus_idx());
         Self {
             mvk,
             bus_inventory,
@@ -98,7 +95,6 @@ impl WhirModule {
             query_bus,
             eq_alpha_u_bus,
             final_poly_bus,
-            exp_bits_len_bus,
         }
     }
 }
@@ -109,13 +105,13 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             sumcheck_bus: self.sumcheck_bus,
             verify_queries_bus: self.verify_queries_bus,
             final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
             query_bus: self.query_bus,
             gamma_bus: self.gamma_bus,
-            exp_bits_len_bus: self.exp_bits_len_bus,
             k: self.mvk.inner.params.k_whir,
             num_queries: self.mvk.inner.params.num_whir_queries,
             final_poly_len: 1 << self.mvk.inner.params.log_final_poly_len,
@@ -142,10 +138,10 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
         };
         let query_air = WhirQueryAir {
             transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             query_bus: self.query_bus,
             verify_queries_bus: self.verify_queries_bus,
             verify_query_bus: self.verify_query_bus,
-            exp_bits_len_bus: self.exp_bits_len_bus,
         };
         let folding_air = WhirFoldingAir {
             alpha_bus: self.alpha_bus,
@@ -167,7 +163,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
         };
         let exp_bits_len_air = ExpBitsLenAir {
-            exp_bits_len_bus: self.exp_bits_len_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
         };
         vec![
             Arc::new(whir_round_air),

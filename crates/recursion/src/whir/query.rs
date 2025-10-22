@@ -14,11 +14,11 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::TranscriptBus,
+    bus::{ExpBitsLenBus, ExpBitsLenMessage, TranscriptBus},
     system::Preflight,
     whir::bus::{
-        ExpBitsLenBus, ExpBitsLenMessage, VerifyQueriesBus, VerifyQueriesBusMessage,
-        VerifyQueryBus, VerifyQueryBusMessage, WhirQueryBus, WhirQueryBusMessage,
+        VerifyQueriesBus, VerifyQueriesBusMessage, VerifyQueryBus, VerifyQueryBusMessage,
+        WhirQueryBus, WhirQueryBusMessage,
     },
 };
 

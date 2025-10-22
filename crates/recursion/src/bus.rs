@@ -427,3 +427,14 @@ pub struct PublicValuesBusMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(PublicValuesBus, PublicValuesBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct ExpBitsLenMessage<T> {
+    pub base: T,
+    pub bit_src: T,
+    pub num_bits: T,
+    pub result: T,
+}
+
+define_typed_lookup_bus!(ExpBitsLenBus, ExpBitsLenMessage);
