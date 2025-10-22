@@ -476,6 +476,8 @@ unsafe fn execute_e12_setup_impl<
     };
 
     if input_prime != pre_compute.expr.prime {
+        println!("input prime: {}", input_prime);
+        println!("pre compute expr prime: {}", pre_compute.expr.prime);
         let err = ExecutionError::Fail {
             pc: *pc,
             msg: "ModularSetup: mismatched prime",
