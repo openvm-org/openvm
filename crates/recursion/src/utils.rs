@@ -2,7 +2,12 @@ use p3_air::AirBuilder;
 use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
 use stark_backend_v2::D_EF;
 
-use crate::bus::TranscriptBusMessage;
+pub fn base_to_ext<FA>(x: impl Into<FA>) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+{
+    [x.into(), FA::ZERO, FA::ZERO, FA::ZERO]
+}
 
 pub fn ext_field_one_minus<FA>(x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
