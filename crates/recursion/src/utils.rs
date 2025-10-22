@@ -9,6 +9,9 @@ where
     [x.into(), FA::ZERO, FA::ZERO, FA::ZERO]
 }
 
+// TODO(ayush): move somewhere else
+pub const MAX_CONSTRAINT_DEGREE: usize = 4;
+
 pub fn ext_field_one_minus<FA>(x: [impl Into<FA>; D_EF]) -> [FA; D_EF]
 where
     FA: FieldAlgebra,
