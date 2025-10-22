@@ -377,7 +377,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             .take(self.mvk.inner.params.l_skip)
             .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
             .collect_vec();
-        let final_poly_at_u = f.eval_at_point::<EF, EF>(&u[t..]);
+        let final_poly_at_u = f.eval_at_point(&u[t..]);
 
         preflight.whir = WhirPreflight {
             alphas,
