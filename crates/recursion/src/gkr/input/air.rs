@@ -12,8 +12,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        BatchConstraintModuleBus, BatchConstraintModuleMessage, GkrModuleBus, GkrModuleMessage,
-        TranscriptBus, TranscriptBusMessage,
+        BatchConstraintModuleBus, BatchConstraintModuleMessage, ExpBitsLenBus, ExpBitsLenMessage,
+        GkrModuleBus, GkrModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     gkr::bus::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
@@ -47,8 +47,6 @@ pub struct GkrInputCols<T> {
 
     pub n_logup: T,
     pub n_max: T,
-    // TODO: do i need this as a column? how to access it as a constant in air constraints
-    pub l_skip: T,
     // max(n_logup, n_max)
     pub n_global: T,
 
@@ -58,9 +56,14 @@ pub struct GkrInputCols<T> {
 
 /// The GkrInputAir handles reading and passing the GkrInput
 pub struct GkrInputAir {
+    // System Params
+    pub l_skip: usize,
+    pub logup_pow_bits: usize,
+    // Buses
     pub gkr_module_bus: GkrModuleBus,
     pub bc_module_bus: BatchConstraintModuleBus,
     pub transcript_bus: TranscriptBus,
+    pub exp_bits_len_bus: ExpBitsLenBus,
     pub layer_input_bus: GkrLayerInputBus,
     pub layer_output_bus: GkrLayerOutputBus,
     pub xi_sampler_input_bus: GkrXiSamplerInputBus,
@@ -124,7 +127,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.proof_idx,
             GkrXiSamplerInputMessage {
                 idx_start: local.num_layers.into(),
-                num_challenges: local.n_max + local.l_skip,
+                num_challenges: local.n_max + AB::Expr::from_canonical_usize(self.l_skip),
                 tidx: local.tidx_after_gkr_layers.into(),
             },
             local.is_real * (AB::Expr::ONE - local.is_n_logup_equal_to_n_global),
@@ -196,5 +199,18 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             },
             local.is_real,
         );
+
+        // 4. ExpBitsLenBus
+        // 4a. Check proof-of-work using `ExpBitsLenBus`.
+        // self.exp_bits_len_bus.lookup_key(
+        //     builder,
+        //     ExpBitsLenMessage {
+        //         base: AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::GENERATOR),
+        //         bit_src: local.logup_pow_witness.into(),
+        //         num_bits: AB::Expr::from_canonical_usize(self.logup_pow_bits),
+        //         result: AB::Expr::ONE,
+        //     },
+        //     local.is_enabled,
+        // );
     }
 }
