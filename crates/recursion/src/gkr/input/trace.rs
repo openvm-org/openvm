@@ -29,7 +29,7 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
     let tidx_beg = preflight.proof_shape.post_tidx;
 
     let logup_pow_witness = gkr_proof.logup_pow_witness;
-    let logup_pow_challenge = preflight.transcript.data[tidx_beg + 1];
+    let logup_pow_sample = preflight.transcript.data[tidx_beg + 1];
 
     let num_rows: usize = 1;
     let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];
@@ -51,8 +51,8 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
     cols.is_n_logup_zero = F::from_bool(n_logup == 0);
     cols.is_n_logup_equal_to_n_global = F::from_bool(n_logup == n_global);
 
-    cols.logup_pow_challenge = logup_pow_challenge;
     cols.logup_pow_witness = logup_pow_witness;
+    cols.logup_pow_sample = logup_pow_sample;
 
     cols.input_layer_claim = if let Some(last_layer_claims) = gkr_proof.claims_per_layer.last() {
         let &GkrLayerClaims {

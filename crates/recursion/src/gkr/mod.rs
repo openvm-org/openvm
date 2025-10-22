@@ -59,7 +59,7 @@ use std::sync::Arc;
 
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::FieldAlgebra;
+use p3_field::{Field, FieldAlgebra};
 use stark_backend_v2::{
     D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -76,6 +76,7 @@ use crate::{
         sumcheck::GkrLayerSumcheckAir,
         xi_sampler::GkrXiSamplerAir,
     },
+    primitives::exp_bits_len::ExpBitsLenAir,
     system::{AirModule, BusIndexManager, BusInventory, GkrPreflight, Preflight},
 };
 
@@ -103,6 +104,7 @@ pub struct GkrModule {
     logup_pow_bits: usize,
     // Global bus inventory
     bus_inventory: BusInventory,
+    exp_bits_len_air: Arc<ExpBitsLenAir>,
     // Module buses
     xi_sampler_input_bus: GkrXiSamplerInputBus,
     xi_sampler_output_bus: GkrXiSamplerOutputBus,
@@ -118,11 +120,13 @@ impl GkrModule {
         mvk: Arc<MultiStarkVerifyingKeyV2>,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
+        exp_bits_len_air: Arc<ExpBitsLenAir>,
     ) -> Self {
         GkrModule {
             l_skip: mvk.inner.params.l_skip,
             logup_pow_bits: mvk.inner.params.logup_pow_bits,
             bus_inventory,
+            exp_bits_len_air,
             layer_input_bus: GkrLayerInputBus::new(b.new_bus_idx()),
             layer_output_bus: GkrLayerOutputBus::new(b.new_bus_idx()),
             sumcheck_input_bus: GkrSumcheckInputBus::new(b.new_bus_idx()),
@@ -193,7 +197,14 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         let ts = &mut preflight.transcript;
 
         ts.observe(*logup_pow_witness);
-        let _pow_bits = ts.sample();
+        let logup_pow_sample = ts.sample();
+
+        self.exp_bits_len_air.add_exp_bits_len(
+            F::GENERATOR,
+            logup_pow_sample,
+            F::from_canonical_usize(self.logup_pow_bits),
+            F::ONE,
+        );
 
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();
