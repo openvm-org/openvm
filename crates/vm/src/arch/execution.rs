@@ -87,20 +87,20 @@ pub enum StaticProgramError {
     ExecutorNotFound { opcode: VmOpcode },
 }
 
-#[cfg(feature = "aot")]  
-#[derive(Error, Debug)]  
-pub enum AotError {  
-    #[error("AOT compilation not supported for this opcode")]  
-    NotSupported,  
-      
-    #[error("No executor found for opcode {0}")]  
-    NoExecutorFound(VmOpcode),  
-      
-    #[error("Invalid instruction format")]  
-    InvalidInstruction,  
-      
-    #[error("Other AOT error: {0}")]  
-    Other(String),  
+#[cfg(feature = "aot")]
+#[derive(Error, Debug)]
+pub enum AotError {
+    #[error("AOT compilation not supported for this opcode")]
+    NotSupported,
+
+    #[error("No executor found for opcode {0}")]
+    NoExecutorFound(VmOpcode),
+
+    #[error("Invalid instruction format")]
+    InvalidInstruction,
+
+    #[error("Other AOT error: {0}")]
+    Other(String),
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
@@ -171,17 +171,17 @@ pub trait Executor<F> {
     where
         Ctx: ExecutionCtxTrait;
 
-    #[cfg(feature = "aot")]  
+    #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         false
     }
 }
 
-#[cfg(feature = "aot")]  
+#[cfg(feature = "aot")]
 pub trait AotExecutor<F>: Executor<F> {
     /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
     /// AOT    
-    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;  
+    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;
 }
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -218,17 +218,17 @@ pub trait MeteredExecutor<F> {
     where
         Ctx: MeteredExecutionCtxTrait;
 
-    #[cfg(feature = "aot")]  
+    #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         false
     }
 }
 
-#[cfg(feature = "aot")]  
+#[cfg(feature = "aot")]
 pub trait AotMeteredExecutor<F>: MeteredExecutor<F> {
     /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
     /// AOT
-    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;  
+    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;
 }
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of
