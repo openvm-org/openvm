@@ -126,11 +126,19 @@ enum ProveSubCommand {
 pub struct SegmentationArgs {
     /// Trace height threshold, in bits, across all chips for triggering segmentation for
     /// continuations in the app proof. Note that these thresholds are not absolute limits.
-    #[arg(long, default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS)]
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS,
+        help_heading = "OpenVM Options"
+    )]
     pub segment_max_height_bits: u8,
     /// Total cells used across all chips for triggering segmentation for continuations in the app
     /// proof. Note that these thresholds are not absolute limits.
-    #[arg(long, default_value_t = DEFAULT_MAX_CELLS)]
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_CELLS,
+        help_heading = "OpenVM Options"
+    )]
     pub segment_max_cells: usize,
 }
 
