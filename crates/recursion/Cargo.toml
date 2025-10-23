@@ -17,6 +17,7 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 tracing = { workspace = true }
+eyre = { workspace = true }
 
 [dev-dependencies]
 stark-backend-v2 = { workspace = true, features = ["test-utils"]}
