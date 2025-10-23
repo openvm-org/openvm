@@ -217,6 +217,12 @@ where
         asm_str
     }
 
+    pub fn to_i16(c: F) -> i16 {
+        let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+        let c_i24 = ((c_u24 << 8) as i32) >> 8; 
+        c_i24 as i16
+    }
+
     pub fn create_asm(exe: &VmExe<F>) -> String {
         let mut asm_str = String::new();
         // generate the assembly based on exe.program
@@ -242,6 +248,11 @@ where
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::initialize_xmm_regs();
+
+        asm_str += "    lea rdx, [rip + map_pc_base]\n";   
+        asm_str += "    movsxd rcx, [rdx + r13]\n";               
+        asm_str += "    add rcx, rdx\n";
+        asm_str += "    jmp rcx\n";
     
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
@@ -255,78 +266,136 @@ where
         }
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            /*
+
             if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
                 // Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
                 // Overflow is ignored and the lower 32-bits are written to the destination.
 
                 asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
+                /*
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_internal_registers();
 
                 asm_str += "    mov rdi, r14\n";
                 asm_str += "    mov rsi, r13\n";
                 asm_str += "    mov rdx, rbx\n";
-
-                /*
-                should_suspend may change 
-                rcx, rdx, r8, r9, r10, r11
-
-                rax holds the return value which is the next pc
-                */
-
                 asm_str += "    call should_suspend\n";
                 asm_str += "    cmp rax, 1\n";
 
                 asm_str += &Self::pop_internal_registers();
                 asm_str += &Self::rv32_regs_to_xmm();
-        
-                asm_str += "    je asm_run_end\n";
+                asm_str += "    je asm_run_end\n";             
+                */
+    
                 
-                let a: u32 = instruction.a.as_canonical_u32();
-                let b: u32 = instruction.b.as_canonical_u32();
-                let c: u32 = instruction.c.as_canonical_u32();
-                let e: u32 = instruction.e.as_canonical_u32();
+                let a : i16 = Self::to_i16(instruction.a);
+                let b : i16 = Self::to_i16(instruction.b);
+                let c : i16 = Self::to_i16(instruction.c);
+                let e : i16 = Self::to_i16(instruction.e);
 
-                assert_eq!((a % 4), 0);
-                assert_eq!((b % 4), 0);
+                assert_eq!(a % 4, 0);
+                assert_eq!(b % 4, 0);    
 
                 // perform the operation
                 if e == 0 {
                     // reg_a = xmm_b + c (immediate)
+                    // 
+                    
+                    /*
+                    Plan for e = 0
+
+                    REG_A = a / 4
+                    REG_B = b / 4
+                    
+                    XMM_MAP_REG_A 
+                    XMM_MAP_REG_B
+
+                    1. move from the XMM_MAP_REG_B to x86 reg_a
+                    2. add x86 reg_a by c
+                    3. set xmm register XMM_MAP_REG_A to REG_A_W
+                    */
+
+                    let xmm_map_reg_a = if (a/4) % 2 == 0 {
+                        a/8
+                    } else {
+                        ((a/4)-1)/2
+                    };
+
+                    let xmm_map_reg_b = if (b/4) % 2 == 0 {
+                        b/8
+                    } else {
+                        ((b/4)-1)/2
+                    };
 
                     if (b/4)%2 == 0 {
-                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", b/8);                                            
+                        // get the [0:32) bits of xmm_map_reg_b
+                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", xmm_map_reg_b);                                            
                     } else {
-                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", (b/4 - 1)/2);
+                        // get the [32:64) bits of xmm_map_reg_b
+                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", xmm_map_reg_b);
                     }
                     
+                    // REG_A += c
                     asm_str += &format!("   add {REG_A}, {c}\n");
 
-                    // place back from general register to xmm register
+                    
                     if (a/4)%2 == 0 {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", a/8, a/8);
+                        // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
                     } else {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", (a/4 - 1)/2, (a/4 - 1)/2);
+                        // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
                     }
                     
                 } else {
                     // reg_a = xmm_b + reg_c
-                    if (b/4)%2 == 0 {
-                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", b/8);                                            
+
+                    let xmm_map_reg_a = if (a/4) % 2 == 0 {
+                        a/8
                     } else {
-                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", (b/4 - 1)/2);
+                        ((a/4)-1)/2
+                    };
+
+                    let xmm_map_reg_b = if (b/4) % 2 == 0 {
+                        b/8
+                    } else {
+                        ((b/4)-1)/2
+                    };
+
+                    assert_eq!(c % 4, 0);
+                    let xmm_map_reg_c = if (c/4) % 2 == 0 {
+                        c/8
+                    } else {
+                        ((c/4)-1)/2
+                    };
+                    
+                    if (b/4)%2 == 0 {
+                        // get the [0:32) bits of xmm_map_reg_b
+                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", xmm_map_reg_b);                                            
+                    } else {
+                        // get the [32:64) bits of xmm_map_reg_b
+                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", xmm_map_reg_b);
                     }
 
-                    asm_str += &format!("   vmovq {REG_C}, xmm{}\n", c/4);
+                    if (c/4) % 2 == 0 {
+                        // get the [0:32) bits of xmm_map_reg_c
+                        asm_str += &format!("   vmovd {REG_C}, xmm{}\n", xmm_map_reg_c); 
+                    } else {
+                        // get the [32:64) bits of xmm_map_reg_b
+                        asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
+                    }
+
+                      
+
+                    // reg_a += reg_c
                     asm_str += &format!("   add {REG_A}, {REG_C}\n");
 
                     // place back from general register to xmm register
                     if (a/4)%2 == 0 {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", a/8, a/8);
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
                     } else {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", (a/4 - 1)/2, (a/4 - 1)/2);
+                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
                     }
                 }
 
@@ -334,11 +403,12 @@ where
                 asm_str += &format!("   add {REG_PC}, 4\n");
                 asm_str += &format!("   add {REG_INSTRET}, 1\n");
 
+                // let it fall to the next instruction 
+
                 continue;
             }
-            */
 
-            asm_str += &format!("asm_execute_pc_{}:\n", pc);
+           asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
             /*
             Invariant to be maintained before and after the call
@@ -394,7 +464,7 @@ where
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += "    je asm_run_end\n";
             asm_str += "    lea rdx, [rip + map_pc_base]\n";   
-            asm_str += "    movsxd rcx, [rdx + rax]\n";               
+            asm_str += "    movsxd rcx, [rdx + r13]\n";               
             asm_str += "    add rcx, rdx\n";
             asm_str += "    jmp rcx\n";
             asm_str += "\n";

@@ -31,7 +31,6 @@ pub unsafe extern "C" fn asm_run(
     from_state_pc: u32,
     from_state_instret: u64,
 ) {
-    println!("asm_run is called");
     asm_run_internal(
         vm_exec_state_ptr,
         pre_compute_insns_ptr,
@@ -72,6 +71,9 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
+
+    println!("extern_handler called with pc: {}, instret: {}", cur_pc, cur_instret);
+
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
@@ -103,7 +105,12 @@ pub extern "C" fn extern_handler(
         );
     };
 
+    println!("debug registers AFTER OPCODE");
+    for r in 0..32 {
+        println!("register {} = {:?}", r, vm_exec_state_ref.vm_read::<u32, 1>(1, r));
+    }
     
+    println!("next pc {}", *pc);
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
@@ -150,7 +157,4 @@ pub extern "C" fn debug_vm_register_addr(mmap_ptr: *mut u32) {
     let second_val = unsafe {
         *(mmap_ptr.wrapping_add(1))
     };
-
-    println!("first value {}", first_val);
-    println!("second value {}", second_val);
 }
