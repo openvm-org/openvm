@@ -143,10 +143,7 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
                     air_id: F::from_canonical_usize(*air_id),
                     hypercube_dim: F::from_canonical_usize(vdata.hypercube_dim),
                     has_preprocessed: F::from_bool(vk.preprocessed_data.is_some()),
-                    num_main_parts: F::from_canonical_usize(
-                        1 + vdata.cached_commitments.len()
-                            + vk.preprocessed_data.is_some() as usize,
-                    ),
+                    num_main_parts: F::from_canonical_usize(1 + vdata.cached_commitments.len()),
                     num_interactions: F::from_canonical_usize(
                         vk.symbolic_constraints.interactions.len(),
                     ),
