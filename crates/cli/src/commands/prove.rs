@@ -4,8 +4,7 @@ use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
-        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT,
-        DEFAULT_MAX_TRACE_HEIGHT_BITS,
+        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
     },
     instructions::exe::VmExe,
 };
@@ -125,8 +124,8 @@ enum ProveSubCommand {
 
 #[derive(Clone, Copy, Parser)]
 pub struct SegmentationArgs {
-    /// Trace height threshold across all chips for triggering segmentation for continuations in the app
-    /// proof. Note that these thresholds are not absolute limits.
+    /// Trace height threshold, in bits, across all chips for triggering segmentation for
+    /// continuations in the app proof. Note that these thresholds are not absolute limits.
     #[arg(long, default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS)]
     pub segment_max_height_bits: u8,
     /// Total cells used across all chips for triggering segmentation for continuations in the app
@@ -303,7 +302,9 @@ fn get_app_config(
 impl From<SegmentationArgs> for SegmentationLimits {
     fn from(args: SegmentationArgs) -> Self {
         SegmentationLimits {
-            max_trace_height: args.segment_max_height,
+            max_trace_height: 1u32
+                .checked_shl(args.segment_max_height_bits as u32)
+                .expect("segment_max_height_bits too large"),
             max_cells: args.segment_max_cells,
             ..Default::default()
         }
