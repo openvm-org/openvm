@@ -25,20 +25,56 @@ use crate::{
 };
 
 
-const REG_A: &str = "rcx";
-const REG_A_W: &str = "ecx";
+/*
+What each x86 register is used for
 
-const REG_B: &str = "rax";
-const REG_B_W: &str = "eax";
+Callee saved:
+* rbx   -> pointer to VmExecState
+* rbp   -> pointer to PreComputeInsns
+* r12   -> 
+* r13   -> vm pc
+* r14   -> vm instret
+* r15   -> pointer to the GuestMemory register address space
 
-const REG_C: &str = "r10";
-const REG_C_W: &str = "r10d";
+Caller saved;
+* rax   -> Return value of extern calls
+* rcx   -> stores REG_A / Fourth argument to function calls
+* rdx   -> Third argument to function calls
+* rsi   -> Second argument to extern calls
+* rdi   -> First argument to extern calls
+* r8    -> 
+* r9    -> 
+* r10   -> 
+* r11   -> 
+*/
 
-const REG_AUX: &str = "r11";
+const DEFAULT_PC_STEP: u32 = 4;
+const DEFAULT_INSTRET_INC: u32 = 1;
+const SHOULD_SUSPEND_INDICATOR: u32 = 1;
+
+// Callee saved
 const REG_EXEC_STATE_PTR: &str = "rbx";
 const REG_INSNS_PTR: &str = "rbp";
 const REG_PC: &str = "r13";
 const REG_INSTRET: &str = "r14";
+const REG_GUEST_MEM_PTR: &str = "r15";
+
+// Caller saved
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_FOURTH_ARG: &str = "rcx";
+const REG_THIRD_ARG: &str = "rdx";
+const REG_SECOND_ARG: &str = "rsi";
+const REG_FIRST_ARG: &str = "rdi";
+const REG_RETURN_VAL: &str = "rax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+const REG_AUX: &str = "r11";
 
 
 /// The assembly bridge build process requires the following tools:
@@ -71,37 +107,7 @@ impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
-{
-
-    fn push_external_registers() -> String {
-        let mut asm_str = String::new();
-        asm_str += "    push rbp\n";
-        asm_str += "    push rbx\n";
-        asm_str += "    push r12\n";
-        asm_str += "    push r13\n";
-        asm_str += "    push r14\n";
-        asm_str += "    push r15\n";
-        
-        asm_str
-    }
-    
-    fn pop_external_registers() -> String {
-        let mut asm_str = String::new();
-        asm_str += "    pop r15\n";
-        asm_str += "    pop r14\n";
-        asm_str += "    pop r13\n";
-        asm_str += "    pop r12\n";
-        asm_str += "    pop rbx\n";
-        asm_str += "    pop rbp\n";
-    
-        asm_str
-    }
-    
-    fn debug_cur_sting(str: &String) {
-        println!("DEBUG");
-        println!("{}", str);
-    } 
-
+{    
     fn push_xmm_regs() -> String {
         let mut asm_str = String::new();
         asm_str += "    sub rsp, 16*16";
@@ -147,7 +153,7 @@ where
         asm_str
     }
     
-    fn push_internal_registers() -> String {
+    fn push_caller_saved_registers() -> String {
         let mut asm_str = String::new();
         asm_str += "    push rax\n";
         asm_str += "    push rcx\n";
@@ -156,12 +162,11 @@ where
         asm_str += "    push r9\n";
         asm_str += "    push r10\n";
         asm_str += "    push r11\n";
-        // asm_str += &Self::push_xmm_regs();
 
         asm_str
     }
     
-    fn pop_internal_registers() -> String {
+    fn pop_caller_saved_registers() -> String {
         let mut asm_str = String::new();
         asm_str += "    pop r11\n";
         asm_str += "    pop r10\n";
@@ -170,26 +175,38 @@ where
         asm_str += "    pop rdx\n";
         asm_str += "    pop rcx\n";
         asm_str += "    pop rax\n";
-        // asm_str += &Self::pop_xmm_regs();
         
         asm_str
     }   
 
-    /*
-    fn sync_vm_registers() -> String  {
+    fn push_callee_saved_registers() -> String {
         let mut asm_str = String::new();
-        for r in 0..16 {
-            asm_str += &format!("");
-            asm_str += &format!("   mov xmm{}, \n", r);
-        }
+        asm_str += "    push rbx\n";
+        asm_str += "    push rbp\n";
+        asm_str += "    push r12\n";
+        asm_str += "    push r13\n";
+        asm_str += "    push r14\n";
+        asm_str += "    push r15\n";
+        
+        asm_str
     }
-    */
+    
+    fn pop_callee_saved_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    pop r15\n";
+        asm_str += "    pop r14\n";
+        asm_str += "    pop r13\n";
+        asm_str += "    pop r12\n";
+        asm_str += "    pop rbp\n";
+        asm_str += "    pop rbx\n";
 
-    // r15 stores vm_register_address
+        asm_str
+    }
+
     fn rv32_regs_to_xmm() -> String {
         let mut asm_str = String::new();
-
         for r in 0..16 {
+            // Save register 2r and 2r+1 which is stored in xmm_r to GuestMemory
             asm_str += &format!("   movq xmm{}, [r15 + 8*{}]\n", r, r);
         }
 
@@ -198,9 +215,8 @@ where
 
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
-        
         for r in 0..16 { 
-            // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
+            // Save register 2r and 2r+1 of GuestMemory to XMM registers
             asm_str += &format!("   movq [r15 + 8*{}], xmm{}\n", r, r);
         }
 
@@ -217,15 +233,26 @@ where
         asm_str
     }
 
+    // For the BaseALU ops: F -> signed integer conversion for the operands
     pub fn to_i16(c: F) -> i16 {
         let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
         let c_i24 = ((c_u24 << 8) as i32) >> 8; 
         c_i24 as i16
     }
 
+    pub fn jump_to_next_pc() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    lea rdx, [rip + map_pc_base]\n";   
+        asm_str += "    movsxd rcx, [rdx + r13]\n";               
+        asm_str += "    add rcx, rdx\n";
+        asm_str += "    jmp rcx\n";
+
+        asm_str 
+    }
+
+    // generate the assembly based on exe.program
     pub fn create_asm(exe: &VmExe<F>) -> String {
         let mut asm_str = String::new();
-        // generate the assembly based on exe.program
         
         // header part
         asm_str += ".intel_syntax noprefix\n";
@@ -233,268 +260,188 @@ where
         asm_str += ".section .text\n";
         asm_str += ".global asm_run_internal\n";
     
-        // asm_run_internal part
+        // Initializations 
         asm_str += "asm_run_internal:\n";
-        asm_str += &Self::push_external_registers();
-        asm_str += "    mov rbx, rdi\n";
-        asm_str += "    mov rbp, rsi\n";
-        asm_str += "    mov r13, rdx\n";
-        asm_str += "    mov r14, rcx\n";
+        asm_str += &Self::push_callee_saved_registers();
 
-        asm_str += &Self::push_internal_registers();
-        asm_str += "    mov rdi, rbx\n";
+        asm_str += &format!("   mov {}, {}\n", REG_EXEC_STATE_PTR, REG_FIRST_ARG);
+        asm_str += &format!("   mov {}, {}\n", REG_INSNS_PTR, REG_SECOND_ARG);
+        asm_str += &format!("   mov {}, {}\n", REG_PC, REG_THIRD_ARG);
+        asm_str += &format!("   mov {}, {}\n", REG_INSTRET, REG_FOURTH_ARG);
+
+        asm_str += &Self::push_caller_saved_registers();
+        asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_EXEC_STATE_PTR);
         asm_str += "    call get_vm_register_addr\n";
-        asm_str += "    mov r15, rax\n";
-        asm_str += &Self::pop_internal_registers();
+        asm_str += &format!("   mov {}, {}\n", REG_GUEST_MEM_PTR, REG_RETURN_VAL);
+        asm_str += &Self::pop_caller_saved_registers();
 
         asm_str += &Self::initialize_xmm_regs();
-
-        asm_str += "    lea rdx, [rip + map_pc_base]\n";   
-        asm_str += "    movsxd rcx, [rdx + r13]\n";               
-        asm_str += "    add rcx, rdx\n";
-        asm_str += "    jmp rcx\n";
-    
-        // asm_execute_pc_{pc_num}
-        // do fallback first for now but expand per instruction
+        asm_str += &Self::jump_to_next_pc(); // jump to pc start
     
         let pc_base = exe.program.pc_base;
-    
+        assert!(pc_base % 4 == 0, "pc base must be a multiple of 4");
+
         for i in 0..(pc_base / 4) { 
-            asm_str += &format!("asm_execute_pc_{}:", i * 4);
-            asm_str += "\n";
+            asm_str += &format!("asm_execute_pc_{}:", i*4);
             asm_str += "\n";
         }
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-
             if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
-                // Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
-                // Overflow is ignored and the lower 32-bits are written to the destination.
+                /*
+                Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
+                Overflow is ignored and the lower 32-bits are written to the destination.
+                */
 
                 asm_str += &format!("asm_execute_pc_{}:\n", pc);
-
+                
+                /*
+                Should suspend block
+                */
                 asm_str += &Self::xmm_to_rv32_regs();
-                asm_str += &Self::push_internal_registers();
-
-                asm_str += "    mov rdi, r14\n";
-                asm_str += "    mov rsi, r13\n";
-                asm_str += "    mov rdx, rbx\n";
+                asm_str += &Self::push_caller_saved_registers();
+                asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_INSTRET);
+                asm_str += &format!("   mov {}, {}\n", REG_SECOND_ARG, REG_PC);
+                asm_str += &format!("   mov {}, {}\n", REG_THIRD_ARG, REG_EXEC_STATE_PTR);
                 asm_str += "    call should_suspend\n";
-                asm_str += "    cmp rax, 1\n";
-
-                asm_str += &Self::pop_internal_registers();
+                asm_str += &format!("   cmp {}, {}\n", REG_RETURN_VAL, SHOULD_SUSPEND_INDICATOR);
+                asm_str += &Self::pop_caller_saved_registers();
                 asm_str += &Self::rv32_regs_to_xmm();
                 asm_str += "    je asm_run_end\n";             
     
-                
                 let a : i16 = Self::to_i16(instruction.a);
                 let b : i16 = Self::to_i16(instruction.b);
                 let c : i16 = Self::to_i16(instruction.c);
                 let e : i16 = Self::to_i16(instruction.e);
 
-                assert_eq!(a % 4, 0);
-                assert_eq!(b % 4, 0);    
-
-                // perform the operation
-                if e == 0 {
-                    // reg_a = xmm_b + c (immediate)
-                    // 
-                    
-                    /*
-                    Plan for e = 0
-
-                    REG_A = a / 4
-                    REG_B = b / 4
-                    
-                    XMM_MAP_REG_A 
-                    XMM_MAP_REG_B
-
-                    1. move from the XMM_MAP_REG_B to x86 reg_a
-                    2. add x86 reg_a by c
-                    3. set xmm register XMM_MAP_REG_A to REG_A_W
-                    */
-
-                    let xmm_map_reg_a = if (a/4) % 2 == 0 {
-                        a/8
-                    } else {
-                        ((a/4)-1)/2
-                    };
-
-                    let xmm_map_reg_b = if (b/4) % 2 == 0 {
-                        b/8
-                    } else {
-                        ((b/4)-1)/2
-                    };
-
-                    if (b/4)%2 == 0 {
-                        // get the [0:32) bits of xmm_map_reg_b
-                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", xmm_map_reg_b);                                            
-                    } else {
-                        // get the [32:64) bits of xmm_map_reg_b
-                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", xmm_map_reg_b);
-                    }
-                    
-                    // REG_A += c
-                    asm_str += &format!("   add {REG_A}, {c}\n");
-
-                    
-                    if (a/4)%2 == 0 {
-                        // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
-                    } else {
-                        // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
-                    }
-                    
+                assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+                assert!(b % 4 == 0, "instruction.b must be a multiple of 4");   
+                
+                let xmm_map_reg_a = if (a/4) % 2 == 0 {
+                    a/8
                 } else {
-                    // reg_a = xmm_b + reg_c
+                    ((a/4)-1)/2 // floor((a/4)/2)
+                };
 
-                    let xmm_map_reg_a = if (a/4) % 2 == 0 {
-                        a/8
-                    } else {
-                        ((a/4)-1)/2
-                    };
+                let xmm_map_reg_b = if (b/4) % 2 == 0 {
+                    b/8
+                } else {
+                    ((b/4)-1)/2
+                };
 
-                    let xmm_map_reg_b = if (b/4) % 2 == 0 {
-                        b/8
-                    } else {
-                        ((b/4)-1)/2
-                    };
+                // [a:4]_1 <- [b:4]_1
+                if (b/4)%2 == 0 {
+                    // get the [0:32) bits of xmm_map_reg_b
+                    asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);                                            
+                } else {
+                    // get the [32:64) bits of xmm_map_reg_b
+                    asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
+                }
 
+                if e == 0 {
+                    // [a:4]_1 <- [a:4]_1 + c
+                    asm_str += &format!("   add {}, {}\n", REG_A, c);
+                } else {
+                    // [a:4]_1 <- [a:4]_1 + [c:4]_1
                     assert_eq!(c % 4, 0);
                     let xmm_map_reg_c = if (c/4) % 2 == 0 {
                         c/8
                     } else {
                         ((c/4)-1)/2
                     };
-                    
-                    if (b/4)%2 == 0 {
-                        // get the [0:32) bits of xmm_map_reg_b
-                        asm_str += &format!("   vmovd {REG_A}, xmm{}\n", xmm_map_reg_b);                                            
-                    } else {
-                        // get the [32:64) bits of xmm_map_reg_b
-                        asm_str += &format!("   vpextrd {REG_A_W}, xmm{}, 1\n", xmm_map_reg_b);
-                    }
 
+                    // XMM -> General Register
                     if (c/4) % 2 == 0 {
                         // get the [0:32) bits of xmm_map_reg_c
-                        asm_str += &format!("   vmovd {REG_C}, xmm{}\n", xmm_map_reg_c); 
+                        asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c); 
                     } else {
                         // get the [32:64) bits of xmm_map_reg_b
                         asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
                     }
 
-                      
-
+                    if 
                     // reg_a += reg_c
                     asm_str += &format!("   add {REG_A}, {REG_C}\n");
-
-                    // place back from general register to xmm register
-                    if (a/4)%2 == 0 {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
-                    } else {
-                        asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
-                    }
                 }
 
-                // increment pc
-                asm_str += &format!("   add {REG_PC}, 4\n");
-                asm_str += &format!("   add {REG_INSTRET}, 1\n");
+                // General Register -> XMM
+                if (a/4)%2 == 0 {
+                    // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                    asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
+                } else {
+                    // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                    asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
+                }
+
+                asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_STEP);
+                asm_str += &format!("   add {}, {}\n", REG_INSTRET, DEFAULT_INSTRET_INC);
 
                 // let it fall to the next instruction 
 
                 continue;
-            }
-
-           asm_str += &format!("asm_execute_pc_{}:\n", pc);
+            } 
 
             /*
-            Invariant to be maintained before and after the call
-
-            rbx -> vm_exec_state_ptr
-            rbp -> pre_compute_insns_ptr
-            r13 -> cur_pc 
-            r14 -> cur_instret
+            Fallback instruction
             */
-    
-            /*
-            call should_suspend with parameters
-            - cur_instret
-            - cur_pc 
-            - vm_exec_state_ptr
-            */
+            asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
             asm_str += &Self::xmm_to_rv32_regs();
-            asm_str += &Self::push_internal_registers();
-
-            asm_str += "    mov rdi, r14\n";
-            asm_str += "    mov rsi, r13\n";
-            asm_str += "    mov rdx, rbx\n";
-
-            /*
-            should_suspend may change 
-            rcx, rdx, r8, r9, r10, r11
-
-            rax holds the return value which is the next pc
-            */
-
+            asm_str += &Self::push_caller_saved_registers();
+            asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_INSTRET);
+            asm_str += &format!("   mov {}, {}\n", REG_SECOND_ARG, REG_PC);
+            asm_str += &format!("   mov {}, {}\n", REG_THIRD_ARG, REG_EXEC_STATE_PTR);
             asm_str += "    call should_suspend\n";
-            asm_str += "    cmp rax, 1\n";
-
-            asm_str += &Self::pop_internal_registers();
-    
+            asm_str += &format!("   cmp {}, {}\n", REG_RETURN_VAL, SHOULD_SUSPEND_INDICATOR);
+            asm_str += &Self::pop_caller_saved_registers();
             asm_str += "    je asm_run_end\n";
     
-            asm_str += &Self::push_internal_registers();
-    
-            asm_str += "    mov rdi, rbx\n";
-            asm_str += "    mov rsi, rbp\n";
-            asm_str += "    mov rdx, r13\n";
-            asm_str += "    mov rcx, r14\n";
-            
+            asm_str += &Self::push_caller_saved_registers();
+            asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_EXEC_STATE_PTR);
+            asm_str += &format!("   mov {}, {}\n", REG_SECOND_ARG, REG_INSNS_PTR);
+            asm_str += &format!("   mov {}, {}\n", REG_THIRD_ARG, REG_PC);
+            asm_str += &format!("   mov {}, {}\n", REG_FOURTH_ARG, REG_INSTRET);            
             asm_str += "    call extern_handler\n";
-            asm_str += "    add r14, 1\n";
-            asm_str += "    mov r13, rax\n";
-            asm_str += "    AND rax, 1\n";
-            asm_str += "    cmp rax, 1\n";
-            
-            asm_str += &Self::pop_internal_registers();
+            asm_str += &format!("   add {}, {}\n", REG_INSTRET, DEFAULT_INSTRET_INC);
+            asm_str += &format!("   mov {}, {}\n", REG_PC, REG_RETURN_VAL);
+            // check if extern_handler returns (*pc) or (*pc)+1 
+            asm_str += &format!("   AND {}, {}\n", REG_RETURN_VAL, 1);
+            asm_str += &format!("   cmp {}, {}\n", REG_RETURN_VAL, 1);
+            asm_str += &Self::pop_caller_saved_registers();
+
             asm_str += &Self::rv32_regs_to_xmm();
             asm_str += "    je asm_run_end\n";
-            asm_str += "    lea rdx, [rip + map_pc_base]\n";   
-            asm_str += "    movsxd rcx, [rdx + r13]\n";               
-            asm_str += "    add rcx, rdx\n";
-            asm_str += "    jmp rcx\n";
-            asm_str += "\n";
-
+            asm_str += &Self::jump_to_next_pc();
         }
     
         // asm_run_end part
         asm_str += "asm_run_end:\n";
-        asm_str += "    sub r13, 1\n";
-        asm_str += "    mov rdi, rbx\n";
-        asm_str += "    mov rsi, rbp\n";
-        asm_str += "    mov rdx, r13\n";
-        asm_str += "    mov rcx, r14\n";
+        // when we jump to asm_run_end, it is because extern handler returns (*pc) + 1
+        // hence we want to subtract by 1 to make pc correct
+        asm_str += &format!("   sub {}, {}\n", REG_PC, 1);
+        asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_EXEC_STATE_PTR);
+        asm_str += &format!("   mov {}, {}\n", REG_SECOND_ARG, REG_INSNS_PTR);
+        asm_str += &format!("   mov {}, {}\n", REG_THIRD_ARG, REG_PC);
+        asm_str += &format!("   mov {}, {}\n", REG_FOURTH_ARG, REG_INSTRET);
         asm_str += "    call set_instret_and_pc\n";
-        asm_str += "    xor rax, rax\n";
-        asm_str += &Self::pop_external_registers();
+        asm_str += "    xor rax, rax\n"; // zero out the return value 
+        asm_str += &Self::pop_callee_saved_registers();
         asm_str += "    ret\n";
         asm_str += "\n";
     
-        // map_pc_base part
+        // jump table part
         asm_str += ".section .rodata\n";
         asm_str += "map_pc_base:\n";
     
         for i in 0..(pc_base / 4) { 
-            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i * 4);
+            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i*4);
         }
-    
+
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
         }
     
-        return asm_str;
+        asm_str
     }
     
 
