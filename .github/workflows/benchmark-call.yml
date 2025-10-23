@@ -117,7 +117,7 @@ on:
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "metrics,parallel,tco"
+  FEATURE_FLAGS: "metrics,parallel,aot"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
