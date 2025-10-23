@@ -1,3 +1,4 @@
+pub mod aggregation;
 pub mod batch_constraint;
 pub mod bus;
 pub mod gkr;
