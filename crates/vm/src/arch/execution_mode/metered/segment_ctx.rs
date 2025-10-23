@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 22;
+pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 

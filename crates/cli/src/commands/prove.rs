@@ -5,6 +5,7 @@ use eyre::Result;
 use openvm_circuit::arch::{
     execution_mode::metered::segment_ctx::{
         SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT,
+        DEFAULT_MAX_TRACE_HEIGHT_BITS,
     },
     instructions::exe::VmExe,
 };
@@ -126,8 +127,8 @@ enum ProveSubCommand {
 pub struct SegmentationArgs {
     /// Trace height threshold across all chips for triggering segmentation for continuations in the app
     /// proof. Note that these thresholds are not absolute limits.
-    #[arg(long, default_value_t = DEFAULT_MAX_TRACE_HEIGHT)]
-    pub segment_max_height: u32,
+    #[arg(long, default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS)]
+    pub segment_max_height_bits: u8,
     /// Total cells used across all chips for triggering segmentation for continuations in the app
     /// proof. Note that these thresholds are not absolute limits.
     #[arg(long, default_value_t = DEFAULT_MAX_CELLS)]
