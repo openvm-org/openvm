@@ -240,7 +240,7 @@ where
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         eprintln!("supports_aot_for_opcode override called with opcode: {:?}", opcode);
-        false
+        // false
         BaseAluOpcode::ADD.global_opcode() == opcode || BaseAluOpcode::SUB.global_opcode() == opcode
         || BaseAluOpcode::AND.global_opcode() == opcode || BaseAluOpcode::OR.global_opcode() == opcode || BaseAluOpcode::XOR.global_opcode() == opcode  
     }
