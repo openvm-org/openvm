@@ -71,8 +71,10 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-
-    println!("extern_handler called with pc: {}, instret: {}", cur_pc, cur_instret);
+    println!(
+        "extern_handler called with pc: {}, instret: {}",
+        cur_pc, cur_instret
+    );
 
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
@@ -104,13 +106,6 @@ pub extern "C" fn extern_handler(
             vm_exec_state_ref,
         );
     };
-
-    println!("debug registers AFTER OPCODE");
-    for r in 0..32 {
-        println!("register {} = {:?}", r, vm_exec_state_ref.vm_read::<u32, 1>(1, r));
-    }
-    
-    println!("next pc {}", *pc);
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
