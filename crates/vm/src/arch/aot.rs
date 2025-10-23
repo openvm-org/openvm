@@ -273,7 +273,6 @@ where
 
                 asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
-                /*
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_internal_registers();
 
@@ -286,7 +285,6 @@ where
                 asm_str += &Self::pop_internal_registers();
                 asm_str += &Self::rv32_regs_to_xmm();
                 asm_str += "    je asm_run_end\n";             
-                */
     
                 
                 let a : i16 = Self::to_i16(instruction.a);
