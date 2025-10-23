@@ -1,4 +1,6 @@
 #![cfg(feature = "aot")]
+use rand::Rng;
+use std::{ffi::c_void, fs, process::Command};
 use std::{ffi::c_void, fs, process::Command};
 
 use libloading::Library;
