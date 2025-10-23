@@ -7,10 +7,9 @@ pub struct ProofIdxSubAir;
 
 #[derive(Clone, Copy)]
 pub struct ProofIdxCols<T> {
-    pub proof_idx: T,
     pub is_enabled: T,
+    pub proof_idx: T,
     pub is_proof_start: T,
-    pub is_proof_end: T,
 }
 
 impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
@@ -32,9 +31,6 @@ impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
 
         // 1. Base Constraints
 
-        // Boolean `is_enabled` flag
-        builder.assert_bool(local.is_enabled);
-
         // `proof_idx` increments by 0 or 1
         builder
             .when_transition()
@@ -48,27 +44,9 @@ impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
             .when(local.is_enabled)
             .assert_one(local.is_proof_start);
 
-        // Last row enabled implies proof end
-        builder
-            .when_last_row()
-            .when(local.is_enabled)
-            .assert_one(local.is_proof_end);
+        // 3. Proof Constraints
 
-        // 3. Disabled Row Constraints
-
-        // No proof start on disabled rows
-        builder
-            .when_ne(local.is_enabled, AB::Expr::ONE)
-            .assert_zero(local.is_proof_start);
-
-        // No proof end on disabled rows
-        builder
-            .when_ne(local.is_enabled, AB::Expr::ONE)
-            .assert_zero(local.is_proof_end);
-
-        // 4. Proof Constraints
-
-        // 4.1. Within Proof (Δproof_idx ≠ 1)
+        // 3.1. Within Proof (Δproof_idx ≠ 1)
         // When Δproof_idx ≠ 1, we are within the same proof (Δproof_idx = 0)
 
         // Enabled state consistency
@@ -77,13 +55,6 @@ impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
             .when_ne(proof_idx_diff.clone(), AB::Expr::ONE)
             .assert_eq(local.is_enabled, next.is_enabled);
 
-        // No proof end within proof
-        builder
-            .when_transition()
-            .when_ne(proof_idx_diff.clone(), AB::Expr::ONE)
-            .when(local.is_enabled)
-            .assert_zero(local.is_proof_end);
-
         // No proof start within proof
         builder
             .when_transition()
@@ -91,18 +62,38 @@ impl<AB: AirBuilder> SubAir<AB> for ProofIdxSubAir {
             .when(local.is_enabled)
             .assert_zero(next.is_proof_start);
 
-        // 4.2. At Proof Boundaries (Δproof_idx ≠ 0)
-
-        // Enabled local row implies proof end
-        builder
-            .when(proof_idx_diff.clone())
-            .when(local.is_enabled)
-            .assert_one(local.is_proof_end);
+        // 3.2. At Proof Boundaries (Δproof_idx ≠ 0)
 
         // Enabled next row implies proof start
         builder
             .when(proof_idx_diff)
             .when(next.is_enabled)
             .assert_one(next.is_proof_start);
+    }
+}
+
+impl ProofIdxSubAir {
+    /// Returns an expression for `is_transition` on enabled rows.
+    ///
+    /// True when:
+    /// - The next row is enabled, AND
+    /// - The next row is not a proof start (continuation within same proof)
+    pub fn local_is_transition<FA>(next: &ProofIdxCols<FA>) -> impl Into<FA>
+    where
+        FA: FieldAlgebra + Copy,
+    {
+        next.is_enabled * (FA::ONE - next.is_proof_start)
+    }
+
+    /// Returns an expression for `is_proof_end` on enabled rows.
+    ///
+    /// Equivalent to `!is_transition`. True when either:
+    /// - The next row is disabled, OR
+    /// - The next row is enabled and is a proof start (boundary between proofs)
+    pub fn local_is_proof_end<FA>(next: &ProofIdxCols<FA>) -> impl Into<FA>
+    where
+        FA: FieldAlgebra + Copy,
+    {
+        FA::ONE - Self::local_is_transition(next).into()
     }
 }
