@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -145,11 +145,17 @@ where
     }
     #[cfg(feature = "aot")]
     fn generate_x86_asm(&self, inst: &Instruction<F>) -> String {
+        eprintln!("generate_x86_asm called with instruction: {:?}", inst);
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
         let mut asm_str = String::new();
-        let a: i16 = Self::to_i16(inst.a);
-        let b: i16 = Self::to_i16(inst.b);
-        let c: i16 = Self::to_i16(inst.c);
-        let e: i16 = Self::to_i16(inst.e);
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
 
         let xmm_map_reg_a = if (a / 4) % 2 == 0 {
             a / 8
@@ -173,24 +179,17 @@ where
         }
 
         let mut asm_opcode = String::new();
-        if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
+        if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
             asm_opcode += "add";
-        } else if instruction.opcode == BaseAluOpcode::SUB.global_opcode() {
+        }else if inst.opcode == BaseAluOpcode::SUB.global_opcode() {
             asm_opcode += "sub";
-        } else if instruction.opcode == BaseAluOpcode::AND.global_opcode() {
+        } else if inst.opcode == BaseAluOpcode::AND.global_opcode() {
             asm_opcode += "and";
-        } else if instruction.opcode == BaseAluOpcode::OR.global_opcode() {
+        } else if inst.opcode == BaseAluOpcode::OR.global_opcode() {
             asm_opcode += "or";
-        } else if instruction.opcode == BaseAluOpcode::XOR.global_opcode() {
+        } else if inst.opcode == BaseAluOpcode::XOR.global_opcode() {
             asm_opcode += "xor";
-        } else if instruction.opcode == ShiftOpcode::SLL.global_opcode() {
-            asm_opcode += "shl";
-        } else if instruction.opcode == ShiftOpcode::SRL.global_opcode() {
-            asm_opcode += "shr";
-        } else if instruction.opcode == ShiftOpcode::SRA.global_opcode() {
-            asm_opcode += "sar";
         }
-
         if e == 0 {
             // [a:4]_1 <- [a:4]_1 + c
             asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, c);
@@ -218,32 +217,32 @@ where
 
         // General Register -> XMM
         if (a / 4) % 2 == 0 {
-            // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+            // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
             asm_str += &format!(
                 "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n",
                 xmm_map_reg_a, xmm_map_reg_a
             );
         } else {
-            // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+            // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
             asm_str += &format!(
                 "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n",
                 xmm_map_reg_a, xmm_map_reg_a
             );
         }
 
-        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_STEP);
-        asm_str += &format!("   add {}, {}\n", REG_INSTRET, DEFAULT_INSTRET_INC);
+        asm_str += &format!("   add {}, {}\n", REG_PC, 4);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
 
         asm_str
     }
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        // false
-        opcode == BaseAluOpcode::ADD.global_opcode()
-            || opcode == BaseAluOpcode::SUB.global_opcode()
-            || opcode == BaseAluOpcode::AND.global_opcode()
-            || opcode == BaseAluOpcode::OR.global_opcode()
-            || opcode == BaseAluOpcode::XOR.global_opcode()
+        eprintln!("supports_aot_for_opcode override called with opcode: {:?}", opcode);
+        false
+        // BaseAluOpcode::ADD.global_opcode() == opcode || BaseAluOpcode::SUB.global_opcode() == opcode
+        // || BaseAluOpcode::AND.global_opcode() == opcode || BaseAluOpcode::OR.global_opcode() == opcode || BaseAluOpcode::XOR.global_opcode() == opcode  
     }
 }
 

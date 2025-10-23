@@ -172,13 +172,13 @@ pub trait Executor<F> {
         Ctx: ExecutionCtxTrait;
 
     #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {// always calling the original, not the overridden one?
         false
     }
     /*
     Function: Sets up parameters for the extern_handler call in the appropriate registers, and then calls extern_handler
 
-    Preconditions: 
+    Preconditions:
     x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc, r14 = cur_instret
 
     Postcondition: rax = return value of AOT's extern_handler
@@ -193,7 +193,7 @@ pub trait Executor<F> {
         asm_str += "    call extern_handler\n";
         asm_str
     }
-    
+
     /*
     Function: Fallback to interpreter execution
 
@@ -202,16 +202,22 @@ pub trait Executor<F> {
     - push_internal_registers_str: pushes the internal registers onto the stack, as deemed necessary by `AotState`
     - pop_internal_registers_str: pops the internal registers from the stack, as deemed necessary by `AotState`
     - rv32_regs_to_xmm_str: reads the memory from the memory location of the RV32 registers in `GuestMemory` registers, to the appropriate XMM registers, as deemed necessary by `AotState`
-    
+
     Postcondition:
     - instret (r14) is incremented by 1
     - pc (r13) is set to the return value of the extern_handler
     - XMM x86 registers are synced with the vm_exec_state
     - base_address of the next instruction is loaded into rcx, and x86 PC is set to the label of the next RV32 instruction, and then jumps to the next instruction
     */
-    
+
     #[cfg(feature = "aot")]
-    fn fallback_to_interpreter(&self, push_internal_registers_str: &str, pop_internal_registers_str: &str, rv32_regs_to_xmm_str: &str, inst: &Instruction<F>) -> String { 
+    fn fallback_to_interpreter(
+        &self,
+        push_internal_registers_str: &str,
+        pop_internal_registers_str: &str,
+        rv32_regs_to_xmm_str: &str,
+        inst: &Instruction<F>,
+    ) -> String {
         let mut asm_str = String::new();
 
         asm_str += push_internal_registers_str;
@@ -222,8 +228,8 @@ pub trait Executor<F> {
         asm_str += "    cmp rax, 1\n"; // compare the return value with 1
         asm_str += pop_internal_registers_str; // pop the internal registers from the stack
 
-
-        asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory` registers, to the appropriate XMM registers
+        asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                                         // registers, to the appropriate XMM registers
         asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should terminate)
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
         asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)

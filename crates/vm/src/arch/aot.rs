@@ -1,13 +1,10 @@
 #![cfg(feature = "aot")]
-use rand::Rng;
 use std::{ffi::c_void, fs, process::Command};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
-
-use openvm_instructions::LocalOpcode;
-use openvm_rv32im_transpiler::BaseAluOpcode;
+use rand::Rng;
 
 use crate::{
     arch::{
@@ -219,7 +216,7 @@ where
         c_i24 as i16
     }
 
-    pub fn create_asm<E>(exe: &VmExe<F>, inventory: &ExecutorInventory<E>) -> String 
+    pub fn create_asm<E>(exe: &VmExe<F>, inventory: &ExecutorInventory<E>) -> String
     where
         E: Executor<F>,
     {
@@ -277,7 +274,9 @@ where
             asm_str += "    cmp rax, 1\n";
             asm_str += &Self::pop_internal_registers();
 
-            if instruction.opcode.as_usize() == 0 { // terminal opcode has no associated executor, so can handle with default fallback for now
+            if instruction.opcode.as_usize() == 0 {
+                // terminal opcode has no associated executor, so can handle with default fallback
+                // for now
                 asm_str += "    je asm_run_end\n";
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
@@ -291,9 +290,10 @@ where
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
 
-
-                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory` registers, to the appropriate XMM registers
-                asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should terminate)
+                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                                                      // registers, to the appropriate XMM registers
+                asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should
+                                                   // terminate)
                 asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
                 asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
                 asm_str += "    add rcx, rdx\n"; // add the base address and the offset
@@ -304,18 +304,17 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-            eprintln!("EXECUTOR FOUND");
             if executor.supports_aot_for_opcode(instruction.opcode) {
                 asm_str += &Self::rv32_regs_to_xmm(); // sync registers
             }
             asm_str += "    je asm_run_end\n";
-            
+
             /*
             x86 assembly for executing the opcode, updating the Rv32 PC (r13) and instret (r14)
             additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
             */
-
             if executor.supports_aot_for_opcode(instruction.opcode) {
+                eprintln!("executor supports aot for opcode");
                 asm_str += &executor.generate_x86_asm(&instruction);
             } else {
                 asm_str += &executor.fallback_to_interpreter(
