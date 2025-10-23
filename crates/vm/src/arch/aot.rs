@@ -7,6 +7,8 @@ use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use openvm_rv32im_transpiler::BaseAluOpcode;
+use openvm_rv32im_transpiler::ShiftOpcode;
+use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_instructions::LocalOpcode;
 
 use crate::{
@@ -287,7 +289,7 @@ where
         }
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
+            if instruction.opcode == BaseAluOpcode::ADD.global_opcode() || instruction.opcode == BaseAluOpcode::SUB.global_opcode() || instruction.opcode == BaseAluOpcode::AND.global_opcode() || instruction.opcode == BaseAluOpcode::OR.global_opcode() || instruction.opcode == BaseAluOpcode::XOR.global_opcode() {
                 /*
                 Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
                 Overflow is ignored and the lower 32-bits are written to the destination.
@@ -338,9 +340,28 @@ where
                     asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
                 }
 
+                let mut asm_opcode = String::new();
+                if instruction.opcode == BaseAluOpcode::ADD.global_opcode() {
+                    asm_opcode += "add";
+                } else if instruction.opcode == BaseAluOpcode::SUB.global_opcode() {
+                    asm_opcode += "sub";
+                } else if instruction.opcode == BaseAluOpcode::AND.global_opcode() {
+                    asm_opcode += "and";
+                } else if instruction.opcode == BaseAluOpcode::OR.global_opcode() {
+                    asm_opcode += "or";
+                } else if instruction.opcode == BaseAluOpcode::XOR.global_opcode() {
+                    asm_opcode += "xor";
+                } else if instruction.opcode == ShiftOpcode::SLL.global_opcode() {
+                    asm_opcode += "shl";
+                } else if instruction.opcode == ShiftOpcode::SRL.global_opcode() {
+                    asm_opcode += "shr";
+                } else if instruction.opcode == ShiftOpcode::SRA.global_opcode() {
+                    asm_opcode += "sar";
+                } 
+ 
                 if e == 0 {
                     // [a:4]_1 <- [a:4]_1 + c
-                    asm_str += &format!("   add {}, {}\n", REG_A, c);
+                    asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, c);
                 } else {
                     // [a:4]_1 <- [a:4]_1 + [c:4]_1
                     assert_eq!(c % 4, 0);
@@ -359,9 +380,8 @@ where
                         asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
                     }
 
-                    if 
                     // reg_a += reg_c
-                    asm_str += &format!("   add {REG_A}, {REG_C}\n");
+                    asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, REG_C);
                 }
 
                 // General Register -> XMM
@@ -627,8 +647,6 @@ where
             Box::new(VmExecState::new(from_state, ctx));
 
         let instret_end = vm_exec_state.ctx.instret_end;
-
-        println!("what is instret_end {}", instret_end);
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
