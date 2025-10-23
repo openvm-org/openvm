@@ -26,7 +26,7 @@ export default defineConfig({
     },
     { text: 'GitHub', link: 'https://github.com/openvm-org/openvm' },
     {
-      text: 'v1.4.0',
+      text: 'v1.4.1',
       items: [
         {
           text: 'Releases',
