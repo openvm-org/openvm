@@ -2,16 +2,17 @@
 
 ## Overview
 
-This SubAir ensures that each proof is properly marked with start and end flags.
+This SubAir ensures that each proof is properly marked with a start flag.
 
 ## Columns
 
+- **is_enabled**: Flag indicating whether the row is enabled for the current proof_idx
 - **proof_idx**: Current proof index
-- **is_enabled**: Boolean flag indicating whether the row is enabled for the current proof_idx
 - **is_proof_start**: Boolean flag marking the first row of a proof
-- **is_proof_end**: Boolean flag marking the last row of a proof
 
 **Note:**
+- The `is_enabled` flag is NOT constrained to be boolean by this SubAir. It is the caller's responsibility if they want to ensure `is_enabled` is boolean.
+- The `is_proof_start` flag is NOT constrained on disabled rows (when `is_enabled = 0`).
 - The `proof_idx` does not necessarily start at 0.
 - The `proof_idx` column either stays the same or increases by 1.
 - Even for disabled proofs, dummy rows are included with appropriate `proof_idx` values.
@@ -26,19 +27,10 @@ let proof_idx_diff = next.proof_idx - local.proof_idx;
 
 ### 1. Base Constraints
 
-#### Boolean `is_enabled` flag
-
-$$
-\text{is\\_enabled} \in \\\{0, 1\\\} \qquad (1)
-$$
-```rust
-builder.assert_bool(local.is_enabled);
-```
-
 #### `proof_idx` increments by 0 or 1
 
 $$
-\Delta\text{proof\\_idx} \in \\\{0, 1\\\}\quad \text{(transition)} \qquad (2)
+\Delta\text{proof\\_idx} \in \\\{0, 1\\\}\quad \text{(transition)} \qquad (1)
 $$
 ```rust
 builder
@@ -51,7 +43,7 @@ builder
 #### First row enabled implies proof start
 
 $$
-\text{is\\_enabled} \Rightarrow \text{is\\_proof\\_start} = 1\quad \text{(first row)} \qquad (3)
+\text{is\\_enabled} \Rightarrow \text{is\\_proof\\_start} = 1\quad \text{(first row)} \qquad (2)
 $$
 ```rust
 builder
@@ -60,52 +52,16 @@ builder
     .assert_one(local.is_proof_start);
 ```
 
-#### Last row enabled implies proof end
+### 3. Proof Constraints
 
-$$
-\text{is\\_enabled} \Rightarrow \text{is\\_proof\\_end} = 1\quad \text{(last row)} \qquad (4)
-$$
-```rust
-builder
-    .when_last_row()
-    .when(local.is_enabled)
-    .assert_one(local.is_proof_end);
-```
+#### 3.1. Within Proof ($\Delta\text{proof\\_idx} \neq 1$)
 
-### 3. Disabled Row Constraints
-
-#### No proof start on disabled rows
-
-$$
-\neg\text{is\\_enabled} \Rightarrow \text{is\\_proof\\_start} = 0 \qquad (5)
-$$
-```rust
-builder
-    .when_ne(local.is_enabled, AB::Expr::ONE)
-    .assert_zero(local.is_proof_start);
-```
-
-#### No proof end on disabled rows
-
-$$
-\neg\text{is\\_enabled} \Rightarrow \text{is\\_proof\\_end} = 0 \qquad (6)
-$$
-```rust
-builder
-    .when_ne(local.is_enabled, AB::Expr::ONE)
-    .assert_zero(local.is_proof_end);
-```
-
-### 4. Proof Constraints
-
-#### 4.1. Within Proof ($\Delta\text{proof\\_idx} \neq 1$)
-
-At transition rows, $\Delta\text{proof\\_idx} \neq 1 \iff \Delta\text{proof\\_idx} = 0$ by (2), indicating we are within the same proof.
+At transition rows, $\Delta\text{proof\\_idx} \neq 1 \iff \Delta\text{proof\\_idx} = 0$ by (1), indicating we are within the same proof.
 
 ##### Enabled state consistency
 
 $$
-\text{is\\_enabled}\_{\text{local}} = \text{is\\_enabled}\_{\text{next}}\quad (\Delta\text{proof\\_idx} \neq 1,\ \text{transition}) \qquad (7)
+\text{is\\_enabled}\_{\text{local}} = \text{is\\_enabled}\_{\text{next}}\quad (\Delta\text{proof\\_idx} \neq 1,\ \text{transition}) \qquad (3)
 $$
 ```rust
 builder
@@ -114,23 +70,10 @@ builder
     .assert_eq(local.is_enabled, next.is_enabled);
 ```
 
-##### No proof end within proof
-
-$$
-\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_proof\\_end}\_{\text{local}} = 0\quad (\Delta\text{proof\\_idx} \neq 1,\ \text{transition}) \qquad (8)
-$$
-```rust
-builder
-    .when_transition()
-    .when_ne(proof_idx_diff.clone(), AB::Expr::ONE)
-    .when(local.is_enabled)
-    .assert_zero(local.is_proof_end);
-```
-
 ##### No proof start within proof
 
 $$
-\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_proof\\_start}\_{\text{next}} = 0\quad (\Delta\text{proof\\_idx} \neq 1,\ \text{transition}) \qquad (9)
+\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_proof\\_start}\_{\text{next}} = 0\quad (\Delta\text{proof\\_idx} \neq 1,\ \text{transition}) \qquad (4)
 $$
 ```rust
 builder
@@ -140,26 +83,14 @@ builder
     .assert_zero(next.is_proof_start);
 ```
 
-#### 4.2. At Proof Boundaries ($\Delta\text{proof\\_idx} \neq 0$)
+#### 3.2. At Proof Boundaries ($\Delta\text{proof\\_idx} \neq 0$)
 
 When $\Delta\text{proof\\_idx} \neq 0$, we are at a proof boundary.
-
-##### Enabled local row implies proof end
-
-$$
-\text{is\\_enabled}\_{\text{local}} \Rightarrow \text{is\\_proof\\_end}\_{\text{local}} = 1\quad (\Delta\text{proof\\_idx} \neq 0) \qquad (10)
-$$
-```rust
-builder
-    .when(proof_idx_diff.clone())
-    .when(local.is_enabled)
-    .assert_one(local.is_proof_end);
-```
 
 ##### Enabled next row implies proof start
 
 $$
-\text{is\\_enabled}\_{\text{next}} \Rightarrow \text{is\\_proof\\_start}\_{\text{next}} = 1\quad (\Delta\text{proof\\_idx} \neq 0) \qquad (11)
+\text{is\\_enabled}\_{\text{next}} \Rightarrow \text{is\\_proof\\_start}\_{\text{next}} = 1\quad (\Delta\text{proof\\_idx} \neq 0) \qquad (5)
 $$
 ```rust
 builder
@@ -170,86 +101,30 @@ builder
 
 ## Case Analysis
 
-### 1. Single Row
+### 1. Single Row ($\text{is\\_enabled} = 1$)
 
-#### Case 1.1: Enabled single row ($\text{is\\_enabled} = 1$)
+- By (2): $\text{is\\_proof\\_start} = 1$
 
-- By (3): $\text{is\\_proof\\_start} = 1$
-- By (4): $\text{is\\_proof\\_end} = 1$
+Single enabled row is properly marked as start.
 
-Single enabled row is properly marked as both start and end.
+### 2. Single Proof ($\Delta\text{proof\\_idx} \neq 1$ for all transition rows, $\text{is\\_enabled} = 1$)
 
-#### Case 1.2: Disabled single row ($\text{is\\_enabled} = 0$)
+- By (2): $\text{is\\_proof\\_start} = 1$ on first row
+- By (4): $\text{is\\_proof\\_start} = 0$ on all interior rows
 
-- By (5): $\text{is\\_proof\\_start} = 0$
-- By (6): $\text{is\\_proof\\_end} = 0$
-
-Single disabled row has no markers.
-
-### 2. Single Proof ($\Delta\text{proof\\_idx} = 0$ for all transition rows)
-
-#### Case 2.1: Enabled proof ($\text{is\\_enabled} = 1$ throughout)
-
-- By (3): $\text{is\\_proof\\_start} = 1$ on first row
-- By (4): $\text{is\\_proof\\_end} = 1$ on last row
-- By (8): $\text{is\\_proof\\_end} = 0$ on all interior rows
-- By (9): $\text{is\\_proof\\_start} = 0$ on all interior rows
-
-Proof is properly marked with start on first row and end on last row only.
-
-#### Case 2.2: Disabled proof ($\text{is\\_enabled} = 0$ throughout)
-
-- By (5): $\text{is\\_proof\\_start} = 0$ on all rows
-- By (6): $\text{is\\_proof\\_end} = 0$ on all rows
-
-Disabled rows maintain no markers throughout.
+Proof is properly marked with start on first row only.
 
 ### 3. Multiple Proofs
 
-#### 3.1. Within Proof Transitions ($\Delta\text{proof\\_idx} \neq 1$)
+#### 3.1. Within Proof Transitions ($\Delta\text{proof\\_idx} \neq 1$, $\text{is\\_enabled}\_{\text{local}} = 1$)
 
-##### Case 3.1.1: Enabled interior rows ($\text{is\\_enabled}\_{\text{local}} = 1$)
+- By (3): $\text{is\\_enabled}\_{\text{next}} = 1$
+- By (4): $\text{is\\_proof\\_start}\_{\text{next}} = 0$
 
-- By (7): $\text{is\\_enabled}\_{\text{next}} = 1$
-- By (8): $\text{is\\_proof\\_end}\_{\text{local}} = 0$
-- By (9): $\text{is\\_proof\\_start}\_{\text{next}} = 0$
+Interior enabled rows maintain enabled state with no start marker.
 
-Interior enabled rows maintain enabled state with no markers.
+#### 3.2. At Proof Boundaries ($\Delta\text{proof\\_idx} \neq 0$, $\text{is\\_enabled}\_{\text{next}} = 1$)
 
-##### Case 3.1.2: Disabled interior rows ($\text{is\\_enabled}\_{\text{local}} = 0$)
+- By (5): $\text{is\\_proof\\_start}\_{\text{next}} = 1$
 
-- By (7): $\text{is\\_enabled}\_{\text{next}} = 0$
-- By (5): $\text{is\\_proof\\_start}\_{\text{local}} = 0$ and $\text{is\\_proof\\_start}\_{\text{next}} = 0$
-- By (6): $\text{is\\_proof\\_end}\_{\text{local}} = 0$ and $\text{is\\_proof\\_end}\_{\text{next}} = 0$
-
-Disabled padding maintains disabled state with no markers.
-
-#### 3.2. At Proof Boundaries ($\Delta\text{proof\\_idx} \neq 0$)
-
-##### Case 3.2.1: Enabled to enabled ($\text{is\\_enabled}\_{\text{local}} = 1, \text{is\\_enabled}\_{\text{next}} = 1$)
-
-- By (10): $\text{is\\_proof\\_end}\_{\text{local}} = 1$
-- By (11): $\text{is\\_proof\\_start}\_{\text{next}} = 1$
-
-Boundary between two enabled proofs is properly marked with end and start flags.
-
-##### Case 3.2.2: Enabled to disabled ($\text{is\\_enabled}\_{\text{local}} = 1, \text{is\\_enabled}\_{\text{next}} = 0$)
-
-- By (10): $\text{is\\_proof\\_end}\_{\text{local}} = 1$
-- By (5): $\text{is\\_proof\\_start}\_{\text{next}} = 0$
-
-End of enabled proof properly marked; next disabled row has no start marker.
-
-##### Case 3.2.3: Disabled to enabled ($\text{is\\_enabled}\_{\text{local}} = 0, \text{is\\_enabled}\_{\text{next}} = 1$)
-
-- By (6): $\text{is\\_proof\\_end}\_{\text{local}} = 0$
-- By (11): $\text{is\\_proof\\_start}\_{\text{next}} = 1$
-
-Start of enabled proof properly marked; previous disabled row has no end marker.
-
-##### Case 3.2.4: Disabled to disabled ($\text{is\\_enabled}\_{\text{local}} = 0, \text{is\\_enabled}\_{\text{next}} = 0$)
-
-- By (5): $\text{is\\_proof\\_start}\_{\text{next}} = 0$
-- By (6): $\text{is\\_proof\\_end}\_{\text{local}} = 0$
-
-Transition between disabled rows with proof index increment has no markers.
+Any transition to an enabled row properly marks it with start flag.
