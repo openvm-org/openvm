@@ -124,7 +124,7 @@ enum ProveSubCommand {
 
 #[derive(Clone, Copy, Parser)]
 pub struct SegmentationArgs {
-    /// Trace height threshold per chip for triggering segmentation for continuations in the app
+    /// Trace height threshold across all chips for triggering segmentation for continuations in the app
     /// proof. Note that these thresholds are not absolute limits.
     #[arg(long, default_value_t = DEFAULT_MAX_TRACE_HEIGHT)]
     pub segment_max_height: u32,
