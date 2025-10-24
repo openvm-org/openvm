@@ -64,7 +64,7 @@ use stark_backend_v2::{
     D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
-    poseidon2::sponge::FiatShamirTranscript,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{GkrProof, Proof},
 };
 
@@ -138,7 +138,7 @@ impl GkrModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let gkr_input_air = GkrInputAir {
             l_skip: self.l_skip,
@@ -186,15 +186,13 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
         ]
     }
 
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
         let GkrProof {
             q0_claim,
             claims_per_layer,
             sumcheck_polys,
             logup_pow_witness,
         } = &proof.gkr_proof;
-
-        let ts = &mut preflight.transcript;
 
         ts.observe(*logup_pow_witness);
         let logup_pow_sample = ts.sample();
@@ -316,7 +314,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for GkrModule {
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![
             // GkrInputAir proof input

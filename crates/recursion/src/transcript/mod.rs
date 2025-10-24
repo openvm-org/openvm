@@ -3,7 +3,9 @@ use std::sync::Arc;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{
-    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::Proof,
 };
 
@@ -25,7 +27,7 @@ impl TranscriptModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let transcript_air = DummyTranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -34,12 +36,12 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for TranscriptModule {
         vec![Arc::new(transcript_air)]
     }
 
-    fn run_preflight(&self, _proof: &Proof, _preflight: &mut Preflight<TS>) {}
+    fn run_preflight(&self, _proof: &Proof, _preflight: &mut Preflight, _ts: &mut TS) {}
 
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],

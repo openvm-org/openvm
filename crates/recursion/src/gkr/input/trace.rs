@@ -4,17 +4,13 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     F,
-    poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
 };
 
 use super::GkrInputCols;
 use crate::system::Preflight;
 
-pub fn generate_trace<TS: FiatShamirTranscript>(
-    proof: &Proof,
-    preflight: &Preflight<TS>,
-) -> RowMajorMatrix<F> {
+pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
     let width = GkrInputCols::<F>::width();
 
     let gkr_proof = &proof.gkr_proof;
@@ -29,7 +25,7 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
     let tidx_beg = preflight.proof_shape.post_tidx;
 
     let logup_pow_witness = gkr_proof.logup_pow_witness;
-    let logup_pow_sample = preflight.transcript.data[tidx_beg + 1];
+    let logup_pow_sample = preflight.transcript[tidx_beg + 1];
 
     let num_rows: usize = 1;
     let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];

@@ -7,10 +7,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -120,10 +117,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyQueryEvalAir {
     }
 }
 
-pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
+pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
-    preflight: &Preflight<TS>,
+    preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let k_whir = vk.inner.params.k_whir;
     let num_in_domain_queries = vk.inner.params.num_whir_queries;

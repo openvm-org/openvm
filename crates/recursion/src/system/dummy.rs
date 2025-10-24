@@ -5,7 +5,6 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::FiatShamirTranscript,
     proof::{GkrLayerClaims, Proof},
 };
 
@@ -19,7 +18,7 @@ use crate::{
     system::Preflight,
 };
 
-impl<TS: FiatShamirTranscript> Preflight<TS> {
+impl Preflight {
     pub(crate) fn batch_constraint_module_msgs(
         &self,
         proof: &Proof,
@@ -299,9 +298,9 @@ impl<TS: FiatShamirTranscript> Preflight<TS> {
     }
 
     pub(crate) fn transcript_msgs(&self, from: usize, to: usize) -> Vec<TranscriptBusMessage<F>> {
-        let values = &self.transcript.data[from..to];
-        let is_samples = &self.transcript.is_sample[from..to];
-        zip(values, is_samples)
+        let values = &self.transcript[from..to];
+        let sample_flags = &self.transcript.samples()[from..to];
+        zip(values, sample_flags)
             .enumerate()
             .map(|(i, (v, is_sample))| TranscriptBusMessage {
                 tidx: F::from_canonical_usize(from + i),

@@ -11,10 +11,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -68,10 +65,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for DummyTranscriptAir {
     }
 }
 
-pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
+pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
-    preflight: &Preflight<TS>,
+    preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let commit_msgs = preflight
         .stacking_commitments_msgs(vk, proof)
@@ -92,8 +89,8 @@ pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
         cols.has_transcript_msg = F::from_bool(i < transcript_len);
         cols.transcript_msg = TranscriptBusMessage {
             tidx: F::from_canonical_usize(i),
-            value: preflight.transcript.data[i],
-            is_sample: F::from_bool(preflight.transcript.is_sample[i]),
+            value: preflight.transcript[i],
+            is_sample: F::from_bool(preflight.transcript.samples()[i]),
         };
         if i < commit_msgs.len() {
             cols.has_commitment_msg = F::ONE;

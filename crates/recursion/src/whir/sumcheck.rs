@@ -7,10 +7,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -126,10 +123,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckAir {
     }
 }
 
-pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
+pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proof: &Proof,
-    preflight: &Preflight<TS>,
+    preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let params = vk.inner.params;
     let num_sumcheck_rounds = params.n_stack + params.l_skip - params.log_final_poly_len;
