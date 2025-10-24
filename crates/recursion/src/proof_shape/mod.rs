@@ -2,6 +2,7 @@ use core::cmp::{Reverse, max};
 use std::sync::Arc;
 
 use itertools::izip;
+use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
@@ -13,35 +14,116 @@ use stark_backend_v2::{
 };
 
 use crate::{
-    proof_shape::dummy::DummyProofShapeAir,
-    system::{AirModule, BusInventory, Preflight, ProofShapePreflight},
+    primitives::{
+        bus::{PowerCheckerBus, RangeCheckerBus},
+        pow::{PowerCheckerAir, PowerCheckerTraceGenerator},
+        range::{RangeCheckerAir, RangeCheckerTraceGenerator},
+    },
+    proof_shape::{
+        air::ProofShapeAir,
+        bus::{NumPublicValuesBus, ProofShapePermutationBus},
+        pvs::PublicValuesAir,
+    },
+    system::{AirModule, BusIndexManager, BusInventory, Preflight, ProofShapePreflight},
 };
 
-mod dummy;
+pub mod air;
+pub mod bus;
+pub mod pvs;
 
 pub struct ProofShapeModule {
     mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
+
+    range_bus: RangeCheckerBus,
+    pow_bus: PowerCheckerBus,
+
+    permutation_bus: ProofShapePermutationBus,
+    num_pvs_bus: NumPublicValuesBus,
+
+    // Required for ProofShapeAir tracegen + constraints
+    idx_encoder: Arc<Encoder>,
+    min_cached_idx: usize,
+    max_cached: usize,
 }
 
 impl ProofShapeModule {
-    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
-        Self { mvk, bus_inventory }
+    pub fn new(
+        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        b: &mut BusIndexManager,
+        bus_inventory: BusInventory,
+    ) -> Self {
+        let idx_encoder = Arc::new(Encoder::new(mvk.inner.per_air.len(), 2, true));
+
+        let (min_cached_idx, min_cached) = mvk
+            .inner
+            .per_air
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, avk)| avk.params.width.cached_mains.len())
+            .map(|(idx, avk)| (idx, avk.params.width.cached_mains.len()))
+            .unwrap();
+        let mut max_cached = mvk
+            .inner
+            .per_air
+            .iter()
+            .map(|avk| avk.params.width.cached_mains.len())
+            .max()
+            .unwrap();
+        if min_cached == max_cached {
+            max_cached += 1;
+        }
+
+        Self {
+            mvk,
+            bus_inventory,
+            range_bus: RangeCheckerBus::new(b.new_bus_idx()),
+            pow_bus: PowerCheckerBus::new(b.new_bus_idx()),
+            permutation_bus: ProofShapePermutationBus::new(b.new_bus_idx()),
+            num_pvs_bus: NumPublicValuesBus::new(b.new_bus_idx()),
+            idx_encoder,
+            min_cached_idx,
+            max_cached,
+        }
     }
 }
 
 impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let proof_shape_air = DummyProofShapeAir {
-            gkr_bus: self.bus_inventory.gkr_module_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
+        let proof_shape_air = ProofShapeAir::<4, 8> {
+            vk: self.mvk.clone(),
+            min_cached_idx: self.min_cached_idx,
+            max_cached: self.max_cached,
+            idx_encoder: self.idx_encoder.clone(),
+            range_bus: self.range_bus,
+            pow_bus: self.pow_bus,
+            permutation_bus: self.permutation_bus,
+            num_pvs_bus: self.num_pvs_bus,
+            gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             air_heights_bus: self.bus_inventory.air_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
-            _public_values_bus: self.bus_inventory.public_values_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
         };
-        vec![Arc::new(proof_shape_air) as AirRef<_>]
+        let pvs_air = PublicValuesAir {
+            _public_values_bus: self.bus_inventory.public_values_bus,
+            num_pvs_bus: self.num_pvs_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+        };
+        let range_checker = RangeCheckerAir::<8> {
+            bus: self.range_bus,
+        };
+        let pow_checker = PowerCheckerAir::<2, 32> {
+            pow_bus: self.pow_bus,
+            range_bus: self.range_bus,
+        };
+        vec![
+            Arc::new(proof_shape_air) as AirRef<_>,
+            Arc::new(pvs_air) as AirRef<_>,
+            Arc::new(range_checker) as AirRef<_>,
+            Arc::new(pow_checker) as AirRef<_>,
+        ]
     }
 
     fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
@@ -51,6 +133,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
         let vk = &self.mvk.inner;
 
         let mut num_common_main_cells = 0;
+        let mut pvs_tidx = vec![];
 
         for (trace_vdata, avk, pvs) in izip!(&proof.trace_vdata, &vk.per_air, &proof.public_values)
         {
@@ -72,6 +155,9 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
                     avk.params.width.cached_mains.len(),
                     trace_vdata.cached_commitments.len()
                 );
+                if !pvs.is_empty() {
+                    pvs_tidx.push(ts.len());
+                }
                 for commit in &trace_vdata.cached_commitments {
                     ts.observe_commit(*commit);
                 }
@@ -115,6 +201,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             l_skip,
             logup_pow_bits,
             post_tidx: ts.len(),
+            pvs_tidx,
         };
     }
 
@@ -123,10 +210,30 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
         proof: &Proof,
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
-        vec![AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(dummy::generate_trace(&self.mvk, proof, preflight))),
-            public_values: vec![],
-        }]
+        let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
+        let pow_checker = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
+        vec![
+            AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(Arc::new(air::generate_trace::<4, 8>(
+                    &self.mvk,
+                    proof,
+                    preflight,
+                    self.idx_encoder.clone(),
+                    self.min_cached_idx,
+                    self.max_cached,
+                    range_checker.clone(),
+                    pow_checker.clone(),
+                ))),
+                public_values: vec![],
+            },
+            AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(Arc::new(pvs::generate_trace(proof, preflight))),
+                public_values: vec![],
+            },
+            range_checker.generate_proof_input(),
+            pow_checker.generate_proof_input(),
+        ]
     }
 }
