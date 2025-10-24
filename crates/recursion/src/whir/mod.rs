@@ -122,7 +122,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
         };
         let whir_sumcheck_air = SumcheckAir {
             sumcheck_bus: self.sumcheck_bus,
-            stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             alpha_bus: self.alpha_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
@@ -151,7 +151,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
             k: self.mvk.inner.params.k_whir,
         };
         let final_poly_mle_eval_air = FinalPoleMleEvalAir {
-            stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
