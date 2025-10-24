@@ -16,7 +16,7 @@ use crate::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
         CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
         PowerCheckerBus, PublicValuesBus, RangeCheckerBus, StackingIndicesBus, StackingModuleBus,
-        StackingSumcheckRandomnessBus, TranscriptBus, WhirModuleBus, XiRandomnessBus,
+        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{exp_bits_len::ExpBitsLenAir, pow::PowerCheckerAir, range::RangeCheckerAir},
@@ -76,7 +76,7 @@ pub struct BusInventory {
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
-    pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
+    pub whir_opening_point_bus: WhirOpeningPointBus,
 
     // Claims buses
     pub column_claims_bus: ColumnClaimsBus,
@@ -253,7 +253,7 @@ impl BusInventory {
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
             constraint_randomness_bus: ConstraintSumcheckRandomnessBus::new(b.new_bus_idx()),
-            stacking_randomness_bus: StackingSumcheckRandomnessBus::new(b.new_bus_idx()),
+            whir_opening_point_bus: WhirOpeningPointBus::new(b.new_bus_idx()),
 
             // Claims buses
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
