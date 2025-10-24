@@ -82,6 +82,7 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 // ============ Executor and Periphery Enums for Extension ============
 
 /// RISC-V 32-bit Base (RV32I) Instruction Executors
+// ITS THIS DERIVES FAULT; not supporting aot traits?
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
 pub enum Rv32IExecutor {
     // Rv32 (for standard 32-bit integers):
