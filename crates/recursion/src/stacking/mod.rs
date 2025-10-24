@@ -85,7 +85,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
             n_stack: self.mvk.inner.params.n_stack,
         };
         let univariate_round_air = UnivariateRoundAir {
-            stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
@@ -96,13 +95,14 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
         };
         let sumcheck_rounds_air = SumcheckRoundsAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
-            stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
             eq_base_bus: self.eq_base_bus,
             eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
+            l_skip: self.mvk.inner.params.l_skip,
         };
         let stacking_claims_air = StackingClaimsAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
@@ -114,6 +114,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
         };
         let eq_base_air = EqBaseAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             eq_base_bus: self.eq_base_bus,
             eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,

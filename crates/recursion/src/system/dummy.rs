@@ -5,6 +5,7 @@ use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poly_common::Squarable,
     proof::{GkrLayerClaims, Proof},
 };
 
@@ -12,8 +13,8 @@ use crate::{
     bus::{
         AirHeightsBusMessage, AirPartShapeBusMessage, AirShapeBusMessage,
         BatchConstraintModuleMessage, ColumnClaimsMessage, CommitmentsBusMessage,
-        ConstraintSumcheckRandomness, StackingIndexMessage, StackingSumcheckRandomnessMessage,
-        TranscriptBusMessage, WhirModuleMessage, XiRandomnessMessage,
+        ConstraintSumcheckRandomness, StackingIndexMessage, TranscriptBusMessage,
+        WhirModuleMessage, WhirOpeningPointMessage, XiRandomnessMessage,
     },
     system::Preflight,
 };
@@ -314,14 +315,19 @@ impl Preflight {
         messages
     }
 
-    pub(crate) fn stacking_randomness_msgs(&self) -> Vec<StackingSumcheckRandomnessMessage<F>> {
-        self.stacking
-            .sumcheck_rnd
-            .iter()
+    pub(crate) fn whir_opening_point_messages(
+        &self,
+        l_skip: usize,
+    ) -> Vec<WhirOpeningPointMessage<F>> {
+        let rnd = &self.stacking.sumcheck_rnd;
+        rnd[0]
+            .exp_powers_of_2()
+            .take(l_skip)
+            .chain(rnd[1..].iter().copied())
             .enumerate()
-            .map(|(i, challenge)| StackingSumcheckRandomnessMessage {
+            .map(|(i, value)| WhirOpeningPointMessage {
                 idx: F::from_canonical_usize(i),
-                challenge: challenge.as_base_slice().try_into().unwrap(),
+                value: value.as_base_slice().try_into().unwrap(),
             })
             .collect()
     }

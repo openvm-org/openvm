@@ -15,10 +15,7 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
-        TranscriptBusMessage,
-    },
+    bus::{TranscriptBus, TranscriptBusMessage},
     stacking::bus::{
         EqBitsLookupBus, EqKernelLookupBus, EqRandValuesLookupBus, EqRandValuesLookupMessage,
         StackingModuleTidxBus, StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
@@ -130,7 +127,6 @@ impl UnivariateRoundTraceGenerator {
 ///////////////////////////////////////////////////////////////////////////
 pub struct UnivariateRoundAir {
     // External buses
-    pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
     pub transcript_bus: TranscriptBus,
 
     // Internal buses
@@ -256,16 +252,6 @@ where
          * Because we sample u_0 from the transcript here, we send u_0 to other AIRs that
          * need to use it.
          */
-        self.stacking_randomness_bus.send(
-            builder,
-            local.proof_idx,
-            StackingSumcheckRandomnessMessage {
-                idx: AB::Expr::ZERO,
-                challenge: local.u_0.map(Into::into),
-            },
-            and(local.is_last, local.is_valid),
-        );
-
         self.eq_rand_values_bus.send(
             builder,
             local.proof_idx,

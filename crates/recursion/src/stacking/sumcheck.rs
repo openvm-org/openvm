@@ -25,9 +25,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus,
-        StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus,
-        TranscriptBusMessage,
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus,
+        TranscriptBusMessage, WhirOpeningPointBus, WhirOpeningPointMessage,
     },
     stacking::{
         bus::{
@@ -248,7 +247,7 @@ impl SumcheckRoundsTraceGenerator {
 pub struct SumcheckRoundsAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
-    pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
+    pub whir_opening_point_bus: WhirOpeningPointBus,
     pub transcript_bus: TranscriptBus,
 
     // Internal buses
@@ -257,6 +256,8 @@ pub struct SumcheckRoundsAir {
     pub eq_base_bus: EqBaseBus,
     pub eq_rand_values_bus: EqRandValuesLookupBus,
     pub eq_kernel_lookup_bus: EqKernelLookupBus,
+
+    pub l_skip: usize,
 }
 
 impl BaseAirWithPublicValues<F> for SumcheckRoundsAir {}
@@ -477,12 +478,12 @@ where
             local.has_r,
         );
 
-        self.stacking_randomness_bus.send(
+        self.whir_opening_point_bus.send(
             builder,
             local.proof_idx,
-            StackingSumcheckRandomnessMessage {
-                idx: local.round,
-                challenge: local.u_round,
+            WhirOpeningPointMessage {
+                idx: local.round + AB::Expr::from_canonical_usize(self.l_skip - 1),
+                value: local.u_round.map(Into::into),
             },
             local.is_valid,
         );

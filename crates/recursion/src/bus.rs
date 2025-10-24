@@ -417,15 +417,12 @@ define_typed_per_proof_permutation_bus!(ColumnClaimsBus, ColumnClaimsMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct StackingSumcheckRandomnessMessage<T> {
+pub struct WhirOpeningPointMessage<T> {
     pub idx: T,
-    pub challenge: [T; D_EF],
+    pub value: [T; D_EF],
 }
 
-define_typed_per_proof_permutation_bus!(
-    StackingSumcheckRandomnessBus,
-    StackingSumcheckRandomnessMessage
-);
+define_typed_per_proof_permutation_bus!(WhirOpeningPointBus, WhirOpeningPointMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
