@@ -6,7 +6,7 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::FiatShamirTranscript,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{BatchConstraintProof, Proof},
 };
 
@@ -28,7 +28,7 @@ impl BatchConstraintModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstraintModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let sumcheck_air = BatchConstraintDummyAir {
             bc_module_bus: self.bus_inventory.bc_module_bus,
@@ -43,8 +43,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
         vec![Arc::new(sumcheck_air) as AirRef<_>]
     }
 
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
-        let ts = &mut preflight.transcript;
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
         let BatchConstraintProof {
             numerator_term_per_air,
             denominator_term_per_air,
@@ -112,7 +111,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for BatchConstraintModule {
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],
