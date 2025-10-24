@@ -11,10 +11,10 @@ use stark_backend_v2::{
 
 use crate::{
     bus::{
-        AirHeightsBusMessage, AirPartShapeBusMessage, AirShapeBusMessage,
-        BatchConstraintModuleMessage, ColumnClaimsMessage, CommitmentsBusMessage,
-        ConstraintSumcheckRandomness, StackingIndexMessage, TranscriptBusMessage,
-        WhirModuleMessage, WhirOpeningPointMessage, XiRandomnessMessage,
+        AirPartShapeBusMessage, AirShapeBusMessage, BatchConstraintModuleMessage,
+        ColumnClaimsMessage, CommitmentsBusMessage, ConstraintSumcheckRandomness,
+        StackingIndexMessage, TranscriptBusMessage, WhirModuleMessage, WhirOpeningPointMessage,
+        XiRandomnessMessage,
     },
     system::Preflight,
 };
@@ -182,41 +182,6 @@ impl Preflight {
                     });
                 }
                 parts
-            })
-            .collect()
-    }
-
-    pub(crate) fn air_heights_bus_msgs_and_widths(
-        &self,
-        mvk: &MultiStarkVerifyingKeyV2,
-    ) -> Vec<(AirHeightsBusMessage<F>, usize)> {
-        self.proof_shape
-            .sorted_trace_vdata
-            .iter()
-            .enumerate()
-            .map(|(sort_idx, (air_id, vdata))| {
-                let vk = &mvk.inner.per_air[*air_id];
-                let log_height = vdata.hypercube_dim + mvk.inner.params.l_skip;
-                let mut total_width = vk.params.width.common_main;
-
-                for width in vk
-                    .params
-                    .width
-                    .preprocessed
-                    .iter()
-                    .chain(&vk.params.width.cached_mains)
-                {
-                    total_width += *width;
-                }
-
-                (
-                    AirHeightsBusMessage {
-                        sort_idx: F::from_canonical_usize(sort_idx),
-                        log_height: F::from_canonical_usize(log_height),
-                        height: F::from_canonical_usize(1 << log_height),
-                    },
-                    total_width,
-                )
             })
             .collect()
     }
