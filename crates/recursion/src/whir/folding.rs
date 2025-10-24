@@ -7,10 +7,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -130,10 +127,10 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirFoldingAir {
     }
 }
 
-pub(crate) fn generate_trace<TS: FiatShamirTranscript>(
+pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
     _proof: &Proof,
-    preflight: &Preflight<TS>,
+    preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let num_rounds = preflight.whir.pow_samples.len();
     let num_queries = vk.inner.params.num_whir_queries;

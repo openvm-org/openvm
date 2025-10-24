@@ -3,12 +3,12 @@ use std::sync::Arc;
 use itertools::{Itertools, izip};
 use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra, TwoAdicField};
+use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
 use stark_backend_v2::{
     EF, F,
     keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poly_common::{Squarable, interpolate_quadratic_at_012},
-    poseidon2::sponge::FiatShamirTranscript,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{Proof, WhirProof},
     prover::poly::Mle,
 };
@@ -101,7 +101,7 @@ impl WhirModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let whir_round_air = WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
@@ -176,8 +176,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
         ]
     }
 
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
-        let ts = &mut preflight.transcript;
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
         let WhirProof {
             whir_sumcheck_polys,
             codeword_commits,
@@ -259,7 +258,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
                 post_sumcheck_claims.push(claim);
             }
             if i != num_whir_rounds - 1 {
-                ts.observe_slice(&codeword_commits[i]);
+                ts.observe_commit(codeword_commits[i]);
                 z0s.push(ts.sample_ext());
                 ts.observe_ext(ood_values[i]);
             } else {
@@ -283,7 +282,8 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
             let mut round_queries = vec![];
             let mut round_query_indices = vec![];
             for _ in 0..num_whir_queries {
-                let (sample, idx) = ts.sample_bits(log_rs_domain_size);
+                let sample = ts.sample();
+                let idx = sample.as_canonical_u32() & (1 << (log_rs_domain_size - 1));
                 round_queries.push(sample);
                 round_query_indices.push(idx);
             }
@@ -303,9 +303,6 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
 
             pre_query_claims.push(claim);
             let omega = F::two_adic_generator(log_rs_domain_size);
-            let m = self.mvk.inner.params.n_stack
-                + self.mvk.inner.params.l_skip
-                + self.mvk.inner.params.log_blowup;
             for (query_idx, index) in round_query_indices.into_iter().enumerate() {
                 let zj_root = omega.exp_u64(index as u64);
                 let zj = zj_root.exp_power_of_2(k_whir);
@@ -404,7 +401,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for WhirModule {
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![
             AirProofRawInput {

@@ -7,7 +7,7 @@ use p3_field::FieldAlgebra;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::FiatShamirTranscript,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{Proof, StackingProof},
 };
 
@@ -62,7 +62,7 @@ impl StackingModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let opening_air = OpeningClaimsAir {
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
@@ -108,11 +108,10 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
         ]
     }
 
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
         let mut sumcheck_rnd = vec![];
         let mut intermediate_tidx = [0; 3];
 
-        let ts = &mut preflight.transcript;
         let StackingProof {
             univariate_round_coeffs,
             sumcheck_round_polys,
@@ -162,7 +161,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for StackingModule {
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![
             AirProofRawInput {

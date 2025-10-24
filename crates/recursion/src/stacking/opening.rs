@@ -10,10 +10,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -67,10 +64,10 @@ pub struct OpeningClaimsCols<F> {
 pub struct OpeningClaimsTraceGenerator;
 
 impl OpeningClaimsTraceGenerator {
-    pub fn generate_trace<TS: FiatShamirTranscript>(
+    pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> RowMajorMatrix<F> {
         let claims = preflight.column_claims_messages(vk, proof);
 
