@@ -4,9 +4,9 @@ use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProo
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{FieldExtensionAlgebra, PrimeField32};
 use stark_backend_v2::{
-    D_EF, DIGEST_SIZE, EF, F,
+    DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::FiatShamirTranscript,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
     proof::{Proof, TraceVData},
 };
 
@@ -28,13 +28,13 @@ use crate::{
 
 mod dummy;
 
-pub trait AirModule<TS: FiatShamirTranscript> {
+pub trait AirModule<TS: FiatShamirTranscript + TranscriptHistory> {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>);
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, transcript: &mut TS);
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>>;
 }
 
@@ -90,16 +90,14 @@ pub struct BusInventory {
 
 #[derive(Debug, Default)]
 pub struct Transcript<TS: FiatShamirTranscript> {
-    pub(crate) data: Vec<F>,
-    pub(crate) is_sample: Vec<bool>,
+    pub(crate) log: TranscriptLog,
     pub(crate) sponge: TS,
 }
 
 impl<TS: FiatShamirTranscript> Transcript<TS> {
     pub fn new(sponge: TS) -> Self {
         Self {
-            data: vec![],
-            is_sample: vec![],
+            log: TranscriptLog::default(),
             sponge,
         }
     }
@@ -107,20 +105,17 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
 
 impl<TS: FiatShamirTranscript> Transcript<TS> {
     pub fn observe(&mut self, value: F) {
-        self.data.push(value);
-        self.is_sample.push(false);
+        self.log.push_observe(value);
         self.sponge.observe(value);
     }
 
     pub fn observe_ext(&mut self, value: EF) {
-        self.data.extend_from_slice(value.as_base_slice());
-        self.is_sample.extend_from_slice(&[false; D_EF]);
+        self.log.extend_observe(value.as_base_slice());
         self.sponge.observe_ext(value);
     }
 
     pub fn observe_commit(&mut self, digest: [F; DIGEST_SIZE]) {
-        self.data.extend_from_slice(&digest);
-        self.is_sample.extend_from_slice(&[false; DIGEST_SIZE]);
+        self.log.extend_observe(&digest);
         self.sponge.observe_commit(digest);
     }
 
@@ -132,8 +127,7 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
 
     pub fn sample(&mut self) -> F {
         let sample = self.sponge.sample();
-        self.data.push(sample);
-        self.is_sample.push(true);
+        self.log.push_sample(sample);
         sample
     }
 
@@ -144,45 +138,32 @@ impl<TS: FiatShamirTranscript> Transcript<TS> {
         let sample: F = self.sponge.sample();
         let sample_u32 = sample.as_canonical_u32();
         let bits = sample_u32 & ((1 << num_bits) - 1);
-        self.data.push(sample);
-        self.is_sample.push(true);
+        self.log.push_sample(sample);
         (sample, bits)
     }
 
     pub fn sample_ext(&mut self) -> EF {
         let sample = self.sponge.sample_ext();
-        self.data.extend_from_slice(sample.as_base_slice());
-        self.is_sample.extend_from_slice(&[true; D_EF]);
+        self.log.extend_sample(sample.as_base_slice());
         sample
     }
 
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
-        self.data.len()
+        self.log.len()
     }
 }
 
 #[derive(Debug, Default)]
-pub struct Preflight<TS: FiatShamirTranscript> {
-    pub transcript: Transcript<TS>,
+pub struct Preflight {
+    /// The concatenated sequence of observes/samples. Not available during preflight; populated
+    /// after.
+    pub transcript: TranscriptLog,
     pub proof_shape: ProofShapePreflight,
     pub gkr: GkrPreflight,
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
-}
-
-impl<TS: FiatShamirTranscript> Preflight<TS> {
-    fn new(sponge: TS) -> Self {
-        Self {
-            transcript: Transcript::new(sponge),
-            proof_shape: Default::default(),
-            gkr: Default::default(),
-            batch_constraint: Default::default(),
-            stacking: Default::default(),
-            whir: Default::default(),
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -291,14 +272,14 @@ impl BusInventory {
     }
 }
 
-pub struct VerifierCircuit<TS: FiatShamirTranscript> {
+pub struct VerifierCircuit<TS> {
     modules: Vec<Box<dyn AirModule<TS>>>,
     range_checker: Arc<RangeCheckerAir<8>>,
     pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
-impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
+impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
@@ -355,11 +336,12 @@ impl<TS: FiatShamirTranscript> VerifierCircuit<TS> {
         airs
     }
 
-    pub fn run_preflight(&self, sponge: TS, proof: &Proof) -> Preflight<TS> {
-        let mut preflight = Preflight::<TS>::new(sponge);
+    pub fn run_preflight(&self, mut sponge: TS, proof: &Proof) -> Preflight {
+        let mut preflight = Preflight::default();
         for module in self.modules.iter() {
-            module.run_preflight(proof, &mut preflight);
+            module.run_preflight(proof, &mut preflight, &mut sponge);
         }
+        preflight.transcript = sponge.into_log();
         preflight
     }
 

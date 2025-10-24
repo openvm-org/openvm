@@ -2,15 +2,12 @@ use core::borrow::BorrowMut;
 
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{D_EF, F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
+use stark_backend_v2::{D_EF, F, proof::Proof};
 
 use super::GkrXiSamplerCols;
 use crate::system::Preflight;
 
-pub fn generate_trace<TS: FiatShamirTranscript>(
-    _proof: &Proof,
-    preflight: &Preflight<TS>,
-) -> RowMajorMatrix<F> {
+pub fn generate_trace(_proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
     let width = GkrXiSamplerCols::<F>::width();
 
     let n_max = preflight.proof_shape.n_max;

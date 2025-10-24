@@ -11,10 +11,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{
-    D_EF, F, poly_common::interpolate_quadratic_at_012, poseidon2::sponge::FiatShamirTranscript,
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, F, poly_common::interpolate_quadratic_at_012, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -62,10 +59,7 @@ pub struct SumcheckRoundsCols<F> {
 pub struct SumcheckRoundsTraceGenerator;
 
 impl SumcheckRoundsTraceGenerator {
-    pub fn generate_trace<TS: FiatShamirTranscript>(
-        proof: &Proof,
-        preflight: &Preflight<TS>,
-    ) -> RowMajorMatrix<F> {
+    pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
         let sumcheck_rounds = &proof.stacking_proof.sumcheck_round_polys;
 
         let width = SumcheckRoundsCols::<usize>::width();
