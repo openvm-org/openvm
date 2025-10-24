@@ -6,7 +6,9 @@ use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
 use stark_backend_v2::{
-    F, keygen::types::MultiStarkVerifyingKeyV2, poseidon2::sponge::FiatShamirTranscript,
+    F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::Proof,
 };
 
@@ -28,7 +30,7 @@ impl ProofShapeModule {
     }
 }
 
-impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
+impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let proof_shape_air = DummyProofShapeAir {
             gkr_bus: self.bus_inventory.gkr_module_bus,
@@ -42,8 +44,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
         vec![Arc::new(proof_shape_air) as AirRef<_>]
     }
 
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight<TS>) {
-        let ts = &mut preflight.transcript;
+    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
         ts.observe_commit(self.mvk.pre_hash);
         ts.observe_commit(proof.common_main_commit);
 
@@ -72,7 +73,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
                     trace_vdata.cached_commitments.len()
                 );
                 for commit in &trace_vdata.cached_commitments {
-                    ts.observe_slice(commit);
+                    ts.observe_commit(*commit);
                 }
                 debug_assert_eq!(avk.params.num_public_values, pvs.len());
             }
@@ -120,7 +121,7 @@ impl<TS: FiatShamirTranscript> AirModule<TS> for ProofShapeModule {
     fn generate_proof_inputs(
         &self,
         proof: &Proof,
-        preflight: &Preflight<TS>,
+        preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
         vec![AirProofRawInput {
             cached_mains: vec![],

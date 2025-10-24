@@ -11,7 +11,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, EF, F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
+use stark_backend_v2::{D_EF, EF, F, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -58,10 +58,7 @@ pub struct StackingClaimsCols<F> {
 pub struct StackingClaimsTraceGenerator;
 
 impl StackingClaimsTraceGenerator {
-    pub fn generate_trace<TS: FiatShamirTranscript>(
-        proof: &Proof,
-        preflight: &Preflight<TS>,
-    ) -> RowMajorMatrix<F> {
+    pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
         let claims = proof
             .stacking_proof
             .stacking_openings

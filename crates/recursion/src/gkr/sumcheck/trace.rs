@@ -2,15 +2,12 @@ use core::borrow::BorrowMut;
 
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{D_EF, EF, F, poseidon2::sponge::FiatShamirTranscript, proof::Proof};
+use stark_backend_v2::{D_EF, EF, F, proof::Proof};
 
 use super::GkrLayerSumcheckCols;
 use crate::system::Preflight;
 
-pub fn generate_trace<TS: FiatShamirTranscript>(
-    proof: &Proof,
-    preflight: &Preflight<TS>,
-) -> RowMajorMatrix<F> {
+pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
     let width = GkrLayerSumcheckCols::<F>::width();
 
     let gkr_proof = &proof.gkr_proof;
@@ -62,7 +59,7 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
             tidx += 3 * D_EF;
 
             // Sample challenge ri
-            let challenge = EF::from_base_slice(&preflight.transcript.data[tidx..tidx + D_EF]);
+            let challenge = EF::from_base_slice(&preflight.transcript[tidx..tidx + D_EF]);
             cols.challenge = challenge.as_base_slice().try_into().unwrap();
             tidx += D_EF;
 
@@ -84,7 +81,7 @@ pub fn generate_trace<TS: FiatShamirTranscript>(
         tidx += 4 * D_EF;
 
         // Sample mu
-        let mu = EF::from_base_slice(&preflight.transcript.data[tidx..tidx + D_EF]);
+        let mu = EF::from_base_slice(&preflight.transcript[tidx..tidx + D_EF]);
         tidx += D_EF;
 
         gkr_r = std::iter::once(mu).chain(gkr_r_prime).collect();
