@@ -145,6 +145,7 @@ pub trait LinearMemory {
 /// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
 /// `unsafe` API.
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     /// Underlying memory data.
     pub mem: Vec<M>,
@@ -287,6 +288,7 @@ impl<M: LinearMemory> AddressMap<M> {
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
 #[derive(Debug, Clone)]
+#[repr(C)]
 pub struct GuestMemory {
     pub memory: AddressMap,
 }
