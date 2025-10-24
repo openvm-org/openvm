@@ -17,7 +17,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::bus::{
+use super::bus::{
     PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
 };
 
@@ -31,11 +31,70 @@ struct PowerCheckerCols<T> {
 }
 
 #[derive(Debug)]
+pub struct PowerCheckerTraceGenerator<const BASE: usize, const N: usize> {
+    count_pow: Vec<AtomicU32>,
+    count_range: Vec<AtomicU32>,
+}
+
+impl<const BASE: usize, const N: usize> Default for PowerCheckerTraceGenerator<BASE, N> {
+    fn default() -> Self {
+        assert!(N.is_power_of_two());
+        let mut count_pow = Vec::with_capacity(N);
+        let mut count_range = Vec::with_capacity(N);
+        for _ in 0..N {
+            count_pow.push(AtomicU32::new(0));
+            count_range.push(AtomicU32::new(0));
+        }
+        Self {
+            count_pow,
+            count_range,
+        }
+    }
+}
+
+impl<const BASE: usize, const N: usize> PowerCheckerTraceGenerator<BASE, N> {
+    pub fn add_pow(&self, log: usize) -> usize {
+        self.count_pow[log].fetch_add(1, Ordering::Relaxed);
+        1 << log
+    }
+
+    pub fn add_range(&self, value: usize) {
+        self.count_range[value].fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
+        let mut current_pow = F::ONE;
+        let trace = self
+            .count_pow
+            .iter()
+            .zip(self.count_range.iter())
+            .enumerate()
+            .flat_map(|(log, (mult_pow, mult_range))| {
+                let ret = [
+                    F::from_canonical_usize(log),
+                    current_pow,
+                    F::from_canonical_u32(mult_pow.load(Ordering::Relaxed)),
+                    F::from_canonical_u32(mult_range.load(Ordering::Relaxed)),
+                ];
+                current_pow *= F::from_canonical_usize(BASE);
+                ret
+            })
+            .collect_vec();
+        AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(RowMajorMatrix::new(
+                trace,
+                PowerCheckerCols::<u8>::width(),
+            ))),
+            public_values: vec![],
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct PowerCheckerAir<const BASE: usize, const N: usize> {
     pub pow_bus: PowerCheckerBus,
     pub range_bus: RangeCheckerBus,
-    count_pow: Vec<AtomicU32>,
-    count_range: Vec<AtomicU32>,
 }
 
 impl<F, const BASE: usize, const N: usize> BaseAir<F> for PowerCheckerAir<BASE, N> {
@@ -82,68 +141,9 @@ impl<AB: AirBuilder + InteractionBuilder, const BASE: usize, const N: usize> Air
             builder,
             RangeCheckerBusMessage {
                 value: local.log.into(),
-                max_bits: AB::Expr::from_canonical_usize(self.max_bits()),
+                max_bits: AB::Expr::from_canonical_usize(log2_strict_usize(N)),
             },
             local.mult_range,
         );
-    }
-}
-
-impl<const BASE: usize, const N: usize> PowerCheckerAir<BASE, N> {
-    pub fn new(pow_bus: PowerCheckerBus, range_bus: RangeCheckerBus) -> Self {
-        assert!(N.is_power_of_two());
-        let mut count_pow = Vec::with_capacity(N);
-        let mut count_range = Vec::with_capacity(N);
-        for _ in 0..N {
-            count_pow.push(AtomicU32::new(0));
-            count_range.push(AtomicU32::new(0));
-        }
-        Self {
-            pow_bus,
-            range_bus,
-            count_pow,
-            count_range,
-        }
-    }
-
-    pub fn add_pow(&self, log: usize) -> usize {
-        self.count_pow[log].fetch_add(1, Ordering::Relaxed);
-        1 << log
-    }
-
-    pub fn add_range(&self, value: usize) {
-        self.count_range[value].fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn max_bits(&self) -> usize {
-        log2_strict_usize(N)
-    }
-
-    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
-        let mut current_pow = F::ONE;
-        let trace = self
-            .count_pow
-            .iter()
-            .zip(self.count_range.iter())
-            .enumerate()
-            .flat_map(|(log, (mult_pow, mult_range))| {
-                let ret = [
-                    F::from_canonical_usize(log),
-                    current_pow,
-                    F::from_canonical_u32(mult_pow.load(Ordering::Relaxed)),
-                    F::from_canonical_u32(mult_range.load(Ordering::Relaxed)),
-                ];
-                current_pow *= F::from_canonical_usize(BASE);
-                ret
-            })
-            .collect_vec();
-        AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                trace,
-                BaseAir::<F>::width(self),
-            ))),
-            public_values: vec![],
-        }
     }
 }

@@ -14,11 +14,11 @@ use crate::{
     bus::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
         CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
-        PowerCheckerBus, PublicValuesBus, RangeCheckerBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        PublicValuesBus, StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus,
+        WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
-    primitives::{exp_bits_len::ExpBitsLenAir, pow::PowerCheckerAir, range::RangeCheckerAir},
+    primitives::exp_bits_len::ExpBitsLenAir,
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
@@ -82,10 +82,6 @@ pub struct BusInventory {
 
     // Exp bits length bus
     pub exp_bits_len_bus: ExpBitsLenBus,
-
-    // Peripheral buses
-    pub range_checker_bus: RangeCheckerBus,
-    pub power_of_two_bus: PowerCheckerBus,
 }
 
 #[derive(Debug, Default)]
@@ -110,6 +106,7 @@ pub struct ProofShapePreflight {
     pub l_skip: usize,
     pub logup_pow_bits: usize,
     pub post_tidx: usize,
+    pub pvs_tidx: Vec<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -192,10 +189,6 @@ impl BusInventory {
             column_claims_bus: ColumnClaimsBus::new(b.new_bus_idx()),
 
             exp_bits_len_bus: ExpBitsLenBus::new(b.new_bus_idx()),
-
-            // Peripheral buses
-            range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
-            power_of_two_bus: PowerCheckerBus::new(b.new_bus_idx()),
             // Stacking module internal buses
         }
     }
@@ -209,8 +202,6 @@ impl BusInventory {
 
 pub struct VerifierCircuit<TS> {
     modules: Vec<Box<dyn AirModule<TS>>>,
-    range_checker: Arc<RangeCheckerAir<8>>,
-    pow_2_checker: Arc<PowerCheckerAir<2, 32>>,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
@@ -218,16 +209,11 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
-
-        let range_checker = Arc::new(RangeCheckerAir::<8>::new(bus_inventory.range_checker_bus));
-        let pow_2_checker = Arc::new(PowerCheckerAir::<2, 32>::new(
-            bus_inventory.power_of_two_bus,
-            bus_inventory.range_checker_bus,
-        ));
         let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
 
         let transcript_module = TranscriptModule::new(child_mvk.clone(), bus_inventory.clone());
-        let proof_shape_module = ProofShapeModule::new(child_mvk.clone(), bus_inventory.clone());
+        let proof_shape_module =
+            ProofShapeModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
         let gkr_module = GkrModule::new(
             child_mvk.clone(),
             &mut b,
@@ -254,8 +240,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
         ];
         VerifierCircuit {
             modules,
-            range_checker,
-            pow_2_checker,
             exp_bits_len_air,
         }
     }
@@ -265,8 +249,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
         for module in &self.modules {
             airs.extend(module.airs());
         }
-        airs.push(self.range_checker.clone());
-        airs.push(self.pow_2_checker.clone());
         airs.push(self.exp_bits_len_air.clone());
         airs
     }
@@ -296,8 +278,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
             );
             proof_inputs.extend(module_proof_inputs);
         }
-        proof_inputs.push(self.range_checker.generate_proof_input());
-        proof_inputs.push(self.pow_2_checker.generate_proof_input());
         proof_inputs.push(self.exp_bits_len_air.generate_proof_input());
         proof_inputs
     }
