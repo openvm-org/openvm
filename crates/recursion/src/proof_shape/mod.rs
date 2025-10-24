@@ -37,8 +37,8 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             transcript_bus: self.bus_inventory.transcript_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
+            air_heights_bus: self.bus_inventory.air_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
-            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             _public_values_bus: self.bus_inventory.public_values_bus,
         };
         vec![Arc::new(proof_shape_air) as AirRef<_>]

@@ -63,6 +63,31 @@ where
     ]
 }
 
+pub fn ext_field_add_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+{
+    let [x0, x1, x2, x3] = x.map(Into::into);
+    [x0 + y.into(), x1, x2, x3]
+}
+
+pub fn ext_field_subtract_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+{
+    let [x0, x1, x2, x3] = x.map(Into::into);
+    [x0 - y.into(), x1, x2, x3]
+}
+
+pub fn ext_field_multiply_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+{
+    let [x0, x1, x2, x3] = x.map(Into::into);
+    let y = y.into();
+    [x0 * y.clone(), x1 * y.clone(), x2 * y.clone(), x3 * y]
+}
+
 // TODO(ayush): move to a custom air builder
 pub fn assert_zeros<AB, const N: usize>(builder: &mut AB, array: [impl Into<AB::Expr>; N])
 where
@@ -70,6 +95,19 @@ where
 {
     for elem in array.into_iter() {
         builder.assert_zero(elem);
+    }
+}
+
+pub fn assert_one_ext<AB>(builder: &mut AB, array: [impl Into<AB::Expr>; D_EF])
+where
+    AB: AirBuilder,
+{
+    for (i, elem) in array.into_iter().enumerate() {
+        if i == 0 {
+            builder.assert_one(elem);
+        } else {
+            builder.assert_zero(elem);
+        }
     }
 }
 
