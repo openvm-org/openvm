@@ -28,7 +28,9 @@ fn test_recursion_circuit_single_fib() {
 
     let sponge = DuplexSpongeRecorder::default();
     let circuit = VerifierCircuit::new(Arc::new(vk));
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
@@ -46,7 +48,9 @@ fn test_recursion_circuit_interactions() {
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::new(Arc::new(vk));
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
@@ -82,7 +86,9 @@ fn test_preflight_cached_trace() {
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::new(Arc::new(vk));
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);
@@ -102,7 +108,9 @@ fn test_preflight_preprocessed_trace() {
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::new(Arc::new(vk));
-    let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
+    let engine = BabyBearPoseidon2Engine::new(
+        FriParameters::standard_with_100_bits_conjectured_security(2),
+    );
     let mut keygen_builder = engine.keygen_builder();
     for air in circuit.airs() {
         keygen_builder.add_air(air);

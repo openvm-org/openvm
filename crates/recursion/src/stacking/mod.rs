@@ -13,11 +13,10 @@ use stark_backend_v2::{
 
 use crate::{
     stacking::{
-        bus::{
-            ClaimCoefficientsBus, EqBaseBus, EqBitsLookupBus, EqKernelLookupBus,
-            StackingModuleTidxBus, SumcheckClaimsBus,
-        },
+        bus::*,
         claims::{StackingClaimsAir, StackingClaimsTraceGenerator},
+        eq_base::{EqBaseAir, EqBaseTraceGenerator},
+        eq_bits::{EqBitsAir, EqBitsTraceGenerator},
         opening::{OpeningClaimsAir, OpeningClaimsTraceGenerator},
         sumcheck::{SumcheckRoundsAir, SumcheckRoundsTraceGenerator},
         univariate::{UnivariateRoundAir, UnivariateRoundTraceGenerator},
@@ -27,18 +26,24 @@ use crate::{
 
 mod bus;
 pub mod claims;
+pub mod eq_base;
+pub mod eq_bits;
 pub mod opening;
 pub mod sumcheck;
 pub mod univariate;
+mod utils;
 
 pub struct StackingModule {
     mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
+
     // Internal buses
     stacking_tidx_bus: StackingModuleTidxBus,
     claim_coefficients_bus: ClaimCoefficientsBus,
     sumcheck_claims_bus: SumcheckClaimsBus,
+    eq_rand_values_bus: EqRandValuesLookupBus,
     eq_base_bus: EqBaseBus,
+    eq_bits_internal_bus: EqBitsInternalBus,
     eq_kernel_lookup_bus: EqKernelLookupBus,
     eq_bits_lookup_bus: EqBitsLookupBus,
 }
@@ -55,7 +60,9 @@ impl StackingModule {
             stacking_tidx_bus: StackingModuleTidxBus::new(b.new_bus_idx()),
             claim_coefficients_bus: ClaimCoefficientsBus::new(b.new_bus_idx()),
             sumcheck_claims_bus: SumcheckClaimsBus::new(b.new_bus_idx()),
+            eq_rand_values_bus: EqRandValuesLookupBus::new(b.new_bus_idx()),
             eq_base_bus: EqBaseBus::new(b.new_bus_idx()),
+            eq_bits_internal_bus: EqBitsInternalBus::new(b.new_bus_idx()),
             eq_kernel_lookup_bus: EqKernelLookupBus::new(b.new_bus_idx()),
             eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
         }
@@ -65,6 +72,7 @@ impl StackingModule {
 impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let opening_air = OpeningClaimsAir {
+            air_heights_bus: self.bus_inventory.air_heights_bus,
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
             column_claims_bus: self.bus_inventory.column_claims_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -73,15 +81,18 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
             sumcheck_claims_bus: self.sumcheck_claims_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
             eq_bits_lookup_bus: self.eq_bits_lookup_bus,
+            l_skip: self.mvk.inner.params.l_skip,
+            n_stack: self.mvk.inner.params.n_stack,
         };
         let univariate_round_air = UnivariateRoundAir {
-            constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
             stacking_randomness_bus: self.bus_inventory.stacking_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
+            eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
             eq_bits_lookup_bus: self.eq_bits_lookup_bus,
+            l_skip: self.mvk.inner.params.l_skip,
         };
         let sumcheck_rounds_air = SumcheckRoundsAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
@@ -89,8 +100,9 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
             transcript_bus: self.bus_inventory.transcript_bus,
             stacking_tidx_bus: self.stacking_tidx_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
+            eq_base_bus: self.eq_base_bus,
+            eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
-            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
         };
         let stacking_claims_air = StackingClaimsAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
@@ -100,11 +112,27 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
             claim_coefficients_bus: self.claim_coefficients_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
         };
+        let eq_base_air = EqBaseAir {
+            constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
+            eq_base_bus: self.eq_base_bus,
+            eq_rand_values_bus: self.eq_rand_values_bus,
+            eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
+            l_skip: self.mvk.inner.params.l_skip,
+        };
+        let eq_bits_air = EqBitsAir {
+            eq_bits_internal_bus: self.eq_bits_internal_bus,
+            eq_bits_lookup_bus: self.eq_bits_lookup_bus,
+            eq_rand_values_bus: self.eq_rand_values_bus,
+            n_stack: self.mvk.inner.params.n_stack,
+            l_skip: self.mvk.inner.params.l_skip,
+        };
         vec![
             Arc::new(opening_air),
             Arc::new(univariate_round_air),
             Arc::new(sumcheck_rounds_air),
             Arc::new(stacking_claims_air),
+            Arc::new(eq_base_air),
+            Arc::new(eq_bits_air),
         ]
     }
 
@@ -174,21 +202,35 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for StackingMod
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(UnivariateRoundTraceGenerator::generate_trace(
-                    proof, preflight,
+                    &self.mvk, proof, preflight,
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(SumcheckRoundsTraceGenerator::generate_trace(
-                    proof, preflight,
+                    &self.mvk, proof, preflight,
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(StackingClaimsTraceGenerator::generate_trace(
-                    proof, preflight,
+                    &self.mvk, proof, preflight,
+                ))),
+                public_values: vec![],
+            },
+            AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(Arc::new(EqBaseTraceGenerator::generate_trace(
+                    &self.mvk, proof, preflight,
+                ))),
+                public_values: vec![],
+            },
+            AirProofRawInput {
+                cached_mains: vec![],
+                common_main: Some(Arc::new(EqBitsTraceGenerator::generate_trace(
+                    &self.mvk, preflight,
                 ))),
                 public_values: vec![],
             },
