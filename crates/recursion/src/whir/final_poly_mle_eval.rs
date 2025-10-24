@@ -11,7 +11,7 @@ use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{StackingSumcheckRandomnessBus, StackingSumcheckRandomnessMessage, TranscriptBus},
+    bus::{TranscriptBus, WhirOpeningPointBus, WhirOpeningPointMessage},
     system::Preflight,
     utils::ext_field_multiply,
     whir::bus::{
@@ -26,8 +26,8 @@ struct FinalyPolyMleEvalCols<T> {
     is_valid: T,
     is_first: T,
     proof_idx: T,
-    stacking_randomness_msg: StackingSumcheckRandomnessMessage<T>,
-    has_stacking_randomness_msg: T,
+    whir_opening_point_msg: WhirOpeningPointMessage<T>,
+    has_whir_opening_point_msg: T,
     tidx: T,
     idx: T,
     coeff: [T; D_EF],
@@ -37,7 +37,7 @@ struct FinalyPolyMleEvalCols<T> {
 }
 
 pub struct FinalPoleMleEvalAir {
-    pub stacking_randomness_bus: StackingSumcheckRandomnessBus,
+    pub whir_opening_point_bus: WhirOpeningPointBus,
     pub final_poly_mle_eval_bus: FinalPolyMleEvalBus,
     pub transcript_bus: TranscriptBus,
     pub eq_alpha_u_bus: WhirEqAlphaUBus,
@@ -63,11 +63,11 @@ where
         let local = main.row_slice(0);
         let local: &FinalyPolyMleEvalCols<AB::Var> = (*local).borrow();
 
-        self.stacking_randomness_bus.receive(
+        self.whir_opening_point_bus.receive(
             builder,
             local.proof_idx,
-            local.stacking_randomness_msg.clone(),
-            local.has_stacking_randomness_msg,
+            local.whir_opening_point_msg.clone(),
+            local.has_whir_opening_point_msg,
         );
         self.final_poly_mle_eval_bus.receive(
             builder,
@@ -114,8 +114,8 @@ pub(crate) fn generate_trace(
     let params = vk.inner.params;
 
     let num_sumcheck_rounds = params.n_stack + params.l_skip - params.log_final_poly_len;
-    let mut stacking_randomness_msgs = preflight
-        .stacking_randomness_msgs()
+    let mut whir_opening_point_msgs = preflight
+        .whir_opening_point_messages(params.l_skip)
         .into_iter()
         .skip(num_sumcheck_rounds);
 
@@ -153,9 +153,9 @@ pub(crate) fn generate_trace(
             .try_into()
             .unwrap();
 
-        if let Some(msg) = stacking_randomness_msgs.next() {
-            cols.stacking_randomness_msg = msg;
-            cols.has_stacking_randomness_msg = F::ONE;
+        if let Some(msg) = whir_opening_point_msgs.next() {
+            cols.whir_opening_point_msg = msg;
+            cols.has_whir_opening_point_msg = F::ONE;
         }
     }
 
