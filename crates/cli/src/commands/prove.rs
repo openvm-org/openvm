@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
@@ -152,8 +152,8 @@ impl ProveCmd {
                 cargo_args,
                 segmentation_args,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let app_config = get_app_config(&app_pk, segmentation_args);
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
                 let sdk = Sdk::new(app_config)?.with_app_pk(app_pk);
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
@@ -180,13 +180,13 @@ impl ProveCmd {
                 segmentation_args,
                 agg_tree_config,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let agg_pk = read_object_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let app_config = get_app_config(&app_pk, segmentation_args);
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
                 let sdk = Sdk::new(app_config)?
                     .with_agg_tree_config(*agg_tree_config)
                     .with_app_pk(app_pk)
@@ -219,14 +219,14 @@ impl ProveCmd {
                 segmentation_args,
                 agg_tree_config,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let app_config = get_app_config(&app_pk, segmentation_args);
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
                 let sdk = Sdk::new(app_config)?
                     .with_agg_tree_config(*agg_tree_config)
                     .with_app_pk(app_pk)
@@ -294,17 +294,19 @@ pub(crate) fn load_or_build_exe(
     ))
 }
 
+/// Should only be called when `app_pk` has only a single reference internally.
+/// Mutates the `SystemConfig` within `app_pk` and then returns the updated `AppConfig`.
 fn get_app_config(
-    app_pk: &AppProvingKey<SdkVmConfig>,
+    app_pk: &mut AppProvingKey<SdkVmConfig>,
     segmentation_args: &SegmentationArgs,
 ) -> AppConfig<SdkVmConfig> {
-    let mut app_config = app_pk.app_config();
-    app_config
-        .app_vm_config
+    Arc::get_mut(&mut app_pk.app_vm_pk)
+        .unwrap()
+        .vm_config
         .system
         .config
         .set_segmentation_limits((*segmentation_args).into());
-    app_config
+    app_pk.app_config()
 }
 
 impl From<SegmentationArgs> for SegmentationLimits {
