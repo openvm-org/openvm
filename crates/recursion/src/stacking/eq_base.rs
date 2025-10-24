@@ -16,7 +16,10 @@ use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus},
+    bus::{
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus,
+        WhirOpeningPointMessage,
+    },
     stacking::bus::{
         EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqRandValuesLookupBus,
         EqRandValuesLookupMessage,
@@ -39,6 +42,9 @@ pub struct EqBaseCols<F> {
     pub is_valid: F,
     pub is_first: F,
     pub is_last: F,
+
+    // Row index for the given proof
+    pub row_idx: F,
 
     // Value of u^{2^row}, r^{2^row}, and (r * omega)^{2^row}
     pub u_pow: [F; D_EF],
@@ -93,14 +99,16 @@ impl EqBaseTraceGenerator {
         let mut prod_u_1 = u + F::ONE;
         let mut prod_r_omega_1 = r_omega + F::ONE;
 
-        for (i, chunk) in trace.chunks_mut(width).take(num_valid).enumerate() {
+        for (row_idx, chunk) in trace.chunks_mut(width).take(num_valid).enumerate() {
             let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-            let is_last = i + 1 == num_valid;
+            let is_last = row_idx + 1 == num_valid;
 
             // TODO[stephen]: handle proof_idx
             cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(i == 0);
+            cols.is_first = F::from_bool(row_idx == 0);
             cols.is_last = F::from_bool(is_last);
+
+            cols.row_idx = F::from_canonical_usize(row_idx);
 
             cols.u_pow.copy_from_slice(u.as_base_slice());
             cols.r_pow.copy_from_slice(r.as_base_slice());
@@ -142,6 +150,7 @@ impl EqBaseTraceGenerator {
 pub struct EqBaseAir {
     // External buses
     pub constraint_randomness_bus: ConstraintSumcheckRandomnessBus,
+    pub whir_opening_point_bus: WhirOpeningPointBus,
 
     // Internal buses
     pub eq_base_bus: EqBaseBus,
@@ -174,6 +183,30 @@ where
         let next: &EqBaseCols<AB::Var> = (*next).borrow();
 
         // TODO[stephen]: constrain proof_idx, is_valid, is_first, is_last
+
+        /*
+         * Constrain value of row_idx and send u^{2^row} to WhirOpeningPointBus when
+         * row_idx < l_skip.
+         */
+        let is_valid_transition = and(local.is_valid, not(local.is_last));
+
+        builder.when(local.is_first).assert_zero(local.row_idx);
+        builder
+            .when(is_valid_transition.clone())
+            .assert_eq(local.row_idx + AB::F::ONE, next.row_idx);
+        builder
+            .when(and(local.is_valid, local.is_last))
+            .assert_eq(local.row_idx, AB::F::from_canonical_usize(self.l_skip));
+
+        self.whir_opening_point_bus.send(
+            builder,
+            local.proof_idx,
+            WhirOpeningPointMessage {
+                idx: local.row_idx,
+                value: local.u_pow,
+            },
+            is_valid_transition,
+        );
 
         /*
          * Receive the values of u_0 and r_0 from the AIRs that sample them.
