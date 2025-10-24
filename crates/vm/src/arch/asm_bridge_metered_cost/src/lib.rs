@@ -1,10 +1,17 @@
 use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, VmExecState},
+    arch::{execution_mode::MeteredCostCtx, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+/*
+rbx = vm_exec_state
+rbp = pre_compute_insns
+r13 = from_state_pc
+r14 = from_state_instret
+*/
 
 extern "C" {
     fn asm_run_internal(
@@ -18,7 +25,6 @@ extern "C" {
 /// Runs the VM execution from assembly
 ///
 /// # Safety
-///
 ///
 /// This function is unsafe because:
 /// - `vm_exec_state_ptr` must be valid
@@ -39,12 +45,13 @@ pub unsafe extern "C" fn asm_run(
 }
 
 type F = BabyBear;
-type Ctx = ExecutionCtx;
+type Ctx = MeteredCostCtx;
 
 // at the end of the execution, you want to store the instret and pc from the x86 registers
 // to update the vm state's pc and instret
+// works for metered cost execution
 #[no_mangle]
-pub extern "C" fn set_instret_and_pc(
+pub extern "C" fn metered_cost_set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
@@ -55,12 +62,12 @@ pub extern "C" fn set_instret_and_pc(
 }
 
 /// # Safety
-/// - vm_exec_state_ptr must point to a valid VmExecState<F, GuestMemory, Ctx>.
+/// - vm_exec_state_ptr must point to VmExecState<F, GuestMemory, MeteredCostCtx>.
 /// - pre_compute_insns_ptr must be a valid, contiguous array of PreComputeInstruction<'static, F,
-///   Ctx>.
+///   MeteredCostCtx>.
 /// - cur_pc must be a valid PC for the current program.
 #[no_mangle]
-pub unsafe extern "C" fn extern_handler(
+pub unsafe extern "C" fn metered_cost_extern_handler(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
@@ -72,24 +79,20 @@ pub unsafe extern "C" fn extern_handler(
             pre_compute_insns_ptr,
             cur_pc,
         );
-        // `arg` is a runtime constant that we want to keep in register
-        // - For pure execution it is `instret_end`
-        let arg = (*ctx_ptr).instret_end;
+        let arg = (*ctx_ptr).max_execution_cost;
         asm_bridge_utils::extern_finish_generic::<Ctx>(vm_ptr, pre_ptr, cur_pc, cur_instret, arg)
     }
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
-    // reference to vm_exec_state
-    let vm_exec_state_ref =
-        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+pub extern "C" fn should_suspend(_instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+    let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
-    let instret_end = vm_exec_state_ref.ctx.instret_end;
+    let max_execution_cost = exec_state_ref.ctx.max_execution_cost;
 
-    if instret >= instret_end {
-        1 // should suspend is `true`
+    if exec_state_ref.ctx.cost > max_execution_cost {
+        1
     } else {
-        0 // should suspend is `false`
+        0
     }
 }

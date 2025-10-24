@@ -1,5 +1,5 @@
 [package]
-name = "asm_bridge_metered"
+name = "asm_bridge_metered_cost"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
