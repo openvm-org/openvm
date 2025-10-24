@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{FieldExtensionAlgebra, PrimeField32};
 use stark_backend_v2::{
-    DIGEST_SIZE, EF, F,
+    EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
     proof::{Proof, TraceVData},
@@ -87,72 +86,6 @@ pub struct BusInventory {
     // Peripheral buses
     pub range_checker_bus: RangeCheckerBus,
     pub power_of_two_bus: PowerCheckerBus,
-}
-
-#[derive(Debug, Default)]
-pub struct Transcript<TS: FiatShamirTranscript> {
-    pub(crate) log: TranscriptLog,
-    pub(crate) sponge: TS,
-}
-
-impl<TS: FiatShamirTranscript> Transcript<TS> {
-    pub fn new(sponge: TS) -> Self {
-        Self {
-            log: TranscriptLog::default(),
-            sponge,
-        }
-    }
-}
-
-impl<TS: FiatShamirTranscript> Transcript<TS> {
-    pub fn observe(&mut self, value: F) {
-        self.log.push_observe(value);
-        self.sponge.observe(value);
-    }
-
-    pub fn observe_ext(&mut self, value: EF) {
-        self.log.extend_observe(value.as_base_slice());
-        self.sponge.observe_ext(value);
-    }
-
-    pub fn observe_commit(&mut self, digest: [F; DIGEST_SIZE]) {
-        self.log.extend_observe(&digest);
-        self.sponge.observe_commit(digest);
-    }
-
-    pub fn observe_slice(&mut self, slc: &[F]) {
-        for x in slc {
-            self.observe(*x);
-        }
-    }
-
-    pub fn sample(&mut self) -> F {
-        let sample = self.sponge.sample();
-        self.log.push_sample(sample);
-        sample
-    }
-
-    pub fn sample_bits(&mut self, num_bits: usize) -> (F, u32)
-    where
-        F: PrimeField32,
-    {
-        let sample: F = self.sponge.sample();
-        let sample_u32 = sample.as_canonical_u32();
-        let bits = sample_u32 & ((1 << num_bits) - 1);
-        self.log.push_sample(sample);
-        (sample, bits)
-    }
-
-    pub fn sample_ext(&mut self) -> EF {
-        let sample = self.sponge.sample_ext();
-        self.log.extend_sample(sample.as_base_slice());
-        sample
-    }
-
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.log.len()
-    }
 }
 
 #[derive(Debug, Default)]
