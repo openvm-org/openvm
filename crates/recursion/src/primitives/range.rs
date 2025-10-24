@@ -16,7 +16,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::bus::{RangeCheckerBus, RangeCheckerBusMessage};
+use super::bus::{RangeCheckerBus, RangeCheckerBusMessage};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -26,9 +26,55 @@ struct RangeCheckerCols<T> {
 }
 
 #[derive(Debug)]
+pub struct RangeCheckerTraceGenerator<const NUM_BITS: usize> {
+    count: Vec<AtomicU32>,
+}
+
+impl<const NUM_BITS: usize> Default for RangeCheckerTraceGenerator<NUM_BITS> {
+    fn default() -> Self {
+        let mut count = Vec::with_capacity(1 << NUM_BITS);
+        for _ in 0..(1 << NUM_BITS) {
+            count.push(AtomicU32::new(0));
+        }
+        Self { count }
+    }
+}
+
+impl<const NUM_BITS: usize> RangeCheckerTraceGenerator<NUM_BITS> {
+    pub fn add_count(&self, value: usize) {
+        self.add_count_mult(value, 1);
+    }
+
+    pub fn add_count_mult(&self, value: usize, mult: u32) {
+        self.count[value].fetch_add(mult, Ordering::Relaxed);
+    }
+
+    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
+        let trace = self
+            .count
+            .iter()
+            .enumerate()
+            .flat_map(|(value, mult)| {
+                [
+                    F::from_canonical_usize(value),
+                    F::from_canonical_u32(mult.load(Ordering::Relaxed)),
+                ]
+            })
+            .collect_vec();
+        AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(RowMajorMatrix::new(
+                trace,
+                RangeCheckerCols::<u8>::width(),
+            ))),
+            public_values: vec![],
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct RangeCheckerAir<const NUM_BITS: usize> {
     pub bus: RangeCheckerBus,
-    count: Vec<AtomicU32>,
 }
 
 impl<F, const NUM_BITS: usize> BaseAir<F> for RangeCheckerAir<NUM_BITS> {
@@ -62,49 +108,9 @@ impl<AB: AirBuilder + InteractionBuilder, const NUM_BITS: usize> Air<AB>
             builder,
             RangeCheckerBusMessage {
                 value: local.value.into(),
-                max_bits: AB::Expr::from_canonical_usize(self.max_bits()),
+                max_bits: AB::Expr::from_canonical_usize(NUM_BITS),
             },
             local.mult,
         );
-    }
-}
-
-impl<const NUM_BITS: usize> RangeCheckerAir<NUM_BITS> {
-    pub fn new(bus: RangeCheckerBus) -> Self {
-        let mut count = Vec::with_capacity(1 << NUM_BITS);
-        for _ in 0..(1 << NUM_BITS) {
-            count.push(AtomicU32::new(0));
-        }
-        Self { bus, count }
-    }
-
-    pub fn add_count(&self, value: usize) {
-        self.count[value].fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub fn max_bits(&self) -> usize {
-        NUM_BITS
-    }
-
-    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
-        let trace = self
-            .count
-            .iter()
-            .enumerate()
-            .flat_map(|(value, mult)| {
-                [
-                    F::from_canonical_usize(value),
-                    F::from_canonical_u32(mult.load(Ordering::Relaxed)),
-                ]
-            })
-            .collect_vec();
-        AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                trace,
-                BaseAir::<F>::width(self),
-            ))),
-            public_values: vec![],
-        }
     }
 }
