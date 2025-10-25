@@ -1,50 +1,45 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{TranscriptBus, TranscriptBusMessage, XiRandomnessBus, XiRandomnessMessage},
-    gkr::bus::{
-        GkrXiSamplerInputBus, GkrXiSamplerInputMessage, GkrXiSamplerOutputBus,
-        GkrXiSamplerOutputMessage,
-    },
+    bus::{TranscriptBus, XiRandomnessBus, XiRandomnessMessage},
+    gkr::bus::{GkrXiSamplerBus, GkrXiSamplerMessage},
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrXiSamplerCols<T> {
-    /// Is this row real (not padding)?
-    pub is_real: T,
+    pub is_enabled: T,
 
     pub proof_idx: T,
 
-    pub is_first_row: T,
-    // xi_index == num_challenges - 1?
-    pub is_final_row: T,
+    pub is_first_challenge: T,
 
+    /// Challenge index
+    // TODO(ayush): can probably remove challenge_idx if XiRandomnessMessage takes tidx instead
+    pub challenge_idx: T,
+
+    /// Sampled challenge
+    pub challenge: [T; D_EF],
     /// Transcript index
     pub tidx: T,
-
-    pub xi_index: T,
-    pub num_challenges: T,
-
-    // Sampled challenge
-    pub challenge: [T; D_EF],
 }
 
 pub struct GkrXiSamplerAir {
     pub xi_randomness_bus: XiRandomnessBus,
     pub transcript_bus: TranscriptBus,
-    pub xi_sampler_input_bus: GkrXiSamplerInputBus,
-    pub xi_sampler_output_bus: GkrXiSamplerOutputBus,
+    pub xi_sampler_bus: GkrXiSamplerBus,
 }
 
 impl<F: Field> BaseAir<F> for GkrXiSamplerAir {
@@ -56,45 +51,85 @@ impl<F: Field> BaseAir<F> for GkrXiSamplerAir {
 impl<F: Field> BaseAirWithPublicValues<F> for GkrXiSamplerAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrXiSamplerAir {}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &GkrXiSamplerCols<AB::Var> = (*local).borrow();
-        let _next: &GkrXiSamplerCols<AB::Var> = (*next).borrow();
+        let next: &GkrXiSamplerCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Constraints
+        // Boolean Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // Boolean constraints
-        builder.assert_bool(local.is_real);
+        builder.assert_bool(local.is_enabled);
 
         ///////////////////////////////////////////////////////////////////////
-        // Internal Interactions
+        // Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // 1. GkrXiSamplerInputBus
-        // 1a. Receive input from GkrInputAir
-        self.xi_sampler_input_bus.receive(
+        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        LoopSubAir {}.eval(
             builder,
-            local.proof_idx,
-            GkrXiSamplerInputMessage {
-                idx_start: local.xi_index,
-                num_challenges: local.num_challenges,
-                tidx: local.tidx,
-            },
-            local.is_first_row,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_enabled,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first_challenge],
+                    },
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_enabled,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first_challenge],
+                    },
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
         );
-        // 2. GkrXiSamplerOutputBus
-        // 2a. Send output to GkrInputAir
-        self.xi_sampler_output_bus.send(
+
+        let is_last_challenge = LoopSubAir::local_is_last(next.is_enabled, next.is_first_challenge);
+
+        // Challenge index increments by 1
+        builder
+            .when(local.is_enabled * (AB::Expr::ONE - is_last_challenge.clone()))
+            .assert_eq(next.challenge_idx, local.challenge_idx + AB::Expr::ONE);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Transition Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        builder
+            .when(local.is_enabled * (AB::Expr::ONE - is_last_challenge.clone()))
+            .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
+
+        ///////////////////////////////////////////////////////////////////////
+        // Module Interactions
+        ///////////////////////////////////////////////////////////////////////
+
+        // 1. GkrXiSamplerBus
+        // 1a. Receive input from GkrInputAir
+        self.xi_sampler_bus.receive(
             builder,
             local.proof_idx,
-            GkrXiSamplerOutputMessage {
+            GkrXiSamplerMessage {
+                challenge_idx: local.challenge_idx.into(),
+                tidx: local.tidx.into(),
+            },
+            local.is_enabled * local.is_first_challenge,
+        );
+        // 1b. Send output to GkrInputAir
+        self.xi_sampler_bus.send(
+            builder,
+            local.proof_idx,
+            GkrXiSamplerMessage {
+                challenge_idx: local.challenge_idx.into(),
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
             },
-            local.is_final_row,
+            local.is_enabled * is_last_challenge,
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -102,19 +137,14 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir {
         ///////////////////////////////////////////////////////////////////////
 
         // 1. TranscriptBus
-        // 1a. Send transcript message
-        for (j, value) in local.challenge.into_iter().enumerate() {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(j),
-                    value: value.into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_real,
-            );
-        }
+        // 1a. Sample challenge from transcript
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx,
+            local.challenge,
+            local.is_enabled,
+        );
 
         // 2. XiRandomnessBus
         // 2a. Send shared randomness
@@ -122,10 +152,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrXiSamplerAir {
             builder,
             local.proof_idx,
             XiRandomnessMessage {
-                idx: local.xi_index.into(),
+                idx: local.challenge_idx.into(),
                 challenge: local.challenge.map(Into::into),
             },
-            local.is_real,
+            local.is_enabled,
         );
     }
 }

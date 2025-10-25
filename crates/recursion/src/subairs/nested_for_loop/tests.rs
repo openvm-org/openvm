@@ -65,7 +65,7 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
 
         let io_width = size_of::<NestedForLoopIoCols<u8, DEPTH_MINUS_ONE>>();
         let (local_io, local_aux) = local.split_at(io_width);
-        let (next_io, next_aux) = next.split_at(io_width);
+        let (next_io, _next_aux) = next.split_at(io_width);
 
         let local_io: &NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE> = (*local_io).borrow();
         let next_io: &NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE> = (*next_io).borrow();
