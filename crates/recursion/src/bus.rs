@@ -153,7 +153,7 @@ define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintModuleMessage<T> {
     pub tidx_alpha_beta: T,
-    // TODO: can this be derived?
+    // TODO(ayush): can this be derived?
     pub tidx: T,
     pub n_max: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],

@@ -1,54 +1,50 @@
 use core::borrow::Borrow;
 
+use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra};
+use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{TranscriptBus, TranscriptBusMessage, XiRandomnessBus, XiRandomnessMessage},
-    gkr::{
-        bus::{
-            GkrSumcheckChallengeBus, GkrSumcheckChallengeMessage, GkrSumcheckInputBus,
-            GkrSumcheckInputMessage, GkrSumcheckOutputBus, GkrSumcheckOutputMessage,
-        },
-        sub_air::{
-            ExtFieldMultAuxCols, ExtFieldMultiplySubAir, InterpolateCubicAuxCols,
-            InterpolateCubicSubAir,
-        },
+    bus::{TranscriptBus, XiRandomnessBus, XiRandomnessMessage},
+    gkr::bus::{
+        GkrSumcheckChallengeBus, GkrSumcheckChallengeMessage, GkrSumcheckInputBus,
+        GkrSumcheckInputMessage, GkrSumcheckOutputBus, GkrSumcheckOutputMessage,
+    },
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    utils::{
+        assert_eq_array, assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply,
+        ext_field_one_minus, ext_field_subtract,
     },
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrLayerSumcheckCols<T> {
-    /// Is this row real (not padding)?
-    pub is_real: T,
+    pub is_enabled: T,
 
     pub proof_idx: T,
+    pub layer_idx: T,
 
-    /// GKR layer (corresponds to `round`)
-    pub layer: T,
-
-    /// Is final layer of GKR?
-    pub is_final_layer: T,
-
-    /// Transcript index
-    pub tidx_beg: T,
-
-    /// Sumcheck sub-round index within this layer (0..layer-1)
-    pub sumcheck_round: T,
-
-    /// sumcheck_round == 0?
+    pub is_layer_start: T,
     pub is_first_round: T,
 
-    /// Is last round of sumcheck?
-    pub is_final_round: T,
+    pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
+
+    pub is_last_layer: T,
+
+    /// Sumcheck sub-round index within this layer_idx (0..layer_idx-1)
+    // TODO(ayush): can probably remove round if XiRandomnessMessage takes tidx instead
+    pub round: T,
+
+    /// Transcript index
+    pub tidx: T,
 
     /// s(1) in extension field
     pub ev1: [T; D_EF],
@@ -62,8 +58,8 @@ pub struct GkrLayerSumcheckCols<T> {
     /// The claim going out of this sub-round (result of cubic interpolation)
     pub claim_out: [T; D_EF],
 
-    /// Component `sumcheck_round` of the original point ξ^{(j-1)}
-    /// (corresponding to `gkr_r[sumcheck_round]`)
+    /// Component `round` of the original point ξ^{(j-1)}
+    /// (corresponding to `gkr_r[round]`)
     pub prev_challenge: [T; D_EF],
     /// The sampled challenge for this sub-round (corresponds to `ri`)
     pub challenge: [T; D_EF],
@@ -72,11 +68,6 @@ pub struct GkrLayerSumcheckCols<T> {
     pub eq_in: [T; D_EF],
     /// The eq value going out (updated for this round)
     pub eq_out: [T; D_EF],
-
-    /// Auxiliary columns for cubic interpolation constraint
-    pub cubic_aux: InterpolateCubicAuxCols<T>,
-    /// Auxiliary columns for eq update (multiplication in extension field)
-    pub eq_mult_aux: ExtFieldMultAuxCols<T>,
 }
 
 pub struct GkrLayerSumcheckAir {
@@ -85,9 +76,6 @@ pub struct GkrLayerSumcheckAir {
     pub sumcheck_input_bus: GkrSumcheckInputBus,
     pub sumcheck_output_bus: GkrSumcheckOutputBus,
     pub sumcheck_challenge_bus: GkrSumcheckChallengeBus,
-
-    _cubic_interpolation: InterpolateCubicSubAir,
-    _ext_field_multiply: ExtFieldMultiplySubAir,
 }
 
 impl GkrLayerSumcheckAir {
@@ -104,8 +92,6 @@ impl GkrLayerSumcheckAir {
             sumcheck_input_bus,
             sumcheck_output_bus,
             sumcheck_challenge_bus,
-            _cubic_interpolation: InterpolateCubicSubAir,
-            _ext_field_multiply: ExtFieldMultiplySubAir,
         }
     }
 }
@@ -119,25 +105,109 @@ impl<F: Field> BaseAir<F> for GkrLayerSumcheckAir {
 impl<F: Field> BaseAirWithPublicValues<F> for GkrLayerSumcheckAir {}
 impl<F: Field> PartitionedBaseAir<F> for GkrLayerSumcheckAir {}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &GkrLayerSumcheckCols<AB::Var> = (*local).borrow();
-        let _next: &GkrLayerSumcheckCols<AB::Var> = (*next).borrow();
+        let next: &GkrLayerSumcheckCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Constraints
+        // Boolean Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // Boolean constraints
-        builder.assert_bool(local.is_real);
-        builder.assert_bool(local.is_final_layer);
-        builder.assert_bool(local.is_first_round);
-        builder.assert_bool(local.is_final_round);
+        builder.assert_bool(local.is_enabled);
 
         ///////////////////////////////////////////////////////////////////////
-        // Internal Interactions
+        // Loop Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        LoopSubAir {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_enabled,
+                        counter: [local.proof_idx, local.layer_idx],
+                        is_first: [local.is_layer_start, local.is_first_round],
+                    },
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_enabled,
+                        counter: [next.proof_idx, next.layer_idx],
+                        is_first: [next.is_layer_start, next.is_first_round],
+                    },
+                ),
+                local.nested_for_loop_aux_cols,
+            ),
+        );
+
+        let is_last_round = LoopSubAir::local_is_last(next.is_enabled, next.is_first_round);
+
+        // Sumcheck round flag starts at 0
+        builder.when(local.is_first_round).assert_zero(local.round);
+
+        // Sumcheck round flag increments by 1
+        builder
+            .when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone()))
+            .assert_eq(next.round, local.round + AB::Expr::ONE);
+
+        // Sumcheck round flag end
+        builder
+            .when(local.is_enabled * is_last_round.clone())
+            .assert_eq(local.round, local.layer_idx - AB::Expr::ONE);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Round Constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // Eq initialization: eq_in = 1 at first round
+        assert_one_ext(&mut builder.when(local.is_first_round), local.eq_in);
+
+        // Eq update: incrementally compute eq *= (xi * ri + (1-xi) * (1-ri))
+        let eq_out: [AB::Expr; D_EF] =
+            update_eq(local.eq_in, local.prev_challenge, local.challenge);
+        assert_eq_array(&mut builder.when(local.is_enabled), local.eq_out, eq_out);
+
+        // Eq propagation
+        assert_eq_array(
+            &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
+            local.eq_out,
+            next.eq_in,
+        );
+
+        // Compute s(0) = claim_in - s(1)
+        let ev0: [AB::Expr; D_EF] = ext_field_subtract(local.claim_in, local.ev1);
+
+        // Cubic interpolation: compute claim_out from polynomial evals at 0,1,2,3
+        let claim_out: [AB::Expr; D_EF] =
+            interpolate_cubic_at_0123(ev0, local.ev1, local.ev2, local.ev3, local.challenge);
+        assert_eq_array(
+            &mut builder.when(local.is_enabled),
+            local.claim_out,
+            claim_out,
+        );
+
+        // Claim propagation
+        assert_eq_array(
+            &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
+            local.claim_out,
+            next.claim_in,
+        );
+
+        // Transcript index increment
+        builder
+            .when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone()))
+            .assert_eq(
+                next.tidx,
+                local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
+            );
+
+        ///////////////////////////////////////////////////////////////////////
+        // Module Interactions
         ///////////////////////////////////////////////////////////////////////
 
         // 1. GkrSumcheckInputBus
@@ -146,11 +216,12 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir {
             builder,
             local.proof_idx,
             GkrSumcheckInputMessage {
-                layer: local.layer,
-                tidx: local.tidx_beg,
+                layer_idx: local.layer_idx,
+                is_last_layer: local.is_last_layer,
+                tidx: local.tidx,
                 claim: local.claim_in,
             },
-            local.is_first_round,
+            local.is_enabled * local.is_first_round,
         );
         // 2. GkrSumcheckOutputBus
         // 2a. Send output back to GkrLayerAir on final round
@@ -158,36 +229,36 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir {
             builder,
             local.proof_idx,
             GkrSumcheckOutputMessage {
-                layer: local.layer.into(),
-                tidx: local.tidx_beg.into() + AB::Expr::from_canonical_usize(4 * D_EF),
-                new_claim: local.claim_out.map(Into::into),
+                layer_idx: local.layer_idx.into(),
+                tidx: local.tidx.into() + AB::Expr::from_canonical_usize(4 * D_EF),
+                claim_out: local.claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_out.map(Into::into),
             },
-            local.is_final_round,
+            local.is_enabled * is_last_round,
         );
 
         // 3. GkrSumcheckChallengeBus
-        // 3a. Receive challenge from previous GKR layer sumcheck
+        // 3a. Receive challenge from previous GKR layer_idx sumcheck
         self.sumcheck_challenge_bus.receive(
             builder,
             local.proof_idx,
             GkrSumcheckChallengeMessage {
-                layer: local.layer - AB::Expr::ONE,
-                sumcheck_round: local.sumcheck_round.into(),
+                layer_idx: local.layer_idx - AB::Expr::ONE,
+                sumcheck_round: local.round.into(),
                 challenge: local.prev_challenge.map(Into::into),
             },
-            local.is_real,
+            local.is_enabled,
         );
-        // 3b. Send challenge to next GKR layer sumcheck for eq calculation
+        // 3b. Send challenge to next GKR layer_idx sumcheck for eq calculation
         self.sumcheck_challenge_bus.send(
             builder,
             local.proof_idx,
             GkrSumcheckChallengeMessage {
-                layer: local.layer.into(),
-                sumcheck_round: local.sumcheck_round.into() + AB::Expr::ONE,
+                layer_idx: local.layer_idx.into(),
+                sumcheck_round: local.round.into() + AB::Expr::ONE,
                 challenge: local.challenge.map(Into::into),
             },
-            local.is_real * (AB::Expr::ONE - local.is_final_layer),
+            local.is_enabled * (AB::Expr::ONE - local.is_last_layer),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -196,35 +267,25 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir {
 
         // 1. TranscriptBus
         // 1a. Observe evaluations
-        let mut tidx = local.tidx_beg.into();
+        let mut tidx = local.tidx.into();
         for eval in [local.ev1, local.ev2, local.ev3].into_iter() {
-            for (j, value) in eval.into_iter().enumerate() {
-                self.transcript_bus.receive(
-                    builder,
-                    local.proof_idx,
-                    TranscriptBusMessage {
-                        tidx: tidx.clone() + AB::Expr::from_canonical_usize(j),
-                        value: value.into(),
-                        is_sample: AB::Expr::ZERO,
-                    },
-                    local.is_real,
-                );
-            }
+            self.transcript_bus.observe_ext(
+                builder,
+                local.proof_idx,
+                tidx.clone(),
+                eval,
+                local.is_enabled,
+            );
             tidx += AB::Expr::from_canonical_usize(D_EF);
         }
         // 1b. Sample challenge `ri`
-        for (j, value) in local.challenge.into_iter().enumerate() {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: tidx.clone() + AB::Expr::from_canonical_usize(j),
-                    value: value.into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_real,
-            );
-        }
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            tidx,
+            local.challenge,
+            local.is_enabled,
+        );
 
         // 2. XiRandomnessBus
         // 2a. Send last challenge
@@ -232,10 +293,90 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrLayerSumcheckAir {
             builder,
             local.proof_idx,
             XiRandomnessMessage {
-                idx: local.sumcheck_round + AB::Expr::ONE,
+                idx: local.round + AB::Expr::ONE,
                 challenge: local.challenge.map(Into::into),
             },
-            local.is_final_layer,
+            local.is_enabled * local.is_last_layer,
         );
     }
+}
+
+/// Interpolates a cubic polynomial at a point using evaluations at 0, 1, 2, 3.
+///
+/// Given evaluations `claim_in, ev1, ev2, ev3` (where ev0 = claim_in - ev1) and a point `x`,
+/// computes `f(x)` using Lagrange interpolation optimized for these specific points.
+fn interpolate_cubic_at_0123<F, FA>(
+    ev0: [FA; D_EF],
+    ev1: [F; D_EF],
+    ev2: [F; D_EF],
+    ev3: [F; D_EF],
+    x: [F; D_EF],
+) -> [FA; D_EF]
+where
+    F: Into<FA> + Copy,
+    FA: FieldAlgebra,
+    FA::F: BinomiallyExtendable<D_EF>,
+{
+    let three: [FA; D_EF] = base_to_ext(FA::from_canonical_usize(3));
+    let inv2: [FA; D_EF] = base_to_ext(FA::from_f(FA::F::from_canonical_usize(2).inverse()));
+    let inv6: [FA; D_EF] = base_to_ext(FA::from_f(FA::F::from_canonical_usize(6).inverse()));
+
+    // s1 = ev1 - ev0
+    let s1: [FA; D_EF] = ext_field_subtract(ev1, ev0.clone());
+    // s2 = ev2 - ev0
+    let s2: [FA; D_EF] = ext_field_subtract(ev2, ev0.clone());
+    // s3 = ev3 - ev0
+    let s3: [FA; D_EF] = ext_field_subtract(ev3, ev0.clone());
+
+    // d3 = s3 - (s2 - s1) * 3
+    let d3: [FA; D_EF] = ext_field_subtract::<FA>(
+        s3,
+        ext_field_multiply::<FA>(ext_field_subtract::<FA>(s2.clone(), s1.clone()), three),
+    );
+
+    // p = d3 / 6
+    let p: [FA; D_EF] = ext_field_multiply(d3.clone(), inv6);
+
+    // q = (s2 - d3) / 2 - s1
+    let q: [FA; D_EF] = ext_field_subtract::<FA>(
+        ext_field_multiply::<FA>(ext_field_subtract::<FA>(s2, d3), inv2),
+        s1.clone(),
+    );
+
+    // r = s1 - p - q
+    let r: [FA; D_EF] = ext_field_subtract::<FA>(s1, ext_field_add::<FA>(p.clone(), q.clone()));
+
+    // result = ((p * x + q) * x + r) * x + ev0
+    ext_field_add::<FA>(
+        ext_field_multiply::<FA>(
+            ext_field_add::<FA>(
+                ext_field_multiply::<FA>(ext_field_add::<FA>(ext_field_multiply::<FA>(p, x), q), x),
+                r,
+            ),
+            x,
+        ),
+        ev0,
+    )
+}
+
+/// Updates the eq evaluation incrementally for one sumcheck round.
+///
+/// Computes: `eq_out = eq_in * (prev_challenge * challenge + (1 - prev_challenge) * (1 - challenge))`
+/// where `prev_challenge` is xi and `challenge` is ri.
+fn update_eq<F, FA>(eq_in: [F; D_EF], prev_challenge: [F; D_EF], challenge: [F; D_EF]) -> [FA; D_EF]
+where
+    F: Into<FA> + Copy,
+    FA: FieldAlgebra,
+    FA::F: BinomiallyExtendable<D_EF>,
+{
+    ext_field_multiply::<FA>(
+        eq_in,
+        ext_field_add::<FA>(
+            ext_field_multiply::<FA>(prev_challenge, challenge),
+            ext_field_multiply::<FA>(
+                ext_field_one_minus::<FA>(prev_challenge),
+                ext_field_one_minus::<FA>(challenge),
+            ),
+        ),
+    )
 }

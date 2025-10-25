@@ -5,12 +5,13 @@
 //! random point. This is done through a layer-by-layer recursive reduction, where each layer uses a
 //! sumcheck protocol.
 //!
-//! The GKR Air Module consists of four AIRs:
+//! The GKR Air Module verifies the [`GkrProof`](stark_backend_v2::proof::GkrProof) struct and
+//! consists of four AIRs:
 //!
-//! 1. **GkrInputAir** - Handles initial setup and coordinates other AIRs
-//! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction
-//! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer
-//! 4. **GkrXiSamplerAir** - Samples additional xi randomness challenges
+//! 1. **GkrInputAir** - Handles initial setup, coordinates other AIRs, and sends final claims to batch constraint module
+//! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction (verifies [`verify_gkr`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr))
+//! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer (verifies [`verify_gkr_sumcheck`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
+//! 4. **GkrXiSamplerAir** - Samples additional xi randomness challenges if required
 //!
 //! ## Architecture
 //!
@@ -20,11 +21,11 @@
 //!                                │ GkrXiSamplerAir │
 //!                                │                 │───────────────────► XiRandomnessBus
 //!                                └─────────────────┘
-//!                                      ▲      ┆
-//!                                      ┆      ┆
-//!                 GkrXiSamplerInputBus ┆      ┆ GkrXiSamplerOutputBus
-//!                                      ┆      ┆
-//!                                      ┆      ▼
+//!                                         ▲
+//!                                         ┆
+//!                         GkrXiSamplerBus ┆
+//!                                         ┆
+//!                                         ▼
 //!                                ┌─────────────────┐
 //!                                │                 │───────────────────► TranscriptBus
 //!                                │                 │
@@ -70,7 +71,7 @@ use stark_backend_v2::{
 
 use crate::{
     gkr::{
-        bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerInputBus, GkrXiSamplerOutputBus},
+        bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerBus},
         input::GkrInputAir,
         layer::GkrLayerAir,
         sumcheck::GkrLayerSumcheckAir,
@@ -87,12 +88,7 @@ pub use bus::{
     GkrSumcheckInputMessage, GkrSumcheckOutputBus, GkrSumcheckOutputMessage,
 };
 
-// Sub-AIRs
-pub mod sub_air;
-
 // Sub-modules for different AIRs
-// mod dummy;
-// TODO: rename to gkr dispatch?
 mod input;
 mod layer;
 mod sumcheck;
@@ -106,8 +102,7 @@ pub struct GkrModule {
     bus_inventory: BusInventory,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
     // Module buses
-    xi_sampler_input_bus: GkrXiSamplerInputBus,
-    xi_sampler_output_bus: GkrXiSamplerOutputBus,
+    xi_sampler_bus: GkrXiSamplerBus,
     layer_input_bus: GkrLayerInputBus,
     layer_output_bus: GkrLayerOutputBus,
     sumcheck_input_bus: GkrSumcheckInputBus,
@@ -132,8 +127,7 @@ impl GkrModule {
             sumcheck_input_bus: GkrSumcheckInputBus::new(b.new_bus_idx()),
             sumcheck_output_bus: GkrSumcheckOutputBus::new(b.new_bus_idx()),
             sumcheck_challenge_bus: GkrSumcheckChallengeBus::new(b.new_bus_idx()),
-            xi_sampler_input_bus: GkrXiSamplerInputBus::new(b.new_bus_idx()),
-            xi_sampler_output_bus: GkrXiSamplerOutputBus::new(b.new_bus_idx()),
+            xi_sampler_bus: GkrXiSamplerBus::new(b.new_bus_idx()),
         }
     }
 }
@@ -149,8 +143,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
             exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
             layer_input_bus: self.layer_input_bus,
             layer_output_bus: self.layer_output_bus,
-            xi_sampler_input_bus: self.xi_sampler_input_bus,
-            xi_sampler_output_bus: self.xi_sampler_output_bus,
+            xi_sampler_bus: self.xi_sampler_bus,
         };
 
         let gkr_layer_air = GkrLayerAir {
@@ -174,8 +167,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
         let gkr_xi_sampler_air = GkrXiSamplerAir {
             xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
-            xi_sampler_input_bus: self.xi_sampler_input_bus,
-            xi_sampler_output_bus: self.xi_sampler_output_bus,
+            xi_sampler_bus: self.xi_sampler_bus,
         };
 
         vec![
