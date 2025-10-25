@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.4.1-rc.3"
+version = "1.4.1-rc.5"
 edition = "2021"
 rust-version = "1.86.0"
 authors = ["OpenVM Authors"]
