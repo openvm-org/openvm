@@ -100,6 +100,10 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
         self.segmentation_limits.max_trace_height = max_trace_height;
     }
 
@@ -258,6 +262,10 @@ impl SegmentationCtx {
                 self.checkpoint_trace_heights.clone(),
             )
         } else {
+            tracing::warn!(
+                "No valid checkpoint, creating segment using instret={instret}, trace_heights={:?}",
+                trace_heights
+            );
             // No valid checkpoint, use current values
             (instret, trace_heights.to_vec())
         };
