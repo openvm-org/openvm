@@ -481,3 +481,36 @@ fn test_inner_proof_codec_roundtrip() -> eyre::Result<()> {
     verify_app_proof(&app_vk, &decoded_app_proof)?;
     Ok(())
 }
+
+#[test]
+fn test_execute_metered_cost_with_custom_max_cost() -> eyre::Result<()> {
+    setup_tracing();
+    let app_config = small_test_app_config(1);
+    let sdk = Sdk::new(app_config)?;
+    let exe = app_exe_for_test();
+
+    // Test with default max cost
+    let (public_values_default, (cost_default, instret_default)) = 
+        sdk.execute_metered_cost(exe.clone(), StdIn::default())?;
+    
+    // Test with custom max cost (should be the same as default for this simple program)
+    let (public_values_custom, (cost_custom, instret_custom)) = 
+        sdk.execute_metered_cost_with_max_cost(exe.clone(), StdIn::default(), None)?;
+    
+    // Results should be identical
+    assert_eq!(public_values_default, public_values_custom);
+    assert_eq!(cost_default, cost_custom);
+    assert_eq!(instret_default, instret_custom);
+
+    // Test with a higher max cost (should work normally)
+    let high_max_cost = cost_default * 2; // Use 200% of the normal cost
+    let (public_values_high, (cost_high, instret_high)) = 
+        sdk.execute_metered_cost_with_max_cost(exe, StdIn::default(), Some(high_max_cost))?;
+    
+    // With higher max cost, execution should work normally
+    assert_eq!(public_values_high, public_values_default);
+    assert_eq!(cost_high, cost_default);
+    assert_eq!(instret_high, instret_default);
+
+    Ok(())
+}
