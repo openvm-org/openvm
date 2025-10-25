@@ -17,7 +17,7 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
 
     let num_layers = if n_logup != 0 { n_logup + l_skip } else { 0 };
 
-    let tidx_start = preflight.proof_shape.post_tidx;
+    let tidx = preflight.proof_shape.post_tidx;
 
     let total_rounds = if num_layers != 0 {
         num_layers * (num_layers - 1) / 2
@@ -28,7 +28,7 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
 
     // Skip grinding nonce observe and grinding challenge sampling
     // Skip alpha_logup, beta_logup sampling
-    let mut tidx = tidx_start + 2 + 2 * D_EF;
+    let mut tidx = tidx + 2 + 2 * D_EF;
     let mut gkr_r: Vec<EF> = Vec::new();
     let mut row_idx = 0;
 
@@ -42,13 +42,22 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
             let row_data = &mut trace[offset..offset + width];
             let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
 
-            cols.is_real = F::ONE;
-            cols.layer = F::from_canonical_usize(layer_idx);
-            cols.is_final_layer = F::from_bool(layer_idx == num_layers - 1);
-            cols.sumcheck_round = F::from_canonical_usize(sumcheck_round);
+            cols.is_enabled = F::ONE;
+
+            cols.proof_idx = F::ZERO;
+            cols.is_layer_start = F::from_bool(layer_idx == 1 && sumcheck_round == 0);
+            cols.nested_for_loop_aux_cols.is_transition[0] =
+                F::from_bool((layer_idx != num_layers - 1) || (sumcheck_round != layer_idx - 1));
+
+            cols.layer_idx = F::from_canonical_usize(layer_idx);
             cols.is_first_round = F::from_bool(sumcheck_round == 0);
-            cols.is_final_round = F::from_bool(sumcheck_round == layer_idx - 1);
-            cols.tidx_beg = F::from_canonical_usize(tidx);
+            cols.is_last_layer = F::from_bool(layer_idx == num_layers - 1);
+
+            cols.round = F::from_canonical_usize(sumcheck_round);
+            cols.tidx = F::from_canonical_usize(tidx);
+
+            // Get precomputed claim_in, claim_out, eq_in, eq_out from preflight
+            let round_data = &preflight.gkr.sumcheck_round_data[row_idx];
 
             // Get the evaluations s(1), s(2), s(3) from the proof
             let poly = &gkr_proof.sumcheck_polys[layer_idx - 1][sumcheck_round];
@@ -65,8 +74,6 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
 
             cols.prev_challenge = prev_challenge.as_base_slice().try_into().unwrap();
 
-            // Get precomputed claim_in, claim_out, eq_in, eq_out from preflight
-            let round_data = &preflight.gkr.sumcheck_round_data[row_idx];
             debug_assert_eq!(round_data.0, layer_idx, "layer_idx mismatch");
             debug_assert_eq!(round_data.1, sumcheck_round, "sumcheck_round mismatch");
             cols.claim_in = round_data.2.as_base_slice().try_into().unwrap();
@@ -85,6 +92,12 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
         tidx += D_EF;
 
         gkr_r = std::iter::once(mu).chain(gkr_r_prime).collect();
+    }
+
+    // Fill padding rows
+    for row_data in trace.chunks_mut(width).skip(row_idx) {
+        let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
+        cols.proof_idx = F::ONE;
     }
 
     RowMajorMatrix::new(trace, width)
