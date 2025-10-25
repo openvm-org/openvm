@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
-pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
-pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
+pub const DEFAULT_MAX_TRACE_HEIGHT_BITS: u8 = 22;
+pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
+pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
@@ -99,6 +100,10 @@ impl SegmentationCtx {
     }
 
     pub fn set_max_trace_height(&mut self, max_trace_height: u32) {
+        debug_assert!(
+            max_trace_height.is_power_of_two(),
+            "max_trace_height should be a power of two"
+        );
         self.segmentation_limits.max_trace_height = max_trace_height;
     }
 
@@ -257,6 +262,10 @@ impl SegmentationCtx {
                 self.checkpoint_trace_heights.clone(),
             )
         } else {
+            tracing::warn!(
+                "No valid checkpoint, creating segment using instret={instret}, trace_heights={:?}",
+                trace_heights
+            );
             // No valid checkpoint, use current values
             (instret, trace_heights.to_vec())
         };

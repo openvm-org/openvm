@@ -7,10 +7,14 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## v1.4.1 (Unreleased)
 
+### Added
+- (CLI) Add configurable segmentation arguments to `cargo openvm prove` commands.
+
 ### Changed
 - (Toolchain) Update `cargo openvm build` to use Rust nightly version `nightly-2025-08-02`.
 - (Primitives Library) Fix in `openvm-algebra-complex-macros` to ensure `const` byte arrays have proper memory alignment.
 - (Executor) Modified `VirtualMachine::build_metered_ctx` to take the program (`&VmExe<Val<E::SC>>`) as an argument.
+- (Prover/Executor) Changed default segmentation limits.
 
 ## v1.4.0 (2025-09-01)
 
