@@ -7,6 +7,7 @@ edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
+links = "circuit-primitives-cuda"
 
 [dependencies]
 openvm-stark-backend = { workspace = true }
