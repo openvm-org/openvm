@@ -1494,4 +1494,3 @@ mod vm_metrics {
         }
     }
 }
-
