@@ -1167,7 +1167,7 @@ fn test_vm_execute_metered_cost_halt() {
             cost1,
             vm_state1,
             config.clone(),
-            None::<VmState<F>>
+            None::<VmState<F>>,
         );
         let (aot_cost2, _aot_vm_state2) = run_aot_metered_cost_and_compare(
             &vm,
@@ -1178,7 +1178,7 @@ fn test_vm_execute_metered_cost_halt() {
             cost2,
             vm_state2,
             config.clone(),
-            None::<VmState<F>>
+            None::<VmState<F>>,
         );
         let (aot_cost3, _aot_vm_state3) = run_aot_metered_cost_and_compare(
             &vm,
@@ -1189,7 +1189,7 @@ fn test_vm_execute_metered_cost_halt() {
             cost3,
             vm_state3,
             config.clone(),
-            None::<VmState<F>>
+            None::<VmState<F>>,
         );
 
         assert!(aot_cost2 < aot_cost1);
