@@ -65,6 +65,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     phantom: PhantomData<&'a ()>,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
 pub struct PreComputeInstruction<'a, F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,
@@ -385,6 +386,13 @@ where
             exec_state,
             ExecutionCtx
         );
+
+        println!("instret: {}", exec_state.vm_state.instret());
+        println!("pc: {}", exec_state.vm_state.pc());
+        println!("interpreter exit code {:?}", exec_state.exit_code);
+        println!("instret_end {:?}", instret_end);
+        println!("num_insns {:?}", num_insns);
+
         if num_insns.is_some() {
             check_exit_code(exec_state.exit_code)?;
         } else {
@@ -572,6 +580,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         .is_ok_and(|exit_code| exit_code.is_none())
     {
         if Ctx::should_suspend(instret, pc, arg, exec_state) {
+            println!("stop because of should_suspend\n");
             break;
         }
         let pc_index = get_pc_index(pc);
@@ -583,6 +592,9 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
             exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
         }
     }
+
+    println!("instret {} pc {}", instret, pc);
+
     // Update the execution state with the final PC and instruction count
     exec_state.set_instret_and_pc(instret, pc);
 }

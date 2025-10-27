@@ -199,7 +199,7 @@ where
     /// this function executes the program until termination
     /// Returns the final VM state when execution stops.
     pub fn execute(
-        &mut self,
+        &self,
         inputs: impl Into<Streams<F>>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
@@ -216,7 +216,7 @@ where
     // Runs for `num_insns` instructions if `num_insns` is not None
     // Otherwise executes until termination
     pub fn execute_from_state(
-        &mut self,
+        &self,
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
@@ -458,7 +458,7 @@ where
     ///
     /// Assumes the program doesn't jump to out of bounds pc
     pub fn execute_metered(
-        &mut self,
+        &self,
         inputs: impl Into<Streams<F>>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
