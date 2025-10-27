@@ -82,11 +82,11 @@ where
             .parent()
             .unwrap();
 
-        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
+        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("../asm/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
         // ar rcs libasm_runtime.a asm_run.o
-        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime
+        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/../asm/asm_bridge -l static=asm_runtime
 
         // run the below command from the `src_asm_bridge_dir` directory
         // as src/asm_run.s -o asm_run.o
@@ -292,7 +292,7 @@ where
         E: MeteredExecutor<F>,
     {
         let default_name = String::from("asm_x86_run");
-        let src_asm_bridge_dir_str = String::from("src/arch/asm_bridge_metered");
+        let src_asm_bridge_dir_str = String::from("../asm/asm_bridge_metered");
         let asm_so_str = String::from("libasm_bridge_metered.so");
         Self::new_metered_generic_with_asm_name(
             inventory,
@@ -313,7 +313,7 @@ where
         E: MeteredExecutor<F>,
     {
         let default_name = String::from("asm_x86_run");
-        let src_asm_bridge_dir_str = String::from("src/arch/asm_bridge_metered_cost");
+        let src_asm_bridge_dir_str = String::from("../asm/asm_bridge_metered_cost");
         let asm_so_str = String::from("libasm_bridge_metered_cost.so");
         Self::new_metered_generic_with_asm_name(
             inventory,

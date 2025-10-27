@@ -14,12 +14,16 @@ use openvm_circuit::{
     system::SystemExecutor,
     utils::air_test,
 };
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{aot::AotInstance, execution_mode::ExecutionCtx};
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImBuilder, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
