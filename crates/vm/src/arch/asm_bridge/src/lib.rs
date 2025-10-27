@@ -113,9 +113,6 @@ pub extern "C" fn extern_handler(
         );
     };
 
-    let vm_exec_state_ref =
-        unsafe { &*(vm_exec_state_ptr as *const VmExecState<F, GuestMemory, Ctx>) };
-
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
             // execution continues
