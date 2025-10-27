@@ -72,13 +72,18 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
 
         if DEPTH_MINUS_TWO > 0 {
             let local_aux: &NestedForLoopAuxCols<AB::Var, DEPTH_MINUS_TWO> = (*local_aux).borrow();
-            NestedForLoopSubAir::<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>
-                .eval(builder, ((*local_io, *next_io), *local_aux));
+            NestedForLoopSubAir::<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>.eval(
+                builder,
+                (
+                    (local_io.map_into(), next_io.map_into()),
+                    local_aux.map_into(),
+                ),
+            );
         } else {
             NestedForLoopSubAir::<DEPTH_MINUS_ONE, 0>.eval(
                 builder,
                 (
-                    (*local_io, *next_io),
+                    (local_io.map_into(), next_io.map_into()),
                     NestedForLoopAuxCols { is_transition: [] },
                 ),
             );
