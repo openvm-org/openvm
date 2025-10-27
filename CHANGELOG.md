@@ -7,7 +7,7 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
-## v1.4.1 (TBD)
+## v1.4.1 (2025-10-26)
 
 ### Added
 - (CLI) Add configurable segmentation arguments to `cargo openvm prove` commands.
