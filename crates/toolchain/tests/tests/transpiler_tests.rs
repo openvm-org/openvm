@@ -8,14 +8,14 @@ use num_bigint::BigUint;
 use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{aot::AotInstance, execution_mode::ExecutionCtx};
 use openvm_circuit::{
     arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
     system::SystemExecutor,
     utils::air_test,
 };
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::{aot::AotInstance, execution_mode::ExecutionCtx};
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
