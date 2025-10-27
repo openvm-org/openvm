@@ -5,6 +5,8 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(format = "aot")]
+use openvm_circuit::arch::execution_mode::metered_cost::MeteredCostCtx;
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::VmState;
 #[cfg(feature = "cuda")]
@@ -13,10 +15,7 @@ use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 use openvm_circuit::{arch::RowMajorMatrixArena, system::SystemCpuBuilder as SystemBuilder};
 use openvm_circuit::{
     arch::{
-        execution_mode::{
-            metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
-            metered_cost::MeteredCostCtx,
-        },
+        execution_mode::metered::segment_ctx::{SegmentationLimits, DEFAULT_SEGMENT_CHECK_INSNS},
         hasher::{poseidon2::vm_poseidon2_hasher, Hasher},
         verify_segments, verify_single, AirInventory, ContinuationVmProver,
         PreflightExecutionOutput, SingleSegmentVmProver, VirtualMachine, VmCircuitConfig,
