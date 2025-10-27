@@ -24,6 +24,19 @@ pub struct NestedForLoopIoCols<T, const DEPTH_MINUS_ONE: usize> {
     pub is_first: [T; DEPTH_MINUS_ONE],
 }
 
+impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopIoCols<T, DEPTH_MINUS_ONE> {
+    pub fn map_into<S>(self) -> NestedForLoopIoCols<S, DEPTH_MINUS_ONE>
+    where
+        T: Into<S>,
+    {
+        NestedForLoopIoCols {
+            is_enabled: self.is_enabled.into(),
+            counter: self.counter.map(Into::into),
+            is_first: self.is_first.map(Into::into),
+        }
+    }
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 pub struct NestedForLoopAuxCols<T, const DEPTH_MINUS_TWO: usize> {
@@ -33,16 +46,27 @@ pub struct NestedForLoopAuxCols<T, const DEPTH_MINUS_TWO: usize> {
     pub is_transition: [T; DEPTH_MINUS_TWO],
 }
 
+impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopAuxCols<T, DEPTH_MINUS_ONE> {
+    pub fn map_into<S>(self) -> NestedForLoopAuxCols<S, DEPTH_MINUS_ONE>
+    where
+        T: Into<S>,
+    {
+        NestedForLoopAuxCols {
+            is_transition: self.is_transition.map(Into::into),
+        }
+    }
+}
+
 impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize> SubAir<AB>
     for NestedForLoopSubAir<DEPTH_MINUS_ONE, DEPTH_MINUS_TWO>
 {
     type AirContext<'a>
         = (
         (
-            NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE>,
-            NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE>,
+            NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
+            NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
         ),
-        NestedForLoopAuxCols<AB::Var, DEPTH_MINUS_TWO>,
+        NestedForLoopAuxCols<AB::Expr, DEPTH_MINUS_TWO>,
     )
     where
         AB: 'a,
@@ -59,16 +83,16 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
         let ((local_io, next_io), local_aux) = ctx;
 
         for level in 0..DEPTH_MINUS_ONE {
-            let counter_diff = next_io.counter[level] - local_io.counter[level];
-            let local_is_first = local_io.is_first[level];
-            let next_is_first = next_io.is_first[level];
+            let counter_diff = next_io.counter[level].clone() - local_io.counter[level].clone();
+            let local_is_first = local_io.is_first[level].clone();
+            let next_is_first = next_io.is_first[level].clone();
 
             // First row constraint
             let mut builder_when_first_row = if level == 0 {
                 builder.when_first_row()
             } else {
                 let parent_level = level - 1;
-                let parent_is_first = local_io.is_first[parent_level];
+                let parent_is_first = local_io.is_first[parent_level].clone();
                 builder.when(parent_is_first)
             };
             self.eval_first_row(&mut builder_when_first_row, &local_io, local_is_first);
@@ -78,31 +102,31 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
                 builder.when_transition()
             } else {
                 let parent_level = level - 1;
-                let parent_next_is_first = next_io.is_first[parent_level];
+                let parent_next_is_first = next_io.is_first[parent_level].clone();
                 let parent_is_transition: AB::Expr =
-                    Self::local_is_transition(next_io.is_enabled, parent_next_is_first);
+                    Self::local_is_transition(next_io.is_enabled.clone(), parent_next_is_first);
 
                 // Constrain is_transition[parent_level] to equal the calculated parent_is_transition
                 builder.assert_eq(
-                    local_aux.is_transition[parent_level],
+                    local_aux.is_transition[parent_level].clone(),
                     parent_is_transition.clone(),
                 );
 
-                builder.when(local_aux.is_transition[parent_level])
+                builder.when(local_aux.is_transition[parent_level].clone())
             };
             self.eval_transition(
                 &mut builder_when_transition,
                 &local_io,
                 &next_io,
-                next_is_first,
+                next_is_first.clone(),
                 counter_diff.clone(),
             );
 
             // At Loop Boundaries (Δcounter ≠ 0)
             builder
                 .when(counter_diff)
-                .when(next_io.is_enabled)
-                .assert_one(next_is_first);
+                .when(next_io.is_enabled.clone())
+                .assert_one(next_is_first.clone());
         }
     }
 }
@@ -116,10 +140,12 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     fn eval_first_row<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local_io: &NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE>,
-        local_is_first: AB::Var,
+        local_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
+        local_is_first: AB::Expr,
     ) {
-        builder.when(local_io.is_enabled).assert_one(local_is_first);
+        builder
+            .when(local_io.is_enabled.clone())
+            .assert_one(local_is_first);
     }
 
     /// Evaluates transition constraints for a loop level.
@@ -131,9 +157,9 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     fn eval_transition<AB: AirBuilder>(
         &self,
         builder: &mut AB,
-        local_io: &NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE>,
-        next_io: &NestedForLoopIoCols<AB::Var, DEPTH_MINUS_ONE>,
-        next_is_first: AB::Var,
+        local_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
+        next_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
+        next_is_first: AB::Expr,
         counter_diff: AB::Expr,
     ) {
         // 1. Base Constraint: `counter[level]` increments by 0 or 1
@@ -142,12 +168,12 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
         // 2. Within Loop (Δcounter ≠ 1): Enabled state consistency
         builder
             .when_ne(counter_diff.clone(), AB::Expr::ONE)
-            .assert_eq(local_io.is_enabled, next_io.is_enabled);
+            .assert_eq(local_io.is_enabled.clone(), next_io.is_enabled.clone());
 
         // 3. Within Loop (Δcounter ≠ 1): `is_first` not set within iteration
         builder
             .when_ne(counter_diff, AB::Expr::ONE)
-            .when(local_io.is_enabled)
+            .when(local_io.is_enabled.clone())
             .assert_zero(next_is_first);
     }
 

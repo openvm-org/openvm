@@ -134,14 +134,16 @@ where
                         is_enabled: local.is_enabled,
                         counter: [local.proof_idx, local.layer_idx],
                         is_first: [local.is_layer_start, local.is_first_round],
-                    },
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_enabled,
                         counter: [next.proof_idx, next.layer_idx],
                         is_first: [next.is_layer_start, next.is_first_round],
-                    },
+                    }
+                    .map_into(),
                 ),
-                local.nested_for_loop_aux_cols,
+                local.nested_for_loop_aux_cols.map_into(),
             ),
         );
 
