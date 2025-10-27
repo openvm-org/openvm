@@ -1,4 +1,5 @@
 use core::borrow::Borrow;
+use std::convert::Into;
 
 use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
@@ -80,12 +81,14 @@ where
                         is_enabled: local.is_enabled,
                         counter: [local.proof_idx],
                         is_first: [local.is_first_challenge],
-                    },
+                    }
+                    .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_enabled,
                         counter: [next.proof_idx],
                         is_first: [next.is_first_challenge],
-                    },
+                    }
+                    .map_into(),
                 ),
                 NestedForLoopAuxCols { is_transition: [] },
             ),
