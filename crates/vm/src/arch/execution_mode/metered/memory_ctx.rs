@@ -2,6 +2,7 @@ use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGI
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
+#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct BitSet {
     words: Box<[u64]>,
@@ -96,6 +97,7 @@ impl BitSet {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,

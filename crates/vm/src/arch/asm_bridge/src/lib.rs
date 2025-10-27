@@ -71,6 +71,10 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
+    // if cur_instret <= 1000 {
+    //     println!("extern_handler is called with instret {} pc {} vm_exec_state_ptr {:p} pre_compute_insns_ptr {:p}", cur_instret, cur_pc, vm_exec_state_ptr, pre_compute_insns_ptr);
+    // }
+
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
@@ -92,6 +96,13 @@ pub extern "C" fn extern_handler(
     // - For pure execution it is `instret_end`
     let arg = ctx.instret_end;
 
+    // if cur_instret <= 1000 {
+    //     println!("[AT CALL]: vm_exec_state_ptr valid? {:p}", vm_exec_state_ptr);
+    //     println!("[AT CALL] Address of exit_code field: {:p}", &vm_exec_state_ref.exit_code as *const _);
+    //     println!("[AT CALL] Address of ctx field: {:p}", &vm_exec_state_ref.ctx as *const _);
+    //     println!("[AT CALL] Address of vm_state field: {:p}", &vm_exec_state_ref.vm_state as *const _);
+    // }
+
     unsafe {
         (pre_compute_insns.handler)(
             pre_compute_insns.pre_compute,
@@ -101,6 +112,9 @@ pub extern "C" fn extern_handler(
             vm_exec_state_ref,
         );
     };
+
+    let vm_exec_state_ref =
+        unsafe { &*(vm_exec_state_ptr as *const VmExecState<F, GuestMemory, Ctx>) };
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => {

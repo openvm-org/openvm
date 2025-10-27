@@ -65,6 +65,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     phantom: PhantomData<&'a ()>,
 }
 
+#[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
 pub struct PreComputeInstruction<'a, F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,

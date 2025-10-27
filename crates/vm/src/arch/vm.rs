@@ -106,6 +106,7 @@ impl KvStore for HashMap<Vec<u8>, Vec<u8>> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone)]
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,

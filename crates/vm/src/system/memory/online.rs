@@ -144,6 +144,7 @@ pub trait LinearMemory {
 /// address space has memory cells of a fixed type (e.g., `u8, F`). We do not use a typemap for
 /// performance reasons, and it is up to the user to enforce types. Needless to say, this is a very
 /// `unsafe` API.
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     /// Underlying memory data.
@@ -286,6 +287,7 @@ impl<M: LinearMemory> AddressMap<M> {
 /// API for guest memory conforming to OpenVM ISA
 // @dev Note we don't make this a trait because phantom executors currently need a concrete type for
 // guest memory
+#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct GuestMemory {
     pub memory: AddressMap,

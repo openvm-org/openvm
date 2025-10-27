@@ -9,6 +9,7 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << 23;
 pub const DEFAULT_MAX_CELLS: usize = 2_000_000_000; // 2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
+#[repr(C)]
 #[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub instret_start: u64,
@@ -16,6 +17,7 @@ pub struct Segment {
     pub trace_heights: Vec<u32>,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, WithSetters)]
 pub struct SegmentationLimits {
     #[getset(set_with = "pub")]
@@ -36,6 +38,7 @@ impl Default for SegmentationLimits {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
