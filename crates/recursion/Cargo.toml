@@ -17,11 +17,12 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-poseidon2-air = { workspace = true }
 tracing = { workspace = true }
 eyre = { workspace = true }
 
 [dev-dependencies]
-stark-backend-v2 = { workspace = true, features = ["test-utils"]}
+stark-backend-v2 = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel"]
