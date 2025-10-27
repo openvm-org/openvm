@@ -406,6 +406,7 @@ impl AsMut<SystemConfig> for SystemConfig {
 // Default implementation uses no init file
 impl InitFileGenerator for SystemConfig {}
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, new)]
 pub struct AddressSpaceHostConfig {
     /// The number of memory cells in each address space, where a memory cell refers to a single
@@ -428,6 +429,7 @@ impl AddressSpaceHostConfig {
 
 pub(crate) const MAX_CELL_BYTE_SIZE: usize = 8;
 
+#[repr(C)]
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryCellType {
     Null,

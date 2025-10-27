@@ -124,11 +124,13 @@ impl<F: Clone> VmState<F, GuestMemory> {
 // @dev: Do not confuse with `ExecutionState` struct.
 #[repr(C)]
 pub struct VmExecState<F, MEM, CTX> {
+    pub exit_code: Result<Option<u32>, ExecutionError>,  
+
+    pub ctx: CTX,
+    
     /// Core VM state
     pub vm_state: VmState<F, MEM>,
-    /// Execution-specific fields
-    pub exit_code: Result<Option<u32>, ExecutionError>,
-    pub ctx: CTX,
+
 }
 
 impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {

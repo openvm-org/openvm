@@ -1,11 +1,12 @@
 use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtx, interpreter::PreComputeInstruction, VmExecState},
+    arch::{execution_mode::ExecutionCtx, interpreter::PreComputeInstruction, VmExecState, VmState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use std::mem::offset_of;
 
 extern "C" {
     fn asm_run_internal(
@@ -31,6 +32,8 @@ pub unsafe extern "C" fn asm_run(
     from_state_pc: u32,
     from_state_instret: u64,
 ) {
+    println!("asm_run is called with from_state_pc {} from_state_instret {}", from_state_pc, from_state_instret);
+
     asm_run_internal(
         vm_exec_state_ptr,
         pre_compute_insns_ptr,
@@ -51,9 +54,12 @@ pub extern "C" fn set_instret_and_pc(
     final_pc: u32,                         // rdx = final_pc
     final_instret: u64,                    // rcx = final_instret
 ) {
+    println!("set_instret_and_pc is called with final_pc {} final_instret {} vm_exec_state_ptr {:p} _pre_compute_insns_ptr {:p}", final_pc, final_instret, vm_exec_state_ptr, _pre_compute_insns_ptr);
+
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+
     vm_exec_state_ref
         .vm_state
         .set_instret_and_pc(final_instret, final_pc);
@@ -71,6 +77,10 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
+    if cur_instret <= 1000 {
+        println!("extern_handler is called with instret {} pc {} vm_exec_state_ptr {:p} pre_compute_insns_ptr {:p}", cur_instret, cur_pc, vm_exec_state_ptr, pre_compute_insns_ptr);
+    }
+
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
@@ -92,6 +102,13 @@ pub extern "C" fn extern_handler(
     // - For pure execution it is `instret_end`
     let arg = ctx.instret_end;
 
+    if cur_instret <= 1000 {
+        println!("[AT CALL]: vm_exec_state_ptr valid? {:p}", vm_exec_state_ptr);
+        println!("[AT CALL] Address of exit_code field: {:p}", &vm_exec_state_ref.exit_code as *const _);
+        println!("[AT CALL] Address of ctx field: {:p}", &vm_exec_state_ref.ctx as *const _);
+        println!("[AT CALL] Address of vm_state field: {:p}", &vm_exec_state_ref.vm_state as *const _);
+    }
+
     unsafe {
         (pre_compute_insns.handler)(
             pre_compute_insns.pre_compute,
@@ -102,6 +119,9 @@ pub extern "C" fn extern_handler(
         );
     };
 
+    let vm_exec_state_ref =
+        unsafe { &*(vm_exec_state_ptr as *const VmExecState<F, GuestMemory, Ctx>) };
+    
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
             // execution continues
@@ -117,11 +137,17 @@ pub extern "C" fn extern_handler(
 
 #[no_mangle]
 pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+    // println!("should_suspend is called with instret {} pc {} exec_state_ptr {:p}", instret, _pc, exec_state_ptr);
+
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
     let instret_end = vm_exec_state_ref.ctx.instret_end;
+
+    // println!("instret {}", instret);
+    // println!("instret_end {}", instret_end);
+    // println!("pc at vm_state {}", vm_exec_state_ref.vm_state.pc());
 
     if instret >= instret_end {
         1 // should suspend is `true`

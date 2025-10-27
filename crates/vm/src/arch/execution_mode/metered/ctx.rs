@@ -18,6 +18,7 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
+#[repr(C)]
 #[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: Vec<u32>,

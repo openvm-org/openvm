@@ -221,12 +221,20 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+        println!("execute_from_state called\n");
+
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
+
+        println!("[BEFORE CALL] Address of exit_code field: {:p}", &vm_exec_state.exit_code as *const _);
+        println!("[BEFORE CALL] Address of ctx field: {:p}", &vm_exec_state.ctx as *const _);
+
+        println!("[BEFORE CALL] Address of vm_state field: {:p}", &vm_exec_state.vm_state as *const _);
+
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
@@ -245,14 +253,21 @@ where
                 from_state_instret,
             );
         }
+        
+        println!("asm_run exited\n");
+
+        println!("pc: {}", (*vm_exec_state).vm_state.pc());
+        println!("instret: {}", (*vm_exec_state).vm_state.instret());
 
         if num_insns.is_some() {
-            check_exit_code(vm_exec_state.exit_code)?;
+            check_exit_code((*vm_exec_state).exit_code)?;
         } else {
-            check_termination(vm_exec_state.exit_code)?;
+            check_termination((*vm_exec_state).exit_code)?;
         }
 
-        Ok(vm_exec_state.vm_state)
+        println!("execute_from_state exited\n");
+
+        Ok((*vm_exec_state).vm_state)
     }
 }
 
@@ -270,6 +285,7 @@ fn check_exit_code(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(),
 
 /// Same as [check_exit_code] but errors if program did not terminate.
 fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(), ExecutionError> {
+    println!("exit_code: {:?}", exit_code);
     let did_terminate = matches!(exit_code.as_ref(), Ok(Some(_)));
     check_exit_code(exit_code)?;
     match did_terminate {
@@ -447,6 +463,7 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+        
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
 
@@ -474,12 +491,10 @@ where
         // handle execution error
         match vm_exec_state.exit_code {
             Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.ctx.into_segments(),
                 vm_exec_state.vm_state,
             )),
             Err(e) => Err(e),
         }
     }
-
-    // TODO: implement execute_metered_until_suspend for AOT if needed
 }

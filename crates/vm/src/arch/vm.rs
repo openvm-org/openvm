@@ -106,6 +106,7 @@ impl KvStore for HashMap<Vec<u8>, Vec<u8>> {
     }
 }
 
+#[repr(C)]
 #[derive(Clone)]
 pub struct Streams<F> {
     pub input_stream: VecDeque<Vec<F>>,
@@ -242,7 +243,7 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        println!("aot instance called yay");
+        println!("aot-stable instance called yay");
         Self::aot_instance(&self, exe)
     }
 
