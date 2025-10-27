@@ -13,7 +13,7 @@ use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
+        CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus, Poseidon2Bus,
         PublicValuesBus, StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus,
         WhirOpeningPointBus, XiRandomnessBus,
     },
@@ -59,6 +59,7 @@ impl BusIndexManager {
 pub struct BusInventory {
     // Control flow buses
     pub transcript_bus: TranscriptBus,
+    pub poseidon2_bus: Poseidon2Bus,
     pub gkr_module_bus: GkrModuleBus,
     pub bc_module_bus: BatchConstraintModuleBus,
     pub stacking_module_bus: StackingModuleBus,
@@ -165,6 +166,7 @@ impl BusInventory {
     fn new(b: &mut BusIndexManager) -> Self {
         Self {
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
+            poseidon2_bus: Poseidon2Bus::new(b.new_bus_idx()),
 
             // Control flow buses
             gkr_module_bus: GkrModuleBus::new(b.new_bus_idx()),

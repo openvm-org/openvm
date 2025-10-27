@@ -1,3 +1,4 @@
+use openvm_poseidon2_air::POSEIDON2_WIDTH;
 use openvm_stark_backend::interaction::InteractionBuilder;
 use p3_field::FieldAlgebra;
 use stark_backend_v2::{D_EF, DIGEST_SIZE};
@@ -305,6 +306,15 @@ impl TranscriptBus {
         }
     }
 }
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct Poseidon2BusMessage<T> {
+    pub input: [T; POSEIDON2_WIDTH],
+    pub output: [T; POSEIDON2_WIDTH],
+}
+
+define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

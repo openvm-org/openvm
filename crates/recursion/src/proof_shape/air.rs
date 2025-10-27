@@ -742,29 +742,29 @@ where
             .when(and(local.is_first, local.is_valid))
             .assert_one(cidx.clone());
 
-        self.commitments_bus.send(
-            builder,
-            local.proof_idx,
-            CommitmentsBusMessage {
-                major_idx: AB::Expr::ZERO,
-                minor_idx: cidx.clone(),
-                commitment: preprocessed_commit,
-            },
-            has_preprocessed.clone() * local.is_valid,
-        );
+        // self.commitments_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     CommitmentsBusMessage {
+        //         major_idx: AB::Expr::ZERO,
+        //         minor_idx: cidx.clone(),
+        //         commitment: preprocessed_commit,
+        //     },
+        //     has_preprocessed.clone() * local.is_valid,
+        // );
 
         cidx += has_preprocessed.clone();
         (0..self.max_cached).for_each(|cached_idx| {
-            self.commitments_bus.send(
-                builder,
-                local.proof_idx,
-                CommitmentsBusMessage {
-                    major_idx: AB::Expr::ZERO,
-                    minor_idx: cidx.clone(),
-                    commitment: localv.cached_commits[cached_idx].map(Into::into),
-                },
-                cached_present[cached_idx].clone() * local.is_valid,
-            );
+            // self.commitments_bus.send(
+            //     builder,
+            //     local.proof_idx,
+            //     CommitmentsBusMessage {
+            //         major_idx: AB::Expr::ZERO,
+            //         minor_idx: cidx.clone(),
+            //         commitment: localv.cached_commits[cached_idx].map(Into::into),
+            //     },
+            //     cached_present[cached_idx].clone() * local.is_valid,
+            // );
             cidx += cached_present[cached_idx].clone();
         });
 
@@ -772,16 +772,16 @@ where
             .when(and(local.is_valid, not(next.is_last)))
             .assert_eq(cidx, next.starting_cidx);
 
-        self.commitments_bus.send(
-            builder,
-            local.proof_idx,
-            CommitmentsBusMessage {
-                major_idx: AB::Expr::ZERO,
-                minor_idx: AB::Expr::ZERO,
-                commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),
-            },
-            is_min_cached.clone() * local.is_valid,
-        );
+        // self.commitments_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     CommitmentsBusMessage {
+        //         major_idx: AB::Expr::ZERO,
+        //         minor_idx: AB::Expr::ZERO,
+        //         commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),
+        //     },
+        //     is_min_cached.clone() * local.is_valid,
+        // );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // NUM PUBLIC VALUES

@@ -104,12 +104,13 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
             local.whir_module_msg.clone(),
             local.is_first_round,
         );
-        self.commitments_bus.send(
-            builder,
-            local.proof_idx,
-            local.commitments_bus_msg.clone(),
-            local.has_commitments_bus_msg,
-        );
+        // TODO: we will have to materialize the merkle proofs instead of only sending commitments
+        // self.commitments_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     local.commitments_bus_msg.clone(),
+        //     local.has_commitments_bus_msg,
+        // );
 
         self.sumcheck_bus.send(
             builder,
