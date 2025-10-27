@@ -1091,7 +1091,7 @@ fn test_vm_execute_metered_cost_native_chips() {
             cost,
             vm_state,
             config.clone(),
-            None::<VmState<F>>
+            None::<VmState<F>>,
         );
     }
 }
@@ -1254,7 +1254,7 @@ fn test_vm_execute_metered_cost_resume_parity() {
             cost_suspend_interp,
             vm_state_suspend_interp,
             config.clone(),
-            None::<VmState<F>>
+            None::<VmState<F>>,
         );
 
         let (cost_resume_aot, vm_state_final_aot) = run_aot_metered_cost_and_compare(
@@ -1266,7 +1266,7 @@ fn test_vm_execute_metered_cost_resume_parity() {
             cost_interp_resume,
             vm_state_final_interp,
             config.clone(),
-            Some(vm_state_suspend_aot.clone())
+            Some(vm_state_suspend_aot.clone()),
         );
         assert_eq!(cost_interp_resume, cost_resume_aot);
         assert_eq!(cost_suspend_aot, cost_suspend_interp);
