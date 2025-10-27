@@ -894,7 +894,7 @@ where
         // handle execution error
         match vm_exec_state.exit_code {
             Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.ctx.into_segments(),
                 vm_exec_state.vm_state,
             )),
             Err(e) => Err(e),
