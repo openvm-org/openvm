@@ -5,7 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-#[cfg(format = "aot")]
+#[cfg(feature = "aot")]
 use openvm_circuit::arch::execution_mode::metered_cost::MeteredCostCtx;
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::VmState;
