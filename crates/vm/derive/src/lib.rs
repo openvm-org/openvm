@@ -231,8 +231,9 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     fn generate_x86_asm(
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
                     ) -> ::std::string::String {
-                        self.0.generate_x86_asm(inst)
+                        self.0.generate_x86_asm(inst, pc)
                     }
 
                     #handler
@@ -357,7 +358,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                 .map(|(variant_name, field)| {
                     let field_ty = &field.ty;
                     quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::generate_x86_asm(x, inst)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::generate_x86_asm(x, inst, pc)
                     }
                 })
                 .collect::<Vec<_>>();
@@ -424,6 +425,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     fn generate_x86_asm(
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
                     ) -> ::std::string::String {
                         match self {
                             #(#generate_x86_asm_arms,)*

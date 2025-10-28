@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
+    LocalOpcode, VmOpcode,
 };
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
@@ -54,6 +56,21 @@ macro_rules! dispatch {
     };
 }
 
+#[cfg(feature = "aot")]
+const REG_A: &str = "rcx";
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "ecx";
+#[cfg(feature = "aot")]
+const REG_B: &str = "rax";
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_AUX: &str = "r11";
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+
 impl<F, A> Executor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
@@ -88,6 +105,67 @@ where
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, enabled)
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        eprintln!(
+            "supports_aot_for_opcode called with JALR opcode: {:?}",
+            opcode
+        );
+        Rv32JalrOpcode::JALR.global_opcode() == opcode
+    }
+
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+        eprintln!("generate_x86_asm called with instruction JALR: {:?}", inst);
+        let mut asm_str = String::new();
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        debug_assert_eq!(a % 4, 0);
+        debug_assert_eq!(b % 4, 0);
+
+        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        let write_rd = !inst.f.is_zero();
+
+        let map_reg = |reg: i16| -> (i16, bool) {
+            let chunk = reg / 4;
+            let is_low = chunk % 2 == 0;
+            let xmm = if is_low { reg / 8 } else { (chunk - 1) / 2 };
+            (xmm, is_low)
+        };
+
+        let (rs1_xmm, rs1_low) = map_reg(b);
+        if rs1_low {
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B, rs1_xmm);
+        } else {
+            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_B_W, rs1_xmm);
+        }
+
+        asm_str += &format!("   mov {}, {}\n", REG_AUX, imm_extended);
+        asm_str += &format!("   add {}, {}\n", REG_B, REG_AUX);
+        asm_str += &format!("   and {}, -2\n", REG_B); // used to zero the low bit, -2 in twos complement; same as ~1
+        asm_str += &format!("   mov {}, {}\n", REG_PC, REG_B);
+
+        if write_rd {
+            let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
+            asm_str += &format!("   mov {}, {}\n", REG_A, next_pc);
+            let (rd_xmm, rd_low) = map_reg(a);
+            if rd_low {
+                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", rd_xmm, rd_xmm);
+            } else {
+                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", rd_xmm, rd_xmm);
+            }
+        }
+
+        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
+
+        asm_str
     }
 }
 

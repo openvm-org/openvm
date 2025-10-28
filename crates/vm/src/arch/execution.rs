@@ -23,6 +23,7 @@ use crate::{
         program::ProgramBus,
     },
 };
+use openvm_instructions::LocalOpcode;
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {
@@ -172,7 +173,7 @@ pub trait Executor<F> {
         Ctx: ExecutionCtxTrait;
 
     #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {// always calling the original, not the overridden one?
+    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
         false
     }
     /*
@@ -252,7 +253,7 @@ pub trait Executor<F> {
     - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
     */
     #[cfg(feature = "aot")]
-    fn generate_x86_asm(&self, inst: &Instruction<F>) -> String {
+    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> String {
         "".to_string()
     }
 }
@@ -301,7 +302,7 @@ pub trait MeteredExecutor<F> {
 pub trait AotMeteredExecutor<F>: MeteredExecutor<F> {
     /// Generate x86 assembly for the given instruction. Preconditions: Opcode must be supported by
     /// AOT
-    fn generate_x86_asm(&self, inst: &Instruction<F>) -> Result<String, AotError>;
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError>;
 }
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of

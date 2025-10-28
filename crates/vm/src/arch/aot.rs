@@ -314,8 +314,7 @@ where
             additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
             */
             if executor.supports_aot_for_opcode(instruction.opcode) {
-                eprintln!("executor supports aot for opcode");
-                asm_str += &executor.generate_x86_asm(&instruction);
+                asm_str += &executor.generate_x86_asm(&instruction, pc);
             } else {
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
