@@ -13,8 +13,7 @@ use crate::{
     bus::{
         AirPartShapeBusMessage, AirShapeBusMessage, BatchConstraintModuleMessage,
         ColumnClaimsMessage, CommitmentsBusMessage, ConstraintSumcheckRandomness,
-        StackingIndexMessage, TranscriptBusMessage, WhirModuleMessage, WhirOpeningPointMessage,
-        XiRandomnessMessage,
+        TranscriptBusMessage, WhirModuleMessage, WhirOpeningPointMessage, XiRandomnessMessage,
     },
     system::Preflight,
 };
@@ -241,39 +240,6 @@ impl Preflight {
                     minor_idx: commit_idx,
                     commitment: commit,
                 });
-                commit_idx += F::ONE;
-            }
-        }
-        messages
-    }
-
-    pub fn stacking_indices_bus_msgs(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-    ) -> Vec<StackingIndexMessage<F>> {
-        let l_skip = vk.inner.params.l_skip;
-        let stacking_height = 1 << (l_skip + vk.inner.params.n_stack);
-        let mut messages = vec![];
-        for i in 0..self.proof_shape.stacked_common_width {
-            messages.push(StackingIndexMessage {
-                commit_idx: F::ZERO,
-                col_idx: F::from_canonical_usize(i),
-            });
-        }
-        let mut commit_idx = F::ONE;
-        for (air_id, vdata) in &self.proof_shape.sorted_trace_vdata {
-            let width = &vk.inner.per_air[*air_id].params.width;
-            let widths = width.preprocessed.iter().chain(width.cached_mains.iter());
-
-            for width in widths {
-                let cells = width * (1 << (vdata.hypercube_dim + l_skip));
-                let stacking_width = cells.div_ceil(stacking_height);
-                for i in 0..stacking_width {
-                    messages.push(StackingIndexMessage {
-                        commit_idx,
-                        col_idx: F::from_canonical_usize(i),
-                    });
-                }
                 commit_idx += F::ONE;
             }
         }

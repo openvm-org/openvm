@@ -1,6 +1,8 @@
 pub mod aggregation;
 pub mod batch_constraint;
 pub mod bus;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 pub mod gkr;
 pub mod primitives;
 pub mod proof_shape;

@@ -21,9 +21,23 @@ openvm-poseidon2-air = { workspace = true }
 tracing = { workspace = true }
 eyre = { workspace = true }
 
+openvm-cuda-common = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+
 [dev-dependencies]
 stark-backend-v2 = { workspace = true, features = ["test-utils"] }
+
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel"]
 parallel = ["stark-backend-v2/parallel"]
+
+cuda = [
+    "dep:openvm-cuda-builder",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
+    "openvm-circuit-primitives/cuda",
+    "openvm-circuit/cuda",
+]
