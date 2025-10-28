@@ -99,15 +99,12 @@ pub struct Preflight {
 
 #[derive(Debug, Default)]
 pub struct ProofShapePreflight {
-    pub stacked_common_width: usize,
     pub sorted_trace_vdata: Vec<(usize, TraceVData)>,
-    pub n_global: usize,
+    pub pvs_tidx: Vec<usize>,
+    pub post_tidx: usize,
     pub n_max: usize,
     pub n_logup: usize,
     pub l_skip: usize,
-    pub logup_pow_bits: usize,
-    pub post_tidx: usize,
-    pub pvs_tidx: Vec<usize>,
 }
 
 #[derive(Debug, Default)]
