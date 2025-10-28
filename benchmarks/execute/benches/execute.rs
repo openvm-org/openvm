@@ -73,12 +73,9 @@ const APP_PROGRAMS: &[&str] = &[
     "fibonacci_iterative",
     "quicksort",
     "bubblesort",
-    "factorial_iterative_u256",
     "revm_snailtracer",
     "keccak256",
-    "keccak256_iter",
     "sha256",
-    "sha256_iter",
     "revm_transfer",
     "pairing",
 ];
@@ -273,6 +270,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
                 .expect("Failed to execute program in interpreted mode");
         });
 }
+        */
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
