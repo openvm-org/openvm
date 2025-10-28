@@ -62,7 +62,7 @@ impl<const N: usize, T> MemoryWriteAuxCols<T, N> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, AlignedBorrow)]
 pub struct MemoryReadAuxCols<T> {
-    pub(in crate::system::memory) base: MemoryBaseAuxCols<T>,
+    pub base: MemoryBaseAuxCols<T>,
 }
 
 impl<F: PrimeField32> MemoryReadAuxCols<F> {

@@ -533,6 +533,25 @@ where
         self
     }
 
+    pub fn load_periphery_and_prank_trace<A, C, P>(
+        mut self,
+        (air, chip): (A, C),
+        modify_trace: P,
+    ) -> Self
+    where
+        A: AnyRap<SC> + 'static,
+        C: Chip<(), CpuBackend<SC>>,
+        P: Fn(&mut RowMajorMatrix<Val<SC>>),
+    {
+        let mut ctx = chip.generate_proving_ctx(());
+        let trace: Arc<RowMajorMatrix<Val<SC>>> = Option::take(&mut ctx.common_main).unwrap();
+        let mut trace = Arc::into_inner(trace).unwrap();
+        modify_trace(&mut trace);
+        ctx.common_main = Some(Arc::new(trace));
+        self.air_ctxs.push((Arc::new(air), ctx));
+        self
+    }
+
     /// Given a function to produce an engine from the max trace height,
     /// runs a simple test on that engine
     pub fn test<E, P: Fn() -> E>(

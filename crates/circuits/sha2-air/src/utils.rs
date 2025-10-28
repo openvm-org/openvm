@@ -1,30 +1,34 @@
+use ndarray::ArrayViewMut;
 pub use openvm_circuit_primitives::utils::compose;
 use openvm_circuit_primitives::{
     encoder::Encoder,
     utils::{not, select},
 };
-use openvm_stark_backend::{p3_air::AirBuilder, p3_field::FieldAlgebra};
+use openvm_stark_backend::{
+    p3_air::AirBuilder,
+    p3_field::{FieldAlgebra, PrimeField32},
+};
 use rand::{rngs::StdRng, Rng};
 
-use crate::{RotateRight, Sha2Config};
+use crate::{RotateRight, Sha2BlockHasherSubairConfig};
 
 /// Convert a word into a list of 8-bit limbs in little endian
-pub fn word_into_u8_limbs<C: Sha2Config>(num: impl Into<C::Word>) -> Vec<u32> {
+pub fn word_into_u8_limbs<C: Sha2BlockHasherSubairConfig>(num: impl Into<C::Word>) -> Vec<u32> {
     word_into_limbs::<C>(num.into(), C::WORD_U8S)
 }
 
 /// Convert a word into a list of 16-bit limbs in little endian
-pub fn word_into_u16_limbs<C: Sha2Config>(num: impl Into<C::Word>) -> Vec<u32> {
+pub fn word_into_u16_limbs<C: Sha2BlockHasherSubairConfig>(num: impl Into<C::Word>) -> Vec<u32> {
     word_into_limbs::<C>(num.into(), C::WORD_U16S)
 }
 
 /// Convert a word into a list of 1-bit limbs in little endian
-pub fn word_into_bits<C: Sha2Config>(num: impl Into<C::Word>) -> Vec<u32> {
+pub fn word_into_bits<C: Sha2BlockHasherSubairConfig>(num: impl Into<C::Word>) -> Vec<u32> {
     word_into_limbs::<C>(num.into(), C::WORD_BITS)
 }
 
 /// Convert a word into a list of limbs in little endian
-pub fn word_into_limbs<C: Sha2Config>(num: C::Word, num_limbs: usize) -> Vec<u32> {
+pub fn word_into_limbs<C: Sha2BlockHasherSubairConfig>(num: C::Word, num_limbs: usize) -> Vec<u32> {
     let limb_bits = std::mem::size_of::<C::Word>() * 8 / num_limbs;
     (0..num_limbs)
         .map(|i| {
@@ -37,7 +41,7 @@ pub fn word_into_limbs<C: Sha2Config>(num: C::Word, num_limbs: usize) -> Vec<u32
 }
 
 /// Convert a u32 into a list of 1-bit limbs in little endian
-pub fn u32_into_bits<C: Sha2Config>(num: u32) -> Vec<u32> {
+pub fn u32_into_bits<C: Sha2BlockHasherSubairConfig>(num: u32) -> Vec<u32> {
     let limb_bits = 32 / C::WORD_BITS;
     (0..C::WORD_BITS)
         .map(|i| (num >> (limb_bits * i)) & ((1 << limb_bits) - 1))
@@ -45,14 +49,14 @@ pub fn u32_into_bits<C: Sha2Config>(num: u32) -> Vec<u32> {
 }
 
 /// Convert a list of limbs in little endian into a Word
-pub fn le_limbs_into_word<C: Sha2Config>(limbs: &[u32]) -> C::Word {
+pub fn le_limbs_into_word<C: Sha2BlockHasherSubairConfig>(limbs: &[u32]) -> C::Word {
     let mut limbs = limbs.to_vec();
     limbs.reverse();
     be_limbs_into_word::<C>(&limbs)
 }
 
 /// Convert a list of limbs in big endian into a Word
-pub fn be_limbs_into_word<C: Sha2Config>(limbs: &[u32]) -> C::Word {
+pub fn be_limbs_into_word<C: Sha2BlockHasherSubairConfig>(limbs: &[u32]) -> C::Word {
     let limb_bits = C::WORD_BITS / limbs.len();
     limbs.iter().fold(C::Word::from(0), |acc, &limb| {
         (acc << limb_bits) | limb.into()
@@ -118,7 +122,7 @@ pub(crate) fn xor<F: FieldAlgebra + Clone>(
 
 /// Choose function from the SHA spec
 #[inline]
-pub fn ch<C: Sha2Config>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
+pub fn ch<C: Sha2BlockHasherSubairConfig>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
     (x & y) ^ ((!x) & z)
 }
 
@@ -135,7 +139,7 @@ pub(crate) fn ch_field<F: FieldAlgebra>(
 }
 
 /// Majority function from the SHA spec
-pub fn maj<C: Sha2Config>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
+pub fn maj<C: Sha2BlockHasherSubairConfig>(x: C::Word, y: C::Word, z: C::Word) -> C::Word {
     (x & y) ^ (x & z) ^ (y & z)
 }
 
@@ -160,7 +164,7 @@ pub(crate) fn maj_field<F: FieldAlgebra + Clone>(
 }
 
 /// Big sigma_0 function from the SHA spec
-pub fn big_sig0<C: Sha2Config>(x: C::Word) -> C::Word {
+pub fn big_sig0<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(2) ^ x.rotate_right(13) ^ x.rotate_right(22)
     } else {
@@ -170,7 +174,7 @@ pub fn big_sig0<C: Sha2Config>(x: C::Word) -> C::Word {
 
 /// Computes BigSigma0(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone, C: Sha2Config>(
+pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone, C: Sha2BlockHasherSubairConfig>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {
@@ -181,7 +185,7 @@ pub(crate) fn big_sig0_field<F: FieldAlgebra + Clone, C: Sha2Config>(
 }
 
 /// Big sigma_1 function from the SHA spec
-pub fn big_sig1<C: Sha2Config>(x: C::Word) -> C::Word {
+pub fn big_sig1<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(6) ^ x.rotate_right(11) ^ x.rotate_right(25)
     } else {
@@ -191,7 +195,7 @@ pub fn big_sig1<C: Sha2Config>(x: C::Word) -> C::Word {
 
 /// Computes BigSigma1(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: Sha2Config>(
+pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: Sha2BlockHasherSubairConfig>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {
@@ -202,7 +206,7 @@ pub(crate) fn big_sig1_field<F: FieldAlgebra + Clone, C: Sha2Config>(
 }
 
 /// Small sigma_0 function from the SHA spec
-pub fn small_sig0<C: Sha2Config>(x: C::Word) -> C::Word {
+pub fn small_sig0<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
     } else {
@@ -212,7 +216,7 @@ pub fn small_sig0<C: Sha2Config>(x: C::Word) -> C::Word {
 
 /// Computes SmallSigma0(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: Sha2Config>(
+pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: Sha2BlockHasherSubairConfig>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {
@@ -223,7 +227,7 @@ pub(crate) fn small_sig0_field<F: FieldAlgebra + Clone, C: Sha2Config>(
 }
 
 /// Small sigma_1 function from the SHA spec
-pub fn small_sig1<C: Sha2Config>(x: C::Word) -> C::Word {
+pub fn small_sig1<C: Sha2BlockHasherSubairConfig>(x: C::Word) -> C::Word {
     if C::WORD_BITS == 32 {
         x.rotate_right(17) ^ x.rotate_right(19) ^ (x >> 10)
     } else {
@@ -233,7 +237,7 @@ pub fn small_sig1<C: Sha2Config>(x: C::Word) -> C::Word {
 
 /// Computes SmallSigma1(x), where x is a [C::WORD_BITS] bit number in little-endian
 #[inline]
-pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone, C: Sha2Config>(
+pub(crate) fn small_sig1_field<F: FieldAlgebra + Clone, C: Sha2BlockHasherSubairConfig>(
     x: &[impl Into<F> + Clone],
 ) -> Vec<F> {
     if C::WORD_BITS == 32 {
@@ -258,7 +262,7 @@ pub fn get_flag_pt_array(encoder: &Encoder, flag_idx: usize) -> Vec<u32> {
 /// Constrain the addition of [C::WORD_BITS] bit words in 16-bit limbs
 /// It takes in the terms some in bits some in 16-bit limbs,
 /// the expected sum in bits and the carries
-pub fn constraint_word_addition<AB: AirBuilder, C: Sha2Config>(
+pub fn constraint_word_addition<AB: AirBuilder, C: Sha2BlockHasherSubairConfig>(
     builder: &mut AB,
     terms_bits: &[&[impl Into<AB::Expr> + Clone]],
     terms_limb: &[&[impl Into<AB::Expr> + Clone]],
@@ -286,4 +290,24 @@ pub fn constraint_word_addition<AB: AirBuilder, C: Sha2Config>(
             + carries[i].clone().into() * AB::Expr::from_canonical_u32(1 << 16);
         builder.assert_eq(limb_sum, expected_sum_limb);
     }
+}
+
+pub fn set_arrayview_from_u32_slice<F: PrimeField32, D: ndarray::Dimension>(
+    arrayview: &mut ArrayViewMut<F, D>,
+    data: impl IntoIterator<Item = u32>,
+) {
+    arrayview
+        .iter_mut()
+        .zip(data.into_iter().map(|x| F::from_canonical_u32(x)))
+        .for_each(|(x, y)| *x = y);
+}
+
+pub fn set_arrayview_from_u8_slice<F: PrimeField32, D: ndarray::Dimension>(
+    arrayview: &mut ArrayViewMut<F, D>,
+    data: impl IntoIterator<Item = u8>,
+) {
+    arrayview
+        .iter_mut()
+        .zip(data.into_iter().map(|x| F::from_canonical_u8(x)))
+        .for_each(|(x, y)| *x = y);
 }
