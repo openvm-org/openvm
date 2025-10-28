@@ -17,15 +17,15 @@ use openvm_stark_backend::{interaction::BusIndex, p3_field::FieldAlgebra};
 use openvm_stark_sdk::{config::setup_tracing, p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{Sha2ChipConfig, Sha2VmAir, Sha2VmChip, Sha2VmStep};
+use super::{Sha2ChipConfig, Sha2BlockHasheAir, Sha2VmChip, Sha2VmStep};
 use crate::{
-    sha2_chip::trace::Sha2VmRecordLayout, sha2_solve, Sha2VmDigestColsRef, Sha2VmRoundColsRef,
+    sha2_chip::trace::Sha2VmRecordLayout, sha2_solve, Sha2BlockHasherDigestColsRef, Sha2BlockHasherRoundColsRef,
 };
 
 type F = BabyBear;
 const SELF_BUS_IDX: BusIndex = 28;
 const MAX_INS_CAPACITY: usize = 8192;
-type Sha2VmChipDense<C> = NewVmChipWrapper<F, Sha2VmAir<C>, Sha2VmStep<C>, DenseRecordArena>;
+type Sha2VmChipDense<C> = NewVmChipWrapper<F, Sha2BlockHasheAir<C>, Sha2VmStep<C>, DenseRecordArena>;
 
 fn create_test_chips<C: Sha2ChipConfig>(
     tester: &mut VmChipTestBuilder<F>,
@@ -36,7 +36,7 @@ fn create_test_chips<C: Sha2ChipConfig>(
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
     let mut chip = Sha2VmChip::<F, C>::new(
-        Sha2VmAir::new(
+        Sha2BlockHasheAir::new(
             tester.system_port(),
             bitwise_bus,
             tester.address_bits(),
@@ -173,11 +173,11 @@ fn execute_roundtrip_sanity_test<C: Sha2ChipConfig>() {
 
     println!(
         "Sha2VmDigestColsRef::<F>::width::<C>(): {}",
-        Sha2VmDigestColsRef::<F>::width::<C>()
+        Sha2BlockHasherDigestColsRef::<F>::width::<C>()
     );
     println!(
         "Sha2VmRoundColsRef::<F>::width::<C>(): {}",
-        Sha2VmRoundColsRef::<F>::width::<C>()
+        Sha2BlockHasherRoundColsRef::<F>::width::<C>()
     );
 
     let num_tests: usize = 1;
@@ -253,7 +253,7 @@ fn create_test_chip_dense<C: Sha2ChipConfig>(
     let bitwise_chip = SharedBitwiseOperationLookupChip::<RV32_CELL_BITS>::new(bitwise_bus);
 
     let mut chip = Sha2VmChipDense::<C>::new(
-        Sha2VmAir::<C>::new(
+        Sha2BlockHasheAir::<C>::new(
             tester.system_port(),
             bitwise_chip.bus(),
             tester.address_bits(),

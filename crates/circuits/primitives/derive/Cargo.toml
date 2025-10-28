@@ -12,7 +12,7 @@ license.workspace = true
 proc-macro = true
 
 [dependencies]
-syn = { version = "2.0", features = ["parsing", "extra-traits"] }
+syn = { version = "2.0", features = ["full", "parsing", "extra-traits"] }
 quote = "1.0"
 itertools = { workspace = true, default-features = true }
 proc-macro2 = "1.0"

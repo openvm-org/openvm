@@ -7,19 +7,18 @@ use openvm_circuit::{
 use openvm_circuit_primitives_derive::ColsRef;
 use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
 use openvm_sha2_air::{
-    ShaDigestCols, ShaDigestColsRef, ShaDigestColsRefMut, ShaRoundCols, ShaRoundColsRef,
-    ShaRoundColsRefMut,
+    Sha2DigestCols, Sha2DigestColsRef, Sha2DigestColsRefMut, Sha2RoundCols, Sha2RoundColsRef,
+    Sha2RoundColsRefMut,
 };
 
-use super::SHA_REGISTER_READS;
-use crate::Sha2ChipConfig;
+use super::{Sha2ChipConfig, SHA_REGISTER_READS};
 
 /// the first C::ROUND_ROWS rows of every SHA block will be of type ShaVmRoundCols and the last row
 /// will be of type ShaVmDigestCols
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2ChipConfig)]
-pub struct Sha2VmRoundCols<
+pub struct Sha2BlockHasherRoundCols<
     T,
     const WORD_BITS: usize,
     const WORD_U8S: usize,
@@ -28,8 +27,8 @@ pub struct Sha2VmRoundCols<
     const ROUNDS_PER_ROW_MINUS_ONE: usize,
     const ROW_VAR_CNT: usize,
 > {
-    pub control: Sha2VmControlCols<T>,
-    pub inner: ShaRoundCols<
+    pub control: Sha2BlockHasherControlCols<T>,
+    pub inner: Sha2RoundCols<
         T,
         WORD_BITS,
         WORD_U8S,
@@ -45,7 +44,7 @@ pub struct Sha2VmRoundCols<
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2ChipConfig)]
-pub struct Sha2VmDigestCols<
+pub struct Sha2BlockHasherDigestCols<
     T,
     const WORD_BITS: usize,
     const WORD_U8S: usize,
@@ -57,8 +56,8 @@ pub struct Sha2VmDigestCols<
     const NUM_WRITES: usize,
     const WRITE_SIZE: usize,
 > {
-    pub control: Sha2VmControlCols<T>,
-    pub inner: ShaDigestCols<
+    pub control: Sha2BlockHasherControlCols<T>,
+    pub inner: Sha2DigestCols<
         T,
         WORD_BITS,
         WORD_U8S,
@@ -91,7 +90,7 @@ pub struct Sha2VmDigestCols<
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2ChipConfig)]
-pub struct Sha2VmControlCols<T> {
+pub struct Sha2BlockHasherControlCols<T> {
     /// Note: We will use the buffer in `inner.message_schedule` as the message data
     /// This is the length of the entire message in bytes
     pub len: T,

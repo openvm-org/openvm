@@ -1,42 +1,67 @@
-use std::{marker::PhantomData, ops::Range};
+use std::{
+    array::{self, from_fn},
+    borrow::{Borrow, BorrowMut},
+    cmp::min,
+    marker::PhantomData,
+    ops::Range,
+};
 
+use openvm_circuit::{
+    arch::{
+        CustomBorrow, MultiRowLayout, MultiRowMetadata, PreflightExecutor, RecordArena,
+        SizedRecord, VmStateMut, *,
+    },
+    system::memory::{
+        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        online::TracingMemory,
+        MemoryAuxColsFactory,
+    },
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::SharedBitwiseOperationLookupChip, encoder::Encoder,
-    utils::next_power_of_two_or_zero,
+    utils::next_power_of_two_or_zero, AlignedBytesBorrow,
 };
+use openvm_instructions::{
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
+use openvm_rv32im_circuit::adapters::{read_rv32_register, tracing_read, tracing_write};
 use openvm_stark_backend::{
-    p3_field::PrimeField32, p3_matrix::dense::RowMajorMatrix, p3_maybe_rayon::prelude::*,
+    p3_field::PrimeField32,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_maybe_rayon::prelude::*,
 };
 use sha2::{compress256, compress512, digest::generic_array::GenericArray};
 
-use super::{
-    big_sig0_field, big_sig1_field, ch_field, compose, get_flag_pt_array, maj_field,
-    small_sig0_field, small_sig1_field, ShaRoundColsRefMut,
-};
 use crate::{
-    big_sig0, big_sig1, ch, le_limbs_into_word, maj, small_sig0, small_sig1, word_into_bits,
-    word_into_u16_limbs, word_into_u8_limbs, Sha2Config, Sha2Variant, ShaDigestColsRefMut,
-    ShaRoundColsRef, WrappingAdd,
+    Sha256Config, Sha2BlockHasherConfig, Sha2BlockHasherFiller, Sha2Config, Sha2MainChipConfig,
+    Sha2Variant, Sha2VmExecutor, Sha384Config, Sha512Config,
 };
 
-/// A helper struct for the SHA256 trace generation.
-/// Also, separates the inner AIR from the trace generation.
-pub struct Sha2StepHelper<C: Sha2Config> {
-    pub row_idx_encoder: Encoder,
-    _phantom: PhantomData<C>,
-}
+impl<F: PrimeField32> TraceFiller<F> for Sha2BlockHasherFiller {
+    fn fill_trace(
+        &self,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        trace_matrix: &mut RowMajorMatrix<F>,
+        rows_used: usize,
+    ) {
+        if rows_used == 0 {
+            return;
+        }
 
-impl<C: Sha2Config> Default for Sha2StepHelper<C> {
-    fn default() -> Self {
-        Self::new()
+        // TODO
     }
 }
+
+// --- old tracegen code ---
 
 /// The trace generation of SHA should be done in two passes.
 /// The first pass should do `get_block_trace` for every block and generate the invalid rows through
 /// `get_default_row` The second pass should go through all the blocks and call
 /// `generate_missing_cells`
-impl<C: Sha2Config> Sha2StepHelper<C> {
+impl<C: Sha2BlockHasherConfig> Sha2StepHelper<C> {
     pub fn new() -> Self {
         Self {
             // +1 for dummy (padding) rows
@@ -107,7 +132,7 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
         for (i, row) in trace.chunks_exact_mut(trace_width).enumerate() {
             // do the rounds
             if i < C::ROUND_ROWS {
-                let mut cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+                let mut cols: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
                     &mut row[get_range(trace_start_col, C::ROUND_WIDTH)],
                 );
                 *cols.flags.is_round_row = F::ONE;
@@ -316,7 +341,7 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
             }
             // generate the digest row
             else {
-                let mut cols: ShaDigestColsRefMut<F> = ShaDigestColsRefMut::from::<C>(
+                let mut cols: Sha2DigestColsRefMut<F> = Sha2DigestColsRefMut::from::<C>(
                     &mut row[get_range(trace_start_col, C::DIGEST_WIDTH)],
                 );
                 for j in 0..C::ROUNDS_PER_ROW - 1 {
@@ -425,10 +450,10 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
         for i in 0..C::ROWS_PER_BLOCK - 1 {
             let rows = &mut trace[i * trace_width..(i + 2) * trace_width];
             let (local, next) = rows.split_at_mut(trace_width);
-            let mut local_cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+            let mut local_cols: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
                 &mut local[get_range(trace_start_col, C::ROUND_WIDTH)],
             );
-            let mut next_cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+            let mut next_cols: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
                 &mut next[get_range(trace_start_col, C::ROUND_WIDTH)],
             );
             if i > 0 {
@@ -451,7 +476,7 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
                 // `next` is a digest row.
                 // Fill in `carry_a` and `carry_e` with dummy values so the constraints on `a` and
                 // `e` hold.
-                let const_local_cols = ShaRoundColsRef::<F>::from_mut::<C>(&local_cols);
+                let const_local_cols = Sha2RoundColsRef::<F>::from_mut::<C>(&local_cols);
                 Self::generate_carry_ae(const_local_cols.clone(), &mut next_cols);
                 // Fill in row 16's `intermed_4` with dummy values so the message schedule
                 // constraints holds on that row
@@ -463,7 +488,7 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
                 // hold on rows 1..4.
                 Self::generate_intermed_12(
                     &mut local_cols,
-                    ShaRoundColsRef::<F>::from_mut::<C>(&next_cols),
+                    Sha2RoundColsRef::<F>::from_mut::<C>(&next_cols),
                 );
             }
         }
@@ -485,38 +510,38 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
         let rows = &mut trace[(C::ROUND_ROWS - 2) * trace_width..(C::ROUND_ROWS + 1) * trace_width];
         let (last_round_row, rows) = rows.split_at_mut(trace_width);
         let (digest_row, next_block_first_row) = rows.split_at_mut(trace_width);
-        let mut cols_last_round_row: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+        let mut cols_last_round_row: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
             &mut last_round_row[trace_start_col..trace_start_col + C::ROUND_WIDTH],
         );
-        let mut cols_digest_row: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+        let mut cols_digest_row: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
             &mut digest_row[trace_start_col..trace_start_col + C::ROUND_WIDTH],
         );
-        let mut cols_next_block_first_row: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(
+        let mut cols_next_block_first_row: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(
             &mut next_block_first_row[trace_start_col..trace_start_col + C::ROUND_WIDTH],
         );
         // Fill in the last round row's `intermed_12` with dummy values so the message schedule
         // constraints holds on row 16
         Self::generate_intermed_12(
             &mut cols_last_round_row,
-            ShaRoundColsRef::from_mut::<C>(&cols_digest_row),
+            Sha2RoundColsRef::from_mut::<C>(&cols_digest_row),
         );
         // Fill in the digest row's `intermed_12` with dummy values so the message schedule
         // constraints holds on the next block's row 0
         Self::generate_intermed_12(
             &mut cols_digest_row,
-            ShaRoundColsRef::from_mut::<C>(&cols_next_block_first_row),
+            Sha2RoundColsRef::from_mut::<C>(&cols_next_block_first_row),
         );
         // Fill in the next block's first row's `intermed_4` with dummy values so the message
         // schedule constraints holds on that row
         Self::generate_intermed_4(
-            ShaRoundColsRef::from_mut::<C>(&cols_digest_row),
+            Sha2RoundColsRef::from_mut::<C>(&cols_digest_row),
             &mut cols_next_block_first_row,
         );
     }
 
     /// Fills the `cols` as a padding row
     /// Note: we still need to correctly fill in the hash values, carries and intermeds
-    pub fn generate_default_row<F: PrimeField32>(&self, mut cols: ShaRoundColsRefMut<F>) {
+    pub fn generate_default_row<F: PrimeField32>(&self, mut cols: Sha2RoundColsRefMut<F>) {
         *cols.flags.is_round_row = F::ZERO;
         *cols.flags.is_first_4_rows = F::ZERO;
         *cols.flags.is_digest_row = F::ZERO;
@@ -588,8 +613,8 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
     /// padding rows which can overflow and we need to make sure it matches the AIR constraints
     /// Puts the correct carries in the `next_row`, the resulting carries can be out of bounds
     pub fn generate_carry_ae<F: PrimeField32>(
-        local_cols: ShaRoundColsRef<F>,
-        next_cols: &mut ShaRoundColsRefMut<F>,
+        local_cols: Sha2RoundColsRef<F>,
+        next_cols: &mut Sha2RoundColsRefMut<F>,
     ) {
         let a = [
             local_cols
@@ -668,8 +693,8 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
 
     /// Puts the correct intermed_4 in the `next_row`
     fn generate_intermed_4<F: PrimeField32>(
-        local_cols: ShaRoundColsRef<F>,
-        next_cols: &mut ShaRoundColsRefMut<F>,
+        local_cols: Sha2RoundColsRef<F>,
+        next_cols: &mut Sha2RoundColsRefMut<F>,
     ) {
         let w = [
             local_cols
@@ -707,8 +732,8 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
 
     /// Puts the needed intermed_12 in the `local_row`
     fn generate_intermed_12<F: PrimeField32>(
-        local_cols: &mut ShaRoundColsRefMut<F>,
-        next_cols: ShaRoundColsRef<F>,
+        local_cols: &mut Sha2RoundColsRefMut<F>,
+        next_cols: Sha2RoundColsRef<F>,
     ) {
         let w = [
             local_cols
@@ -770,7 +795,7 @@ impl<C: Sha2Config> Sha2StepHelper<C> {
 }
 
 /// `records` consists of pairs of `(input_block, is_last_block)`.
-pub fn generate_trace<F: PrimeField32, C: Sha2Config>(
+pub fn generate_trace<F: PrimeField32, C: Sha2BlockHasherConfig>(
     step: &Sha2StepHelper<C>,
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<8>,
     width: usize,
@@ -784,7 +809,7 @@ pub fn generate_trace<F: PrimeField32, C: Sha2Config>(
     let height = next_power_of_two_or_zero(non_padded_height);
     let mut values = F::zero_vec(height * width);
 
-    struct BlockContext<C: Sha2Config> {
+    struct BlockContext<C: Sha2BlockHasherConfig> {
         prev_hash: Vec<C::Word>, // len is C::HASH_WORDS
         local_block_idx: u32,
         global_block_idx: u32,
@@ -849,7 +874,7 @@ pub fn generate_trace<F: PrimeField32, C: Sha2Config>(
     values[width * non_padded_height..]
         .par_chunks_mut(width)
         .for_each(|row| {
-            let cols: ShaRoundColsRefMut<F> = ShaRoundColsRefMut::from::<C>(row);
+            let cols: Sha2RoundColsRefMut<F> = Sha2RoundColsRefMut::from::<C>(row);
             step.generate_default_row(cols);
         });
 

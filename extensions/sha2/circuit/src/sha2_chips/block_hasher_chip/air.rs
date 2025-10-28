@@ -9,9 +9,10 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use super::{
@@ -19,12 +20,13 @@ use super::{
     small_sig1_field,
 };
 use crate::{
-    constraint_word_addition, word_into_u16_limbs, Sha2Config, ShaDigestColsRef, ShaRoundColsRef,
+    constraint_word_addition, word_into_u16_limbs, Sha2BlockHasherConfig, Sha2DigestColsRef,
+    Sha2RoundColsRef,
 };
 
 /// Expects the message to be padded to a multiple of C::BLOCK_WORDS * C::WORD_BITS bits
 #[derive(Clone, Debug)]
-pub struct Sha2Air<C: Sha2Config> {
+pub struct Sha2BlockHasherAir<C: Sha2BlockHasherConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
@@ -32,7 +34,7 @@ pub struct Sha2Air<C: Sha2Config> {
     _phantom: PhantomData<C>,
 }
 
-impl<C: Sha2Config> Sha2Air<C> {
+impl<C: Sha2BlockHasherConfig> Sha2BlockHasherAir<C> {
     pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: BusIndex) -> Self {
         Self {
             bitwise_lookup_bus,
@@ -44,43 +46,32 @@ impl<C: Sha2Config> Sha2Air<C> {
     }
 }
 
-impl<F, C: Sha2Config> BaseAir<F> for Sha2Air<C> {
+impl<F, C: Sha2BlockHasherConfig> BaseAirWithPublicValues<F> for Sha2BlockHasherAir<C> {}
+impl<F, C: Sha2BlockHasherConfig> PartitionedBaseAir<F> for Sha2BlockHasherAir<C> {}
+impl<F, C: Sha2BlockHasherConfig> BaseAir<F> for Sha2BlockHasherAir<C> {
     fn width(&self) -> usize {
-        max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
+        C::WIDTH
     }
 }
 
-impl<AB: InteractionBuilder, C: Sha2Config> SubAir<AB> for Sha2Air<C> {
-    /// The start column for the sub-air to use
-    type AirContext<'a>
-        = usize
-    where
-        Self: 'a,
-        AB: 'a,
-        <AB as AirBuilder>::Var: 'a,
-        <AB as AirBuilder>::Expr: 'a;
-
-    fn eval<'a>(&'a self, builder: &'a mut AB, start_col: Self::AirContext<'a>)
-    where
-        <AB as AirBuilder>::Var: 'a,
-        <AB as AirBuilder>::Expr: 'a,
-    {
-        self.eval_row(builder, start_col);
-        self.eval_transitions(builder, start_col);
+impl<AB: InteractionBuilder, C: Sha2BlockHasherConfig> Air<AB> for Sha2BlockHasherAir<C> {
+    fn eval(&self, builder: &mut AB) {
+        self.eval_row(builder);
+        self.eval_transitions(builder);
     }
 }
 
-impl<C: Sha2Config> Sha2Air<C> {
+impl<C: Sha2BlockHasherConfig> Sha2BlockHasherAir<C> {
     /// Implements the single row constraints (i.e. imposes constraints only on local)
     /// Implements some sanity constraints on the row index, flags, and work variables
-    fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
+    fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
 
         // Doesn't matter which column struct we use here as we are only interested in the common
         // columns
-        let local_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&local[start_col..start_col + C::DIGEST_WIDTH]);
+        let local_cols: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&local[..C::DIGEST_WIDTH]);
         let flags = &local_cols.flags;
         builder.assert_bool(*flags.is_round_row);
         builder.assert_bool(*flags.is_first_4_rows);
@@ -139,8 +130,8 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_digest_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<AB::Var>,
-        next: ShaDigestColsRef<AB::Var>,
+        local: Sha2RoundColsRef<AB::Var>,
+        next: Sha2DigestColsRef<AB::Var>,
     ) {
         // Check that if this is the last row of a message or an inpadding row, the hash should be
         // the [SHA_H]
@@ -259,16 +250,16 @@ impl<C: Sha2Config> Sha2Air<C> {
         }
     }
 
-    fn eval_transitions<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
+    fn eval_transitions<AB: InteractionBuilder>(&self, builder: &mut AB) {
         let main = builder.main();
         let local = main.row_slice(0);
         let next = main.row_slice(1);
 
         // Doesn't matter what column structs we use here
-        let local_cols: ShaRoundColsRef<AB::Var> =
-            ShaRoundColsRef::from::<C>(&local[start_col..start_col + C::ROUND_WIDTH]);
-        let next_cols: ShaRoundColsRef<AB::Var> =
-            ShaRoundColsRef::from::<C>(&next[start_col..start_col + C::ROUND_WIDTH]);
+        let local_cols: Sha2RoundColsRef<AB::Var> =
+            Sha2RoundColsRef::from::<C>(&local[..C::ROUND_WIDTH]);
+        let next_cols: Sha2RoundColsRef<AB::Var> =
+            Sha2RoundColsRef::from::<C>(&next[..C::ROUND_WIDTH]);
 
         let local_is_padding_row = local_cols.flags.is_padding_row();
         // Note that there will always be a padding row in the trace since the unpadded height is a
@@ -384,11 +375,11 @@ impl<C: Sha2Config> Sha2Air<C> {
 
         self.eval_message_schedule(builder, local_cols.clone(), next_cols.clone());
         self.eval_work_vars(builder, local_cols.clone(), next_cols);
-        let next_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&next[start_col..start_col + C::DIGEST_WIDTH]);
+        let next_cols: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&next[..C::DIGEST_WIDTH]);
         self.eval_digest_row(builder, local_cols, next_cols);
-        let local_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&local[start_col..start_col + C::DIGEST_WIDTH]);
+        let local_cols: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&local[..C::DIGEST_WIDTH]);
         self.eval_prev_hash(builder, local_cols, next_is_padding_row);
     }
 
@@ -397,7 +388,7 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_prev_hash<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaDigestColsRef<AB::Var>,
+        local: Sha2DigestColsRef<AB::Var>,
         is_last_block_of_trace: AB::Expr, /* note this indicates the last block of the trace,
                                            * not the last block of the message */
     ) {
@@ -459,8 +450,8 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_message_schedule<'a, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<'a, AB::Var>,
-        next: ShaRoundColsRef<'a, AB::Var>,
+        local: Sha2RoundColsRef<'a, AB::Var>,
+        next: Sha2RoundColsRef<'a, AB::Var>,
     ) {
         // This `w` array contains 8 message schedule words - w_{idx}, ..., w_{idx+7} for some idx
         let w = ndarray::concatenate(
@@ -591,8 +582,8 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_work_vars<'a, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<'a, AB::Var>,
-        next: ShaRoundColsRef<'a, AB::Var>,
+        local: Sha2RoundColsRef<'a, AB::Var>,
+        next: Sha2RoundColsRef<'a, AB::Var>,
     ) {
         let a =
             ndarray::concatenate(ndarray::Axis(0), &[local.work_vars.a, next.work_vars.a]).unwrap();

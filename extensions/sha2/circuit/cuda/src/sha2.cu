@@ -1,9 +1,9 @@
 #include "launcher.cuh"
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
-#include "sha2-air/columns.cuh"
-#include "sha2-air/tracegen.cuh"
-#include "sha2-air/utils.cuh"
+#include "sha2-block-hasher/columns.cuh"
+#include "sha2-block-hashker/tracegen.cuh"
+#include "sha2-block-hasher/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "system/memory/offline_checker.cuh"
 #include <cassert>
