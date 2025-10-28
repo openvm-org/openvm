@@ -86,6 +86,5 @@ jobs:
 
   execute-benchmarks:
     name: Execute benchmarks
-    if: contains(github.event.pull_request.labels.*.name, 'run-benchmarks')
     uses: ./.github/workflows/benchmarks-execute.yml
     secrets: inherit
