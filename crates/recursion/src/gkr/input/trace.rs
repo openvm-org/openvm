@@ -1,4 +1,5 @@
 use core::borrow::BorrowMut;
+use std::cmp::max;
 
 use openvm_circuit_primitives::{
     TraceSubRowGenerator, is_equal::IsEqSubAir, is_zero::IsZeroSubAir,
@@ -20,7 +21,7 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
 
     let n_max = preflight.proof_shape.n_max;
     let n_logup = preflight.proof_shape.n_logup;
-    let n_global = preflight.proof_shape.n_global;
+    let n_global = max(n_max, n_logup);
 
     let tidx = preflight.proof_shape.post_tidx;
 

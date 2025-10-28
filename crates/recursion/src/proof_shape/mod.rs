@@ -1,4 +1,4 @@
-use core::cmp::{Reverse, max};
+use core::cmp::Reverse;
 use std::sync::Arc;
 
 use itertools::izip;
@@ -132,7 +132,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
 
         let vk = &self.mvk.inner;
 
-        let mut num_common_main_cells = 0;
         let mut pvs_tidx = vec![];
 
         for (trace_vdata, avk, pvs) in izip!(&proof.trace_vdata, &vk.per_air, &proof.public_values)
@@ -143,9 +142,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
                 ts.observe(F::from_bool(is_air_present));
             }
             if let Some(trace_vdata) = trace_vdata {
-                num_common_main_cells += (1 << (vk.params.l_skip + trace_vdata.hypercube_dim))
-                    * avk.params.width.common_main;
-
                 if let Some(pdata) = avk.preprocessed_data.as_ref() {
                     ts.observe_commit(pdata.commit);
                 } else {
@@ -187,21 +183,13 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
         let l_skip = vk.params.l_skip;
         let n_logup = num_layers.saturating_sub(l_skip);
 
-        let stack_height = 1 << (vk.params.l_skip + vk.params.n_stack);
-        let stacked_common_width = num_common_main_cells.div_ceil(stack_height);
-
-        let logup_pow_bits = vk.params.logup_pow_bits;
-
         preflight.proof_shape = ProofShapePreflight {
-            stacked_common_width,
             sorted_trace_vdata,
-            n_global: max(n_max, n_logup),
+            pvs_tidx,
+            post_tidx: ts.len(),
             n_max,
             n_logup,
             l_skip,
-            logup_pow_bits,
-            post_tidx: ts.len(),
-            pvs_tidx,
         };
     }
 
