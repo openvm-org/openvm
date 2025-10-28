@@ -11,6 +11,8 @@ license.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
 
 rand.workspace = true
 derive-new.workspace = true
@@ -23,6 +25,11 @@ tracing.workspace = true
 test-case.workspace = true
 openvm-stark-sdk = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder.workspace = true
+
 [features]
 default = ["parallel"]
 parallel = ["openvm-stark-backend/parallel"]
+cuda = ["dep:openvm-cuda-common", "dep:openvm-cuda-backend"]
+touchemall = ["openvm-cuda-backend/touchemall"]

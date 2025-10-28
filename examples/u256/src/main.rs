@@ -1,11 +1,9 @@
 #![allow(clippy::needless_range_loop)]
-openvm::entry!(main);
 
 use core::array;
 
+use openvm as _;
 use openvm_ruint::aliases::U256;
-
-openvm::entry!(main);
 
 const N: usize = 16;
 type Matrix = [[U256; N]; N];

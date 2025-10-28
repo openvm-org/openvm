@@ -7,23 +7,22 @@ use aws_config::{defaults, BehaviorVersion, Region};
 use aws_sdk_s3::Client;
 use clap::Parser;
 use eyre::{eyre, Result};
-use openvm_native_recursion::halo2::utils::CacheHalo2ParamsReader;
 use openvm_sdk::{
-    config::{AggConfig, AggStarkConfig},
+    config::DEFAULT_HALO2_VERIFIER_K,
     fs::{
-        write_agg_halo2_pk_to_file, write_agg_stark_pk_to_file, write_evm_halo2_verifier_to_folder,
+        read_object_from_file, write_evm_halo2_verifier_to_folder, write_object_to_file,
         EVM_HALO2_VERIFIER_BASE_NAME, EVM_HALO2_VERIFIER_INTERFACE_NAME,
         EVM_HALO2_VERIFIER_PARENT_NAME,
     },
-    DefaultStaticVerifierPvHandler, Sdk,
+    Sdk,
 };
 
 use crate::{
     default::{
-        default_agg_halo2_pk_path, default_agg_stark_pk_path, default_asm_path,
-        default_evm_halo2_verifier_path, default_params_dir,
+        default_agg_halo2_pk_path, default_agg_stark_pk_path, default_agg_stark_vk_path,
+        default_asm_path, default_evm_halo2_verifier_path, default_params_dir,
     },
-    util::read_default_agg_pk,
+    util::read_default_agg_and_halo2_pk,
 };
 
 #[derive(Parser)]
@@ -49,25 +48,33 @@ pub struct SetupCmd {
 impl SetupCmd {
     pub async fn run(&self) -> Result<()> {
         let default_agg_stark_pk_path = default_agg_stark_pk_path();
-        let default_params_dir = default_params_dir();
+        let default_agg_stark_vk_path = default_agg_stark_vk_path();
         let default_evm_halo2_verifier_path = default_evm_halo2_verifier_path();
         let default_asm_path = default_asm_path();
         if !self.evm {
-            if PathBuf::from(&default_agg_stark_pk_path).exists() {
+            if PathBuf::from(&default_agg_stark_pk_path).exists() && !self.force_agg_keygen {
                 println!("Aggregation stark proving key already exists");
                 return Ok(());
             }
-            let agg_stark_config = AggStarkConfig::default();
-            let sdk = Sdk::new();
-            let agg_stark_pk = sdk.agg_stark_keygen(agg_stark_config)?;
+            // agg keygen does not depend on the app config
+            let sdk = Sdk::standard();
+            let (agg_pk, agg_vk) = sdk.agg_keygen()?;
 
-            println!("Writing stark proving key to file...");
-            write_agg_stark_pk_to_file(&agg_stark_pk, default_agg_stark_pk_path)?;
+            println!(
+                "Writing STARK aggregation proving key to {}",
+                &default_agg_stark_pk_path
+            );
+            write_object_to_file(default_agg_stark_pk_path, agg_pk)?;
+            println!(
+                "Writing STARK aggregation verifying key to {}",
+                &default_agg_stark_vk_path
+            );
+            write_object_to_file(default_agg_stark_vk_path, agg_vk)?;
 
             println!("Generating root verifier ASM...");
-            let root_verifier_asm = sdk.generate_root_verifier_asm(&agg_stark_pk);
+            let root_verifier_asm = sdk.generate_root_verifier_asm();
 
-            println!("Writing root verifier ASM to file...");
+            println!("Writing root verifier ASM to {}", &default_asm_path);
             write(&default_asm_path, root_verifier_asm)?;
         } else {
             let default_agg_halo2_pk_path = default_agg_halo2_pk_path();
@@ -92,32 +99,42 @@ impl SetupCmd {
                 ));
             }
 
-            Self::download_params(10, 24).await?;
-            let params_reader = CacheHalo2ParamsReader::new(&default_params_dir);
-            let agg_config = AggConfig::default();
-            let sdk = Sdk::new();
+            Self::download_params(10, DEFAULT_HALO2_VERIFIER_K as u32).await?;
+            // halo2 keygen does not depend on the app config
+            let sdk = Sdk::standard();
 
-            let agg_pk = if !self.force_agg_keygen
+            let agg_vk = if !self.force_agg_keygen
                 && PathBuf::from(&default_agg_stark_pk_path).exists()
+                && PathBuf::from(&default_agg_stark_vk_path).exists()
                 && PathBuf::from(&default_agg_halo2_pk_path).exists()
             {
-                read_default_agg_pk()?
+                let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk()?;
+                sdk.set_agg_pk(agg_pk)
+                    .map_err(|_| eyre!("agg_pk already existed"))?;
+                sdk.set_halo2_pk(halo2_pk)
+                    .map_err(|_| eyre!("halo2_pk already existed"))?;
+                read_object_from_file(&default_agg_stark_vk_path)?
             } else {
                 println!("Generating proving key...");
-                sdk.agg_keygen(agg_config, &params_reader, &DefaultStaticVerifierPvHandler)?
+                let (_agg_pk, agg_vk) = sdk.agg_keygen()?;
+                let _halo2_pk = sdk.halo2_pk();
+                agg_vk
             };
 
             println!("Generating root verifier ASM...");
-            let root_verifier_asm = sdk.generate_root_verifier_asm(&agg_pk.agg_stark_pk);
+            let root_verifier_asm = sdk.generate_root_verifier_asm();
 
             println!("Generating verifier contract...");
-            let verifier = sdk.generate_halo2_verifier_solidity(&params_reader, &agg_pk)?;
+            let verifier = sdk.generate_halo2_verifier_solidity()?;
 
             println!("Writing stark proving key to file...");
-            write_agg_stark_pk_to_file(&agg_pk.agg_stark_pk, &default_agg_stark_pk_path)?;
+            write_object_to_file(&default_agg_stark_pk_path, sdk.agg_pk())?;
+
+            println!("Writing stark verifying key to file...");
+            write_object_to_file(&default_agg_stark_vk_path, agg_vk)?;
 
             println!("Writing halo2 proving key to file...");
-            write_agg_halo2_pk_to_file(&agg_pk.halo2_pk, &default_agg_halo2_pk_path)?;
+            write_object_to_file(&default_agg_halo2_pk_path, sdk.halo2_pk())?;
 
             println!("Writing root verifier ASM to file...");
             write(&default_asm_path, root_verifier_asm)?;

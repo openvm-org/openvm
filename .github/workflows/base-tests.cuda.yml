@@ -1,0 +1,72 @@
+name: Base Tests (CUDA)
+# Consolidate non-extension tests to use fewer CUDA runners
+
+on:
+  workflow_call:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["**"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "extensions/native/compiler/**"
+      - "extensions/native/recursion/**"
+      - "Cargo.toml"
+      - ".github/workflows/base-tests.cuda.yml"
+
+concurrency:
+  group: ${{ github.workflow_ref }}-base-tests-cuda-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_FAST_TEST: "1"
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  tests-cuda:
+    runs-on:
+      - runs-on=${{ github.run_id }}-base-tests-cuda-${{ github.run_attempt }}/runner=test-gpu-nvidia/family=g6+g5 # ensure 24G vram for async test
+
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Check CUDA status and set environment variables
+        run: |
+          nvcc --version
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall --test-threads=1" >> $GITHUB_ENV
+
+      - name: Run tests for primitives
+        working-directory: crates/circuits/primitives
+        run: |
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
+
+      - name: Run tests for poseidon2-air
+        working-directory: crates/circuits/poseidon2-air
+        run: |
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
+
+      - name: Run vm crate tests
+        working-directory: crates/vm
+        run: |
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
+
+      - name: Run recursion crate tests
+        working-directory: extensions/native/recursion
+        run: |
+          cargo nextest run --features cuda
+
+      - name: Run async concurrency test
+        working-directory: benchmarks/prove
+        run: |
+          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=14 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000

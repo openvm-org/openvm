@@ -57,7 +57,7 @@ impl Halo2WrapperProvingKey {
     }
     pub fn keygen(params: &Halo2Params, dummy_snark: Snark) -> Self {
         let k = params.k();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let mut circuit =
             generate_wrapper_circuit_object(CircuitBuilderStage::Keygen, k as usize, dummy_snark);
@@ -67,11 +67,11 @@ impl Halo2WrapperProvingKey {
             "Wrapper circuit num advice: {:?}",
             config_params.num_advice_per_phase
         );
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         emit_wrapper_circuit_metrics(&circuit);
         let pk = keygen_pk2(params, &circuit, false).unwrap();
         let num_pvs = circuit.instances().iter().map(|x| x.len()).collect_vec();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("halo2_keygen_time_ms").set(start.elapsed().as_millis() as f64);
         Self {
             pinning: Halo2ProvingPinning {
@@ -112,7 +112,7 @@ impl Halo2WrapperProvingKey {
     }
     #[cfg(feature = "evm-prove")]
     pub fn prove_for_evm(&self, params: &Halo2Params, snark_to_verify: Snark) -> RawEvmProof {
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let k = self.pinning.metadata.config_params.k;
         let prover_circuit = self.generate_circuit_object_for_proving(k, snark_to_verify);
@@ -124,7 +124,7 @@ impl Halo2WrapperProvingKey {
             prover_circuit,
             pvs.clone(),
         );
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
         RawEvmProof {
@@ -176,6 +176,7 @@ impl Halo2WrapperProvingKey {
                 "Snark has multiple phases"
             );
             if circuit.builder.config_params.num_advice_per_phase[0] == 1 {
+                circuit.builder.clear();
                 break;
             }
             if first_run {
@@ -186,6 +187,8 @@ impl Halo2WrapperProvingKey {
                 k += 1;
             }
             first_run = false;
+            // Prevent drop warnings
+            circuit.builder.clear();
         }
         k
     }
@@ -212,7 +215,7 @@ fn generate_wrapper_circuit_object(
     circuit
 }
 
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 fn emit_wrapper_circuit_metrics(agg_circuit: &AggregationCircuit) {
     let stats = agg_circuit.builder.statistics();
     let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();

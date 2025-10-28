@@ -28,7 +28,7 @@ openvm_algebra_guest::moduli_macros::moduli_init! {
 }
 
 openvm_ecc_guest::sw_macros::sw_init! {
-    Secp256k1Point,
+    "Secp256k1Point",
 }
 */
 
@@ -45,7 +45,7 @@ The crate provides two macros: `sw_declare!` and `sw_init!`. The signatures are:
 
 - `sw_declare!` receives comma-separated list of moduli classes descriptions. Each description looks like `SwStruct { mod_type = ModulusName, a = a_expr, b = b_expr }`. Here `ModulusName` is the name of a struct that implements `trait IntMod` -- in particular, the ones created by `moduli_declare!` do -- and has `NUM_LIMBS` divisible by 4. Parameters `a` and `b` correspond to the coefficients of the equation defining the curve. They **must be compile-time constants**. The parameter `a` may be omitted, in which case it defaults to `0` (or, more specifically, to `<ModulusName as IntMod>::ZERO`). The parameter `b` is required.
 
-- `sw_init!` receives comma-separated list of struct names. The struct name must exactly match the name in `sw_declare!` -- type defs are not allowed (see point 5 below).
+- `sw_init!` receives comma-separated list of struct names as string literals. Each struct name must exactly match the name in `sw_declare!` -- type defs are not allowed (see point 5 below).
 
 What happens under the hood:
 
@@ -107,7 +107,7 @@ sw_declare! {
 pub type Sw = Secp256k1Point;
 
 sw_init! {
-    Sw,
+    "Sw",
 }
 ```
 

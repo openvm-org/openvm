@@ -8,6 +8,7 @@ use crate::TranspilerExtension;
 
 /// Collection of [`TranspilerExtension`]s.
 /// The transpiler can be configured to transpile any ELF in 32-bit chunks.
+#[derive(Clone)]
 pub struct Transpiler<F> {
     processors: Vec<Rc<dyn TranspilerExtension<F>>>,
 }

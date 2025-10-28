@@ -1,9 +1,22 @@
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
-    merkle::MemoryMerkleChip, persistent::PersistentBoundaryChip, volatile::VolatileBoundaryChip,
+    merkle::{MemoryMerkleAir, MemoryMerkleChip},
+    persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
+    volatile::{VolatileBoundaryAir, VolatileBoundaryChip},
     MemoryImage, CHUNK,
 };
+
+#[derive(Clone)]
+pub enum MemoryInterfaceAirs {
+    Volatile {
+        boundary: VolatileBoundaryAir,
+    },
+    Persistent {
+        boundary: PersistentBoundaryAir<CHUNK>,
+        merkle: MemoryMerkleAir<CHUNK>,
+    },
+}
 
 #[allow(clippy::large_enum_variant)]
 pub enum MemoryInterface<F> {

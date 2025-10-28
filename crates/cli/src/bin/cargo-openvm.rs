@@ -12,10 +12,13 @@ pub enum Cargo {
 }
 
 #[derive(clap::Args)]
-#[command(author, about, long_about = None, args_conflicts_with_subcommands = true, version = OPENVM_VERSION_MESSAGE)]
+#[command(author, about, long_about = None, version = OPENVM_VERSION_MESSAGE)]
 pub struct VmCli {
     #[command(subcommand)]
     pub command: VmCliCommands,
+
+    #[arg(long)]
+    pub verbose: bool,
 }
 
 #[derive(Subcommand)]
@@ -36,7 +39,13 @@ pub enum VmCliCommands {
 async fn main() -> Result<()> {
     let Cargo::OpenVm(args) = Cargo::parse();
     let command = args.command;
-    setup_tracing_with_log_level(Level::WARN);
+    let log_level = if args.verbose {
+        Level::INFO
+    } else {
+        Level::WARN
+    };
+    setup_tracing_with_log_level(log_level);
+
     match command {
         VmCliCommands::Build(cmd) => cmd.run(),
         VmCliCommands::Commit(cmd) => cmd.run(),

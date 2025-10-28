@@ -122,7 +122,7 @@ impl RangeCheckerChip {
             let cols: &mut RangeCols<F> = (*row).borrow_mut();
             // Set multiplicity for each value in range
             cols.mult =
-                F::from_canonical_u32(self.count[n].load(std::sync::atomic::Ordering::SeqCst));
+                F::from_canonical_u32(self.count[n].swap(0, std::sync::atomic::Ordering::Relaxed));
         }
         RowMajorMatrix::new(rows, NUM_RANGE_COLS)
     }

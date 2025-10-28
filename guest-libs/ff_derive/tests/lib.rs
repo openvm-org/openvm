@@ -4,9 +4,9 @@ mod tests {
 
     use eyre::Result;
     use num_bigint::BigUint;
-    use openvm_algebra_circuit::Rv32ModularConfig;
+    use openvm_algebra_circuit::{Rv32ModularBuilder, Rv32ModularConfig};
     use openvm_algebra_transpiler::ModularTranspilerExtension;
-    use openvm_circuit::utils::{air_test, test_system_config_with_continuations};
+    use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_instructions::exe::VmExe;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -23,7 +23,7 @@ mod tests {
     #[cfg(test)]
     fn test_rv32modular_config(moduli: Vec<BigUint>) -> Rv32ModularConfig {
         let mut config = Rv32ModularConfig::new(moduli);
-        config.system = test_system_config_with_continuations();
+        config.system = test_system_config();
         config
     }
 
@@ -46,7 +46,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -65,7 +65,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -84,7 +84,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -108,7 +108,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -132,7 +132,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 
@@ -181,7 +181,7 @@ mod tests {
                 .with_extension(ModularTranspilerExtension),
         )?;
 
-        air_test(config, openvm_exe);
+        air_test(Rv32ModularBuilder, config, openvm_exe);
         Ok(())
     }
 }

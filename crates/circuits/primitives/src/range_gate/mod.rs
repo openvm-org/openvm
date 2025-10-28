@@ -143,7 +143,7 @@ impl RangeCheckerGateChip {
             .iter()
             .enumerate()
             .flat_map(|(i, count)| {
-                let c = count.load(std::sync::atomic::Ordering::Relaxed);
+                let c = count.swap(0, std::sync::atomic::Ordering::Relaxed);
                 vec![F::from_canonical_usize(i), F::from_canonical_u32(c)]
             })
             .collect();
@@ -153,5 +153,7 @@ impl RangeCheckerGateChip {
 
 const fn make_col_map() -> RangeGateCols<usize> {
     let indices_arr = indices_arr::<NUM_RANGE_GATE_COLS>();
+    // SAFETY: RangeGateCols is repr(C) with two fields, same layout as [usize; 2].
+    // NUM_RANGE_GATE_COLS equals 2. Transmute reinterprets array as struct.
     unsafe { transmute::<[usize; NUM_RANGE_GATE_COLS], RangeGateCols<usize>>(indices_arr) }
 }

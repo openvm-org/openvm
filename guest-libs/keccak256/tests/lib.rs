@@ -3,7 +3,7 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::utils::air_test;
     use openvm_instructions::exe::VmExe;
-    use openvm_keccak256_circuit::Keccak256Rv32Config;
+    use openvm_keccak256_circuit::{Keccak256Rv32Builder, Keccak256Rv32Config};
     use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
     use openvm_rv32im_transpiler::{
         Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
@@ -27,7 +27,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, openvm_exe);
+        air_test(Keccak256Rv32Builder, config, openvm_exe);
         Ok(())
     }
 }

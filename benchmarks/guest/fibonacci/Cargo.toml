@@ -1,16 +1,10 @@
-[workspace]
 [package]
 name = "openvm-fibonacci-program"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", features = ["std"] }
+openvm = { workspace = true, features = ["std"] }
 
 [features]
 default = []
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

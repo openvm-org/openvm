@@ -15,7 +15,7 @@ pub struct Poseidon2Config<F> {
     pub constants: Poseidon2Constants<F>,
 }
 
-impl<F: PrimeField32> Default for Poseidon2Config<F> {
+impl<F: Field> Default for Poseidon2Config<F> {
     fn default() -> Self {
         Self {
             constants: default_baby_bear_rc(),

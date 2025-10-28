@@ -1,12 +1,14 @@
 use std::{array::from_fn, sync::Arc};
 
 use num_bigint::BigUint;
-use openvm_circuit::{
-    arch::{instructions::exe::VmExe, VmConfig},
-    system::program::trace::VmCommittedExe,
-};
+use openvm_circuit::arch::{instructions::exe::VmExe, MemoryConfig};
+pub use openvm_circuit::system::program::trace::VmCommittedExe;
 use openvm_native_compiler::ir::DIGEST_SIZE;
-use openvm_stark_backend::{config::StarkGenericConfig, p3_field::PrimeField32};
+use openvm_stark_backend::{
+    config::{Com, StarkGenericConfig, Val},
+    engine::StarkEngine,
+    p3_field::PrimeField32,
+};
 use openvm_stark_sdk::{
     config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
     engine::StarkFriEngine,
@@ -16,14 +18,15 @@ use openvm_stark_sdk::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use tracing::instrument;
 
-use crate::{types::BN254_BYTES, NonRootCommittedExe, F, SC};
+use crate::{types::BN254_BYTES, F, SC};
 
 /// Wrapper for an array of big-endian bytes, representing an unsigned big integer. Each commit can
 /// be converted to a Bn254Fr using the trivial identification as natural numbers or into a `u32`
 /// digest by decomposing the big integer base-`F::MODULUS`.
 #[serde_as]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CommitBytes(#[serde_as(as = "serde_with::hex::Hex")] [u8; BN254_BYTES]);
 
 impl CommitBytes {
@@ -56,9 +59,15 @@ impl CommitBytes {
     }
 }
 
+impl std::fmt::Display for CommitBytes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.0))
+    }
+}
+
 /// `AppExecutionCommit` has all the commitments users should check against the final proof.
 #[serde_as]
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AppExecutionCommit {
     /// Commitment of the executable. In base-F::MODULUS, it's computed as
     /// compress(
@@ -72,26 +81,41 @@ pub struct AppExecutionCommit {
     pub app_exe_commit: CommitBytes,
 
     /// Commitment of the leaf VM verifier program which commits the VmConfig of App VM.
-    /// Internal verifier will verify `leaf_vm_verifier_commit`.
+    // Internal verifier will verify `app_vm_commit`.
+    // Internally this is also known as `leaf_verifier_program_commit`.
     pub app_vm_commit: CommitBytes,
 }
 
 impl AppExecutionCommit {
     /// Users should use this function to compute `AppExecutionCommit` and check it against the
     /// final proof.
-    pub fn compute<VC: VmConfig<F>>(
-        app_vm_config: &VC,
-        app_exe: &NonRootCommittedExe,
-        leaf_vm_verifier_exe: &NonRootCommittedExe,
-    ) -> Self {
-        let exe_commit: [F; DIGEST_SIZE] = app_exe
-            .compute_exe_commit(&app_vm_config.system().memory_config)
-            .into();
-        let vm_commit: [F; DIGEST_SIZE] = leaf_vm_verifier_exe.committed_program.commitment.into();
+    #[instrument(name = "AppExecutionCommit::compute", skip_all)]
+    pub fn compute<SC: StarkGenericConfig>(
+        app_memory_config: &MemoryConfig,
+        app_exe: &VmExe<Val<SC>>,
+        app_program_commit: Com<SC>,
+        leaf_verifier_program_commit: Com<SC>,
+    ) -> Self
+    where
+        Com<SC>: AsRef<[Val<SC>; DIGEST_SIZE]>
+            + From<[Val<SC>; DIGEST_SIZE]>
+            + Into<[Val<SC>; DIGEST_SIZE]>,
+        Val<SC>: PrimeField32,
+    {
+        let exe_commit: [Val<SC>; DIGEST_SIZE] = VmCommittedExe::<SC>::compute_exe_commit(
+            &app_program_commit,
+            app_exe,
+            app_memory_config,
+        )
+        .into();
+        let vm_commit: [Val<SC>; DIGEST_SIZE] = leaf_verifier_program_commit.into();
         Self::from_field_commit(exe_commit, vm_commit)
     }
 
-    pub fn from_field_commit(exe_commit: [F; DIGEST_SIZE], vm_commit: [F; DIGEST_SIZE]) -> Self {
+    pub fn from_field_commit<F: PrimeField32>(
+        exe_commit: [F; DIGEST_SIZE],
+        vm_commit: [F; DIGEST_SIZE],
+    ) -> Self {
         Self {
             app_exe_commit: CommitBytes::from_u32_digest(&exe_commit.map(|x| x.as_canonical_u32())),
             app_vm_commit: CommitBytes::from_u32_digest(&vm_commit.map(|x| x.as_canonical_u32())),
@@ -102,10 +126,10 @@ impl AppExecutionCommit {
 pub fn commit_app_exe(
     app_fri_params: FriParameters,
     app_exe: impl Into<VmExe<F>>,
-) -> Arc<NonRootCommittedExe> {
+) -> Arc<VmCommittedExe<SC>> {
     let exe: VmExe<_> = app_exe.into();
     let app_engine = BabyBearPoseidon2Engine::new(app_fri_params);
-    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config.pcs()))
+    Arc::new(VmCommittedExe::<SC>::commit(exe, app_engine.config().pcs()))
 }
 
 pub(crate) fn babybear_digest_to_bn254(digest: &[F; DIGEST_SIZE]) -> Bn254Fr {

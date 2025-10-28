@@ -6,13 +6,7 @@ use std::{
 
 use itertools::zip_eq;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, CustomBorrow, E2PreCompute, ExecuteFunc, ExecutionBridge,
-        ExecutionState, MatrixRecordArena, MultiRowLayout, MultiRowMetadata, NewVmChipWrapper,
-        RecordArena, Result, SizedRecord, StepExecutorE1, StepExecutorE2, TraceFiller, TraceStep,
-        VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::{
         memory::{
             offline_checker::{
@@ -43,6 +37,13 @@ use crate::{
     field_extension::{FieldExtension, EXT_DEG},
     utils::const_max,
 };
+
+mod execution;
+
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[cfg(test)]
 mod tests;
@@ -639,6 +640,9 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         &'a mut self,
         layout: FriReducedOpeningLayout,
     ) -> FriReducedOpeningRecordMut<'a, F> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits and
+        //   constants are guaranteed <= self.len() by layout precondition
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<FriReducedOpeningHeaderRecord>()) };
         let header: &mut FriReducedOpeningHeaderRecord = header_buf.borrow_mut();
@@ -646,6 +650,10 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
         let workload_size =
             layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
 
+        // SAFETY:
+        // - layout guarantees rest has sufficient length for workload data
+        // - workload_size is calculated from layout.metadata.length
+        // - total buffer size was validated to contain header + workload + aligned aux records
         let (workload_buf, rest) = unsafe { rest.split_at_mut_unchecked(workload_size) };
         let a_prev_size = if layout.metadata.is_init {
             0
@@ -653,9 +661,21 @@ impl<'a, F> CustomBorrow<'a, FriReducedOpeningRecordMut<'a, F>, FriReducedOpenin
             layout.metadata.length * size_of::<F>()
         };
 
+        // SAFETY:
+        // - The layout guarantees sufficient space for a_prev data when is_init is false
+        // - When is_init is true, a_prev_size is 0 and the split is trivial
+        // - The remaining buffer has space for common data
         let (a_prev_buf, common_buf) = unsafe { rest.split_at_mut_unchecked(a_prev_size) };
 
+        // SAFETY:
+        // - a_prev_buf contains bytes that will be interpreted as field elements
+        // - align_to_mut ensures proper alignment for type F
+        // - The slice length is a multiple of size_of::<F>() by construction
         let (_, a_prev_records, _) = unsafe { a_prev_buf.align_to_mut::<F>() };
+        // SAFETY:
+        // - workload_buf contains exactly layout.metadata.length workload records worth of bytes
+        // - align_to_mut ensures proper alignment for the FriReducedOpeningWorkloadRowRecord<F>
+        //   type
         let (_, workload_records, _) =
             unsafe { workload_buf.align_to_mut::<FriReducedOpeningWorkloadRowRecord<F>>() };
 
@@ -682,6 +702,9 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     fn size(layout: &FriReducedOpeningLayout) -> usize {
         let mut total_len = size_of::<FriReducedOpeningHeaderRecord>();
         total_len += layout.metadata.length * size_of::<FriReducedOpeningWorkloadRowRecord<F>>();
+        if !layout.metadata.is_init {
+            total_len += layout.metadata.length * size_of::<F>();
+        }
         total_len += size_of::<FriReducedOpeningCommonRecord<F>>();
         total_len
     }
@@ -691,45 +714,35 @@ impl<F> SizedRecord<FriReducedOpeningLayout> for FriReducedOpeningRecordMut<'_, 
     }
 }
 
-pub struct FriReducedOpeningStep<F: Field> {
-    phantom: std::marker::PhantomData<F>,
-}
+#[derive(derive_new::new, Copy, Clone)]
+pub struct FriReducedOpeningExecutor;
 
-impl<F: PrimeField32> Default for FriReducedOpeningStep<F> {
+#[derive(derive_new::new)]
+pub struct FriReducedOpeningFiller;
+
+pub type FriReducedOpeningChip<F> = VmChipWrapper<F, FriReducedOpeningFiller>;
+
+impl Default for FriReducedOpeningExecutor {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    pub fn new() -> Self {
-        Self {
-            phantom: std::marker::PhantomData,
-        }
-    }
-}
-
-impl<F, CTX> TraceStep<F, CTX> for FriReducedOpeningStep<F>
+impl<F, RA> PreflightExecutor<F, RA> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, FriReducedOpeningLayout, FriReducedOpeningRecordMut<'buf, F>>,
 {
-    type RecordLayout = FriReducedOpeningLayout;
-    type RecordMut<'a> = FriReducedOpeningRecordMut<'a, F>;
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         assert_eq!(opcode, FRI_REDUCED_OPENING.global_opcode().as_usize());
         String::from("FRI_REDUCED_OPENING")
     }
 
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             a,
             b,
@@ -755,7 +768,7 @@ where
             length: length as usize,
             is_init,
         };
-        let record = arena.alloc(MultiRowLayout::new(metadata));
+        let record = state.ctx.alloc(MultiRowLayout::new(metadata));
 
         record.common.from_pc = *state.pc;
         record.common.timestamp = timestamp_start;
@@ -880,10 +893,7 @@ where
     }
 }
 
-impl<F, CTX> TraceFiller<F, CTX> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
+impl<F: PrimeField32> TraceFiller<F> for FriReducedOpeningFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -898,6 +908,9 @@ where
         let mut remaining_trace = &mut trace.values[..OVERALL_WIDTH * rows_used];
         let mut chunks = Vec::with_capacity(rows_used);
         while !remaining_trace.is_empty() {
+            // SAFETY:
+            // - caller ensures `remaining_trace` contains a valid record representation that was
+            //   previously written by the executor
             let header: &FriReducedOpeningHeaderRecord =
                 unsafe { get_record_from_slice(&mut remaining_trace, ()) };
             let num_rows = header.length as usize + 2;
@@ -913,6 +926,12 @@ where
                 length: num_rows - 2,
                 is_init,
             };
+            // SAFETY:
+            // - caller ensures `trace` contains a valid record representation that was previously
+            //   written by the executor
+            // - chunk contains a valid FriReducedOpeningRecord with the exact layout specified
+            // - get_record_from_slice will correctly split the buffer into header, workload, and
+            //   aux components based on this layout
             let record: FriReducedOpeningRecordMut<F> =
                 unsafe { get_record_from_slice(&mut chunk, MultiRowLayout::new(metadata)) };
 
@@ -1100,189 +1119,3 @@ where
         });
     }
 }
-
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct FriReducedOpeningPreCompute {
-    a_ptr_ptr: u32,
-    b_ptr_ptr: u32,
-    length_ptr: u32,
-    alpha_ptr: u32,
-    result_ptr: u32,
-    hint_id_ptr: u32,
-    is_init_ptr: u32,
-}
-
-impl<F: PrimeField32> FriReducedOpeningStep<F> {
-    #[inline(always)]
-    fn pre_compute_impl(
-        &self,
-        _pc: u32,
-        inst: &Instruction<F>,
-        data: &mut FriReducedOpeningPreCompute,
-    ) -> Result<()> {
-        let &Instruction {
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            ..
-        } = inst;
-
-        let a_ptr_ptr = a.as_canonical_u32();
-        let b_ptr_ptr = b.as_canonical_u32();
-        let length_ptr = c.as_canonical_u32();
-        let alpha_ptr = d.as_canonical_u32();
-        let result_ptr = e.as_canonical_u32();
-        let hint_id_ptr = f.as_canonical_u32();
-        let is_init_ptr = g.as_canonical_u32();
-
-        *data = FriReducedOpeningPreCompute {
-            a_ptr_ptr,
-            b_ptr_ptr,
-            length_ptr,
-            alpha_ptr,
-            result_ptr,
-            hint_id_ptr,
-            is_init_ptr,
-        };
-
-        Ok(())
-    }
-}
-
-impl<F> StepExecutorE1<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
-    #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<FriReducedOpeningPreCompute>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let pre_compute: &mut FriReducedOpeningPreCompute = data.borrow_mut();
-
-        self.pre_compute_impl(pc, inst, pre_compute)?;
-
-        let fn_ptr = execute_e1_impl;
-        Ok(fn_ptr)
-    }
-}
-
-impl<F> StepExecutorE2<F> for FriReducedOpeningStep<F>
-where
-    F: PrimeField32,
-{
-    #[inline(always)]
-    fn e2_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<FriReducedOpeningPreCompute>>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e2<Ctx: E2ExecutionCtx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let pre_compute: &mut E2PreCompute<FriReducedOpeningPreCompute> = data.borrow_mut();
-        pre_compute.chip_idx = chip_idx as u32;
-
-        self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-
-        let fn_ptr = execute_e2_impl;
-        Ok(fn_ptr)
-    }
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
-    execute_e12_impl(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
-    let height = execute_e12_impl(&pre_compute.data, vm_state);
-    vm_state
-        .ctx
-        .on_height_change(pre_compute.chip_idx as usize, height);
-}
-
-#[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx>(
-    pre_compute: &FriReducedOpeningPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
-) -> u32 {
-    let alpha = vm_state.vm_read(AS::Native as u32, pre_compute.alpha_ptr);
-
-    let [length]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.length_ptr);
-    let length = length.as_canonical_u32() as usize;
-
-    let [a_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.a_ptr_ptr);
-    let [b_ptr]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.b_ptr_ptr);
-
-    let [is_init_read]: [F; 1] = vm_state.vm_read(AS::Native as u32, pre_compute.is_init_ptr);
-    let is_init = is_init_read.as_canonical_u32();
-
-    let [hint_id_f]: [F; 1] = vm_state.host_read(AS::Native as u32, pre_compute.hint_id_ptr);
-    let hint_id = hint_id_f.as_canonical_u32() as usize;
-
-    let data = if is_init == 0 {
-        let hint_steam = &mut vm_state.streams.hint_space[hint_id];
-        hint_steam.drain(0..length).collect()
-    } else {
-        vec![]
-    };
-
-    let mut as_and_bs = Vec::with_capacity(length);
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..length {
-        let a_ptr_i = (a_ptr + F::from_canonical_usize(i)).as_canonical_u32();
-        let [a]: [F; 1] = if is_init == 0 {
-            vm_state.vm_write(AS::Native as u32, a_ptr_i, &[data[i]]);
-            [data[i]]
-        } else {
-            vm_state.vm_read(AS::Native as u32, a_ptr_i)
-        };
-        let b_ptr_i = (b_ptr + F::from_canonical_usize(EXT_DEG * i)).as_canonical_u32();
-        let b = vm_state.vm_read(AS::Native as u32, b_ptr_i);
-
-        as_and_bs.push((a, b));
-    }
-
-    let mut result = [F::ZERO; EXT_DEG];
-    for (a, b) in as_and_bs.into_iter().rev() {
-        // result = result * alpha + (b - a)
-        result = FieldExtension::add(
-            FieldExtension::multiply(result, alpha),
-            FieldExtension::subtract(b, elem_to_ext(a)),
-        );
-    }
-
-    vm_state.vm_write(AS::Native as u32, pre_compute.result_ptr, &result);
-
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
-
-    length as u32 + 2
-}
-
-pub type FriReducedOpeningChip<F> =
-    NewVmChipWrapper<F, FriReducedOpeningAir, FriReducedOpeningStep<F>, MatrixRecordArena<F>>;

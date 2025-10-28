@@ -7,7 +7,7 @@ use openvm_p256::NistP256;
 #[allow(unused)]
 use openvm_p256::P256Point;
 
-openvm::init!("openvm_init_simple.rs");
+openvm::init!("openvm_init_add.rs");
 
 openvm::entry!(main);
 

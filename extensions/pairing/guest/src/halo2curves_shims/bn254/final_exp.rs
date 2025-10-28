@@ -2,10 +2,31 @@ use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
     ff::Field,
 };
+use lazy_static::lazy_static;
 use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
 
 use super::{Bn254, EXP1, EXP2, M_INV, R_INV, U27_COEFF_0, U27_COEFF_1};
 use crate::pairing::{FinalExp, MultiMillerLoop};
+
+lazy_static! {
+    pub static ref UNITY_ROOT_27: Fq12 = {
+        let u0 = U27_COEFF_0.to_u64_digits();
+        let u1 = U27_COEFF_1.to_u64_digits();
+        let u_coeffs = Fq2::from_coeffs([
+            Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
+            Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
+        ]);
+        Fq12::from_coeffs([
+            Fq2::ZERO,
+            Fq2::ZERO,
+            u_coeffs,
+            Fq2::ZERO,
+            Fq2::ZERO,
+            Fq2::ZERO,
+        ])
+    };
+    pub static ref UNITY_ROOT_27_EXP2: Fq12 = UNITY_ROOT_27.pow(EXP2.to_u64_digits());
+}
 
 #[allow(non_snake_case)]
 impl FinalExp for Bn254 {
@@ -50,21 +71,7 @@ impl FinalExp for Bn254 {
         // Cubic nonresidue power
         let u;
 
-        // get the 27th root of unity
-        let u0 = U27_COEFF_0.to_u64_digits();
-        let u1 = U27_COEFF_1.to_u64_digits();
-        let u_coeffs = Fq2::from_coeffs([
-            Fq::from_raw([u0[0], u0[1], u0[2], u0[3]]),
-            Fq::from_raw([u1[0], u1[1], u1[2], u1[3]]),
-        ]);
-        let unity_root_27 = Fq12::from_coeffs([
-            Fq2::ZERO,
-            Fq2::ZERO,
-            u_coeffs,
-            Fq2::ZERO,
-            Fq2::ZERO,
-            Fq2::ZERO,
-        ]);
+        let unity_root_27 = *UNITY_ROOT_27;
         debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
 
         if f.pow(EXP1.to_u64_digits()) == Fq12::ONE {
@@ -115,8 +122,9 @@ impl FinalExp for Bn254 {
 
         tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
 
+        let unity_root_27_exp2 = *UNITY_ROOT_27_EXP2;
         while t != 0 {
-            tmp = unity_root_27.pow(EXP2.to_u64_digits());
+            tmp = unity_root_27_exp2;
             x *= tmp;
 
             x3 = x.square() * x * c_inv;

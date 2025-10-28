@@ -1,10 +1,15 @@
-use std::{array, borrow::BorrowMut};
+use std::{array, borrow::BorrowMut, sync::Arc};
 
-use openvm_circuit::arch::{
-    testing::{VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
-    InstructionExecutor, VmAirWrapper,
+use openvm_circuit::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
+        Arena, ExecutionBridge, PreflightExecutor,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::range_tuple::{RangeTupleCheckerBus, SharedRangeTupleCheckerChip};
+use openvm_circuit_primitives::range_tuple::{
+    RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
+};
 use openvm_instructions::LocalOpcode;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
@@ -18,50 +23,95 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv32MultAdapterRecord, MultiplicationCoreRecord, Rv32MultiplicationChipGpu},
+    openvm_circuit::arch::{
+        testing::{GpuChipTestBuilder, GpuTestChipHarness},
+        EmptyAdapterCoreLayout,
+    },
+};
 
 use super::core::run_mul;
 use crate::{
-    adapters::{Rv32MultAdapterAir, Rv32MultAdapterStep, RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS},
-    mul::{MultiplicationCoreCols, MultiplicationStep, Rv32MultiplicationChip},
+    adapters::{
+        Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
+        RV32_REGISTER_NUM_LIMBS,
+    },
+    mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
-    MultiplicationCoreAir,
+    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
+const TUPLE_CHECKER_SIZES: [u32; 2] = [
+    (1u32 << RV32_CELL_BITS),
+    (MAX_NUM_LIMBS * (1u32 << RV32_CELL_BITS)),
+];
+
 type F = BabyBear;
+type Harness = TestChipHarness<
+    F,
+    Rv32MultiplicationExecutor,
+    Rv32MultiplicationAir,
+    Rv32MultiplicationChip<F>,
+>;
 
-fn create_test_chip(
-    tester: &mut VmChipTestBuilder<F>,
-) -> (Rv32MultiplicationChip<F>, SharedRangeTupleCheckerChip<2>) {
-    let range_tuple_bus = RangeTupleCheckerBus::new(
-        RANGE_TUPLE_CHECKER_BUS,
-        [1 << RV32_CELL_BITS, MAX_NUM_LIMBS * (1 << RV32_CELL_BITS)],
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    range_tuple_chip: Arc<RangeTupleCheckerChip<2>>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (
+    Rv32MultiplicationAir,
+    Rv32MultiplicationExecutor,
+    Rv32MultiplicationChip<F>,
+) {
+    let air = Rv32MultiplicationAir::new(
+        Rv32MultAdapterAir::new(execution_bridge, memory_bridge),
+        MultiplicationCoreAir::new(*range_tuple_chip.bus(), MulOpcode::CLASS_OFFSET),
     );
-    let range_tuple_checker = SharedRangeTupleCheckerChip::new(range_tuple_bus);
-
-    let mut chip = Rv32MultiplicationChip::<F>::new(
-        VmAirWrapper::new(
-            Rv32MultAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-            MultiplicationCoreAir::new(range_tuple_bus, MulOpcode::CLASS_OFFSET),
-        ),
-        MultiplicationStep::new(
-            Rv32MultAdapterStep::new(),
-            range_tuple_checker.clone(),
+    let executor =
+        Rv32MultiplicationExecutor::new(Rv32MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
+    let chip = Rv32MultiplicationChip::<F>::new(
+        MultiplicationFiller::new(
+            Rv32MultAdapterFiller,
+            range_tuple_chip,
             MulOpcode::CLASS_OFFSET,
         ),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (RangeTupleCheckerAir<2>, SharedRangeTupleCheckerChip<2>),
+) {
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+    let range_tuple_chip =
+        SharedRangeTupleCheckerChip::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        range_tuple_chip.clone(),
         tester.memory_helper(),
     );
-    chip.set_trace_buffer_height(MAX_INS_CAPACITY);
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
 
-    (chip, range_tuple_checker)
+    (harness, (range_tuple_chip.air, range_tuple_chip))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_and_execute<E: InstructionExecutor<F>>(
-    tester: &mut VmChipTestBuilder<F>,
-    chip: &mut E,
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
     rng: &mut StdRng,
     opcode: MulOpcode,
     b: Option<[u8; RV32_REGISTER_NUM_LIMBS]>,
@@ -74,7 +124,7 @@ fn set_and_execute<E: InstructionExecutor<F>>(
         rv32_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
 
     instruction.e = F::ZERO;
-    tester.execute(chip, &instruction);
+    tester.execute(executor, arena, &instruction);
 
     let (a, _) = run_mul::<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>(&b, &c);
     assert_eq!(
@@ -95,16 +145,24 @@ fn run_rv32_mul_rand_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
 
-    let (mut chip, range_tuple_checker) = create_test_chip(&mut tester);
+    let (mut harness, range_tuple) = create_harness(&mut tester);
     let num_ops = 100;
     for _ in 0..num_ops {
-        set_and_execute(&mut tester, &mut chip, &mut rng, MUL, None, None);
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            MUL,
+            None,
+            None,
+        );
     }
 
     let tester = tester
         .build()
-        .load(chip)
-        .load(range_tuple_checker)
+        .load(harness)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test().expect("Verification failed");
 }
@@ -127,11 +185,19 @@ fn run_negative_mul_test(
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();
-    let (mut chip, range_tuple_chip) = create_test_chip(&mut tester);
+    let (mut harness, range_tuple) = create_harness(&mut tester);
 
-    set_and_execute(&mut tester, &mut chip, &mut rng, opcode, Some(b), Some(c));
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+        Some(b),
+        Some(c),
+    );
 
-    let adapter_width = BaseAir::<F>::width(&chip.air.adapter);
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).to_vec();
         let cols: &mut MultiplicationCoreCols<F, RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS> =
@@ -144,8 +210,8 @@ fn run_negative_mul_test(
     disable_debug_builder();
     let tester = tester
         .build()
-        .load_and_prank_trace(chip, modify_trace)
-        .load(range_tuple_chip)
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(range_tuple)
         .finalize();
     tester.simple_test_with_expected_error(get_verification_error(interaction_error));
 }
@@ -191,4 +257,81 @@ fn run_mul_sanity_test() {
         assert_eq!(z[i], result[i]);
         assert_eq!(c[i], carry[i]);
     }
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness = GpuTestChipHarness<
+    F,
+    Rv32MultiplicationExecutor,
+    Rv32MultiplicationAir,
+    Rv32MultiplicationChipGpu,
+    Rv32MultiplicationChip<F>,
+>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let range_tuple_bus = RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES);
+    let dummy_range_tuple_chip = Arc::new(RangeTupleCheckerChip::<2>::new(range_tuple_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_tuple_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv32MultiplicationChipGpu::new(
+        tester.range_checker(),
+        tester.range_tuple_checker(),
+        tester.timestamp_max_bits(),
+    );
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_rand_mul_tracegen() {
+    let mut rng = create_seeded_rng();
+    let mut tester = GpuChipTestBuilder::default().with_range_tuple_checker(
+        RangeTupleCheckerBus::new(RANGE_TUPLE_CHECKER_BUS, TUPLE_CHECKER_SIZES),
+    );
+
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            MulOpcode::MUL,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (
+        &'a mut Rv32MultAdapterRecord,
+        &'a mut MultiplicationCoreRecord<RV32_REGISTER_NUM_LIMBS, RV32_CELL_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record<'_>, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv32MultAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
 }

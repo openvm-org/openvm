@@ -5,10 +5,7 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{
-        get_record_from_slice, CustomBorrow, MultiRowLayout, MultiRowMetadata, RecordArena, Result,
-        SizedRecord, TraceFiller, TraceStep, VmStateMut,
-    },
+    arch::*,
     system::memory::{
         offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         online::TracingMemory,
@@ -41,7 +38,7 @@ use super::{
 use crate::{
     columns::NUM_KECCAK_VM_COLS,
     utils::{keccak256, keccak_f, num_keccak_f},
-    KeccakVmStep, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
+    KeccakVmExecutor, KeccakVmFiller, KECCAK_DIGEST_BYTES, KECCAK_RATE_U16S, KECCAK_WORD_SIZE,
 };
 
 #[derive(Clone, Copy)]
@@ -88,11 +85,18 @@ pub struct KeccakVmRecordMut<'a> {
 /// Has debug assertions that check the size and alignment of the slices.
 impl<'a> CustomBorrow<'a, KeccakVmRecordMut<'a>, KeccakVmRecordLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: KeccakVmRecordLayout) -> KeccakVmRecordMut<'a> {
+        // SAFETY:
+        // - Caller guarantees through the layout that self has sufficient length for all splits and
+        //   constants are guaranteed <= self.len() by layout precondition
         let (record_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<KeccakVmRecordHeader>()) };
 
         let num_reads = layout.metadata.len.div_ceil(KECCAK_WORD_SIZE);
         // Note: each read is `KECCAK_WORD_SIZE` bytes
+        // SAFETY:
+        // - layout guarantees rest has sufficient length for input data
+        // - num_reads is calculated from layout.metadata.len
+        // - total buffer size was validated to contain header + input + aligned aux records
         let (input, rest) = unsafe { rest.split_at_mut_unchecked(num_reads * KECCAK_WORD_SIZE) };
         let (_, read_aux_buf, _) = unsafe { rest.align_to_mut::<MemoryReadAuxRecord>() };
         KeccakVmRecordMut {
@@ -128,23 +132,20 @@ impl SizedRecord<KeccakVmRecordLayout> for KeccakVmRecordMut<'_> {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
-    type RecordLayout = KeccakVmRecordLayout;
-    type RecordMut<'a> = KeccakVmRecordMut<'a>;
-
+impl<F, RA> PreflightExecutor<F, RA> for KeccakVmExecutor
+where
+    F: PrimeField32,
+    for<'buf> RA: RecordArena<'buf, KeccakVmRecordLayout, KeccakVmRecordMut<'buf>>,
+{
     fn get_opcode_name(&self, _: usize) -> String {
         format!("{:?}", Rv32KeccakOpcode::KECCAK256)
     }
 
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let &Instruction {
             opcode,
             a,
@@ -163,7 +164,9 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
         let num_blocks = num_keccak_f(len);
-        let record = arena.alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
+        let record = state
+            .ctx
+            .alloc(KeccakVmRecordLayout::new(KeccakVmMetadata { len }));
 
         record.inner.from_pc = *state.pc;
         record.inner.timestamp = state.memory.timestamp();
@@ -205,7 +208,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
                     .memory
                     .increment_timestamp_by(KECCAK_REGISTER_READS as u32);
             }
-            let read = tracing_read::<_, KECCAK_WORD_SIZE>(
+            let read = tracing_read::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.src + (idx * KECCAK_WORD_SIZE) as u32,
@@ -221,7 +224,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
 
         let digest = keccak256(&record.input[..len]);
         for (i, word) in digest.chunks_exact(KECCAK_WORD_SIZE).enumerate() {
-            tracing_write::<_, KECCAK_WORD_SIZE>(
+            tracing_write::<KECCAK_WORD_SIZE>(
                 state.memory,
                 RV32_MEMORY_AS,
                 record.inner.dst + (i * KECCAK_WORD_SIZE) as u32,
@@ -239,7 +242,7 @@ impl<F: PrimeField32, CTX> TraceStep<F, CTX> for KeccakVmStep {
     }
 }
 
-impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
+impl<F: PrimeField32> TraceFiller<F> for KeccakVmFiller {
     fn fill_trace(
         &self,
         mem_helper: &MemoryAuxColsFactory<F>,
@@ -264,6 +267,10 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                 sizes.push((0, 0));
                 break;
             } else {
+                // SAFETY:
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - header is the first element of the record
                 let record: &KeccakVmRecordHeader =
                     unsafe { get_record_from_slice(&mut trace, ()) };
                 let num_blocks = num_keccak_f(record.len as usize);
@@ -304,6 +311,13 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                             // Need to get rid of the accidental garbage data that might overflow
                             // the F's prime field. Unfortunately, there
                             // is no good way around this
+                            // SAFETY:
+                            // - row has exactly NUM_KECCAK_VM_COLS elements
+                            // - NUM_KECCAK_PERM_COLS offset is less than NUM_KECCAK_VM_COLS by
+                            //   design
+                            // - We're zeroing the remaining (NUM_KECCAK_VM_COLS -
+                            //   NUM_KECCAK_PERM_COLS) elements to clear any garbage data that might
+                            //   overflow the field
                             unsafe {
                                 std::ptr::write_bytes(
                                     row.as_mut_ptr().add(NUM_KECCAK_PERM_COLS) as *mut u8,
@@ -325,6 +339,12 @@ impl<F: PrimeField32, CTX> TraceFiller<F, CTX> for KeccakVmStep {
                 let num_reads = len.div_ceil(KECCAK_WORD_SIZE);
                 let read_len = num_reads * KECCAK_WORD_SIZE;
 
+                // SAFETY:
+                // - caller ensures `trace` contains a valid record representation that was
+                //   previously written by the executor
+                // - slice contains a valid KeccakVmRecord with the exact layout specified
+                // - get_record_from_slice will correctly split the buffer into header, input, and
+                //   aux components based on this layout
                 let record: KeccakVmRecordMut = unsafe {
                     get_record_from_slice(
                         slice,

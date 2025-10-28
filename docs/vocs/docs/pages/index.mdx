@@ -1,0 +1,43 @@
+---
+content:
+    width: 100%
+layout: landing
+showLogo: false
+title: OpenVM
+description: A performant and modular zkVM framework built for customization and extensibility
+---
+
+import { HomePage } from "vocs/components";
+
+<HomePage.Root>
+  <HomePage.Logo />
+  <HomePage.Tagline>A performant and modular zkVM framework built for customization and extensibility.</HomePage.Tagline>
+    <div className="flex flex-col justify-between space-y-4 w-full max-w-[1000px]">
+    <div style={{textAlign: 'left', display: 'block'}}>
+    :::code-group
+
+    ```bash [Build with OpenVM]
+    # install `cargo openvm`
+    cargo +1.86 install --locked --git https://github.com/openvm-org/openvm.git --tag v1.4.0 cargo-openvm
+
+    # create a starter OpenVM project
+    cargo openvm init fibonacci
+    ```
+    ```bash [Customize OpenVM]
+    // .. snip ..
+    let vm_config = SdkVmConfig::builder()
+        .system(Default::default())
+        .rv32i(Default::default())
+        .rv32m(Default::default())
+        .io(Default::default())
+        .build();
+    ```
+    :::
+    </div>
+    </div>
+  <HomePage.Description>OpenVM is an open-source zero-knowledge virtual machine (zkVM) framework focused on modularity at every level of the stack. OpenVM is designed for customization and extensibility without sacrificing performance or maintainability.</HomePage.Description>
+  <HomePage.Buttons>
+    <HomePage.Button href="/book/getting-started/install" variant="accent">Get started</HomePage.Button>
+    <HomePage.Button href="https://github.com/openvm-org/openvm">GitHub</HomePage.Button>
+  </HomePage.Buttons>
+</HomePage.Root>

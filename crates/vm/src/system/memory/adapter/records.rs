@@ -14,7 +14,7 @@ pub struct AccessRecordHeader {
     pub timestamp_and_mask: u32,
     pub address_space: u32,
     pub pointer: u32,
-    // TODO: these three are easily mergeable into a single u32
+    // PERF: these three are easily mergeable into a single u32
     pub block_size: u32,
     pub lowest_block_size: u32,
     pub type_size: u32,
@@ -24,7 +24,7 @@ pub struct AccessRecordHeader {
 #[derive(Debug)]
 pub struct AccessRecordMut<'a> {
     pub header: &'a mut AccessRecordHeader,
-    // TODO(AG): optimize with some `Option` serialization stuff
+    // PERF(AG): optimize with some `Option` serialization stuff
     pub timestamps: &'a mut [u32], // len is block_size / lowest_block_size
     pub data: &'a mut [u8],        // len is block_size * type_size
 }
@@ -69,7 +69,8 @@ impl SizedRecord<AccessLayout> for AccessRecordMut<'_> {
 
 impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
     fn custom_borrow(&'a mut self, layout: AccessLayout) -> AccessRecordMut<'a> {
-        // header: AccessRecordHeader (using trivial borrowing)
+        // header: AccessRecordHeader
+        // SAFETY: self.len() >= size_of::<AccessRecordHeader>() from size_by_layout()
         let (header_buf, rest) =
             unsafe { self.split_at_mut_unchecked(size_of::<AccessRecordHeader>()) };
         let header = header_buf.borrow_mut();
@@ -77,6 +78,10 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         let mut offset = 0;
 
         // timestamps: [u32] (block_size / cell_size * 4 bytes)
+        // SAFETY:
+        // - size: (layout.block_size / layout.lowest_block_size) * size_of::<u32>() from
+        //   size_by_layout()
+        // - alignment: u32 aligned due to AccessRecordHeader alignment
         let timestamps = unsafe {
             std::slice::from_raw_parts_mut(
                 rest.as_mut_ptr().add(offset) as *mut u32,
@@ -86,6 +91,9 @@ impl<'a> CustomBorrow<'a, AccessRecordMut<'a>, AccessLayout> for [u8] {
         offset += layout.block_size / layout.lowest_block_size * size_of::<u32>();
 
         // data: [u8] (block_size * type_size bytes)
+        // SAFETY:
+        // - size: layout.block_size * layout.type_size from size_by_layout()
+        // - offset points past timestamps section
         let data = unsafe {
             std::slice::from_raw_parts_mut(
                 rest.as_mut_ptr().add(offset),
@@ -117,4 +125,28 @@ impl<'a> RecordArena<'a, AccessLayout, AccessRecordMut<'a>> for DenseRecordArena
         ));
         <[u8] as CustomBorrow<AccessRecordMut<'a>, AccessLayout>>::custom_borrow(bytes, layout)
     }
+}
+
+/// `trace_heights[i]` is assumed to correspond to `Adapter< 2^(i+1) >`.
+pub fn arena_size_bound(trace_heights: &[u32]) -> usize {
+    // At the very worst, each row in `Adapter<N>`
+    // corresponds to a unique record of `block_size` being `2 * N`,
+    // and its `lowest_block_size` is at least 1 and `type_size` is at most 4.
+    let size_bound = trace_heights
+        .iter()
+        .enumerate()
+        .map(|(i, &h)| {
+            size_by_layout(&AccessLayout {
+                block_size: 1 << (i + 1),
+                lowest_block_size: 1,
+                type_size: 4,
+            }) * h as usize
+        })
+        .sum::<usize>();
+    tracing::debug!(
+        "Allocating {} bytes for memory adapters arena from heights {:?}",
+        size_bound,
+        trace_heights
+    );
+    size_bound
 }

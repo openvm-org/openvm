@@ -1,6 +1,7 @@
 name: STARK Recursion Tests
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -14,7 +15,7 @@ on:
       - ".github/workflows/recursion.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-recursion-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -24,14 +25,11 @@ env:
 jobs:
   tests:
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-arm64/image=ubuntu24-full-arm64/extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

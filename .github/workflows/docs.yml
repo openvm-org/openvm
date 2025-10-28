@@ -1,14 +1,20 @@
 name: Build and Serve Crate Docs
 
 on:
+  workflow_call:
   push:
-    branches: [main]
+    branches: ["main"]
     tags:
       - v*.*.*
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/docs.yml"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name for S3 bucket"
+        required: true
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: true
@@ -19,12 +25,11 @@ jobs:
       contents: write
       packages: read
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-arm64
+      - runs-on=${{ github.run_id }}/runner=test-gpu-nvidia/cpu=32
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
@@ -32,7 +37,7 @@ jobs:
         run: cargo check
 
       - name: Build documentation
-        run: cargo +nightly doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test"
+        run: cargo +nightly doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --features "cuda"
 
       # We only want the index page to display workspace crates, so we build
       # separately and copy over the index as a hack
@@ -50,8 +55,22 @@ jobs:
           install_s5cmd
 
       - name: Sync static S3 bucket
+        working-directory: target/doc
+        if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
-        run: |
-          cd target/doc
-          s5cmd sync . s3://${S3_BUCKET%/}/static/
+        run: s5cmd sync . s3://${S3_BUCKET%/}/static/
+
+      - name: Sync tagged version S3 bucket
+        working-directory: target/doc
+        if: github.ref_type == 'tag'
+        env:
+          S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
+        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.ref_name }}/
+
+      - name: Sync tagged version S3 bucket
+        working-directory: target/doc
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
+        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.event.inputs.tag }}/

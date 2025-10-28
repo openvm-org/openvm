@@ -8,22 +8,23 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
 openvm-algebra-circuit = { workspace = true }
 openvm-rv32-adapters = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
+openvm-stark-sdk = { workspace = true, optional = true }
 
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 strum = { workspace = true }
-derive_more = { workspace = true }
+derive_more = { workspace = true, features = ["deref", "deref_mut"] }
 derive-new = { workspace = true }
 once_cell = { workspace = true, features = ["std"] }
 rand = { workspace = true }
@@ -31,13 +32,37 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 lazy_static = { workspace = true }
 hex-literal = { workspace = true }
+halo2curves-axiom = { workspace = true }
+cfg-if = { workspace = true }
 
 [dev-dependencies]
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 openvm-stark-sdk = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-rv32-adapters = { workspace = true, features = ["test-utils"] }
 lazy_static = { workspace = true }
+
+[features]
+default = []
+tco = ["openvm-algebra-circuit/tco"]
+cuda = [
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
+    "dep:openvm-stark-sdk",
+    "openvm-circuit-primitives/cuda",
+    "openvm-mod-circuit-builder/cuda",
+    "openvm-circuit/cuda",
+    "openvm-algebra-circuit/cuda",
+]
+touchemall = [
+    "cuda",
+    "openvm-circuit/touchemall",
+    "openvm-circuit-primitives/touchemall",
+    "openvm-cuda-backend/touchemall",
+    "openvm-cuda-common/touchemall",
+    "openvm-algebra-circuit/touchemall",
+]
 
 [package.metadata.cargo-shear]
 ignored = ["rand"]

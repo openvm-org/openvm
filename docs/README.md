@@ -3,7 +3,7 @@
 This directory contains documentation for contributors.
 
 - [Repository and Project Structure](./repo)
-- [Design and Specification](./specs)
 - [Crates](./crates)
+- [Machine and IDE Setup](contributor-setup.md)
 
 ![](../assets/modularity.png)

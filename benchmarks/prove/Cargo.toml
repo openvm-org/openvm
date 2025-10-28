@@ -9,46 +9,38 @@ license.workspace = true
 
 [dependencies]
 openvm-benchmarks-utils.workspace = true
-openvm-circuit.workspace = true
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-continuations.workspace = true
 openvm-sdk.workspace = true
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
 openvm-transpiler.workspace = true
-openvm-rv32im-circuit.workspace = true
-openvm-rv32im-transpiler.workspace = true
-openvm-keccak256-circuit.workspace = true
-openvm-keccak256-transpiler.workspace = true
-openvm-algebra-circuit.workspace = true
-openvm-algebra-transpiler.workspace = true
-openvm-ecc-circuit.workspace = true
-openvm-ecc-transpiler.workspace = true
-openvm-pairing-circuit.workspace = true
-openvm-pairing-guest.workspace = true
 openvm-native-circuit.workspace = true
 openvm-native-compiler.workspace = true
 openvm-native-recursion = { workspace = true, features = ["test-utils"] }
 
-clap = { version = "4.5.9", features = ["derive", "env"] }
+clap = { workspace = true, features = ["derive", "env"] }
 eyre.workspace = true
-tokio = { version = "1.43.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros"] }
 rand_chacha = { version = "0.3", default-features = false }
 k256 = { workspace = true, features = ["ecdsa"] }
 tiny-keccak.workspace = true
-derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
-num-bigint = { workspace = true, features = ["std", "serde"] }
 rand.workspace = true
-serde.workspace = true
 tracing.workspace = true
+metrics.workspace = true
 
 [dev-dependencies]
 
 [features]
-default = ["parallel", "jemalloc", "bench-metrics"]
-bench-metrics = ["openvm-sdk/bench-metrics"]
-profiling = ["openvm-sdk/profiling"]
-aggregation = []                                    # runs leaf aggregation benchmarks
+default = ["parallel", "jemalloc", "metrics"]
+metrics = ["openvm-sdk/metrics"]
+tco = ["openvm-sdk/tco"]
+perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
+stark-debug = ["openvm-sdk/stark-debug"]
+async = ["openvm-sdk/async"]
+# runs leaf aggregation benchmarks:
+aggregation = []
 evm = ["openvm-sdk/evm-verify"]
 parallel = ["openvm-sdk/parallel"]
 mimalloc = ["openvm-sdk/mimalloc"]
@@ -56,17 +48,24 @@ jemalloc = ["openvm-sdk/jemalloc"]
 jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 nightly-features = ["openvm-sdk/nightly-features"]
 
+cuda = [
+    "openvm-circuit/cuda",
+    "openvm-native-circuit/cuda",
+    "openvm-sdk/cuda",
+]
+
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]
 
 [[bin]]
 name = "fib_e2e"
 path = "src/bin/fib_e2e.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
 
 [[bin]]
 name = "kitchen_sink"
 path = "src/bin/kitchen_sink.rs"
-# TODO: cfg run benchmark with prove stark if no evm feature
-required-features = ["evm"]
+
+[[bin]]
+name = "async_regex"
+path = "src/bin/async_regex.rs"
+required-features = ["async"]

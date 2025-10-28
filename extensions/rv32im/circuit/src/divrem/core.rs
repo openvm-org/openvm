@@ -6,14 +6,7 @@ use std::{
 use num_bigint::BigUint;
 use num_integer::Integer;
 use openvm_circuit::{
-    arch::{
-        execution_mode::{E1ExecutionCtx, E2ExecutionCtx},
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
-        E2PreCompute, EmptyAdapterCoreLayout, ExecuteFunc,
-        ExecutionError::InvalidInstruction,
-        MinimalInstruction, RecordArena, Result, StepExecutorE1, StepExecutorE2, TraceFiller,
-        TraceStep, VmAdapterInterface, VmCoreAir, VmSegmentState, VmStateMut,
-    },
+    arch::*,
     system::memory::{online::TracingMemory, MemoryAuxColsFactory},
 };
 use openvm_circuit_primitives::{
@@ -23,12 +16,7 @@ use openvm_circuit_primitives::{
     AlignedBytesBorrow,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
-};
+use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_rv32im_transpiler::DivRemOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -361,14 +349,28 @@ pub(super) enum DivRemCoreSpecialCase {
     SignedOverflow,
 }
 
-pub struct DivRemStep<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct DivRemCoreRecord<const NUM_LIMBS: usize> {
+    pub b: [u8; NUM_LIMBS],
+    pub c: [u8; NUM_LIMBS],
+    pub local_opcode: u8,
+}
+
+#[derive(Clone, Copy, derive_new::new)]
+pub struct DivRemExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    adapter: A,
+    pub offset: usize,
+}
+
+pub struct DivRemFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
     pub range_tuple_chip: SharedRangeTupleCheckerChip<2>,
 }
 
-impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemStep<A, NUM_LIMBS, LIMB_BITS> {
+impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemFiller<A, NUM_LIMBS, LIMB_BITS> {
     pub fn new(
         adapter: A,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
@@ -398,45 +400,34 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> DivRemStep<A, NUM_LIMBS,
     }
 }
 
-#[repr(C)]
-#[derive(AlignedBytesBorrow, Debug)]
-pub struct DivRemCoreRecords<const NUM_LIMBS: usize> {
-    pub b: [u8; NUM_LIMBS],
-    pub c: [u8; NUM_LIMBS],
-    pub local_opcode: u8,
-}
-
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceStep<F, CTX>
-    for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
+    for DivRemExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
-        + for<'a> AdapterTraceStep<
+        + AdapterTraceExecutor<
             F,
-            CTX,
             ReadData: Into<[[u8; NUM_LIMBS]; 2]>,
             WriteData: From<[[u8; NUM_LIMBS]; 1]>,
         >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut DivRemCoreRecord<NUM_LIMBS>),
+    >,
 {
-    type RecordLayout = EmptyAdapterCoreLayout<F, A>;
-    type RecordMut<'a> = (A::RecordMut<'a>, &'a mut DivRemCoreRecords<NUM_LIMBS>);
-
     fn get_opcode_name(&self, opcode: usize) -> String {
         format!("{:?}", DivRemOpcode::from_usize(opcode - self.offset))
     }
 
-    fn execute<'buf, RA>(
-        &mut self,
-        state: VmStateMut<F, TracingMemory<F>, CTX>,
+    fn execute(
+        &self,
+        state: VmStateMut<F, TracingMemory, RA>,
         instruction: &Instruction<F>,
-        arena: &'buf mut RA,
-    ) -> Result<()>
-    where
-        RA: RecordArena<'buf, Self::RecordLayout, Self::RecordMut<'buf>>,
-    {
+    ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
-        let (mut adapter_record, core_record) = arena.alloc(EmptyAdapterCoreLayout::new());
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
         A::start(*state.pc, state.memory, &mut adapter_record);
 
@@ -471,16 +462,20 @@ where
     }
 }
 
-impl<F, CTX, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F, CTX>
-    for DivRemStep<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
+    for DivRemFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
-    A: 'static + AdapterTraceFiller<F, CTX>,
+    A: 'static + AdapterTraceFiller<F>,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
+        // SAFETY: row_slice is guaranteed by the caller to have at least A::WIDTH +
+        // DivRemCoreCols::width() elements
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &DivRemCoreRecords<NUM_LIMBS> =
+        // SAFETY: core_row contains a valid DivRemCoreRecord written by the executor
+        // during trace generation
+        let record: &DivRemCoreRecord<NUM_LIMBS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
         let core_row: &mut DivRemCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
 
@@ -567,189 +562,6 @@ where
         core_row.q = q.map(F::from_canonical_u32);
         core_row.c = record.c.map(F::from_canonical_u8);
         core_row.b = record.b.map(F::from_canonical_u8);
-    }
-}
-
-#[derive(AlignedBytesBorrow, Clone)]
-#[repr(C)]
-struct DivRemPreCompute {
-    a: u8,
-    b: u8,
-    c: u8,
-}
-
-impl<F, A, const LIMB_BITS: usize> StepExecutorE1<F>
-    for DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    #[inline(always)]
-    fn pre_compute_size(&self) -> usize {
-        size_of::<DivRemPreCompute>()
-    }
-
-    #[inline(always)]
-    fn pre_compute_e1<Ctx: E1ExecutionCtx>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>> {
-        let data: &mut DivRemPreCompute = data.borrow_mut();
-        let local_opcode = self.pre_compute_impl(pc, inst, data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e1_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e1_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e1_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e1_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
-    }
-}
-
-impl<F, A, const LIMB_BITS: usize> StepExecutorE2<F>
-    for DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn e2_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<DivRemPreCompute>>()
-    }
-
-    fn pre_compute_e2<Ctx>(
-        &self,
-        chip_idx: usize,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>>
-    where
-        Ctx: E2ExecutionCtx,
-    {
-        let data: &mut E2PreCompute<DivRemPreCompute> = data.borrow_mut();
-        data.chip_idx = chip_idx as u32;
-        let local_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        let fn_ptr = match local_opcode {
-            DivRemOpcode::DIV => execute_e2_impl::<_, _, DivOp>,
-            DivRemOpcode::DIVU => execute_e2_impl::<_, _, DivuOp>,
-            DivRemOpcode::REM => execute_e2_impl::<_, _, RemOp>,
-            DivRemOpcode::REMU => execute_e2_impl::<_, _, RemuOp>,
-        };
-        Ok(fn_ptr)
-    }
-}
-
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
-    pre_compute: &DivRemPreCompute,
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let rs1 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = vm_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.c as u32);
-    let result = <OP as DivRemOp>::compute(rs1, rs2);
-    vm_state.vm_write::<u8, 4>(RV32_REGISTER_AS, pre_compute.a as u32, &result);
-    vm_state.pc = vm_state.pc.wrapping_add(DEFAULT_PC_STEP);
-    vm_state.instret += 1;
-}
-
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: E1ExecutionCtx, OP: DivRemOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &DivRemPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, vm_state);
-}
-
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: E2ExecutionCtx, OP: DivRemOp>(
-    pre_compute: &[u8],
-    vm_state: &mut VmSegmentState<F, CTX>,
-) {
-    let pre_compute: &E2PreCompute<DivRemPreCompute> = pre_compute.borrow();
-    vm_state
-        .ctx
-        .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, vm_state);
-}
-
-impl<A, const LIMB_BITS: usize> DivRemStep<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
-    #[inline(always)]
-    fn pre_compute_impl<F: PrimeField32>(
-        &self,
-        pc: u32,
-        inst: &Instruction<F>,
-        data: &mut DivRemPreCompute,
-    ) -> Result<DivRemOpcode> {
-        let &Instruction {
-            opcode, a, b, c, d, ..
-        } = inst;
-        let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        if d.as_canonical_u32() != RV32_REGISTER_AS {
-            return Err(InvalidInstruction(pc));
-        }
-        let pre_compute: &mut DivRemPreCompute = data.borrow_mut();
-        *pre_compute = DivRemPreCompute {
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
-            c: c.as_canonical_u32() as u8,
-        };
-        Ok(local_opcode)
-    }
-}
-
-trait DivRemOp {
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4];
-}
-struct DivOp;
-struct DivuOp;
-struct RemOp;
-struct RemuOp;
-impl DivRemOp for DivOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        let rs1_i32 = i32::from_le_bytes(rs1);
-        let rs2_i32 = i32::from_le_bytes(rs2);
-        match (rs1_i32, rs2_i32) {
-            (_, 0) => [u8::MAX; 4],
-            (i32::MIN, -1) => rs1,
-            _ => (rs1_i32 / rs2_i32).to_le_bytes(),
-        }
-    }
-}
-impl DivRemOp for DivuOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        if rs2 == [0; 4] {
-            [u8::MAX; 4]
-        } else {
-            let rs1 = u32::from_le_bytes(rs1);
-            let rs2 = u32::from_le_bytes(rs2);
-            (rs1 / rs2).to_le_bytes()
-        }
-    }
-}
-
-impl DivRemOp for RemOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        let rs1_i32 = i32::from_le_bytes(rs1);
-        let rs2_i32 = i32::from_le_bytes(rs2);
-        match (rs1_i32, rs2_i32) {
-            (_, 0) => rs1,
-            (i32::MIN, -1) => [0; 4],
-            _ => (rs1_i32 % rs2_i32).to_le_bytes(),
-        }
-    }
-}
-
-impl DivRemOp for RemuOp {
-    #[inline(always)]
-    fn compute(rs1: [u8; 4], rs2: [u8; 4]) -> [u8; 4] {
-        if rs2 == [0; 4] {
-            rs1
-        } else {
-            let rs1 = u32::from_le_bytes(rs1);
-            let rs2 = u32::from_le_bytes(rs2);
-            (rs1 % rs2).to_le_bytes()
-        }
     }
 }
 

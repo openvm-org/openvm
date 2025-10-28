@@ -46,7 +46,7 @@ impl CycleTracker {
     }
 }
 
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 mod emit {
     use metrics::counter;
 

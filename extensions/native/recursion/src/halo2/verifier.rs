@@ -62,3 +62,9 @@ impl Halo2VerifierProvingKey {
         self.pinning.generate_dummy_snark(reader)
     }
 }
+
+// SAFETY: the reason these aren't auto-implemented is because DslOperations contains TracedVec
+// which has backtrace. This is only used for debugging purposes, and the rest of the proving key is
+// Send and Sync.
+unsafe impl Send for Halo2VerifierProvingKey {}
+unsafe impl Sync for Halo2VerifierProvingKey {}

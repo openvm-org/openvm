@@ -6,12 +6,15 @@ use std::{
 use clap::Parser;
 use eyre::Result;
 use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
-use openvm_sdk::{commit::AppExecutionCommit, fs::write_to_file_json, Sdk};
+use openvm_sdk::{fs::write_to_file_json, Sdk};
 
 use super::{RunArgs, RunCargoArgs};
 use crate::{
-    commands::{load_app_pk, load_or_build_and_commit_exe},
-    util::{get_manifest_path_and_dir, get_target_dir, get_target_output_dir},
+    commands::{load_app_pk, load_or_build_exe, ExecutionMode},
+    util::{
+        get_app_commit_path, get_manifest_path_and_dir, get_single_target_name, get_target_dir,
+        get_target_output_dir,
+    },
 };
 
 #[derive(Parser)]
@@ -64,7 +67,6 @@ pub struct CommitCmd {
 
 impl CommitCmd {
     pub fn run(&self) -> Result<()> {
-        let sdk = Sdk::new();
         let app_pk = load_app_pk(&self.app_pk, &self.cargo_args)?;
 
         let run_args = RunArgs {
@@ -73,29 +75,31 @@ impl CommitCmd {
             output_dir: self.output_dir.clone(),
             init_file_name: self.init_file_name.clone(),
             input: None,
+            mode: ExecutionMode::Pure,
         };
-        let (committed_exe, target_name) =
-            load_or_build_and_commit_exe(&sdk, &run_args, &self.cargo_args, &app_pk)?;
+        let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
+        let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
 
-        let commits = AppExecutionCommit::compute(
-            &app_pk.app_vm_pk.vm_config,
-            &committed_exe,
-            &app_pk.leaf_committed_exe,
-        );
-        println!("exe commit: {:?}", commits.app_exe_commit.to_bn254());
-        println!("vm commit: {:?}", commits.app_vm_commit.to_bn254());
+        let app_commit = sdk.app_prover(exe)?.app_commit();
+        println!("exe commit: {:?}", app_commit.app_exe_commit.to_bn254());
+        println!("vm commit: {:?}", app_commit.app_vm_commit.to_bn254());
 
         let (manifest_path, _) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
         let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
         let target_output_dir = get_target_output_dir(&target_dir, &self.cargo_args.profile);
 
-        let commit_name = format!("{}.commit.json", &target_name);
-        let commit_path = target_output_dir.join(&commit_name);
+        // target_name_stem does not contain "examples/" prefix
+        let target_name =
+            get_single_target_name(&self.cargo_args).unwrap_or(target_name_stem.into());
+        let commit_path = get_app_commit_path(&target_output_dir, target_name);
 
-        write_to_file_json(&commit_path, commits)?;
+        println!("Writing app commit to {}", commit_path.display());
+        write_to_file_json(&commit_path, app_commit)?;
         if let Some(output_dir) = &self.output_dir {
             create_dir_all(output_dir)?;
-            copy(commit_path, output_dir.join(commit_name))?;
+            let commit_name = commit_path.file_name().unwrap();
+            let to_path = output_dir.join(commit_name);
+            copy(commit_path, to_path)?;
         }
 
         Ok(())

@@ -22,7 +22,7 @@ openvm_algebra_moduli_macros::moduli_init!(
 );
 
 openvm_algebra_complex_macros::complex_init! {
-    Complex { mod_idx = 0 },
+    "Complex" { mod_idx = 0 },
 }
 */
 
@@ -39,7 +39,7 @@ The crate provides two macros: `complex_declare!` and `complex_init!`. The signa
 
 - `complex_declare!` receives comma-separated list of moduli classes descriptions. Each description looks like `ComplexStruct { mod_type = ModulusName }`. Here `ModulusName` is the name of any struct that implements `trait IntMod` -- in particular, the ones created by `moduli_declare!` do, and `ComplexStruct` is the name for the complex arithmetic struct to create.
 
-- `complex_init!` receives comma-separated list of struct descriptions. Each description looks like `ComplexStruct { mod_idx = idx }`. Here `ComplexStruct` is the name of the complex struct used in `complex_declare!`, and `idx` is the index of the modulus **in the `moduli_init!` macro**.
+- `complex_init!` receives comma-separated list of struct descriptions. Each description looks like `"ComplexStruct" { mod_idx = idx }`. Here `ComplexStruct` is the name of the complex struct used in `complex_declare!`, and `idx` is the index of the modulus **in the `moduli_init!` macro**.
 
 What happens under the hood:
 
@@ -96,7 +96,7 @@ complex_declare! {
 pub type Fp2 = Bn254Fp2;
 
 complex_init! {
-    Fp2 { mod_idx = 0 },
+    "Fp2" { mod_idx = 0 },
 }
 ```
 

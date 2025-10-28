@@ -1,15 +1,30 @@
 use std::path::PathBuf;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use eyre::Result;
-use openvm_circuit::arch::OPENVM_DEFAULT_INIT_FILE_NAME;
-use openvm_sdk::{fs::read_exe_from_file, Sdk};
+use openvm_circuit::arch::{instructions::exe::VmExe, OPENVM_DEFAULT_INIT_FILE_NAME};
+use openvm_sdk::{config::SdkVmConfig, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F};
 
 use super::{build, BuildArgs, BuildCargoArgs};
 use crate::{
+    commands::keygen::keygen,
     input::{read_to_stdin, Input},
-    util::{get_manifest_path_and_dir, get_single_target_name, read_config_toml_or_default},
+    util::{
+        get_app_pk_path, get_app_vk_path, get_manifest_path_and_dir, get_single_target_name,
+        get_target_dir, read_config_toml_or_default,
+    },
 };
+
+#[derive(Clone, Debug, ValueEnum)]
+pub enum ExecutionMode {
+    /// Runs the program normally
+    Pure,
+    /// Runs the program and estimates the execution cost in terms of number of cells
+    Meter,
+    /// Runs the program and calculates the number of segments that the execution will be split
+    /// into for proving
+    Segment,
+}
 
 #[derive(Parser)]
 #[command(name = "run", about = "Run an OpenVM program")]
@@ -60,6 +75,15 @@ pub struct RunArgs {
         help_heading = "OpenVM Options"
     )]
     pub init_file_name: String,
+
+    #[arg(
+        long,
+        value_enum,
+        default_value = "pure",
+        help = "Execution mode",
+        help_heading = "OpenVM Options"
+    )]
+    pub mode: ExecutionMode,
 }
 
 impl From<RunArgs> for BuildArgs {
@@ -237,25 +261,70 @@ impl RunCmd {
             let build_args = self.run_args.clone().into();
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
-            &output_dir.join(format!("{}.vmexe", target_name))
+            &output_dir.join(target_name.with_extension("vmexe"))
         };
 
-        let (_, manifest_dir) = get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
-        let app_config = read_config_toml_or_default(
-            self.run_args
-                .config
-                .to_owned()
-                .unwrap_or_else(|| manifest_dir.join("openvm.toml")),
-        )?;
-        let exe = read_exe_from_file(exe_path)?;
+        let (manifest_path, manifest_dir) =
+            get_manifest_path_and_dir(&self.cargo_args.manifest_path)?;
+        let config_path = self
+            .run_args
+            .config
+            .to_owned()
+            .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
+        let app_config = read_config_toml_or_default(&config_path)?;
+        let exe: VmExe<F> = read_object_from_file(exe_path)?;
+        let inputs = read_to_stdin(&self.run_args.input)?;
 
-        let sdk = Sdk::new();
-        let output = sdk.execute(
-            exe,
-            app_config.app_vm_config,
-            read_to_stdin(&self.run_args.input)?,
-        )?;
-        println!("Execution output: {:?}", output);
+        // Create SDK
+        let sdk = Sdk::new(app_config)?;
+
+        // For metered modes, load existing app pk from disk or generate it
+        if matches!(
+            self.run_args.mode,
+            ExecutionMode::Segment | ExecutionMode::Meter
+        ) {
+            let target_dir = get_target_dir(&self.cargo_args.target_dir, &manifest_path);
+            let app_pk_path = get_app_pk_path(&target_dir);
+            let app_vk_path = get_app_vk_path(&target_dir);
+
+            // Generate app pk if it doesn't exist
+            if !app_pk_path.exists() {
+                let config_path = self
+                    .run_args
+                    .config
+                    .to_owned()
+                    .unwrap_or_else(|| manifest_dir.join("openvm.toml"));
+                keygen(&config_path, &app_pk_path, &app_vk_path, None::<&str>)?;
+            }
+
+            // Load the app pk and set it
+            let app_pk: AppProvingKey<SdkVmConfig> = read_object_from_file(&app_pk_path)?;
+            sdk.set_app_pk(app_pk)
+                .map_err(|_| eyre::eyre!("Failed to set app pk"))?;
+        }
+
+        match self.run_args.mode {
+            ExecutionMode::Pure => {
+                let output = sdk.execute(exe, inputs)?;
+                println!("Execution output: {:?}", output);
+            }
+            ExecutionMode::Meter => {
+                let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
+                println!("Execution output: {:?}", output);
+
+                println!("Number of instructions executed: {}", instret);
+                println!("Total cost: {}", cost);
+            }
+            ExecutionMode::Segment => {
+                let (output, segments) = sdk.execute_metered(exe, inputs)?;
+                println!("Execution output: {:?}", output);
+
+                let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
+                println!("Number of instructions executed: {}", total_instructions);
+                println!("Total segments: {}", segments.len());
+            }
+        }
+
         Ok(())
     }
 }

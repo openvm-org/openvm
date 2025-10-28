@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use openvm as _;
 use openvm_algebra_guest::{moduli_macros::*, IntMod};
 
 // This macro will create two structs, `Mod1` and `Mod2`,
@@ -28,7 +29,7 @@ moduli_init! {
 // The order of these structs does not matter,
 // given that we specify the `mod_idx` parameters properly.
 openvm_algebra_complex_macros::complex_init! {
-    Complex1 { mod_idx = 0 }, Complex2 { mod_idx = 1 },
+    "Complex1" { mod_idx = 0 }, "Complex2" { mod_idx = 1 },
 }
 */
 

@@ -18,6 +18,7 @@ openvm-bigint-circuit.workspace = true
 openvm-bigint-transpiler.workspace = true
 openvm-ecc-circuit.workspace = true
 openvm-ecc-transpiler.workspace = true
+openvm-native-circuit = { workspace = true }
 openvm-pairing-circuit.workspace = true
 openvm-pairing-guest.workspace = true
 openvm-pairing-transpiler.workspace = true
@@ -27,21 +28,34 @@ openvm-rv32im-circuit.workspace = true
 openvm-rv32im-transpiler.workspace = true
 openvm-sha2-circuit.workspace = true
 openvm-sha2-transpiler.workspace = true
+openvm-continuations = { workspace = true }
+openvm-native-recursion = { workspace = true }
+openvm-sdk = { workspace = true }
+
+clap.workspace = true
 eyre.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
+bitcode.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 divan = { package = "codspeed-divan-compat", version = "3.0.2" }
 
 [features]
 default = ["jemalloc"]
+tco = ["openvm-sdk/tco"]
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
-profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
+perf-metrics = [
+    "openvm-circuit/perf-metrics",
+    "openvm-transpiler/function-span",
+]
+evm-prove = []
 
 # [[bench]]
 # name = "fibonacci_execute"
@@ -54,6 +68,10 @@ profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
 [[bench]]
 name = "execute"
 harness = false
+
+[[bin]]
+name = "execute-verifier"
+path = "src/execute-verifier.rs"
 
 [package.metadata.cargo-shear]
 ignored = ["derive_more", "rand"]

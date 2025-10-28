@@ -116,7 +116,7 @@ impl Halo2Prover {
         state.load_witness(witness);
 
         let backend = Halo2ConstraintCompiler::<C>::new(dsl_operations.num_public_values);
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let backend = if profiling {
             backend.with_profiling()
         } else {
@@ -164,20 +164,10 @@ impl Halo2Prover {
         let mut builder = Self::populate(builder, dsl_operations, witness, true);
         builder.calculate_params(Some(20));
 
-        // let break_points;
-        // // if pk already exists, read break points from file
-        // let pk = if Path::new("halo2_final.pk").exists() {
-        //     let file = File::open("halo2_final.json").unwrap();
-        //     break_points = serde_json::from_reader(file).unwrap();
-        //     gen_pk(&params, &builder, Some(Path::new("halo2_final.pk")))
-        // } else {
-        //
-        //     pk
-        // };
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let pk = keygen_pk2(params, &builder, false).unwrap();
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("halo2_keygen_time_ms").set(start.elapsed().as_millis() as f64);
         let break_points = builder.break_points();
 
@@ -188,8 +178,6 @@ impl Halo2Prover {
             .map(|x| x.len())
             .collect_vec();
 
-        // let file = File::create("halo2_final.json").unwrap();
-        // serde_json::to_writer(file, &break_points).unwrap();
         Halo2ProvingPinning {
             pk,
             metadata: Halo2ProvingMetadata {
@@ -212,13 +200,13 @@ impl Halo2Prover {
         profiling: bool,
     ) -> Snark {
         let k = config_params.k;
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let start = std::time::Instant::now();
         let builder = Self::builder(CircuitBuilderStage::Prover, k)
             .use_params(config_params)
             .use_break_points(break_points);
         let builder = Self::populate(builder, dsl_operations, witness, profiling);
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         {
             let stats = builder.statistics();
             let total_advices: usize = stats.gate.total_advice_per_phase.into_iter().sum();
@@ -228,7 +216,7 @@ impl Halo2Prover {
         }
         let snark = gen_snark_shplonk(params, pk, builder, None::<&str>);
 
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         metrics::gauge!("total_proof_time_ms").set(start.elapsed().as_millis() as f64);
 
         snark

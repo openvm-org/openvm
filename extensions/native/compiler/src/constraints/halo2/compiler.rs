@@ -7,7 +7,7 @@ use std::{
 };
 
 use itertools::Itertools;
-#[cfg(feature = "bench-metrics")]
+#[cfg(feature = "metrics")]
 use openvm_circuit::metrics::cycle_tracker::CycleTracker;
 use openvm_stark_backend::p3_field::{ExtensionField, Field, FieldAlgebra, PrimeField};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, p3_bn254_fr::Bn254Fr};
@@ -135,7 +135,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
     where
         C: Config<N = Bn254Fr, F = BabyBear, EF = BabyBearExt4>,
     {
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let mut cell_tracker = CycleTracker::new();
         let range = Arc::new(halo2_state.builder.range_chip());
         let f_chip = Arc::new(BabyBearChip::new(range.clone()));
@@ -149,10 +149,10 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
         let mut felts = HashMap::<u32, AssignedBabyBear>::new();
         let mut exts = HashMap::<u32, AssignedBabyBearExt4>::new();
 
-        #[cfg(feature = "bench-metrics")]
+        #[cfg(feature = "metrics")]
         let mut old_stats = stats_snapshot(ctx, range.clone());
         for (instruction, backtrace) in operations {
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             if self.profiling {
                 old_stats = stats_snapshot(ctx, range.clone());
             }
@@ -492,11 +492,11 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                         range.check_less_than(ctx, vars[&a.0], vars[&b.0], C::F::bits());
                     }
                     DslIr::CycleTrackerStart(_name) => {
-                        #[cfg(feature = "bench-metrics")]
+                        #[cfg(feature = "metrics")]
                         cell_tracker.start(_name);
                     }
                     DslIr::CycleTrackerEnd(_name) => {
-                        #[cfg(feature = "bench-metrics")]
+                        #[cfg(feature = "metrics")]
                         cell_tracker.end(_name);
                     }
                     DslIr::CircuitPublish(val, index) => {
@@ -512,7 +512,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                 }
                 res.unwrap();
             }
-            #[cfg(feature = "bench-metrics")]
+            #[cfg(feature = "metrics")]
             if self.profiling {
                 let mut new_stats = stats_snapshot(ctx, range.clone());
                 new_stats.diff(&old_stats);
@@ -538,7 +538,7 @@ pub fn convert_efr<F: PrimeField, EF: ExtensionField<F>>(a: &EF) -> Vec<Fr> {
 }
 
 // Unfortunately `builder.statistics()` cannot be called when `ctx` exists.
-#[allow(dead_code)] // used only in bench-metrics
+#[allow(dead_code)] // used only in metrics
 fn stats_snapshot(ctx: &Context<Fr>, range_chip: Arc<RangeChip<Fr>>) -> Halo2Stats {
     Halo2Stats {
         total_gate_cell: ctx.advice.len(),

@@ -10,6 +10,8 @@ repository.workspace = true
 [dependencies]
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit = { workspace = true }
@@ -27,18 +29,40 @@ derive-new.workspace = true
 derive_more = { workspace = true, features = ["from"] }
 rand.workspace = true
 serde.workspace = true
+cfg-if.workspace = true
 
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 hex.workspace = true
+tokio = { workspace = true, features = ["full"] }
+
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
 default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
+tco = ["openvm-rv32im-circuit/tco"]
 # performance features:
 mimalloc = ["openvm-circuit/mimalloc"]
 jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
+cuda = [
+    "dep:openvm-cuda-backend",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-builder",
+    "openvm-circuit-primitives/cuda",
+    "openvm-circuit/cuda",
+    "openvm-rv32im-circuit/cuda",
+]
+touchemall = [
+    "cuda",
+    "openvm-circuit/touchemall",
+    "openvm-circuit-primitives/touchemall",
+    "openvm-cuda-backend/touchemall",
+    "openvm-cuda-common/touchemall",
+    "openvm-rv32im-circuit/touchemall",
+]

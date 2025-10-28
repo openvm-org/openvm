@@ -1,17 +1,21 @@
 use std::{borrow::BorrowMut, mem::size_of, sync::Arc};
 
-use air::{DummyExecutionInteractionCols, ExecutionDummyAir};
+use air::DummyExecutionInteractionCols;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip, ChipUsageGetter,
 };
 
 use crate::arch::{ExecutionBus, ExecutionState};
 
 pub mod air;
+#[cfg(feature = "cuda")]
+mod cuda;
+#[cfg(feature = "cuda")]
+pub use cuda::*;
 
 #[derive(Debug)]
 pub struct ExecutionTester<F: Field> {
@@ -48,24 +52,20 @@ impl<F: PrimeField32> ExecutionTester<F> {
     }
 }
 
-impl<SC: StarkGenericConfig> Chip<SC> for ExecutionTester<Val<SC>>
+impl<SC: StarkGenericConfig, RA> Chip<RA, CpuBackend<SC>> for ExecutionTester<Val<SC>>
 where
     Val<SC>: Field,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(ExecutionDummyAir::new(self.bus))
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = self.records.len().next_power_of_two();
         let width = self.trace_width();
         let mut values = Val::<SC>::zero_vec(height * width);
         // This zip only goes through records. The padding rows between records.len()..height
         // are filled with zeros - in particular count = 0 so nothing is added to bus.
-        for (row, record) in values.chunks_mut(width).zip(self.records) {
-            *row.borrow_mut() = record;
+        for (row, record) in values.chunks_mut(width).zip(&self.records) {
+            *row.borrow_mut() = *record;
         }
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
+        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }
 }
 impl<F: Field> ChipUsageGetter for ExecutionTester<F> {

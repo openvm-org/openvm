@@ -1,35 +1,25 @@
-[workspace]
 [package]
 name = "openvm-kitchen-sink-program"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-openvm = { path = "../../../crates/toolchain/openvm", default-features = false, features = [
+openvm = { workspace = true, features = [
     "std",
 ] }
-openvm-algebra-guest = { path = "../../../extensions/algebra/guest", default-features = false }
-openvm-ecc-guest = { path = "../../../extensions/ecc/guest", default-features = false }
-openvm-pairing = { path = "../../../guest-libs/pairing/", features = [
+openvm-algebra-guest.workspace = true
+openvm-ecc-guest.workspace = true
+openvm-pairing = { workspace = true, features = [
     "bn254",
     "bls12_381",
 ] }
-openvm-keccak256 = { path = "../../../guest-libs/keccak256/", default-features = false }
-openvm-sha2 = { path = "../../../guest-libs/sha2/", default-features = false }
-openvm-k256 = { path = "../../../guest-libs/k256/", package = "k256" }
-openvm-p256 = { path = "../../../guest-libs/p256/", package = "p256" }
-openvm-ruint = { path = "../../../guest-libs/ruint/", package = "ruint", default-features = false }
+openvm-keccak256.workspace = true
+openvm-sha2.workspace = true
+openvm-k256.workspace = true
+openvm-p256.workspace = true
+openvm-ruint.workspace = true
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 serde = "1.0"
 
 [features]
 default = []
-
-[profile.release]
-panic = "abort"
-lto = "thin"    # faster compile time
-
-[profile.profiling]
-inherits = "release"
-debug = 2
-strip = false

@@ -1,0 +1,160 @@
+name: Merge Queue Controller
+
+on:
+  # NOTE[jpw]: this workflow is currently disabled and not meant to be used
+  workflow_dispatch:
+  # merge_group:
+  # pull_request:
+  #   types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  packages: read
+  pull-requests: write
+
+jobs:
+  # This job serves as the single required status check for the merge queue
+  controller:
+    name: Merge Queue Controller
+    runs-on:
+      - runs-on=${{ github.run_id }}
+      - runner=8cpu-linux-x64
+    steps:
+      - name: Starting merge queue checks
+        run: echo "Starting all merge queue checks..."
+
+  # Call all the existing workflows that need to run in the merge queue
+  lints:
+    name: Lints
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/lints.yml
+    secrets: inherit
+
+  build:
+    name: Build
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  cli:
+    name: CLI
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/cli.yml
+    secrets: inherit
+
+  docs:
+    name: Docs
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+
+  native-compiler:
+    name: Native Compiler
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/native-compiler.yml
+    secrets: inherit
+
+  primitives:
+    name: Primitives
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/primitives.yml
+    secrets: inherit
+
+  recursion:
+    name: Recursion
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/recursion.yml
+    secrets: inherit
+
+  riscv:
+    name: RISCV
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/riscv.yml
+    secrets: inherit
+
+  sdk:
+    name: SDK
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/sdk.yml
+    secrets: inherit
+
+  vm:
+    name: VM
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/vm.yml
+    secrets: inherit
+
+  extension-tests:
+    name: Extension Tests
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/extension-tests.yml
+    secrets: inherit
+
+  extension-tests-cuda:
+    name: Extension Tests CUDA
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/extension-tests.cuda.yml
+    secrets: inherit
+
+  guest-lib-tests:
+    name: Guest Lib Tests
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/guest-lib-tests.yml
+    secrets: inherit
+
+  guest-lib-tests-cuda:
+    name: Guest Lib Tests CUDA
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/guest-lib-tests.cuda.yml
+    secrets: inherit
+
+  benchmarks:
+    name: Benchmarks
+    if: github.event_name == 'merge_group'
+    uses: ./.github/workflows/benchmarks.yml
+    with:
+      is_merge_queue: true
+    secrets: inherit
+
+  # Final job that depends on all others - this is what GitHub will track
+  all-checks-pass:
+    name: All Checks Pass
+    runs-on:
+      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
+    needs:
+      - lints
+      - build
+      - cli
+      - docs
+      - native-compiler
+      - primitives
+      - recursion
+      - riscv
+      - sdk
+      - vm
+      - extension-tests
+      - extension-tests-cuda
+      - guest-lib-tests
+      - guest-lib-tests-cuda
+      - benchmarks
+    if: always()
+    steps:
+      - name: Check job results for merge queue
+        if: github.event_name == 'merge_group'
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          elif [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs were cancelled"
+            exit 1
+          else
+            echo "All jobs passed successfully"
+          fi
+
+      - name: PR status placeholder
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "This provides the 'All Checks Pass' status for PRs."
+          echo "Individual checks run separately on pull requests."
+          echo "Full validation occurs in the merge queue."

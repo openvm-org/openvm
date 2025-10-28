@@ -5,25 +5,24 @@ on:
     branches: ["main"]
   pull_request:
     branches: ["**"]
+  workflow_call:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-lints-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
   lint:
     name: Lint
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=64cpu-linux-x64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-x64/extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
 
       - uses: codespell-project/actions-codespell@v2
         with:
-          skip: Cargo.lock,./book/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
+          skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
           ignore_words_file: .codespellignore
 
       - uses: dtolnay/rust-toolchain@stable
@@ -46,7 +45,7 @@ jobs:
           # list of all unique features across workspace generated using:
           # cargo metadata --format-version=1 --no-deps | jq -r '.packages[].features | to_entries[] | .key' | sort -u | tr '\n' ' ' && echo ""
           # (exclude mimalloc since it conflicts with jemalloc)
-          cargo clippy --all-targets --all --tests --features "aggregation bench-metrics bls12_381 bn254 build-binaries default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof nightly-features panic-handler parallel profiling rust-runtime static-verifier std test-utils" -- -D warnings
+          cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics nightly-features panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils" -- -D warnings
           cargo clippy --all-targets --all --tests --no-default-features --features "mimalloc" -- -D warnings
 
       - name: Run fmt, clippy for guest
@@ -86,3 +85,47 @@ jobs:
         run: |
           cargo binstall --no-confirm --force cargo-audit
           cargo audit
+
+  lint-cuda:
+    name: Lint CUDA
+    runs-on:
+      - runs-on=${{ github.run_id }}-cuda/runner=test-gpu-nvidia
+    steps:
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Verify CUDA setup
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+
+      - name: Run fmt
+        working-directory: crates
+        run: |
+          rustup install nightly
+          rustup component add --toolchain nightly rustfmt
+          cargo +nightly fmt --all -- --check
+
+      - name: Run clippy
+        run: |
+          # includes GPU specific features cuda and touchemall
+          cargo clippy --all-targets --all --tests --features "aggregation bls12_381 bn254 build-elfs cuda default entrypoint evm-prove evm-verify export-intrinsics export-libm function-span getrandom-unsupported halo2-compiler halo2curves heap-embedded-alloc jemalloc jemalloc-prof metrics nightly-features panic-handler parallel perf-metrics rust-runtime static-verifier std test-utils touchemall" -- -D warnings
+          cargo clippy --all-targets --all --tests --no-default-features --features "jemalloc jemalloc-prof" -- -D warnings
+
+      - name: Run clang-tidy
+        run: |
+          set -eux
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain.list
+          sudo apt-get update
+          sudo apt-get install -y clang-tidy
+          ./scripts/run_clang_tidy.sh

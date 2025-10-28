@@ -13,9 +13,9 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
-    AirRef, Chip, ChipUsageGetter,
+    Chip, ChipUsageGetter,
 };
 use rustc_hash::FxHashSet;
 use tracing::instrument;
@@ -207,13 +207,13 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
         }
     }
 
-    #[instrument(name = "boundary_finalize", skip_all)]
-    pub fn finalize<H>(
+    #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
+    pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
         // Only touched stuff
         final_memory: &TimestampedEquipartition<F, CHUNK>,
-        hasher: &mut H,
+        hasher: &H,
     ) where
         H: Hasher<CHUNK, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
@@ -221,8 +221,10 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
             .par_iter()
             .map(|&((addr_space, ptr), ts_values)| {
                 let TimestampedValues { timestamp, values } = ts_values;
-                let init_values =
-                    array::from_fn(|i| initial_memory.get_f::<F>(addr_space, ptr + i as u32));
+                // SAFETY: addr_space from `final_memory` are all in bounds
+                let init_values = array::from_fn(|i| unsafe {
+                    initial_memory.get_f::<F>(addr_space, ptr + i as u32)
+                });
                 let initial_hash = hasher.hash(&init_values);
                 let final_hash = hasher.hash(&values);
                 FinalTouchedLabel {
@@ -244,15 +246,12 @@ impl<const CHUNK: usize, F: PrimeField32> PersistentBoundaryChip<F, CHUNK> {
     }
 }
 
-impl<const CHUNK: usize, SC: StarkGenericConfig> Chip<SC> for PersistentBoundaryChip<Val<SC>, CHUNK>
+impl<const CHUNK: usize, RA, SC> Chip<RA, CpuBackend<SC>> for PersistentBoundaryChip<Val<SC>, CHUNK>
 where
+    SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        Arc::new(self.air.clone())
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let trace = {
             let width = PersistentBoundaryCols::<Val<SC>, CHUNK>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
@@ -267,13 +266,13 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            let touched_labels = match self.touched_labels {
+            let touched_labels = match &self.touched_labels {
                 TouchedLabels::Final(touched_labels) => touched_labels,
                 _ => panic!("Cannot generate trace before finalization"),
             };
 
             rows.par_chunks_mut(2 * width)
-                .zip(touched_labels.into_par_iter())
+                .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
                     let (initial_row, final_row) = row.split_at_mut(width);
                     *initial_row.borrow_mut() = PersistentBoundaryCols {
@@ -294,9 +293,9 @@ where
                         timestamp: Val::<SC>::from_canonical_u32(touched_label.final_timestamp),
                     };
                 });
-            RowMajorMatrix::new(rows, width)
+            Arc::new(RowMajorMatrix::new(rows, width))
         };
-        AirProofInput::simple_no_pis(trace)
+        AirProvingContext::simple_no_pis(trace)
     }
 }
 

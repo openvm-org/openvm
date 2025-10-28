@@ -1,6 +1,7 @@
 name: Primitives Tests
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -8,13 +9,13 @@ on:
     paths:
       - "crates/circuits/primitives/**"
       - "crates/circuits/poseidon2-air/**"
-      - "crates/circuits/sha2-air/**"
+      - "crates/circuits/sha256-air/**"
       - "crates/circuits/mod-builder/**"
       - "Cargo.toml"
       - ".github/workflows/primitives.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-primitives-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -23,37 +24,56 @@ env:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        platform:
+          - { runner: "64cpu-linux-arm64", image: "ubuntu24-full-arm64" }
+
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=32cpu-linux-arm64
-      - image=ubuntu24-full-arm64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-primitives-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
 
     steps:
-      - uses: runs-on/action@v1
-      - uses: actions/checkout@v4
+      - uses: runs-on/action@v2
+      - uses: actions/checkout@v5
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - uses: taiki-e/install-action@nextest
 
+      - name: Set CPU tests environment variables
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
+        run: |
+          echo "NEXTEST_ARGS=--cargo-profile fast --features parallel" >> $GITHUB_ENV
+
+      - name: Check CUDA status and set environment variables
+        if: contains(matrix.platform.runner, 'gpu')
+        run: |
+          nvcc --version
+          echo "NEXTEST_ARGS=cuda --features parallel,cuda,touchemall" >> $GITHUB_ENV
+
       - name: Run tests for primitives
         working-directory: crates/circuits/primitives
         run: |
-          cargo nextest run --cargo-profile fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for poseidon2-air
         working-directory: crates/circuits/poseidon2-air
         run: |
-          cargo nextest run --cargo-profile fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
-      - name: Run tests for sha2-air
-        working-directory: crates/circuits/sha2-air
+        # No gpu tests in these crates
+      - name: Run tests for sha256-air
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
+        working-directory: crates/circuits/sha256-air
         run: |
-          cargo nextest run --cargo-profile fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}
 
       - name: Run tests for mod-builder
+        if: ${{ !contains(matrix.platform.runner, 'gpu') }}
         working-directory: crates/circuits/mod-builder
         run: |
-          cargo nextest run --cargo-profile fast --features parallel
+          cargo nextest run ${{ env.NEXTEST_ARGS }}

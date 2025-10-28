@@ -1,3 +1,20 @@
+/*
+ * The `ColsRef` procedural macro is used in constraint generation to create column structs that
+ * have dynamic sizes.
+ *
+ * Note: this macro was originally created for use in the SHA-2 VM extension, where we reuse the
+ * same constraint generation code for three different circuits (SHA-256, SHA-512, and SHA-384).
+ * See the [SHA-2 VM extension](openvm/extensions/sha2/circuit/src/sha2_chip/air.rs) for an
+ * example of how to use the `ColsRef` macro to reuse constraint generation code over multiple
+ * circuits.
+ *
+ * This macro can also be used in other situations where we want to derive Borrow<T> for &[u8],
+ * for some complicated struct T.
+ */
+mod utils;
+
+use utils::*;
+
 extern crate proc_macro;
 
 use itertools::Itertools;
@@ -169,7 +186,8 @@ fn make_struct(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_mac
                 }
             }
 
-            // returns number of cells in the struct (where each cell has type T)
+            // Returns number of cells in the struct (where each cell has type T).
+            // This method should only be called if the struct has no primitive types (i.e. for columns structs).
             pub const fn width<C: #config>() -> usize {
                 0 #( + #length_exprs )*
             }
@@ -227,7 +245,7 @@ fn make_from_mut(struct_info: StructInfo, config: &proc_macro2::Ident) -> proc_m
                     &other.#ident
                 }
             } else {
-                panic!("Unsupported field type: {:?}", f.ty);
+                panic!("Unsupported field type (in make_from_mut): {:?}", f.ty);
             }
         })
         .collect_vec();
@@ -346,8 +364,28 @@ fn get_const_cols_ref_fields(
                     #slice_var
                 },
             }
+        } else if is_primitive_type(&elem_type) {
+            FieldInfo {
+                ty: parse_quote! {
+                    &'a #elem_type
+                },
+                // Columns structs won't ever have primitive types, but this macro can be used on
+                // other structs as well, to make it easy to borrow a struct from &[u8].
+                // We just set length = 0 knowing that calling the width() method is undefined if
+                // the struct has a primitive type.
+                length_expr: quote! {
+                    0
+                },
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at(std::mem::size_of::<#elem_type>() #(* #dim_exprs)*);
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            }
         } else {
-            panic!("Unsupported field type: {:?}", f.ty);
+            panic!("Unsupported field type (in get_const_cols_ref_fields): {:?}", f.ty);
         }
     } else if derives_aligned_borrow {
         // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
@@ -405,7 +443,7 @@ fn get_const_cols_ref_fields(
             },
         }
     } else {
-        panic!("Unsupported field type: {:?}", f.ty);
+        panic!("Unsupported field type (in get_mut_cols_ref_fields): {:?}", f.ty);
     }
 }
 
@@ -485,8 +523,28 @@ fn get_mut_cols_ref_fields(
                     #slice_var
                 },
             }
+        } else if is_primitive_type(&elem_type) {
+            FieldInfo {
+                ty: parse_quote! {
+                    &'a mut #elem_type
+                },
+                // Columns structs won't ever have primitive types, but this macro can be used on
+                // other structs as well, to make it easy to borrow a struct from &[u8].
+                // We just set length = 0 knowing that calling the width() method is undefined if
+                // the struct has a primitive type.
+                length_expr: quote! {
+                    0
+                },
+                prepare_subslice: quote! {
+                    let (#slice_var, slice) = slice.split_at_mut(std::mem::size_of::<#elem_type>() #(* #dim_exprs)*);
+                    let #slice_var = ndarray::#ndarray_ident::from_shape( ( #(#dim_exprs),* ) , #slice_var).unwrap();
+                },
+                initializer: quote! {
+                    #slice_var
+                },
+            }
         } else {
-            panic!("Unsupported field type: {:?}", f.ty);
+            panic!("Unsupported field type (in get_mut_cols_ref_fields): {:?}", f.ty);
         }
     } else if derives_aligned_borrow {
         // treat the field as a struct that derives AlignedBorrow (and doesn't depend on the config)
@@ -544,7 +602,7 @@ fn get_mut_cols_ref_fields(
             },
         }
     } else {
-        panic!("Unsupported field type: {:?}", f.ty);
+        panic!("Unsupported field type (in get_mut_cols_ref_fields): {:?}", f.ty);
     }
 }
 
@@ -635,63 +693,5 @@ fn is_generic_type(ty: &syn::Type, generic_type: &syn::TypeParam) -> bool {
         }
     } else {
         false
-    }
-}
-
-// Type of array dimension
-enum Dimension {
-    ConstGeneric(syn::Expr),
-    Other(syn::Expr),
-}
-
-// Describes a nested array
-struct ArrayInfo {
-    dims: Vec<Dimension>,
-    elem_type: syn::Type,
-}
-
-fn get_array_info(ty: &syn::Type, const_generics: &[&syn::Ident]) -> ArrayInfo {
-    let dims = get_dims(ty, const_generics);
-    let elem_type = get_elem_type(ty);
-    ArrayInfo { dims, elem_type }
-}
-
-fn get_elem_type(ty: &syn::Type) -> syn::Type {
-    match ty {
-        syn::Type::Array(array) => get_elem_type(array.elem.as_ref()),
-        syn::Type::Path(_) => ty.clone(),
-        _ => panic!("Unsupported type: {:?}", ty),
-    }
-}
-
-// Get a vector of the dimensions of the array
-// Each dimension is either a constant generic or a literal integer value
-fn get_dims(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Vec<Dimension> {
-    get_dims_impl(ty, const_generics)
-        .into_iter()
-        .rev()
-        .collect()
-}
-
-fn get_dims_impl(ty: &syn::Type, const_generics: &[&syn::Ident]) -> Vec<Dimension> {
-    match ty {
-        syn::Type::Array(array) => {
-            let mut dims = get_dims_impl(array.elem.as_ref(), const_generics);
-            match &array.len {
-                syn::Expr::Path(syn::ExprPath { path, .. }) => {
-                    let len_ident = path.get_ident();
-                    if len_ident.is_some() && const_generics.contains(&len_ident.unwrap()) {
-                        dims.push(Dimension::ConstGeneric(array.len.clone()));
-                    } else {
-                        dims.push(Dimension::Other(array.len.clone()));
-                    }
-                }
-                syn::Expr::Lit(expr_lit) => dims.push(Dimension::Other(expr_lit.clone().into())),
-                _ => panic!("Unsupported array length type"),
-            }
-            dims
-        }
-        syn::Type::Path(_) => Vec::new(),
-        _ => panic!("Unsupported field type"),
     }
 }

@@ -25,11 +25,15 @@ __pycache__/
 metrics.json
 guest.syms
 
+# Generated configs
+.clangd
+
 # KZG trusted setup
 **/params
 
 # Javascript
 **/node_modules/
+**/dist/
 
 # Profiling
 **/flamegraph.svg
@@ -40,3 +44,6 @@ crates/cli/openvm/
 
 # samply profile
 profile.json.gz
+
+# test fixtures
+benchmarks/fixtures

@@ -1,0 +1,26 @@
+[workspace]
+[package]
+name = "openvm-sdk-p256-test"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+openvm = { path = "../../../toolchain/openvm", features = ["std"] }
+openvm-algebra-guest = { path = "../../../../extensions/algebra/guest" }
+openvm-ecc-guest = { path = "../../../../extensions/ecc/guest" }
+openvm-pairing = { path = "../../../../guest-libs/pairing", features = [
+    "bn254",
+    "bls12_381",
+] }
+openvm-k256 = { path = "../../../../guest-libs/k256", package = "k256" }
+openvm-p256 = { path = "../../../../guest-libs/p256", package = "p256" }
+
+elliptic-curve = { version = "0.13.8" }
+
+[features]
+default = []
+std = ["openvm/std"]
+
+[profile.release]
+panic = "abort"
+lto = "thin"

@@ -22,7 +22,7 @@ use super::columns::Poseidon2PeripheryCols;
 #[derive(Clone, new, Debug)]
 pub struct Poseidon2PeripheryAir<F: Field, const SBOX_REGISTERS: usize> {
     pub(super) subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
-    pub(super) bus: LookupBus,
+    pub bus: LookupBus,
 }
 
 impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>

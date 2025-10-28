@@ -15,9 +15,12 @@ def run_cargo_command(
     kzg_params_dir,
     profile="release"
 ):
+    toolchain = "+1.86"
+    if "tco" in feature_flags:
+        toolchain = "+nightly-2025-08-19"
     # Command to run (for best performance but slower builds, use --profile maxperf)
     command = [
-        "cargo", "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
+        "cargo", toolchain, "run", "--no-default-features", "-p", "openvm-benchmarks-prove", "--bin", bin_name, "--profile", profile, "--features", ",".join(feature_flags), "--"
     ]
 
     if app_log_blowup is not None:
@@ -32,7 +35,7 @@ def run_cargo_command(
         command.extend(["--max_segment_length", max_segment_length])
     if kzg_params_dir is not None:
         command.extend(["--kzg-params-dir", kzg_params_dir])
-    if "profiling" in feature_flags:
+    if "perf-metrics" in feature_flags:
         # set guest build args and vm config to profiling
         command.extend(["--profiling"])
 
@@ -50,9 +53,9 @@ def run_cargo_command(
     # Prepare the environment variables
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
-    if "profiling" in feature_flags:
-        env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
     env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    if "perf-metrics" in feature_flags:
+        env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
 
     # Run the subprocess with the updated environment
     subprocess.run(command, check=True, env=env)
@@ -73,7 +76,7 @@ def bench():
     parser.add_argument('--output_path', type=str, required=True, help="The path to write the metrics to")
     args = parser.parse_args()
 
-    feature_flags = ["bench-metrics", "parallel"] + (args.features.split(",") if args.features else [])
+    feature_flags = ["metrics", "parallel"] + (args.features.split(",") if args.features else [])
     assert (feature_flags.count("mimalloc") + feature_flags.count("jemalloc")) == 1
 
     run_cargo_command(

@@ -4,29 +4,24 @@ mod tests {
 
     use eyre::Result;
     use openvm_circuit::{
-        arch::{
-            execution_mode::e1::E1Ctx, hasher::poseidon2::vm_poseidon2_hasher,
-            interpreter::InterpretedInstance, ExecutionError, Streams, VirtualMachine, VmConfig,
-            VmExecutor,
-        },
+        arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
         system::memory::merkle::public_values::UserPublicValuesProof,
-        utils::{air_test, air_test_with_min_segments, test_system_config_with_continuations},
+        utils::{air_test, air_test_with_min_segments, test_system_config},
     };
-    use openvm_instructions::exe::VmExe;
-    use openvm_rv32im_circuit::{Rv32IConfig, Rv32ImConfig};
+    use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
+    use openvm_rv32im_circuit::{Rv32IBuilder, Rv32IConfig, Rv32ImBuilder, Rv32ImConfig};
     use openvm_rv32im_guest::hint_load_by_key_encode;
     use openvm_rv32im_transpiler::{
-        Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+        DivRemOpcode, MulHOpcode, MulOpcode, Rv32ITranspilerExtension, Rv32IoTranspilerExtension,
+        Rv32MTranspilerExtension,
     };
-    use openvm_stark_sdk::{
-        config::baby_bear_poseidon2::default_engine, openvm_stark_backend::p3_field::FieldAlgebra,
-        p3_baby_bear::BabyBear,
-    };
+    use openvm_stark_sdk::{openvm_stark_backend::p3_field::FieldAlgebra, p3_baby_bear::BabyBear};
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
         get_programs_dir,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    use strum::IntoEnumIterator;
     use test_case::test_case;
 
     type F = BabyBear;
@@ -35,7 +30,7 @@ mod tests {
     fn test_rv32im_config() -> Rv32ImConfig {
         Rv32ImConfig {
             rv32i: Rv32IConfig {
-                system: test_system_config_with_continuations(),
+                system: test_system_config(),
                 ..Default::default()
             },
             ..Default::default()
@@ -46,18 +41,19 @@ mod tests {
     fn test_rv32i(example_name: &str, min_segments: usize) -> Result<()> {
         let config = Rv32IConfig::default();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;
-        let exe = VmExe::from_elf(
+        let mut exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
                 .with_extension(Rv32ITranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        let config = test_rv32im_config();
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        change_rv32m_insn_to_nop(&mut exe);
+        air_test_with_min_segments(Rv32IBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
+    #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
     fn test_rv32im(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv32im_config();
@@ -69,7 +65,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension),
         )?;
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -90,7 +86,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension)
                 .with_extension(Rv32MTranspilerExtension),
         )?;
-        air_test_with_min_segments(config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -106,7 +102,7 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
         let input = vec![[0, 1, 2, 3].map(F::from_canonical_u8).to_vec()];
-        air_test_with_min_segments(config, exe, input, 1);
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, input, 1);
         Ok(())
     }
 
@@ -129,7 +125,7 @@ mod tests {
             "key".as_bytes().to_vec(),
             hint_load_by_key_encode(&input),
         )]));
-        air_test_with_min_segments(config, exe, streams, 1);
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, streams, 1);
         Ok(())
     }
 
@@ -160,7 +156,7 @@ mod tests {
             .flat_map(|w| w.to_le_bytes())
             .map(F::from_canonical_u8)
             .collect();
-        air_test_with_min_segments(config, exe, vec![input], 1);
+        air_test_with_min_segments(Rv32ImBuilder, config, exe, vec![input], 1);
         Ok(())
     }
 
@@ -176,20 +172,13 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
 
-        let vm = VirtualMachine::new(default_engine(), config.clone());
-        let pk = vm.keygen();
-        let vk = pk.get_vk();
-        let segments = vm
-            .executor
-            .execute_metered(exe.clone(), vec![], &vk.num_interactions())
-            .unwrap();
-
-        let final_memory = vm.executor.execute(exe, vec![], &segments)?.unwrap();
+        let executor = VmExecutor::new(config.clone())?;
+        let instance = executor.instance(&exe)?;
+        let state = instance.execute(vec![], None)?;
+        let final_memory = state.memory.memory;
         let hasher = vm_poseidon2_hasher::<F>();
         let pv_proof = UserPublicValuesProof::compute(
-            VmConfig::<F>::system(&config)
-                .memory_config
-                .memory_dimensions(),
+            config.as_ref().memory_config.memory_dimensions(),
             64,
             &hasher,
             &final_memory,
@@ -224,7 +213,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(Rv32ImBuilder, config, exe);
         Ok(())
     }
 
@@ -240,9 +229,10 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
 
-        let executor = VmExecutor::new(config);
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&exe)?;
         let input = vec![[0, 0, 0, 1].map(F::from_canonical_u8).to_vec()];
-        match executor.execute_e1(exe.clone(), input.clone(), None) {
+        match instance.execute(input.clone(), None) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),
@@ -265,7 +255,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(Rv32ImBuilder, config, exe);
         Ok(())
     }
 
@@ -285,7 +275,7 @@ mod tests {
                 .with_extension(Rv32MTranspilerExtension)
                 .with_extension(Rv32IoTranspilerExtension),
         )?;
-        air_test(config, exe);
+        air_test(Rv32ImBuilder, config, exe);
         Ok(())
     }
 
@@ -302,8 +292,9 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        let interpreter = InterpretedInstance::new(config, exe);
-        interpreter.execute(E1Ctx::new(None), vec![]).unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let instance = executor.instance(&exe).unwrap();
+        instance.execute(vec![], None).unwrap();
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
@@ -327,6 +318,26 @@ mod tests {
                 .with_extension(Rv32IoTranspilerExtension),
         )
         .unwrap();
-        air_test(config, exe);
+        air_test(Rv32ImBuilder, config, exe);
+    }
+
+    // For testing programs that should only execute RV32I:
+    // The ELF might still have Mul instructions even though the program doesn't use them. We
+    // mask those to NOP here.
+    fn change_rv32m_insn_to_nop(exe: &mut VmExe<F>) {
+        for (insn, _) in exe
+            .program
+            .instructions_and_debug_infos
+            .iter_mut()
+            .flatten()
+        {
+            if MulOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || MulHOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+                || DivRemOpcode::iter().any(|op| op.global_opcode() == insn.opcode)
+            {
+                *insn = Instruction::default();
+                insn.opcode = SystemOpcode::PHANTOM.global_opcode();
+            }
+        }
     }
 }

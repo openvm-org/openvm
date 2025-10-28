@@ -5,31 +5,24 @@ use std::{
 
 use eyre::Result;
 use num_bigint::BigUint;
-use openvm_algebra_circuit::{
-    Fp2Extension, Fp2ExtensionExecutor, Fp2ExtensionPeriphery, ModularExtension,
-    ModularExtensionExecutor, ModularExtensionPeriphery,
-};
+use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_bigint_circuit::{Int256, Int256Executor, Int256Periphery};
+use openvm_bigint_circuit::*;
 use openvm_circuit::{
-    arch::{
-        execution_mode::e1::E1Ctx, interpreter::InterpretedInstance, InitFileGenerator,
-        SystemConfig,
-    },
+    arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
+    system::SystemExecutor,
     utils::air_test,
 };
 use openvm_ecc_circuit::{SECP256K1_MODULUS, SECP256K1_ORDER};
 use openvm_instructions::exe::VmExe;
 use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32IPeriphery, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32IoPeriphery,
-    Rv32M, Rv32MExecutor, Rv32MPeriphery,
+    Rv32I, Rv32IExecutor, Rv32ImBuilder, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
@@ -83,14 +76,15 @@ fn test_rv32im_runtime(elf_path: &str) -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension),
     )?;
     let config = Rv32ImConfig::default();
-    let interpreter = InterpretedInstance::new(config, exe);
-    interpreter.execute(E1Ctx::new(None), vec![])?;
+    let executor = VmExecutor::new(config)?;
+    let interpreter = executor.instance(&exe)?;
+    interpreter.execute(vec![], None)?;
     Ok(())
 }
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv32ModularFp2Int256Config {
-    #[system]
+    #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv32I,
@@ -109,7 +103,7 @@ pub struct Rv32ModularFp2Int256Config {
 impl Rv32ModularFp2Int256Config {
     pub fn new(modular_moduli: Vec<BigUint>, fp2_moduli: Vec<(String, BigUint)>) -> Self {
         Self {
-            system: SystemConfig::default().with_continuations(),
+            system: SystemConfig::default(),
             base: Default::default(),
             mul: Default::default(),
             io: Default::default(),
@@ -146,8 +140,9 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
             .with_extension(ModularTranspilerExtension)
             .with_extension(Fp2TranspilerExtension),
     )?;
-    let interpreter = InterpretedInstance::new(config, openvm_exe);
-    interpreter.execute(E1Ctx::new(None), vec![])?;
+    let executor = VmExecutor::new(config)?;
+    let interpreter = executor.instance(&openvm_exe)?;
+    interpreter.execute(vec![], None)?;
     Ok(())
 }
 
@@ -163,6 +158,6 @@ fn test_terminate_prove() -> Result<()> {
             .with_extension(Rv32IoTranspilerExtension)
             .with_extension(ModularTranspilerExtension),
     )?;
-    air_test(config, openvm_exe);
+    air_test(Rv32ImBuilder, config, openvm_exe);
     Ok(())
 }

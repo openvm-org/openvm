@@ -32,7 +32,7 @@ pub struct ProgramExecutionCols<T> {
     pub g: T,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, derive_new::new)]
 pub struct ProgramAir {
     pub bus: ProgramBus,
 }

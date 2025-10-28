@@ -10,8 +10,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        default: g6.2xlarge
       memory_allocator:
         type: string
         required: false
@@ -49,7 +49,7 @@ on:
       features:
         type: string
         required: false
-        description: Host features, comma separated (aggregation,profiling)
+        description: Host features, comma separated (aggregation,perf-metrics)
   workflow_call:
     inputs:
       benchmark_name:
@@ -63,8 +63,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The type of runner to start ({1,2,4,8,16,32,48,64}cpu-linux-{arm64,x64})
-        default: 64cpu-linux-arm64
+        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        default: g6.2xlarge
       memory_allocator:
         type: string
         required: false
@@ -102,12 +102,22 @@ on:
       features:
         type: string
         required: false
-        description: Host features, comma separated (aggregation,profiling)
+        description: Host features, comma separated (aggregation,perf-metrics)
+      job_index:
+        type: string
+        required: false
+        description: Job index from strategy matrix
+        default: "0"
+      is_merge_queue:
+        type: boolean
+        required: false
+        description: Whether this is being called from merge queue
+        default: false
 
 env:
   S3_METRICS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/metrics
   S3_FLAMEGRAPHS_PATH: s3://openvm-public-data-sandbox-us-east-1/benchmark/github/flamegraphs
-  FEATURE_FLAGS: "bench-metrics,parallel,nightly-features"
+  FEATURE_FLAGS: "metrics,parallel,tco"
   INPUT_ARGS: ""
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
 
@@ -118,22 +128,19 @@ jobs:
   bench-new:
     name: Run benchmark on workflow ref/branch
     runs-on:
-      - runs-on
-      - runner=${{ inputs.instance_type }}
-      - run-id=${{ github.run_id }}
-      - family=m7
-      - tag=bench-${{ inputs.benchmark_name }}-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}-benchcall-${{ github.run_attempt }}-${{ inputs.job_index || inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}/family=${{ inputs.instance_type || github.event.inputs.instance_type }}/image=${{ startsWith(inputs.instance_type || github.event.inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(inputs.instance_type || github.event.inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/spot=capacity-optimized/extras=s3-cache
     steps:
-      - uses: runs-on/action@v1
+      - uses: runs-on/action@v2
       ##########################################################################
       # Environment setup                                                      #
       ##########################################################################
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-
+      - run: | # avoid cross-device link error
+          rustup component remove clippy || true
+          rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -146,12 +153,20 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
-      - name: "Feature flags: memory allocator"
+      - name: "Feature flags: memory allocator + e2e"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
+          if [[ ! "${{ inputs.instance_type || github.event.inputs.instance_type }}" =~ ^g ]]; then
+            FEATURE_FLAGS=${FEATURE_FLAGS},nightly-features
+            if [[ "${{ inputs.e2e_bench }}" == "true" ]]; then
+              FEATURE_FLAGS=${FEATURE_FLAGS},evm
+            fi
+          else
+            FEATURE_FLAGS=${FEATURE_FLAGS},cuda
+          fi
           echo "FEATURE_FLAGS=$ALLOCATOR,${FEATURE_FLAGS}" >> $GITHUB_ENV
       - name: "Feature flags: aggregation"
-        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        if: contains(github.event.pull_request.labels.*.name, 'run-benchmark') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || inputs.is_merge_queue == true
         run: |
           echo "Adding aggregation feature flag"
           echo "FEATURE_FLAGS=${FEATURE_FLAGS},aggregation" >> $GITHUB_ENV
@@ -170,7 +185,7 @@ jobs:
             ROOT_ARG="--root_log_blowup ${{ inputs.root_log_blowup }}"
             INTERNAL_ARG="--internal_log_blowup ${{ inputs.internal_log_blowup }}"
             bash ./extensions/native/recursion/trusted_setup_s3.sh
-            PARAMS_DIR=$(pwd)/params
+            PARAMS_DIR=$HOME/.openvm/params
             PARAMS_ARG="--kzg-params-dir $PARAMS_DIR"
             echo "INPUT_ARGS=${ROOT_ARG} ${INTERNAL_ARG} ${PARAMS_ARG} ${INPUT_ARGS}" >> $GITHUB_ENV
           fi
@@ -208,6 +223,7 @@ jobs:
           MAX_SEGMENT_LENGTH="--max_segment_length ${{ inputs.max_segment_length }}"
           OUTPUT_PATH="--output_path $(pwd)/$METRIC_PATH"
           echo "INPUT_ARGS=${FEATURES} ${APP_ARG} ${AGG_ARG} ${MAX_SEGMENT_LENGTH} ${OUTPUT_PATH} ${INPUT_ARGS}" >> $GITHUB_ENV
+          echo "VPMM_PAGES=2048" >> $GITHUB_ENV # 4GB
 
       ##########################################################################
       # Find working directory based on benchmark_name and run the benchmark   #
@@ -230,11 +246,11 @@ jobs:
           s5cmd cp $METRIC_PATH ${{ env.S3_METRICS_PATH }}/${METRIC_NAME}-${current_sha}.json
 
       - name: Install inferno-flamegraph
-        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
         run: cargo install inferno
 
       - name: Generate flamegraphs
-        if: ${{ contains(env.FEATURE_FLAGS, 'profiling') }}
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
         run: |
           if [[ -f $METRIC_PATH ]]; then
             GUEST_SYMBOLS_PATH="${METRIC_PATH%.json}.syms"
@@ -253,9 +269,12 @@ jobs:
       # Update s3 for latest branch metrics upon a push event                  #
       ##########################################################################
       - name: Update latest branch result in s3
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.is_merge_queue == true
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # Treat merge_queue events as main branch for ref-hash purposes
+          if [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
+            REF_HASH="main"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             # for backwards compatibility
             REF_HASH="main"
           else

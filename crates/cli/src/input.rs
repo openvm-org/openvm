@@ -13,49 +13,52 @@ use openvm_stark_backend::p3_field::FieldAlgebra;
 #[derive(Debug, Clone)]
 pub enum Input {
     FilePath(PathBuf),
-    HexBytes(String),
+    HexBytes(Vec<u8>),
 }
 
 impl FromStr for Input {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if is_valid_hex_string(s) {
-            Ok(Input::HexBytes(s.to_string()))
+        if let Ok(bytes) = decode_hex_string(s) {
+            Ok(Input::HexBytes(bytes))
         } else if PathBuf::from(s).exists() {
             Ok(Input::FilePath(PathBuf::from(s)))
         } else {
-            Err("Input must be a valid file path or hex string.".to_string())
+            Err("Input must be a valid file path or a hex string of even length.".to_string())
         }
     }
 }
 
-pub fn is_valid_hex_string(s: &str) -> bool {
-    if s.len() % 2 != 0 {
-        return false;
-    }
-    // All hex digits with optional 0x prefix
-    s.starts_with("0x") && s[2..].chars().all(|c| c.is_ascii_hexdigit())
-        || s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
 pub fn decode_hex_string(s: &str) -> Result<Vec<u8>> {
-    // Remove 0x prefix if present
-    let s = s.trim_start_matches("0x");
-    if s.is_empty() {
-        return Ok(Vec::new());
+    // Remove 0x prefix if present (exactly once)
+    let s = s.strip_prefix("0x").unwrap_or(s);
+    if s.len() % 2 != 0 {
+        return Err(eyre::eyre!("The hex string must be of even length"));
+    }
+    if !s.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(eyre::eyre!("The hex string must consist of hex digits"));
+    }
+    if s.starts_with("02") {
+        if s.len() % 8 != 2 {
+            return Err(eyre::eyre!(
+                "If the hex value starts with 02, a whole number of 32-bit elements must follow"
+            ));
+        }
+    } else if !s.starts_with("01") {
+        return Err(eyre::eyre!("The hex value must start with 01 or 02"));
     }
     hex::decode(s).map_err(|e| eyre::eyre!("Invalid hex: {}", e))
 }
 
 pub fn read_bytes_into_stdin(stdin: &mut StdIn, bytes: &[u8]) -> Result<()> {
     // should either write_bytes or write_field
-    match bytes[0] {
-        0x01 => {
+    match bytes.first() {
+        Some(0x01) => {
             stdin.write_bytes(&bytes[1..]);
             Ok(())
         }
-        0x02 => {
+        Some(0x02) => {
             let data = &bytes[1..];
             if data.len() % 4 != 0 {
                 return Err(eyre::eyre!(
@@ -91,21 +94,20 @@ pub fn read_to_stdin(input: &Option<Input>) -> Result<StdIn> {
                     inner
                         .as_str()
                         .ok_or_else(|| eyre::eyre!("Each value must be a hex string"))
-                        .and_then(|s| {
-                            if !is_valid_hex_string(s) {
-                                return Err(eyre::eyre!("Invalid hex string"));
+                        .and_then(|s| match decode_hex_string(s) {
+                            Err(msg) => Err(eyre::eyre!("Invalid hex string: {}", msg)),
+                            Ok(bytes) => {
+                                read_bytes_into_stdin(&mut stdin, &bytes).expect("Fail: input validation accepted an input, but the deserialization rejected it");
+                                Ok(())
                             }
-                            let bytes = decode_hex_string(s)?;
-                            read_bytes_into_stdin(&mut stdin, &bytes)
                         })
                 })?;
 
             Ok(stdin)
         }
-        Some(Input::HexBytes(hex_str)) => {
+        Some(Input::HexBytes(bytes)) => {
             let mut stdin = StdIn::default();
-            let bytes = decode_hex_string(hex_str)?;
-            read_bytes_into_stdin(&mut stdin, &bytes)?;
+            read_bytes_into_stdin(&mut stdin, bytes)?;
             Ok(stdin)
         }
         None => Ok(StdIn::default()),

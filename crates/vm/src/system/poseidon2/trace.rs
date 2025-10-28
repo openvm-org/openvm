@@ -1,4 +1,4 @@
-use std::borrow::BorrowMut;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_stark_backend::{
@@ -7,33 +7,33 @@ use openvm_stark_backend::{
     p3_field::{FieldAlgebra, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProofInput,
-    AirRef, Chip, ChipUsageGetter,
+    prover::{cpu::CpuBackend, types::AirProvingContext},
+    Chip, ChipUsageGetter,
 };
 
 use super::{columns::*, Poseidon2PeripheryBaseChip, PERIPHERY_POSEIDON2_WIDTH};
 
-impl<SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<SC>
+impl<RA, SC: StarkGenericConfig, const SBOX_REGISTERS: usize> Chip<RA, CpuBackend<SC>>
     for Poseidon2PeripheryBaseChip<Val<SC>, SBOX_REGISTERS>
 where
     Val<SC>: PrimeField32,
 {
-    fn air(&self) -> AirRef<SC> {
-        self.air.clone()
-    }
-
-    fn generate_air_proof_input(self) -> AirProofInput<SC> {
+    /// Generates trace and clears internal records state.
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
         let height = next_power_of_two_or_zero(self.current_trace_height());
         let width = self.trace_width();
 
         let mut inputs = Vec::with_capacity(height);
         let mut multiplicities = Vec::with_capacity(height);
         #[cfg(feature = "parallel")]
-        let records_iter = self.records.into_par_iter();
+        let records_iter = self.records.par_iter();
         #[cfg(not(feature = "parallel"))]
-        let records_iter = self.records.into_iter();
+        let records_iter = self.records.iter();
         let (actual_inputs, actual_multiplicities): (Vec<_>, Vec<_>) = records_iter
-            .map(|(input, mult)| (input, mult.load(std::sync::atomic::Ordering::Relaxed)))
+            .map(|r| {
+                let (input, mult) = r.pair();
+                (*input, mult.load(std::sync::atomic::Ordering::Relaxed))
+            })
             .unzip();
         inputs.extend(actual_inputs);
         multiplicities.extend(actual_multiplicities);
@@ -55,8 +55,9 @@ where
                 let cols: &mut Poseidon2PeripheryCols<Val<SC>, SBOX_REGISTERS> = row.borrow_mut();
                 cols.mult = Val::<SC>::from_canonical_u32(mult);
             });
+        self.records.clear();
 
-        AirProofInput::simple_no_pis(RowMajorMatrix::new(values, width))
+        AirProvingContext::simple_no_pis(Arc::new(RowMajorMatrix::new(values, width)))
     }
 }
 

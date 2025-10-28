@@ -31,14 +31,20 @@ pub struct InternalVmVerifierInput<SC: StarkGenericConfig> {
 assert_impl_all!(InternalVmVerifierInput<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 /// A proof which can prove OpenVM program execution.
-#[derive(Deserialize, Serialize, Derivative)]
-#[serde(bound = "")]
+///
+/// The `inner` field contains the raw STARK proof, including the public values of each AIR. The
+/// `user_public_values` are special user-defined values that are only committed to in the `inner`
+/// public values: one can verify using a Merkle proof that the former are committed to in the
+/// latter.
+///
+/// This struct may be serialized using the `Encode` trait in the `openvm_sdk` crate.
+#[derive(Derivative)]
 #[derivative(Clone(bound = "Com<SC>: Clone"))]
 pub struct VmStarkProof<SC: StarkGenericConfig> {
-    pub proof: Proof<SC>,
+    /// STARK backend proof
+    pub inner: Proof<SC>,
     pub user_public_values: Vec<Val<SC>>,
 }
-assert_impl_all!(VmStarkProof<BabyBearPoseidon2Config>: Serialize, DeserializeOwned);
 
 /// Aggregated state of all segments
 #[derive(Debug, Clone, Copy, AlignedBorrow)]

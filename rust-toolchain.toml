@@ -1,3 +1,5 @@
 [toolchain]
-channel = "1.85.1"
+channel = "1.86.0"
+# To use the "tco" feature, switch to Rust nightly:
+# channel = "nightly-2025-08-19"
 components = ["clippy", "rustfmt"]

@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, SignedImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -156,10 +156,13 @@ pub struct Rv32JalrAdapterRecord {
 }
 
 // This adapter reads from [b:4]_d (rs1) and writes to [a:4]_d (rd)
-#[derive(derive_new::new)]
-pub struct Rv32JalrAdapterStep;
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32JalrAdapterExecutor;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32JalrAdapterStep
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32JalrAdapterFiller;
+
+impl<F> AdapterTraceExecutor<F> for Rv32JalrAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -169,7 +172,7 @@ where
     type RecordMut<'a> = &'a mut Rv32JalrAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -177,7 +180,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -197,7 +200,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -225,9 +228,16 @@ where
         }
     }
 }
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32JalrAdapterStep {
+
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32JalrAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32JalrAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - get_record_from_slice correctly interprets the bytes as Rv32JalrAdapterRecord
         let record: &Rv32JalrAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32JalrAdapterCols<F> = adapter_row.borrow_mut();
 

@@ -20,7 +20,10 @@ openvm-toolchain-tests = { path = "../../../crates/toolchain/tests" }
 eyre.workspace = true
 test-case.workspace = true
 serde = { workspace = true, features = ["alloc"] }
+strum.workspace = true
 
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
+tco = ["openvm-rv32im-circuit/tco"]
+cuda = ["openvm-rv32im-circuit/cuda"]

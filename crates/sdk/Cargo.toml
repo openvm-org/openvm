@@ -31,6 +31,7 @@ openvm-rv32im-transpiler = { workspace = true }
 openvm-transpiler = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true }
+openvm-cuda-backend = { workspace = true, optional = true }
 openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm = { workspace = true }
@@ -42,7 +43,6 @@ derivative = { workspace = true }
 derive_more = { workspace = true }
 serde = { workspace = true }
 eyre.workspace = true
-async-trait.workspace = true
 metrics.workspace = true
 tracing.workspace = true
 itertools.workspace = true
@@ -50,6 +50,7 @@ getset.workspace = true
 clap = { workspace = true, features = ["derive"] }
 serde_with = { workspace = true, features = ["hex"] }
 serde_json.workspace = true
+toml.workspace = true
 thiserror.workspace = true
 rand.workspace = true
 snark-verifier = { workspace = true, optional = true }
@@ -57,8 +58,10 @@ snark-verifier-sdk = { workspace = true, optional = true }
 tempfile.workspace = true
 hex.workspace = true
 forge-fmt = { workspace = true, optional = true }
-rrs-lib = { workspace = true }
-num-bigint = { workspace = true }
+rrs-lib.workspace = true
+num-bigint.workspace = true
+cfg-if.workspace = true
+tokio = { workspace = true, features = ["rt", "sync"], optional = true }
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -74,14 +77,32 @@ evm-verify = [
     "dep:alloy-sol-types",
     "dep:forge-fmt",
 ]
-bench-metrics = [
-    "openvm-circuit/bench-metrics",
-    "openvm-native-recursion/bench-metrics",
-    "openvm-native-compiler/bench-metrics",
+metrics = [
+    "openvm-circuit/metrics",
+    "openvm-native-recursion/metrics",
+    "openvm-native-compiler/metrics",
 ]
+tco = [
+    "openvm-circuit/tco",
+    "openvm-rv32im-circuit/tco",
+    "openvm-native-circuit/tco",
+    "openvm-sha2-circuit/tco",
+    "openvm-keccak256-circuit/tco",
+    "openvm-bigint-circuit/tco",
+    "openvm-algebra-circuit/tco",
+    "openvm-ecc-circuit/tco",
+    "openvm-pairing-circuit/tco",
+]
+unprotected = ["openvm-circuit/unprotected"]
 # for guest profiling:
-profiling = ["openvm-circuit/function-span", "openvm-transpiler/function-span"]
+perf-metrics = [
+    "openvm-circuit/perf-metrics",
+    "openvm-transpiler/function-span",
+]
+# turns on stark-backend debugger in all proofs
+stark-debug = ["openvm-circuit/stark-debug"]
 test-utils = ["openvm-circuit/test-utils"]
+async = ["tokio"]
 # performance features:
 # (rayon is always imported because of halo2, so "parallel" feature is redundant)
 parallel = ["openvm-circuit/parallel"]
@@ -90,10 +111,33 @@ jemalloc = ["openvm-circuit/jemalloc"]
 jemalloc-prof = ["openvm-circuit/jemalloc-prof"]
 nightly-features = ["openvm-circuit/nightly-features"]
 
+cuda = [
+    "dep:openvm-cuda-backend",
+    "openvm-circuit/cuda",
+    "openvm-algebra-circuit/cuda",
+    "openvm-bigint-circuit/cuda",
+    "openvm-ecc-circuit/cuda",
+    "openvm-keccak256-circuit/cuda",
+    "openvm-sha2-circuit/cuda",
+    "openvm-pairing-circuit/cuda",
+    "openvm-native-circuit/cuda",
+    "openvm-rv32im-circuit/cuda",
+]
+
+# Legacy compatibility features for backwards compatibility with v1.2/v1.3
+legacy-v1-3 = ["legacy-v1-3-evm-verifier", "legacy-v1-3-mem-align"]
+# Generate EVM verifier compatible with v1.2/v1.3 format
+legacy-v1-3-evm-verifier = []
+# Enable unaligned memory access for RISC-V 32-bit instructions (v1.2/v1.3 behavior)
+legacy-v1-3-mem-align = [
+    "openvm-rv32im-circuit/legacy-v1-3-mem-align",
+    "openvm-circuit/legacy-v1-3-mem-align"
+]
+
 [[example]]
 name = "sdk_evm"
 path = "examples/sdk_evm.rs"
 required-features = ["evm-verify"]
 
 [package.metadata.cargo-shear]
-ignored = ["rand"]
+ignored = ["derive_more", "rand"]

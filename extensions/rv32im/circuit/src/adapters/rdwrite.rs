@@ -2,7 +2,7 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{
     arch::{
-        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, AdapterTraceStep,
+        get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         BasicAdapterInterface, ExecutionBridge, ExecutionState, ImmInstruction, VmAdapterAir,
     },
     system::memory::{
@@ -199,10 +199,13 @@ pub struct Rv32RdWriteAdapterRecord {
     pub rd_aux_record: MemoryWriteBytesAuxRecord<RV32_REGISTER_NUM_LIMBS>,
 }
 
-#[derive(derive_new::new)]
-pub struct Rv32RdWriteAdapterStep;
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32RdWriteAdapterExecutor;
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32RdWriteAdapterStep
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32RdWriteAdapterFiller;
+
+impl<F> AdapterTraceExecutor<F> for Rv32RdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -212,7 +215,7 @@ where
     type RecordMut<'a> = &'a mut Rv32RdWriteAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -220,7 +223,7 @@ where
     #[inline(always)]
     fn read(
         &self,
-        _memory: &mut TracingMemory<F>,
+        _memory: &mut TracingMemory,
         _instruction: &Instruction<F>,
         _record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
@@ -230,7 +233,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -251,9 +254,15 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32RdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32RdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32RdWriteAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_row: &mut Rv32RdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -273,12 +282,17 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32RdWriteAdapterStep
 }
 
 /// This adapter doesn't read anything, and **maybe** writes to \[a:4\]_d, where d == 1
-#[derive(derive_new::new)]
-pub struct Rv32CondRdWriteAdapterStep {
-    inner: Rv32RdWriteAdapterStep,
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32CondRdWriteAdapterExecutor {
+    inner: Rv32RdWriteAdapterExecutor,
 }
 
-impl<F, CTX> AdapterTraceStep<F, CTX> for Rv32CondRdWriteAdapterStep
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv32CondRdWriteAdapterFiller {
+    inner: Rv32RdWriteAdapterFiller,
+}
+
+impl<F> AdapterTraceExecutor<F> for Rv32CondRdWriteAdapterExecutor
 where
     F: PrimeField32,
 {
@@ -288,7 +302,7 @@ where
     type RecordMut<'a> = &'a mut Rv32RdWriteAdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory<F>, record: &mut Self::RecordMut<'_>) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -296,11 +310,11 @@ where
     #[inline(always)]
     fn read(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
-        <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::read(
+        <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::read(
             &self.inner,
             memory,
             instruction,
@@ -311,7 +325,7 @@ where
     #[inline(always)]
     fn write(
         &self,
-        memory: &mut TracingMemory<F>,
+        memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
@@ -319,7 +333,7 @@ where
         let Instruction { f: enabled, .. } = instruction;
 
         if enabled.is_one() {
-            <Rv32RdWriteAdapterStep as AdapterTraceStep<F, CTX>>::write(
+            <Rv32RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::write(
                 &self.inner,
                 memory,
                 instruction,
@@ -333,9 +347,15 @@ where
     }
 }
 
-impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapterStep {
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv32CondRdWriteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv32CondRdWriteAdapterCols<u8>>();
+
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
+        // SAFETY:
+        // - caller ensures `adapter_row` contains a valid record representation that was previously
+        //   written by the executor
+        // - get_record_from_slice correctly interprets the bytes as Rv32RdWriteAdapterRecord
         let record: &Rv32RdWriteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let adapter_cols: &mut Rv32CondRdWriteAdapterCols<F> = adapter_row.borrow_mut();
@@ -343,9 +363,11 @@ impl<F: PrimeField32, CTX> AdapterTraceFiller<F, CTX> for Rv32CondRdWriteAdapter
         adapter_cols.needs_write = F::from_bool(record.rd_ptr != u32::MAX);
 
         if record.rd_ptr != u32::MAX {
+            // SAFETY:
+            // - adapter_row has sufficient length for the split
+            // - size_of::<Rv32RdWriteAdapterCols<u8>>() is the correct split point
             unsafe {
-                <Rv32RdWriteAdapterStep as AdapterTraceFiller<F, CTX>>::fill_trace_row(
-                    &self.inner,
+                self.inner.fill_trace_row(
                     mem_helper,
                     adapter_row
                         .split_at_mut_unchecked(size_of::<Rv32RdWriteAdapterCols<u8>>())

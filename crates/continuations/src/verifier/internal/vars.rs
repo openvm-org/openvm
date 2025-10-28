@@ -57,7 +57,7 @@ impl Hintable<C> for VmStarkProof<SC> {
     }
 
     fn write(&self) -> Vec<Vec<<C as Config>::N>> {
-        let mut stream = self.proof.write();
+        let mut stream = self.inner.write();
         stream.extend(self.user_public_values.write());
         stream
     }
