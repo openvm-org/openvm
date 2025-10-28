@@ -387,6 +387,7 @@ fn transmute_interpreter_lifetime<'a, Ctx>(
     unsafe { std::mem::transmute(interpreter) }
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
     bencher
@@ -404,6 +405,7 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
         });
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
     bencher
@@ -426,6 +428,7 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
     bencher
@@ -443,6 +446,7 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
         });
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_internal_verifier_execute(bencher: Bencher, program: &str) {
     bencher
@@ -460,6 +464,7 @@ fn benchmark_internal_verifier_execute(bencher: Bencher, program: &str) {
         });
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) {
     bencher
@@ -482,6 +487,7 @@ fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) 
         });
 }
 
+#[cfg(not(feature = "aot"))]
 #[divan::bench(args = INTERNAL_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str) {
     bencher
