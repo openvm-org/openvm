@@ -110,7 +110,9 @@ where
 {
     setup_tracing();
     let engine = E::new(fri_params);
+    println!("start");
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
+    println!("A");
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
@@ -118,10 +120,11 @@ where
     let (segments, _) = vm
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx)?;
+    println!("B");
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     vm.load_program(cached_program_trace);
     let mut preflight_interpreter = vm.preflight_interpreter(&exe)?;
-
+    println!("C");
     let mut state = Some(vm.create_initial_state(&exe, input));
     let mut proofs = Vec::new();
     let mut exit_code = None;
@@ -144,10 +147,12 @@ where
             Some(num_insns),
             &trace_heights,
         )?;
+        println!("D");
         state = Some(to_state);
         exit_code = system_records.exit_code;
 
         let ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+        println!("E");
         if debug {
             debug_proving_ctx(&vm, &pk, &ctx);
         }

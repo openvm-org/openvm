@@ -10,7 +10,9 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+openvm = { workspace = true }
 openvm-sha2-guest = { workspace = true }
+sha2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 openvm-instructions = { workspace = true }
@@ -19,12 +21,10 @@ openvm-circuit = { workspace = true, features = ["test-utils", "parallel"] }
 openvm-transpiler = { workspace = true }
 openvm-sha2-transpiler = { workspace = true }
 openvm-sha2-circuit = { workspace = true }
+openvm-sha2-air = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-toolchain-tests = { workspace = true }
 eyre = { workspace = true }
-
-[target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sha2 = { workspace = true }
 
 [features]
 # Internal feature for testing only.

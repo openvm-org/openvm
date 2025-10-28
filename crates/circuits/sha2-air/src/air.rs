@@ -9,9 +9,10 @@ use openvm_circuit_primitives::{
 };
 use openvm_stark_backend::{
     interaction::{BusIndex, InteractionBuilder, PermutationCheckBus},
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::{Air, AirBuilder, BaseAir},
     p3_field::{Field, FieldAlgebra},
     p3_matrix::Matrix,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 
 use super::{
@@ -19,38 +20,41 @@ use super::{
     small_sig1_field,
 };
 use crate::{
-    constraint_word_addition, word_into_u16_limbs, Sha2Config, ShaDigestColsRef, ShaRoundColsRef,
+    constraint_word_addition, word_into_u16_limbs, Sha2BlockHasherSubairConfig, Sha2DigestColsRef,
+    Sha2RoundColsRef,
 };
 
 /// Expects the message to be padded to a multiple of C::BLOCK_WORDS * C::WORD_BITS bits
 #[derive(Clone, Debug)]
-pub struct Sha2Air<C: Sha2Config> {
+pub struct Sha2BlockHasherSubAir<C: Sha2BlockHasherSubairConfig> {
     pub bitwise_lookup_bus: BitwiseOperationLookupBus,
     pub row_idx_encoder: Encoder,
     /// Internal bus for self-interactions in this AIR.
-    bus: PermutationCheckBus,
+    pub private_bus: PermutationCheckBus,
     _phantom: PhantomData<C>,
 }
 
-impl<C: Sha2Config> Sha2Air<C> {
-    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, self_bus_idx: BusIndex) -> Self {
+impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
+    pub fn new(bitwise_lookup_bus: BitwiseOperationLookupBus, private_bus_idx: BusIndex) -> Self {
         Self {
             bitwise_lookup_bus,
             row_idx_encoder: Encoder::new(C::ROWS_PER_BLOCK + 1, 2, false), /* + 1 for dummy
                                                                              *   (padding) rows */
-            bus: PermutationCheckBus::new(self_bus_idx),
+            private_bus: PermutationCheckBus::new(private_bus_idx),
             _phantom: PhantomData,
         }
     }
 }
 
-impl<F, C: Sha2Config> BaseAir<F> for Sha2Air<C> {
+impl<F, C: Sha2BlockHasherSubairConfig> BaseAir<F> for Sha2BlockHasherSubAir<C> {
     fn width(&self) -> usize {
-        max(C::ROUND_WIDTH, C::DIGEST_WIDTH)
+        C::SUBAIR_WIDTH
     }
 }
 
-impl<AB: InteractionBuilder, C: Sha2Config> SubAir<AB> for Sha2Air<C> {
+impl<AB: InteractionBuilder, C: Sha2BlockHasherSubairConfig> SubAir<AB>
+    for Sha2BlockHasherSubAir<C>
+{
     /// The start column for the sub-air to use
     type AirContext<'a>
         = usize
@@ -62,15 +66,15 @@ impl<AB: InteractionBuilder, C: Sha2Config> SubAir<AB> for Sha2Air<C> {
 
     fn eval<'a>(&'a self, builder: &'a mut AB, start_col: Self::AirContext<'a>)
     where
-        <AB as AirBuilder>::Var: 'a,
-        <AB as AirBuilder>::Expr: 'a,
+        AB::Var: 'a,
+        AB::Expr: 'a,
     {
         self.eval_row(builder, start_col);
         self.eval_transitions(builder, start_col);
     }
 }
 
-impl<C: Sha2Config> Sha2Air<C> {
+impl<C: Sha2BlockHasherSubairConfig> Sha2BlockHasherSubAir<C> {
     /// Implements the single row constraints (i.e. imposes constraints only on local)
     /// Implements some sanity constraints on the row index, flags, and work variables
     fn eval_row<AB: InteractionBuilder>(&self, builder: &mut AB, start_col: usize) {
@@ -79,26 +83,28 @@ impl<C: Sha2Config> Sha2Air<C> {
 
         // Doesn't matter which column struct we use here as we are only interested in the common
         // columns
-        let local_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&local[start_col..start_col + C::DIGEST_WIDTH]);
+        let local_cols: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&local[start_col..start_col + C::SUBAIR_DIGEST_WIDTH]);
         let flags = &local_cols.flags;
         builder.assert_bool(*flags.is_round_row);
         builder.assert_bool(*flags.is_first_4_rows);
         builder.assert_bool(*flags.is_digest_row);
         builder.assert_bool(*flags.is_round_row + *flags.is_digest_row);
-        builder.assert_bool(*flags.is_last_block);
 
         self.row_idx_encoder
             .eval(builder, local_cols.flags.row_idx.to_slice().unwrap());
+        // assert all row indices are in [0, C::ROWS_PER_BLOCK]
         builder.assert_one(self.row_idx_encoder.contains_flag_range::<AB>(
             local_cols.flags.row_idx.to_slice().unwrap(),
             0..=C::ROWS_PER_BLOCK,
         ));
+        // assert that the row indices are [0, 3] for the first 4 rows
         builder.assert_eq(
             self.row_idx_encoder
                 .contains_flag_range::<AB>(local_cols.flags.row_idx.to_slice().unwrap(), 0..=3),
             *flags.is_first_4_rows,
         );
+        // round row indices are in [0, C::ROUND_ROWS - 1]
         builder.assert_eq(
             self.row_idx_encoder.contains_flag_range::<AB>(
                 local_cols.flags.row_idx.to_slice().unwrap(),
@@ -106,6 +112,7 @@ impl<C: Sha2Config> Sha2Air<C> {
             ),
             *flags.is_round_row,
         );
+        // digest row always has row index C::ROUND_ROWS
         builder.assert_eq(
             self.row_idx_encoder.contains_flag::<AB>(
                 local_cols.flags.row_idx.to_slice().unwrap(),
@@ -132,82 +139,13 @@ impl<C: Sha2Config> Sha2Air<C> {
         }
     }
 
-    /// Implements constraints for a digest row that ensure proper state transitions between blocks
-    /// This validates that:
-    /// The work variables are correctly initialized for the next message block
-    /// For the last message block, the initial state matches SHA_H constants
+    /// Evaluates the final hash for this block
     fn eval_digest_row<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<AB::Var>,
-        next: ShaDigestColsRef<AB::Var>,
+        local: Sha2RoundColsRef<AB::Var>,
+        next: Sha2DigestColsRef<AB::Var>,
     ) {
-        // Check that if this is the last row of a message or an inpadding row, the hash should be
-        // the [SHA_H]
-        for i in 0..C::ROUNDS_PER_ROW {
-            let a = next.hash.a.row(i).mapv(|x| x.into()).to_vec();
-            let e = next.hash.e.row(i).mapv(|x| x.into()).to_vec();
-
-            for j in 0..C::WORD_U16S {
-                let a_limb = compose::<AB::Expr>(&a[j * 16..(j + 1) * 16], 1);
-                let e_limb = compose::<AB::Expr>(&e[j * 16..(j + 1) * 16], 1);
-
-                // If it is a padding row or the last row of a message, the `hash` should be the
-                // [SHA_H]
-                builder
-                    .when(
-                        next.flags.is_padding_row()
-                            + *next.flags.is_last_block * *next.flags.is_digest_row,
-                    )
-                    .assert_eq(
-                        a_limb,
-                        AB::Expr::from_canonical_u32(
-                            word_into_u16_limbs::<C>(C::get_h()[C::ROUNDS_PER_ROW - i - 1])[j],
-                        ),
-                    );
-
-                builder
-                    .when(
-                        next.flags.is_padding_row()
-                            + *next.flags.is_last_block * *next.flags.is_digest_row,
-                    )
-                    .assert_eq(
-                        e_limb,
-                        AB::Expr::from_canonical_u32(
-                            word_into_u16_limbs::<C>(C::get_h()[C::ROUNDS_PER_ROW - i + 3])[j],
-                        ),
-                    );
-            }
-        }
-
-        // Check if last row of a non-last block, the `hash` should be equal to the final hash of
-        // the current block
-        for i in 0..C::ROUNDS_PER_ROW {
-            let prev_a = next.hash.a.row(i).mapv(|x| x.into()).to_vec();
-            let prev_e = next.hash.e.row(i).mapv(|x| x.into()).to_vec();
-            let cur_a = next
-                .final_hash
-                .row(C::ROUNDS_PER_ROW - i - 1)
-                .mapv(|x| x.into());
-
-            let cur_e = next
-                .final_hash
-                .row(C::ROUNDS_PER_ROW - i + 3)
-                .mapv(|x| x.into());
-            for j in 0..C::WORD_U8S {
-                let prev_a_limb = compose::<AB::Expr>(&prev_a[j * 8..(j + 1) * 8], 1);
-                let prev_e_limb = compose::<AB::Expr>(&prev_e[j * 8..(j + 1) * 8], 1);
-
-                builder
-                    .when(not(*next.flags.is_last_block) * *next.flags.is_digest_row)
-                    .assert_eq(prev_a_limb, cur_a[j].clone());
-
-                builder
-                    .when(not(*next.flags.is_last_block) * *next.flags.is_digest_row)
-                    .assert_eq(prev_e_limb, cur_e[j].clone());
-            }
-        }
-
         // Assert that the previous hash + work vars == final hash.
         // That is, `next.prev_hash[i] + local.work_vars[i] == next.final_hash[i]`
         // where addition is done modulo 2^32
@@ -265,10 +203,10 @@ impl<C: Sha2Config> Sha2Air<C> {
         let next = main.row_slice(1);
 
         // Doesn't matter what column structs we use here
-        let local_cols: ShaRoundColsRef<AB::Var> =
-            ShaRoundColsRef::from::<C>(&local[start_col..start_col + C::ROUND_WIDTH]);
-        let next_cols: ShaRoundColsRef<AB::Var> =
-            ShaRoundColsRef::from::<C>(&next[start_col..start_col + C::ROUND_WIDTH]);
+        let local_cols: Sha2RoundColsRef<AB::Var> =
+            Sha2RoundColsRef::from::<C>(&local[start_col..start_col + C::SUBAIR_ROUND_WIDTH]);
+        let next_cols: Sha2RoundColsRef<AB::Var> =
+            Sha2RoundColsRef::from::<C>(&next[start_col..start_col + C::SUBAIR_ROUND_WIDTH]);
 
         let local_is_padding_row = local_cols.flags.is_padding_row();
         // Note that there will always be a padding row in the trace since the unpadded height is a
@@ -276,13 +214,6 @@ impl<C: Sha2Config> Sha2Air<C> {
         // current block is the last block in the trace.
         let next_is_padding_row = next_cols.flags.is_padding_row();
 
-        // We check that the very last block has `is_last_block` set to true, which guarantees that
-        // there is at least one complete message. If other digest rows have `is_last_block` set to
-        // true, then the trace will be interpreted as containing multiple messages.
-        builder
-            .when(next_is_padding_row.clone())
-            .when(*next_cols.flags.is_digest_row)
-            .assert_one(*next_cols.flags.is_last_block);
         // If we are in a round row, the next row cannot be a padding row
         builder
             .when(*local_cols.flags.is_round_row)
@@ -328,9 +259,9 @@ impl<C: Sha2Config> Sha2Air<C> {
             .assert_eq(local_row_idx.clone() + delta, next_row_idx.clone());
         builder.when_first_row().assert_zero(local_row_idx);
 
-        // Constrain the global block index
+        // Constrain the global block index starting with 1 so it is not the same as the padding
+        // rows.
         // We set the global block index to 0 for padding rows
-        // Starting with 1 so it is not the same as the padding rows
 
         // Global block index is 1 on first row
         builder
@@ -356,39 +287,33 @@ impl<C: Sha2Config> Sha2Air<C> {
             .when(local_is_padding_row.clone())
             .assert_zero(*local_cols.flags.global_block_idx);
 
-        // Constrain the local block index
-        // We set the local block index to 0 for padding rows
-
-        // Local block index is constant on all rows in a block
-        // and its value on padding rows is equal to its value on the first block
-        builder
-            .when(not(*local_cols.flags.is_digest_row))
-            .assert_eq(
-                *local_cols.flags.local_block_idx,
-                *next_cols.flags.local_block_idx,
-            );
-        // Local block index increases by 1 between blocks in the same message
-        builder
-            .when(*local_cols.flags.is_digest_row)
-            .when(not(*local_cols.flags.is_last_block))
-            .assert_eq(
-                *local_cols.flags.local_block_idx + AB::Expr::ONE,
-                *next_cols.flags.local_block_idx,
-            );
-        // Local block index is 0 on padding rows
-        // Combined with the above, this means that the local block index is 0 in the first block
-        builder
-            .when(*local_cols.flags.is_digest_row)
-            .when(*local_cols.flags.is_last_block)
-            .assert_zero(*next_cols.flags.local_block_idx);
+        // Constrain that all the padding rows have the same work vars as the last block's digest
+        // row. We constrain elsewhere that the last block's digest row is equal to the first
+        // block's prev_hash. Together, this ensures that all the padding rows have the same
+        // work vars as the first block's prev_hash. As a result, the
+        // constraint_word_addition constraints in eval_work_vars() on the first row of the first
+        // block (i.e. when next = first_row) will correctly constrain the first 4 rounds of
+        // the first block.
+        for i in 0..C::ROUNDS_PER_ROW {
+            for j in 0..C::WORD_BITS {
+                builder.when(next_cols.flags.is_padding_row()).assert_eq(
+                    local_cols.work_vars.a[[i, j]],
+                    next_cols.work_vars.a[[i, j]],
+                );
+                builder.when(next_cols.flags.is_padding_row()).assert_eq(
+                    local_cols.work_vars.e[[i, j]],
+                    next_cols.work_vars.e[[i, j]],
+                );
+            }
+        }
 
         self.eval_message_schedule(builder, local_cols.clone(), next_cols.clone());
         self.eval_work_vars(builder, local_cols.clone(), next_cols);
-        let next_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&next[start_col..start_col + C::DIGEST_WIDTH]);
-        self.eval_digest_row(builder, local_cols, next_cols);
-        let local_cols: ShaDigestColsRef<AB::Var> =
-            ShaDigestColsRef::from::<C>(&local[start_col..start_col + C::DIGEST_WIDTH]);
+        let next: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&next[start_col..start_col + C::SUBAIR_DIGEST_WIDTH]);
+        self.eval_digest_row(builder, local_cols, next);
+        let local_cols: Sha2DigestColsRef<AB::Var> =
+            Sha2DigestColsRef::from::<C>(&local[start_col..start_col + C::SUBAIR_DIGEST_WIDTH]);
         self.eval_prev_hash(builder, local_cols, next_is_padding_row);
     }
 
@@ -397,7 +322,7 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_prev_hash<AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaDigestColsRef<AB::Var>,
+        local: Sha2DigestColsRef<AB::Var>,
         is_last_block_of_trace: AB::Expr, /* note this indicates the last block of the trace,
                                            * not the last block of the message */
     ) {
@@ -431,7 +356,7 @@ impl<C: Sha2Config> Sha2Air<C> {
             *local.flags.global_block_idx + AB::Expr::ONE,
         );
         // The following interactions constrain certain values from block to block
-        self.bus.send(
+        self.private_bus.send(
             builder,
             composed_hash
                 .into_iter()
@@ -440,7 +365,7 @@ impl<C: Sha2Config> Sha2Air<C> {
             *local.flags.is_digest_row,
         );
 
-        self.bus.receive(
+        self.private_bus.receive(
             builder,
             local
                 .prev_hash
@@ -459,8 +384,8 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_message_schedule<'a, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<'a, AB::Var>,
-        next: ShaRoundColsRef<'a, AB::Var>,
+        local: Sha2RoundColsRef<'a, AB::Var>,
+        next: Sha2RoundColsRef<'a, AB::Var>,
     ) {
         // This `w` array contains 8 message schedule words - w_{idx}, ..., w_{idx+7} for some idx
         let w = ndarray::concatenate(
@@ -506,10 +431,10 @@ impl<C: Sha2Config> Sha2Air<C> {
                 let w_idx_limb = compose::<AB::Expr>(&w_idx[j * 16..(j + 1) * 16], 1);
                 let sig_w_limb = compose::<AB::Expr>(&sig_w[j * 16..(j + 1) * 16], 1);
 
-                // We would like to constrain this only on rows 0..16, but we can't do a conditional
-                // check because the degree is already 3. So we must fill in
-                // `intermed_4` with dummy values on rows 0 and 16 to ensure the constraint holds on
-                // these rows.
+                // We would like to constrain this only on round rows, but we can't do a conditional
+                // check because the degree is already 3. So we must fill in `intermed_4` with dummy
+                // values on the first round row and the digest row (rows 0 and 16 for SHA-256) to
+                // ensure the constraint holds on these rows.
                 builder.when_transition().assert_eq(
                     next.schedule_helper.intermed_4[[i, j]],
                     w_idx_limb + sig_w_limb,
@@ -591,8 +516,8 @@ impl<C: Sha2Config> Sha2Air<C> {
     fn eval_work_vars<'a, AB: InteractionBuilder>(
         &self,
         builder: &mut AB,
-        local: ShaRoundColsRef<'a, AB::Var>,
-        next: ShaRoundColsRef<'a, AB::Var>,
+        local: Sha2RoundColsRef<'a, AB::Var>,
+        next: Sha2RoundColsRef<'a, AB::Var>,
     ) {
         let a =
             ndarray::concatenate(ndarray::Axis(0), &[local.work_vars.a, next.work_vars.a]).unwrap();
@@ -651,13 +576,14 @@ impl<C: Sha2Config> Sha2Air<C> {
                 builder,
                 &[
                     e.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `h`
-                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), /* sig_1 of previous `e` */
+                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), /* sig_1 of
+                                                                     previous `e` */
                     &ch_field::<AB::Expr>(
                         e.row(i + 3).as_slice().unwrap(),
                         e.row(i + 2).as_slice().unwrap(),
                         e.row(i + 1).as_slice().unwrap(),
                     ), /* Ch of previous `e`, `f`, `g` */
-                    &big_sig0_field::<AB::Expr, C>(a.row(i + 3).as_slice().unwrap()), /* sig_0 of previous `a` */
+                    &big_sig0_field::<AB::Expr, C>(a.row(i + 3).as_slice().unwrap()), /* sig_0 of `a` */
                     &maj_field::<AB::Expr>(
                         a.row(i + 3).as_slice().unwrap(),
                         a.row(i + 2).as_slice().unwrap(),
@@ -678,7 +604,8 @@ impl<C: Sha2Config> Sha2Air<C> {
                 &[
                     a.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `d`
                     e.row(i).mapv(|x| x.into()).as_slice().unwrap(), // previous `h`
-                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), /* sig_1 of previous `e` */
+                    &big_sig1_field::<AB::Expr, C>(e.row(i + 3).as_slice().unwrap()), /* sig_1 of
+                                                                     previous `e` */
                     &ch_field::<AB::Expr>(
                         e.row(i + 3).as_slice().unwrap(),
                         e.row(i + 2).as_slice().unwrap(),

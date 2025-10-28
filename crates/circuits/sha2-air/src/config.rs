@@ -1,16 +1,18 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr};
 
-use crate::{ShaDigestColsRef, ShaRoundColsRef};
+use crate::{Sha2DigestColsRef, Sha2RoundColsRef};
 
 #[repr(u32)]
-#[derive(num_enum::TryFromPrimitive, num_enum::IntoPrimitive)]
+#[derive(num_enum::TryFromPrimitive, num_enum::IntoPrimitive, Copy, Clone, Debug)]
 pub enum Sha2Variant {
     Sha256,
     Sha512,
     Sha384,
 }
 
-pub trait Sha2Config: Send + Sync + Clone {
+pub trait Sha2BlockHasherSubairConfig: Send + Sync + Clone {
+    // --- Required ---
+
     type Word: 'static
         + Shr<usize, Output = Self::Word>
         + Shl<usize, Output = Self::Word>
@@ -30,59 +32,61 @@ pub trait Sha2Config: Send + Sync + Clone {
     const VARIANT: Sha2Variant;
     /// Number of bits in a SHA word
     const WORD_BITS: usize;
-    /// Number of 16-bit limbs in a SHA word
-    const WORD_U16S: usize = Self::WORD_BITS / 16;
-    /// Number of 8-bit limbs in a SHA word
-    const WORD_U8S: usize = Self::WORD_BITS / 8;
     /// Number of words in a SHA block
     const BLOCK_WORDS: usize;
-    /// Number of cells in a SHA block
-    const BLOCK_U8S: usize = Self::BLOCK_WORDS * Self::WORD_U8S;
-    /// Number of bits in a SHA block
-    const BLOCK_BITS: usize = Self::BLOCK_WORDS * Self::WORD_BITS;
     /// Number of rows per block
     const ROWS_PER_BLOCK: usize;
     /// Number of rounds per row. Must divide Self::ROUNDS_PER_BLOCK
     const ROUNDS_PER_ROW: usize;
-    /// Number of rows used for the sha rounds
-    const ROUND_ROWS: usize = Self::ROUNDS_PER_BLOCK / Self::ROUNDS_PER_ROW;
-    /// Number of rows used for the message
-    const MESSAGE_ROWS: usize = Self::BLOCK_WORDS / Self::ROUNDS_PER_ROW;
-    /// Number of rounds per row minus one (needed for one of the column structs)
-    const ROUNDS_PER_ROW_MINUS_ONE: usize = Self::ROUNDS_PER_ROW - 1;
     /// Number of rounds per block. Must be a multiple of Self::ROUNDS_PER_ROW
     const ROUNDS_PER_BLOCK: usize;
     /// Number of words in a SHA hash
     const HASH_WORDS: usize;
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize;
-    /// Width of the ShaRoundCols
-    const ROUND_WIDTH: usize = ShaRoundColsRef::<u8>::width::<Self>();
-    /// Width of the ShaDigestCols
-    const DIGEST_WIDTH: usize = ShaDigestColsRef::<u8>::width::<Self>();
-    /// Width of the ShaCols
-    const WIDTH: usize = if Self::ROUND_WIDTH > Self::DIGEST_WIDTH {
-        Self::ROUND_WIDTH
-    } else {
-        Self::DIGEST_WIDTH
-    };
-    /// Number of cells used in each message row to store the message
-    const CELLS_PER_ROW: usize = Self::ROUNDS_PER_ROW * Self::WORD_U8S;
-
-    ///  To optimize the trace generation of invalid rows, we precompute those values.
-    // these should be appropriately sized for the config
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32];
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32];
 
     /// We also store the SHA constants K and H
     fn get_k() -> &'static [Self::Word];
     fn get_h() -> &'static [Self::Word];
+
+    // --- Provided ---
+
+    /// Number of 16-bit limbs in a SHA word
+    const WORD_U16S: usize = Self::WORD_BITS / 16;
+    /// Number of 8-bit limbs in a SHA word
+    const WORD_U8S: usize = Self::WORD_BITS / 8;
+    /// Number of cells in a SHA block
+    const BLOCK_U8S: usize = Self::BLOCK_WORDS * Self::WORD_U8S;
+    /// Number of bits in a SHA block
+    const BLOCK_BITS: usize = Self::BLOCK_WORDS * Self::WORD_BITS;
+    /// Number of rows used for the sha rounds
+    const ROUND_ROWS: usize = Self::ROUNDS_PER_BLOCK / Self::ROUNDS_PER_ROW;
+    /// Number of rows used for the message
+    const MESSAGE_ROWS: usize = Self::BLOCK_WORDS / Self::ROUNDS_PER_ROW;
+    /// Number of rounds per row minus one (needed for one of the column structs)
+    const ROUNDS_PER_ROW_MINUS_ONE: usize = Self::ROUNDS_PER_ROW - 1;
+    /// Width of the Sha2RoundCols
+    const SUBAIR_ROUND_WIDTH: usize = Sha2RoundColsRef::<u8>::width::<Self>();
+    /// Width of the Sha2DigestCols
+    const SUBAIR_DIGEST_WIDTH: usize = Sha2DigestColsRef::<u8>::width::<Self>();
+    /// Width of the Sha2BlockHasherCols
+    const SUBAIR_WIDTH: usize = if Self::SUBAIR_ROUND_WIDTH > Self::SUBAIR_DIGEST_WIDTH {
+        Self::SUBAIR_ROUND_WIDTH
+    } else {
+        Self::SUBAIR_DIGEST_WIDTH
+    };
 }
 
 #[derive(Clone)]
 pub struct Sha256Config;
 
-impl Sha2Config for Sha256Config {
+#[derive(Clone)]
+pub struct Sha512Config;
+
+#[derive(Clone)]
+pub struct Sha384Config;
+
+impl Sha2BlockHasherSubairConfig for Sha256Config {
     // ==== Do not change these constants! ====
     const VARIANT: Sha2Variant = Sha2Variant::Sha256;
     type Word = u32;
@@ -101,12 +105,6 @@ impl Sha2Config for Sha256Config {
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize = 5;
 
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
-        &SHA256_INVALID_CARRY_A[round_num]
-    }
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
-        &SHA256_INVALID_CARRY_E[round_num]
-    }
     fn get_k() -> &'static [u32] {
         &SHA256_K
     }
@@ -114,19 +112,6 @@ impl Sha2Config for Sha256Config {
         &SHA256_H
     }
 }
-
-pub const SHA256_INVALID_CARRY_A: [[u32; Sha256Config::WORD_U16S]; Sha256Config::ROUNDS_PER_ROW] = [
-    [1230919683, 1162494304],
-    [266373122, 1282901987],
-    [1519718403, 1008990871],
-    [923381762, 330807052],
-];
-pub const SHA256_INVALID_CARRY_E: [[u32; Sha256Config::WORD_U16S]; Sha256Config::ROUNDS_PER_ROW] = [
-    [204933122, 1994683449],
-    [443873282, 1544639095],
-    [719953922, 1888246508],
-    [194580482, 1075725211],
-];
 
 /// SHA256 constant K's
 pub const SHA256_K: [u32; 64] = [
@@ -144,10 +129,7 @@ pub const SHA256_H: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
-#[derive(Clone)]
-pub struct Sha512Config;
-
-impl Sha2Config for Sha512Config {
+impl Sha2BlockHasherSubairConfig for Sha512Config {
     // ==== Do not change these constants! ====
     const VARIANT: Sha2Variant = Sha2Variant::Sha512;
     type Word = u64;
@@ -166,12 +148,6 @@ impl Sha2Config for Sha512Config {
     /// Number of vars needed to encode the row index with [Encoder]
     const ROW_VAR_CNT: usize = 6;
 
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
-        &SHA512_INVALID_CARRY_A[round_num]
-    }
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
-        &SHA512_INVALID_CARRY_E[round_num]
-    }
     fn get_k() -> &'static [u64] {
         &SHA512_K
     }
@@ -179,22 +155,6 @@ impl Sha2Config for Sha512Config {
         &SHA512_H
     }
 }
-
-pub(crate) const SHA512_INVALID_CARRY_A: [[u32; Sha512Config::WORD_U16S];
-    Sha512Config::ROUNDS_PER_ROW] = [
-    [55971842, 827997017, 993005918, 512731953],
-    [227512322, 1697529235, 1936430385, 940122990],
-    [1939875843, 1173318562, 826201586, 1513494849],
-    [891955202, 1732283693, 1736658755, 223514501],
-];
-
-pub(crate) const SHA512_INVALID_CARRY_E: [[u32; Sha512Config::WORD_U16S];
-    Sha512Config::ROUNDS_PER_ROW] = [
-    [1384427522, 1509509767, 153131516, 102514978],
-    [1527552003, 1041677071, 837289497, 843522538],
-    [775188482, 1620184630, 744892564, 892058728],
-    [1801267202, 1393118048, 1846108940, 830635531],
-];
 
 /// SHA512 constant K's
 pub const SHA512_K: [u64; 80] = [
@@ -291,34 +251,25 @@ pub const SHA512_H: [u64; 8] = [
     0x5be0cd19137e2179,
 ];
 
-#[derive(Clone)]
-pub struct Sha384Config;
-
-impl Sha2Config for Sha384Config {
+impl Sha2BlockHasherSubairConfig for Sha384Config {
     // ==== Do not change these constants! ====
     const VARIANT: Sha2Variant = Sha2Variant::Sha384;
-    type Word = u64;
+    type Word = <Sha512Config as Sha2BlockHasherSubairConfig>::Word;
     /// Number of bits in a SHA384 word
-    const WORD_BITS: usize = 64;
+    const WORD_BITS: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::WORD_BITS;
     /// Number of words in a SHA384 block
-    const BLOCK_WORDS: usize = 16;
+    const BLOCK_WORDS: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::BLOCK_WORDS;
     /// Number of rows per block
-    const ROWS_PER_BLOCK: usize = 21;
+    const ROWS_PER_BLOCK: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROWS_PER_BLOCK;
     /// Number of rounds per row
-    const ROUNDS_PER_ROW: usize = 4;
+    const ROUNDS_PER_ROW: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROUNDS_PER_ROW;
     /// Number of rounds per block
-    const ROUNDS_PER_BLOCK: usize = 80;
+    const ROUNDS_PER_BLOCK: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROUNDS_PER_BLOCK;
     /// Number of words in a SHA384 hash
-    const HASH_WORDS: usize = 8;
+    const HASH_WORDS: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::HASH_WORDS;
     /// Number of vars needed to encode the row index with [Encoder]
-    const ROW_VAR_CNT: usize = 6;
+    const ROW_VAR_CNT: usize = <Sha512Config as Sha2BlockHasherSubairConfig>::ROW_VAR_CNT;
 
-    fn get_invalid_carry_a(round_num: usize) -> &'static [u32] {
-        &SHA384_INVALID_CARRY_A[round_num]
-    }
-    fn get_invalid_carry_e(round_num: usize) -> &'static [u32] {
-        &SHA384_INVALID_CARRY_E[round_num]
-    }
     fn get_k() -> &'static [u64] {
         &SHA384_K
     }
@@ -326,22 +277,6 @@ impl Sha2Config for Sha384Config {
         &SHA384_H
     }
 }
-
-pub(crate) const SHA384_INVALID_CARRY_A: [[u32; Sha384Config::WORD_U16S];
-    Sha384Config::ROUNDS_PER_ROW] = [
-    [1571481603, 1428841901, 1050676523, 793575075],
-    [1233315842, 1822329223, 112923808, 1874228927],
-    [1245603842, 927240770, 1579759431, 70557227],
-    [195532801, 594312107, 1429379950, 220407092],
-];
-
-pub(crate) const SHA384_INVALID_CARRY_E: [[u32; Sha384Config::WORD_U16S];
-    Sha384Config::ROUNDS_PER_ROW] = [
-    [1067980802, 1508061099, 1418826213, 1232569491],
-    [1453086722, 1702524575, 152427899, 238512408],
-    [1623674882, 701393097, 1002035664, 4776891],
-    [1888911362, 184963225, 1151849224, 1034237098],
-];
 
 /// SHA384 constant K's
 pub const SHA384_K: [u64; 80] = SHA512_K;

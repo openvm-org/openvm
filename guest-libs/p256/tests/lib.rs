@@ -94,7 +94,6 @@ mod guest_tests {
                 VmChipComplex, VmProverExtension,
             },
             derive::VmConfig,
-            utils::test_system_config_with_continuations,
         };
         use openvm_ecc_circuit::{
             CurveConfig, Rv32WeierstrassBuilder, Rv32WeierstrassConfig,

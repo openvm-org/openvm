@@ -34,10 +34,11 @@ use openvm_stark_backend::{
 };
 
 use super::{
-    Sha2ChipConfig, Sha2Variant, Sha2VmDigestColsRefMut, Sha2VmRoundColsRefMut, Sha2VmStep,
+    Sha2BlockHasherDigestColsRefMut, Sha2BlockHasherRoundColsRefMut, Sha2ChipConfig, Sha2Variant,
+    Sha2VmStep,
 };
 use crate::{
-    get_sha2_num_blocks, sha2_chip::PaddingFlags, sha2_solve, Sha2VmControlColsRefMut,
+    get_sha2_num_blocks, sha2_chip::PaddingFlags, sha2_solve, Sha2BlockHasherControlColsRefMut,
     MAX_SHA_NUM_WRITES, SHA_MAX_MESSAGE_LEN, SHA_REGISTER_READS, SHA_WRITE_SIZE,
 };
 
@@ -365,7 +366,7 @@ impl<F: PrimeField32, CTX, C: Sha2ChipConfig> TraceFiller<F, CTX> for Sha2VmStep
                                 C::VM_WIDTH * size_of::<F>(),
                             );
                         }
-                        let cols = Sha2VmRoundColsRefMut::<F>::from::<C>(
+                        let cols = Sha2BlockHasherRoundColsRefMut::<F>::from::<C>(
                             row[..C::VM_ROUND_WIDTH].borrow_mut(),
                         );
                         self.inner.generate_default_row(cols.inner);
@@ -446,8 +447,11 @@ impl<F: PrimeField32, CTX, C: Sha2ChipConfig> TraceFiller<F, CTX> for Sha2VmStep
             .par_chunks_mut(C::VM_WIDTH * C::ROWS_PER_BLOCK)
             .take(rows_used / C::ROWS_PER_BLOCK)
             .for_each(|chunk| {
-                self.inner
-                    .generate_missing_cells(chunk, C::VM_WIDTH, C::VM_CONTROL_WIDTH);
+                self.inner.generate_missing_cells(
+                    chunk,
+                    C::VM_WIDTH,
+                    C::BLOCK_HASHER_CONTROL_WIDTH,
+                );
             });
     }
 }
@@ -513,7 +517,7 @@ impl<C: Sha2ChipConfig> Sha2VmStep<C> {
                 // Handle round rows and digest row separately
                 if row_idx == C::ROWS_PER_BLOCK - 1 {
                     // This is a digest row
-                    let mut digest_cols = Sha2VmDigestColsRefMut::<F>::from::<C>(
+                    let mut digest_cols = Sha2BlockHasherDigestColsRefMut::<F>::from::<C>(
                         row_slice[..C::VM_DIGEST_WIDTH].borrow_mut(),
                     );
                     digest_cols.from_state.timestamp = F::from_canonical_u32(record.timestamp);
@@ -591,7 +595,7 @@ impl<C: Sha2ChipConfig> Sha2VmStep<C> {
                     *digest_cols.inner.flags.is_digest_row = F::from_bool(true);
                 } else {
                     // This is a round row
-                    let mut round_cols = Sha2VmRoundColsRefMut::<F>::from::<C>(
+                    let mut round_cols = Sha2BlockHasherRoundColsRefMut::<F>::from::<C>(
                         row_slice[..C::VM_ROUND_WIDTH].borrow_mut(),
                     );
                     // Take care of the first 4 round rows (aka read rows)
@@ -615,8 +619,8 @@ impl<C: Sha2ChipConfig> Sha2VmStep<C> {
                     }
                 }
                 // Fill in the control cols, doesn't matter if it is a round or digest row
-                let mut control_cols = Sha2VmControlColsRefMut::<F>::from::<C>(
-                    row_slice[..C::VM_CONTROL_WIDTH].borrow_mut(),
+                let mut control_cols = Sha2BlockHasherControlColsRefMut::<F>::from::<C>(
+                    row_slice[..C::BLOCK_HASHER_CONTROL_WIDTH].borrow_mut(),
                 );
                 *control_cols.len = F::from_canonical_u32(record.len);
                 // Only the first `SHA256_NUM_READ_ROWS` rows increment the timestamp and read ptr
@@ -707,7 +711,7 @@ impl<C: Sha2ChipConfig> Sha2VmStep<C> {
         self.inner.generate_block_trace::<F>(
             block_slice,
             C::VM_WIDTH,
-            C::VM_CONTROL_WIDTH,
+            C::BLOCK_HASHER_CONTROL_WIDTH,
             &padded_input,
             self.bitwise_lookup_chip.clone(),
             prev_hash,

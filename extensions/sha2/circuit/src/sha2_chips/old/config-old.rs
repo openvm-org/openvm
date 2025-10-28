@@ -2,17 +2,19 @@ use openvm_instructions::riscv::RV32_CELL_BITS;
 use openvm_sha2_air::{Sha256Config, Sha2Config, Sha384Config, Sha512Config};
 use openvm_sha2_transpiler::Rv32Sha2Opcode;
 
-use super::{Sha2VmControlColsRef, Sha2VmDigestColsRef, Sha2VmRoundColsRef};
+use super::{
+    Sha2BlockHasherControlColsRef, Sha2BlockHasherDigestColsRef, Sha2BlockHasherRoundColsRef,
+};
 
-pub trait Sha2ChipConfig: Sha2Config {
+pub trait Sha2ChipConfig: Sha2BlockHasherConfig {
     // Name of the opcode
     const OPCODE_NAME: &'static str;
     /// Width of the ShaVmControlCols
-    const VM_CONTROL_WIDTH: usize = Sha2VmControlColsRef::<u8>::width::<Self>();
+    const BLOCK_HASHER_CONTROL_WIDTH: usize = Sha2BlockHasherControlColsRef::<u8>::width::<Self>();
     /// Width of the ShaVmRoundCols
-    const VM_ROUND_WIDTH: usize = Sha2VmRoundColsRef::<u8>::width::<Self>();
+    const VM_ROUND_WIDTH: usize = Sha2BlockHasherRoundColsRef::<u8>::width::<Self>();
     /// Width of the ShaVmDigestCols
-    const VM_DIGEST_WIDTH: usize = Sha2VmDigestColsRef::<u8>::width::<Self>();
+    const VM_DIGEST_WIDTH: usize = Sha2BlockHasherDigestColsRef::<u8>::width::<Self>();
     /// Width of the ShaVmCols
     const VM_WIDTH: usize = if Self::VM_ROUND_WIDTH > Self::VM_DIGEST_WIDTH {
         Self::VM_ROUND_WIDTH
