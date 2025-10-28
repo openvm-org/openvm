@@ -270,7 +270,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
                 .expect("Failed to execute program in interpreted mode");
         });
 }
-        */
+        
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
