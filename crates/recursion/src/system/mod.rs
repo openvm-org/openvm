@@ -3,7 +3,7 @@ use std::sync::Arc;
 use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use stark_backend_v2::{
-    EF, F,
+    DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
     proof::{Proof, TraceVData},
@@ -13,9 +13,9 @@ use crate::{
     batch_constraint::BatchConstraintModule,
     bus::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus, Poseidon2Bus,
-        PublicValuesBus, StackingIndicesBus, StackingModuleBus, TranscriptBus, WhirModuleBus,
-        WhirOpeningPointBus, XiRandomnessBus,
+        CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
+        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, PublicValuesBus, StackingIndicesBus,
+        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::exp_bits_len::ExpBitsLenAir,
@@ -60,6 +60,7 @@ pub struct BusInventory {
     // Control flow buses
     pub transcript_bus: TranscriptBus,
     pub poseidon2_bus: Poseidon2Bus,
+    pub merkle_verify_bus: MerkleVerifyBus,
     pub gkr_module_bus: GkrModuleBus,
     pub bc_module_bus: BatchConstraintModuleBus,
     pub stacking_module_bus: StackingModuleBus,
@@ -95,6 +96,8 @@ pub struct Preflight {
     pub batch_constraint: BatchConstraintPreflight,
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
+    // Merkle bus message + actual commitment
+    pub merkle_verify_logs: Vec<(MerkleVerifyBusMessage<F>, [F; DIGEST_SIZE])>,
 }
 
 #[derive(Debug, Default)]
@@ -164,6 +167,7 @@ impl BusInventory {
         Self {
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
             poseidon2_bus: Poseidon2Bus::new(b.new_bus_idx()),
+            merkle_verify_bus: MerkleVerifyBus::new(b.new_bus_idx()),
 
             // Control flow buses
             gkr_module_bus: GkrModuleBus::new(b.new_bus_idx()),

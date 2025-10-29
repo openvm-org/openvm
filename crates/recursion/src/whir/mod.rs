@@ -5,7 +5,7 @@ use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
 use stark_backend_v2::{
-    EF, F,
+    DIGEST_SIZE, EF, F,
     keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
@@ -14,6 +14,7 @@ use stark_backend_v2::{
 };
 
 use crate::{
+    bus::MerkleVerifyBusMessage,
     primitives::exp_bits_len::ExpBitsLenAir,
     system::{AirModule, BusIndexManager, BusInventory, Preflight, WhirPreflight},
     whir::{
@@ -231,6 +232,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
         let mut eq_partial = EF::ONE;
         let mut fold_records = vec![];
         let mut initial_round_coset_vals = vec![];
+        let mut merkle_verify_logs = vec![];
 
         let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
 
@@ -261,6 +263,17 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
                 ts.observe_commit(codeword_commits[i]);
                 z0s.push(ts.sample_ext());
                 ts.observe_ext(ood_values[i]);
+
+                merkle_verify_logs.push((
+                    MerkleVerifyBusMessage {
+                        leaf_hash: [F::ZERO; DIGEST_SIZE], // TODO: fix this
+                        merkle_idx: F::ZERO,               // TODO: fix this
+                        depth: F::ZERO,                    // TODO: fix this
+                        commit_major: F::from_canonical_usize(i + 1),
+                        commit_minor: F::ZERO,
+                    },
+                    codeword_commits[i],
+                ));
             } else {
                 for coeff in final_poly {
                     ts.observe_ext(*coeff);
@@ -396,6 +409,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
             initial_round_coset_vals,
             final_poly_at_u,
         };
+        preflight.merkle_verify_logs = merkle_verify_logs;
     }
 
     fn generate_proof_inputs(

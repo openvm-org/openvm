@@ -21,10 +21,12 @@ use stark_backend_v2::{
 
 use crate::{
     system::{AirModule, BusInventory, Preflight},
+    transcript::merkle_verify::{MerkleVerifyAir, MerkleVerifyCols},
     transcript::poseidon2::{CHUNK, Poseidon2Air, Poseidon2Cols},
     transcript::transcript::{TranscriptAir, TranscriptCols},
 };
 
+pub mod merkle_verify;
 pub mod poseidon2;
 pub mod transcript;
 
@@ -61,16 +63,26 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
             poseidon2_bus: self.bus_inventory.poseidon2_bus,
             subair: self.sub_chip.air.clone(),
         };
-        vec![Arc::new(transcript_air), Arc::new(poseidon2_air)]
+        let merkle_verify_air = MerkleVerifyAir {
+            poseidon2_bus: self.bus_inventory.poseidon2_bus,
+            merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
+            commitments_bus: self.bus_inventory.commitments_bus,
+        };
+        vec![
+            Arc::new(transcript_air),
+            Arc::new(poseidon2_air),
+            Arc::new(merkle_verify_air),
+        ]
     }
 
     fn run_preflight(&self, _proof: &Proof, _preflight: &mut Preflight, _ts: &mut TS) {}
 
     fn generate_proof_inputs(
         &self,
-        _proof: &Proof,
+        proof: &Proof,
         preflight: &Preflight,
     ) -> Vec<AirProofRawInput<F>> {
+        let merkle_verify_trace = merkle_verify::generate_trace(proof, preflight);
         // generate transcript first, and then we know what's the poseidon2 lookup that are needed
         let transcript_width = TranscriptCols::<F>::width();
 
@@ -226,6 +238,14 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
             ))),
             public_values: vec![],
         };
-        vec![transcript_input, poseidon2_input]
+        let merkle_verify_input = AirProofRawInput {
+            cached_mains: vec![],
+            common_main: Some(Arc::new(RowMajorMatrix::new(
+                merkle_verify_trace,
+                MerkleVerifyCols::<F>::width(),
+            ))),
+            public_values: vec![],
+        };
+        vec![transcript_input, poseidon2_input, merkle_verify_input]
     }
 }

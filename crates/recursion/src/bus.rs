@@ -318,6 +318,18 @@ define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct MerkleVerifyBusMessage<T> {
+    pub leaf_hash: [T; DIGEST_SIZE],
+    pub merkle_idx: T,
+    pub depth: T,
+    pub commit_major: T,
+    pub commit_minor: T,
+}
+
+define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
     pub air_id: T,
