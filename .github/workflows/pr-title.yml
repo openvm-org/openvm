@@ -88,3 +88,8 @@ jobs:
     name: Execute benchmarks
     uses: ./.github/workflows/benchmarks-execute.yml
     secrets: inherit
+
+  extension-tests:
+    name: Extension tests
+    uses: ./.github/workflows/extension-tests.yml
+    secrets: inherit
