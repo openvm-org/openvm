@@ -201,8 +201,7 @@ where
                 asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
             }
 
-            // move shift amount to cl register (required by x86)
-            asm_str += &format!("   mov cl, {}l\n", REG_C_W);
+            asm_str += &format!("   mov ecx, {}\n", REG_C_W);
             // reg_a = reg_a << c
             asm_str += &format!("   {} {}, cl\n", asm_opcode, REG_A_W);
         }
