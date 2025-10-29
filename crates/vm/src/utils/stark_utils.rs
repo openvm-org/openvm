@@ -9,6 +9,7 @@ use openvm_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
+
 #[cfg(feature = "aot")]
 use crate::arch::{SystemConfig, VmState};
 #[cfg(feature = "aot")]
@@ -16,9 +17,8 @@ use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
         debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, ExitCode,
-        InterpreterExecutor,
-        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
-        VmCircuitConfig, VmConfig, VmExecutionConfig,
+        InterpreterExecutor, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams,
+        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };
