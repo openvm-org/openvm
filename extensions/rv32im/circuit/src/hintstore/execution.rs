@@ -69,7 +69,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F> Executor<F> for Rv32HintStoreExecutor
+impl<F> InterpreterExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,
 {

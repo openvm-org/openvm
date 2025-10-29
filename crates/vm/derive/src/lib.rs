@@ -160,7 +160,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let where_clause = new_generics.make_where_clause();
             where_clause
                 .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor<F> });
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.
@@ -181,7 +181,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::Executor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         self.0.pre_compute_size()
@@ -236,16 +236,16 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute_size(x)
                 };
                 let pre_compute_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
                 };
                 let handler_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::handler(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::handler(x, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
+                    #field_ty: ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>
                 };
                 (pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
             }));
@@ -277,7 +277,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::Executor<#first_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         match self {
@@ -329,9 +329,9 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
             };
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause.predicates.push(
-                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotExecutor<F> },
-            );
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotExecutor<F> });
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {

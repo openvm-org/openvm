@@ -56,7 +56,7 @@ impl KeccakVmExecutor {
     }
 }
 
-impl<F: PrimeField32> Executor<F> for KeccakVmExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for KeccakVmExecutor {
     fn pre_compute_size(&self) -> usize {
         size_of::<KeccakPreCompute>()
     }

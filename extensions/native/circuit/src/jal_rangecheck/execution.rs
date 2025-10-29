@@ -79,7 +79,7 @@ impl JalRangeCheckExecutor {
     }
 }
 
-impl<F> Executor<F> for JalRangeCheckExecutor
+impl<F> InterpreterExecutor<F> for JalRangeCheckExecutor
 where
     F: PrimeField32,
 {

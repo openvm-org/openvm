@@ -40,7 +40,7 @@ impl<A> Rv32AuipcExecutor<A> {
     }
 }
 
-impl<F, A> Executor<F> for Rv32AuipcExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv32AuipcExecutor<A>
 where
     F: PrimeField32,
 {

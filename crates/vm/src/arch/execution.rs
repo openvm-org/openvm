@@ -144,7 +144,7 @@ pub type Handler<F, CTX> = unsafe fn(
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
 // @dev: In the codebase this is sometimes referred to as (E1).
-pub trait Executor<F> {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]
@@ -173,7 +173,7 @@ pub trait Executor<F> {
 }
 
 #[cfg(feature = "aot")]
-pub trait AotExecutor<F>: Executor<F> {
+pub trait AotExecutor<F>{
     fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
         false
     }
@@ -256,6 +256,15 @@ pub trait AotExecutor<F>: Executor<F> {
     }
     // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
 }
+#[cfg(feature = "aot")]
+pub trait Executor<F>: InterpreterExecutor<F> + AotExecutor<F> {}
+#[cfg(feature = "aot")]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> + AotExecutor<F> {}
+
+#[cfg(not(feature = "aot"))]
+pub trait Executor<F>: InterpreterExecutor<F> {}
+#[cfg(not(feature = "aot"))]
+impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction

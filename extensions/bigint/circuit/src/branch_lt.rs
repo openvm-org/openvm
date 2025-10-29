@@ -49,7 +49,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32BranchLessThan256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv32BranchLessThan256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<BranchLtPreCompute>()
     }

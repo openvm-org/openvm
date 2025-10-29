@@ -47,7 +47,7 @@ use super::{
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
-    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor, PreflightExecutor,
+    ExecutorInventory, ExecutorInventoryError, InterpreterExecutor, MemoryConfig, MeteredExecutor, PreflightExecutor,
     StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
     VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
@@ -236,26 +236,27 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
+}
+
+#[cfg(feature = "aot")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: Executor<F>,
+{
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError>
-    where
-        VC::Executor: crate::arch::AotExecutor<F>,
-    {
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
     pub fn aot_instance_with_asm_name(
         &self,
         exe: &VmExe<F>,
         asm_name: &String,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError>
-    where
-        VC::Executor: crate::arch::AotExecutor<F>,
-    {
+    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new_with_asm_name(&self.inventory, exe, asm_name)
     }
 }
@@ -275,17 +276,6 @@ where
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
-    // Crates an AOT instance for metered execution of the given `exe`.
-    #[cfg(feature = "aot")]
-    pub fn metered_aot_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError>
-    {
-        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
-    }
-
     /// Creates an instance of the interpreter specialized for cost metering execution of the given
     /// `exe`.
     pub fn metered_cost_instance(
@@ -294,6 +284,23 @@ where
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<F, MeteredCostCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+}
+
+#[cfg(feature = "aot")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: MeteredExecutor<F>,
+{
+    // Creates an AOT instance for metered execution of the given `exe`.
+    pub fn metered_aot_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
+        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 }
 
@@ -431,23 +438,9 @@ where
     ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InterpreterExecutor<Val<E::SC>>,
     {
         self.executor().instance(exe)
-    }
-
-    // Pure AOT execution
-    #[cfg(feature = "aot")]
-    pub fn get_aot_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-            + crate::arch::AotExecutor<Val<E::SC>>,
-    {
-        self.executor().aot_instance(exe)
     }
 
     pub fn metered_interpreter(
@@ -461,21 +454,6 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_instance(exe, &executor_idx_to_air_idx)
-    }
-
-    // Metered AOT execution
-    #[cfg(feature = "aot")]
-    pub fn get_metered_aot_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,   
-    {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .metered_aot_instance(exe, &executor_idx_to_air_idx)
     }
 
     pub fn metered_cost_interpreter(

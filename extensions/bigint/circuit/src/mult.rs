@@ -35,7 +35,7 @@ struct MultPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Rv32Multiplication256Executor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Rv32Multiplication256Executor {
     fn pre_compute_size(&self) -> usize {
         size_of::<MultPreCompute>()
     }

@@ -172,7 +172,7 @@ macro_rules! dispatch {
         }
     };
 }
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
     for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]

@@ -70,7 +70,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {

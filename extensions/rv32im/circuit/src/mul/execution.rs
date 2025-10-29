@@ -48,7 +48,7 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
     }
 }
 
-impl<F, A, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,

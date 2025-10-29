@@ -22,7 +22,7 @@ struct ShaPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Sha256VmExecutor {
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,

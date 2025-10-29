@@ -51,7 +51,7 @@ impl<A> CastFCoreExecutor<A> {
     }
 }
 
-impl<F, A> Executor<F> for CastFCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {

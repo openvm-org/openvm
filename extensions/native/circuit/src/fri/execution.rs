@@ -65,7 +65,7 @@ impl FriReducedOpeningExecutor {
     }
 }
 
-impl<F> Executor<F> for FriReducedOpeningExecutor
+impl<F> InterpreterExecutor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {

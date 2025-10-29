@@ -64,7 +64,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BranchLessThanExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,

@@ -134,7 +134,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for FieldArithmeticCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,
 {

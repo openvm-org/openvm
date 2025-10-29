@@ -71,7 +71,7 @@ const REG_PC: &str = "r13";
 #[cfg(feature = "aot")]
 const REG_INSTRET: &str = "r14";
 
-impl<F, A> Executor<F> for Rv32JalrExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {

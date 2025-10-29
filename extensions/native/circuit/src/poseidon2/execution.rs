@@ -166,7 +166,7 @@ macro_rules! dispatch1 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]

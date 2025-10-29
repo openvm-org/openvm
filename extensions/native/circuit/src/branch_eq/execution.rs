@@ -93,7 +93,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
+impl<F, A> InterpreterExecutor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {

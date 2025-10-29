@@ -14,7 +14,7 @@ use crate::{
             get_metered_pre_compute_max_size, get_pre_compute_instructions,
             get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
-        AotExecutor, ExecutionCtxTrait, ExecutionError, ExecutorInventory, ExitCode,
+        Executor, ExecutionCtxTrait, ExecutionError, ExecutorInventory, ExitCode,
         MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
         VmExecState, VmState,
     },
@@ -218,7 +218,7 @@ where
 
     pub fn create_asm<E>(exe: &VmExe<F>, inventory: &ExecutorInventory<E>) -> String
     where
-        E: AotExecutor<F>,
+        E: Executor<F>,
     {
         let mut asm_str = String::new();
         // generate the assembly based on exe.program
@@ -301,6 +301,7 @@ where
                 asm_str += "\n";
                 continue;
             }
+            // executor doesnt have aotexecutor trait
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
@@ -359,7 +360,7 @@ where
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
-        E: AotExecutor<F>,
+        E: Executor<F>,
     {
         let _default_name = String::from("asm_x86_run");
         let random_name = format!("asm_x86_run_{}", rand::thread_rng().gen_range(0..1000000));
@@ -374,7 +375,7 @@ where
         asm_name: &String, // name of the asm file we write into
     ) -> Result<Self, StaticProgramError>
     where
-        E: AotExecutor<F>,
+        E: Executor<F>,
     {
         // source asm_bridge directory
         // this is fixed

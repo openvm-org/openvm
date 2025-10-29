@@ -42,6 +42,9 @@ tco = ["openvm-circuit/tco"]
 aot = [
     "openvm-circuit/aot",
     "openvm-rv32im-circuit/aot",
+    "openvm-algebra-circuit/aot",
+    "openvm-bigint-circuit/aot",
+    "openvm-ecc-circuit/aot",
 ]
 touchemall = [
     "cuda",

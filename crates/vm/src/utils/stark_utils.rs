@@ -9,14 +9,14 @@ use openvm_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
-
 #[cfg(feature = "aot")]
 use crate::arch::{SystemConfig, VmState};
 #[cfg(feature = "aot")]
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
+        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, ExitCode,
+        InterpreterExecutor,
         MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
@@ -46,7 +46,7 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        InterpreterExecutor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     air_test_with_min_segments(builder, config, exe, Streams::default(), 1);
 }
@@ -65,7 +65,7 @@ where
         + VmCircuitConfig<BabyBearPoseidon2Config>
         + VmConfig<BabyBearPoseidon2Config>,
     <VC as VmExecutionConfig<BabyBear>>::Executor:
-        Executor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
+        InterpreterExecutor<BabyBear> + MeteredExecutor<BabyBear> + PreflightExecutor<BabyBear, RA>,
 {
     let mut log_blowup = 1;
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
@@ -98,7 +98,7 @@ where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InterpreterExecutor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
@@ -174,7 +174,7 @@ where
     E: StarkFriEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: InterpreterExecutor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
