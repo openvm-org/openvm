@@ -116,8 +116,8 @@ where
     F: PrimeField32,
 {
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        false; //JALR is wrong, failing test_decompress
-        // opcode == Rv32JalrOpcode::JALR.global_opcode()
+        false //JALR is wrong, failing test_decompress
+               // opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
