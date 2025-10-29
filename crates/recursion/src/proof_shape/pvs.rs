@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{AlignedBorrow, utils::not};
+use openvm_circuit_primitives::{AlignedBorrow, SubAir, utils::not};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -13,6 +13,7 @@ use stark_backend_v2::{F, proof::Proof};
 use crate::{
     bus::{PublicValuesBus, TranscriptBus, TranscriptBusMessage},
     proof_shape::bus::{NumPublicValuesBus, NumPublicValuesMessage},
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
 };
 
@@ -31,48 +32,58 @@ pub struct PublicValuesCols<F> {
     pub value: F,
 }
 
-pub(crate) fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
-    let total_num_pvs = proof
+pub(crate) fn generate_trace(proofs: &[&Proof], preflights: &[&Preflight]) -> RowMajorMatrix<F> {
+    let total_num_pvs = proofs[0]
         .public_values
         .iter()
         .fold(0usize, |acc, per_air| acc + per_air.len());
     let num_rows = total_num_pvs.next_power_of_two();
     let width = PublicValuesCols::<u8>::width();
 
+    debug_assert_eq!(proofs.len(), preflights.len());
+
     let mut trace = vec![F::ZERO; num_rows * width];
-    let mut chunks = trace.chunks_mut(width);
+    let mut chunks = trace.chunks_exact_mut(width);
     let mut row_idx = 0usize;
 
-    for ((air_idx, pvs), &starting_tidx) in proof
-        .public_values
-        .iter()
-        .enumerate()
-        .filter(|(_, per_air)| !per_air.is_empty())
-        .zip(&preflight.proof_shape.pvs_tidx)
-    {
-        let mut tidx = starting_tidx;
-        let mut num_pvs_left = pvs.len();
+    for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+        for ((air_idx, pvs), &starting_tidx) in proof
+            .public_values
+            .iter()
+            .enumerate()
+            .filter(|(_, per_air)| !per_air.is_empty())
+            .zip(&preflight.proof_shape.pvs_tidx)
+        {
+            let mut tidx = starting_tidx;
+            let mut num_pvs_left = pvs.len();
 
-        for (pv_idx, pv) in pvs.iter().enumerate() {
-            let chunk = chunks.next().unwrap();
-            let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
+            for (pv_idx, pv) in pvs.iter().enumerate() {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
 
-            // TODO[stephen]: proof_idx
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(row_idx == 0);
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(row_idx == 0);
 
-            cols.air_idx = F::from_canonical_usize(air_idx);
-            cols.tidx = F::from_canonical_usize(tidx);
-            cols.num_pvs_left = F::from_canonical_usize(num_pvs_left);
+                cols.air_idx = F::from_canonical_usize(air_idx);
+                cols.tidx = F::from_canonical_usize(tidx);
+                cols.num_pvs_left = F::from_canonical_usize(num_pvs_left);
 
-            cols.is_first_for_air = F::from_bool(pv_idx == 0);
-            cols.value = *pv;
+                cols.is_first_for_air = F::from_bool(pv_idx == 0);
+                cols.value = *pv;
 
-            tidx += 1;
-            num_pvs_left -= 1;
-            row_idx += 1;
+                tidx += 1;
+                num_pvs_left -= 1;
+                row_idx += 1;
+            }
         }
     }
+
+    for chunk in chunks {
+        let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
+        cols.proof_idx = F::from_canonical_usize(proofs.len());
+    }
+
     RowMajorMatrix::new(trace, width)
 }
 
@@ -101,7 +112,26 @@ where
         let local: &PublicValuesCols<AB::Var> = (*local).borrow();
         let next: &PublicValuesCols<AB::Var> = (*next).borrow();
 
-        // TODO[stephen]: proof_idx constraints
+        NestedForLoopSubAir::<1, 0> {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
+        );
 
         // Constrain is_first_for_air, send NumPublicValuesBus message when true
         builder.assert_bool(local.is_first_for_air);
