@@ -86,7 +86,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
             GUEST_FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
           fi
-          cargo nextest run --cargo-profile=fast --features aot  $GUEST_FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
