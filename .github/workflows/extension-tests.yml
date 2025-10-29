@@ -75,7 +75,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
-          cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass -- --nocapture
+          cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
 
         # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
@@ -93,4 +93,4 @@ jobs:
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
-          cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass -- --nocapture
+          cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
