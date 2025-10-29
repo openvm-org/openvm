@@ -257,91 +257,118 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
 
     fn generate_proof_inputs(
         &self,
-        proof: &Proof,
-        preflight: &Preflight,
+        proofs: &[Proof],
+        preflights: &[Preflight],
     ) -> Vec<AirProofRawInput<F>> {
+        // TODO: support multiple proofs
+        debug_assert_eq!(proofs.len(), 1);
+        debug_assert_eq!(preflights.len(), 1);
         vec![
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(fractions_folder::generate_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(sumcheck::generate_univariate_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(sumcheck::generate_multilinear_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_ns_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_mle_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_sharp_uni_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_sharp_uni_receiver_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_3b_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_symbolic_expression_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_column_claim_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_expression_claim_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_interactions_folding_trace(
-                    &self.mvk, proof, preflight,
+                    &self.mvk,
+                    &proofs[0],
+                    &preflights[0],
                 ))),
                 public_values: vec![],
             },
