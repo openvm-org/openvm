@@ -281,6 +281,7 @@ mod tests {
 
     #[test]
     #[should_panic]
+    #[cfg(not(feature = "aot"))] // AOT skips this test since it is not a trusted program
     fn test_load_x0() {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();
