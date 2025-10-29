@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode
 };
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -76,6 +76,30 @@ macro_rules! dispatch {
     };
 }
 
+// Callee saved
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
+const REG_GUEST_MEM_PTR: &str = "r15";
+
+// Caller saved
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_FOURTH_ARG: &str = "rcx";
+const REG_THIRD_ARG: &str = "rdx";
+const REG_SECOND_ARG: &str = "rsi";
+const REG_FIRST_ARG: &str = "rdi";
+const REG_RETURN_VAL: &str = "rax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+const REG_AUX: &str = "r11";
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -112,6 +136,89 @@ where
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
         let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, is_imm, is_sltu)
+    }
+
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();  
+        let a : i16 = to_i16(inst.a);
+        let b : i16 = to_i16(inst.b);
+        let c : i16 = to_i16(inst.c);
+        let e : i16 = to_i16(inst.e);
+
+        assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");   
+        
+        let xmm_map_reg_a = if (a/4) % 2 == 0 {
+            a/8
+        } else {
+            ((a/4)-1)/2 // floor((a/4)/2)
+        };
+
+        let xmm_map_reg_b = if (b/4) % 2 == 0 {
+            b/8
+        } else {
+            ((b/4)-1)/2
+        };
+
+        // [a:4]_1 <- [b:4]_1
+        if (b/4)%2 == 0 {
+            // get the [0:32) bits of xmm_map_reg_b
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);                                            
+        } else {
+            // get the [32:64) bits of xmm_map_reg_b
+            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
+        }
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == LessThanOpcode::SLT.global_opcode() {
+            asm_opcode += "setl";
+        } else if inst.opcode == LessThanOpcode::SLTU.global_opcode() {
+            asm_opcode += "setb";
+        }
+        
+        if e == 0 {
+            asm_str += &format!("   cmp {}, {}\n", REG_A_W, c);
+        } else {
+            // [a:4]_1 <- [a:4]_1 + [c:4]_1
+            assert_eq!(c % 4, 0);
+            let xmm_map_reg_c = if (c/4) % 2 == 0 {
+                c/8
+            } else {
+                ((c/4)-1)/2
+            };
+
+            // XMM -> General Register
+            if (c/4) % 2 == 0 {
+                // get the [0:32) bits of xmm_map_reg_c
+                asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c); 
+            } else {
+                // get the [32:64) bits of xmm_map_reg_b
+                asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
+            }
+
+            asm_str += &format!("   cmp {}, {}\n", REG_A_W, REG_C_W);
+        }                
+
+        // Set REG_A to 1 if less than (signed), 0 otherwise
+        asm_str += &format!("   {} cl\n", asm_opcode);  // setl cl or setb cl
+        asm_str += &format!("   movzx {}, cl\n", REG_A_W);  // zero-extend to 32-bit
+
+
+        // let it fall to the next instruction 
+
+        asm_str
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        LessThanOpcode::SLT.global_opcode() == opcode 
+            || LessThanOpcode::SLTU.global_opcode() == opcode 
     }
 }
 

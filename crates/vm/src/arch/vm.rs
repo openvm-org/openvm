@@ -237,6 +237,16 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
+    // Temporary function used for AOT testing
+    // [TODO: remove this later]
+    #[cfg(feature = "aot")]
+    pub fn interp_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+        InterpretedInstance::new(&self.inventory, exe)
+    }
+
     #[cfg(feature = "aot")]
     pub fn instance(
         &self,
@@ -448,6 +458,20 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         self.executor().instance(exe)
+    }
+
+    // Temporary function for AOT testing
+    // [TODO: remove this]
+    #[cfg(feature = "aot")]
+    pub fn interp_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().interp_instance(exe)
     }
 
     // Pure AOT execution

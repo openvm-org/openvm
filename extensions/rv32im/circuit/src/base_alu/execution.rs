@@ -143,7 +143,7 @@ where
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
-    #[cfg(feature = "aot")]
+
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
@@ -236,6 +236,8 @@ where
 
         asm_str
     }
+
+
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         BaseAluOpcode::ADD.global_opcode() == opcode
