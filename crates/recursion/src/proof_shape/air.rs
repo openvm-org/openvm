@@ -100,8 +100,8 @@ pub struct ProofShapeVarColsMut<'a, F> {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_trace<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[&Proof],
-    preflights: &[&Preflight],
+    proofs: &[Proof],
+    preflights: &[Preflight],
     idx_encoder: Arc<Encoder>,
     min_cached_idx: usize,
     max_cached: usize,
