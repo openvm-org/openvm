@@ -209,6 +209,26 @@ where
         asm_str += &format!("   {} cl\n", asm_opcode);  // setl cl or setb cl
         asm_str += &format!("   movzx {}, cl\n", REG_A_W);  // zero-extend to 32-bit
 
+        // General Register -> XMM
+        if (a / 4) % 2 == 0 {
+            // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
+        } else {
+            // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
+        }
+
+        asm_str += &format!("   add {}, {}\n", REG_PC, 4);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+
 
         // let it fall to the next instruction 
 
@@ -217,7 +237,8 @@ where
 
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        false
+        LessThanOpcode::SLT.global_opcode() == opcode 
+            || LessThanOpcode::SLTU.global_opcode() == opcode 
     }
 }
 
