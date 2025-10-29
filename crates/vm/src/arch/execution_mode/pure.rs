@@ -3,6 +3,7 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+#[repr(C)]
 pub struct ExecutionCtx {
     pub instret_end: u64,
 }
