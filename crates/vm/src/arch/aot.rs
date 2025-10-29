@@ -289,6 +289,111 @@ where
         }
     
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            if instruction.opcode == ShiftOpcode::SLL.global_opcode() || instruction.opcode == ShiftOpcode::SRL.global_opcode() || instruction.opcode == ShiftOpcode::SRA.global_opcode() {
+                /*
+                Spec: 
+                [a:4]_1 = [b:4]_1 << [c:4]_e
+                For e=0: c is sign-extended i16; for e=1: c is from register block
+                */
+
+                asm_str += &format!("asm_execute_pc_{}:\n", pc);
+                
+                asm_str += &Self::xmm_to_rv32_regs();
+                asm_str += &Self::push_caller_saved_registers();
+
+                asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_INSTRET);
+                asm_str += &format!("   mov {}, {}\n", REG_SECOND_ARG, REG_PC);
+                asm_str += &format!("   mov {}, {}\n", REG_THIRD_ARG, REG_EXEC_STATE_PTR);
+                asm_str += "    call should_suspend\n";
+                asm_str += &format!("   cmp {}, {}\n", REG_RETURN_VAL, SHOULD_SUSPEND_INDICATOR);
+                
+                asm_str += &Self::pop_caller_saved_registers();
+                asm_str += &Self::rv32_regs_to_xmm();
+                asm_str += "    je asm_run_end\n";             
+    
+                let a : i16 = Self::to_i16(instruction.a);
+                let b : i16 = Self::to_i16(instruction.b);
+                let c : i16 = Self::to_i16(instruction.c);
+                let e : i16 = Self::to_i16(instruction.e);
+
+                assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+                assert!(b % 4 == 0, "instruction.b must be a multiple of 4");   
+                
+                let xmm_map_reg_a = if (a/4) % 2 == 0 {
+                    a/8
+                } else {
+                    ((a/4)-1)/2 // floor((a/4)/2)
+                };
+
+                let xmm_map_reg_b = if (b/4) % 2 == 0 {
+                    b/8
+                } else {
+                    ((b/4)-1)/2
+                };
+
+                // [a:4]_1 <- [b:4]_1
+                if (b/4)%2 == 0 {
+                    // get the [0:32) bits of xmm_map_reg_b
+                    asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);                                            
+                } else {
+                    // get the [32:64) bits of xmm_map_reg_b
+                    asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
+                }
+
+                let mut asm_opcode = String::new();
+                if instruction.opcode == ShiftOpcode::SLL.global_opcode() {
+                    asm_opcode += "shl";
+                } else if instruction.opcode == ShiftOpcode::SRL.global_opcode() {
+                    asm_opcode += "shr";
+                } else if instruction.opcode == ShiftOpcode::SRA.global_opcode() {
+                    asm_opcode += "sar";
+                }
+                
+                if e == 0 {
+                    // [a:4]_1 <- [a:4]_1 << c
+                    asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, c);
+                } else {
+                    // [a:4]_1 <- [a:4]_1 + [c:4]_1
+                    assert_eq!(c % 4, 0);
+                    let xmm_map_reg_c = if (c/4) % 2 == 0 {
+                        c/8
+                    } else {
+                        ((c/4)-1)/2
+                    };
+
+                    // XMM -> General Register
+                    if (c/4) % 2 == 0 {
+                        // get the [0:32) bits of xmm_map_reg_c
+                        asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c); 
+                    } else {
+                        // get the [32:64) bits of xmm_map_reg_b
+                        asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
+                    }
+
+                    // move shift amount to cl register (required by x86)
+                    asm_str += &format!("   mov cl, {}l\n", REG_C_W);
+                    // reg_a = reg_a << c
+                    asm_str += &format!("   {} {}, cl\n", asm_opcode, REG_A_W);
+                }
+
+                // General Register -> XMM
+                if (a/4)%2 == 0 {
+                    // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                    asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
+                } else {
+                    // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other bits
+                    asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
+                }
+
+                asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_STEP);
+                asm_str += &format!("   add {}, {}\n", REG_INSTRET, DEFAULT_INSTRET_INC);
+
+                // let it fall to the next instruction 
+
+                continue;
+            } 
+
+            /*
             if instruction.opcode == BaseAluOpcode::ADD.global_opcode() || instruction.opcode == BaseAluOpcode::SUB.global_opcode() || instruction.opcode == BaseAluOpcode::AND.global_opcode() || instruction.opcode == BaseAluOpcode::OR.global_opcode() || instruction.opcode == BaseAluOpcode::XOR.global_opcode() {
                 /*
                 Spec: ADD_RV32	a,b,c,1,e	[a:4]_1 = [b:4]_1 + [c:4]_e. 
@@ -297,9 +402,6 @@ where
 
                 asm_str += &format!("asm_execute_pc_{}:\n", pc);
                 
-                /*
-                Should suspend block
-                */
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_caller_saved_registers();
                 asm_str += &format!("   mov {}, {}\n", REG_FIRST_ARG, REG_INSTRET);
@@ -351,13 +453,7 @@ where
                     asm_opcode += "or";
                 } else if instruction.opcode == BaseAluOpcode::XOR.global_opcode() {
                     asm_opcode += "xor";
-                } else if instruction.opcode == ShiftOpcode::SLL.global_opcode() {
-                    asm_opcode += "shl";
-                } else if instruction.opcode == ShiftOpcode::SRL.global_opcode() {
-                    asm_opcode += "shr";
-                } else if instruction.opcode == ShiftOpcode::SRA.global_opcode() {
-                    asm_opcode += "sar";
-                } 
+                }
  
                 if e == 0 {
                     // [a:4]_1 <- [a:4]_1 + c
@@ -400,6 +496,7 @@ where
 
                 continue;
             } 
+            */
 
             /*
             Fallback instruction
