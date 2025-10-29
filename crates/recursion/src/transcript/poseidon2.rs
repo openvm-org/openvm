@@ -1,8 +1,13 @@
 use core::borrow::Borrow;
+use std::sync::Arc;
 
 use crate::bus::Poseidon2Bus;
 use crate::bus::Poseidon2BusMessage;
+use openvm_poseidon2_air::{
+    BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, Poseidon2SubAir, Poseidon2SubCols,
+};
 use openvm_stark_backend::{
+    air_builders::sub::SubAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
@@ -17,38 +22,51 @@ pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
 #[repr(C)]
 #[derive(AlignedBorrow)]
 pub struct Poseidon2Cols<T, const SBOX_REGISTERS: usize> {
-    // TODO: use inner to constraint permutation
-    // pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
-    pub input: [T; POSEIDON2_WIDTH],
-    pub output: [T; POSEIDON2_WIDTH],
+    pub inner: Poseidon2SubCols<T, SBOX_REGISTERS>,
     pub mult: T,
 }
 
-pub struct Poseidon2Air {
+pub struct Poseidon2Air<F: Field, const SBOX_REGISTERS: usize> {
+    pub subair: Arc<Poseidon2SubAir<F, SBOX_REGISTERS>>,
     pub poseidon2_bus: Poseidon2Bus,
 }
 
-impl<F: Field> BaseAir<F> for Poseidon2Air {
+impl<F: Field, const SBOX_REGISTERS: usize> BaseAir<F> for Poseidon2Air<F, SBOX_REGISTERS> {
     fn width(&self) -> usize {
-        // TODO: what's sbox_registers?
-        Poseidon2Cols::<F, 0>::width()
+        Poseidon2Cols::<F, SBOX_REGISTERS>::width()
     }
 }
 
-impl<F: Field> BaseAirWithPublicValues<F> for Poseidon2Air {}
-impl<F: Field> PartitionedBaseAir<F> for Poseidon2Air {}
+impl<F: Field, const SBOX_REGISTERS: usize> BaseAirWithPublicValues<F>
+    for Poseidon2Air<F, SBOX_REGISTERS>
+{
+}
+impl<F: Field, const SBOX_REGISTERS: usize> PartitionedBaseAir<F>
+    for Poseidon2Air<F, SBOX_REGISTERS>
+{
+}
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Poseidon2Air {
+impl<AB: AirBuilder + InteractionBuilder, const SBOX_REGISTERS: usize> Air<AB>
+    for Poseidon2Air<AB::F, SBOX_REGISTERS>
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, _next) = (main.row_slice(0), main.row_slice(1));
-        let local: &Poseidon2Cols<AB::Var, 0> = (*local).borrow();
+        let local: &Poseidon2Cols<AB::Var, SBOX_REGISTERS> = (*local).borrow();
+
+        let mut sub_builder =
+            SubAirBuilder::<AB, Poseidon2SubAir<AB::F, SBOX_REGISTERS>, AB::F>::new(
+                builder,
+                0..self.subair.width(),
+            );
+        self.subair.eval(&mut sub_builder);
 
         self.poseidon2_bus.add_key_with_lookups(
             builder,
             Poseidon2BusMessage {
-                input: local.input,
-                output: local.output,
+                input: local.inner.inputs,
+                output: local.inner.ending_full_rounds[BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS - 1]
+                    .post,
             },
             local.mult,
         )
