@@ -398,12 +398,31 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        self.execute_metered_cost_with_max_cost(app_exe, inputs, None)
+    }
+
+    /// Executes with cost metering to measure computational cost in trace cells.
+    /// Returns both user public values, and cost along with instruction count.
+    /// 
+    /// # Arguments
+    /// * `app_exe` - The executable to run
+    /// * `inputs` - Program inputs
+    /// * `max_cost` - Optional maximum execution cost. If None, uses the default value.
+    pub fn execute_metered_cost_with_max_cost(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+        inputs: StdIn,
+        max_cost: Option<u64>,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
         let app_prover = self.app_prover(app_exe)?;
 
         let vm = app_prover.vm();
         let exe = app_prover.exe();
 
-        let ctx = vm.build_metered_cost_ctx();
+        let mut ctx = vm.build_metered_cost_ctx();
+        if let Some(max_cost) = max_cost {
+            ctx = ctx.with_max_execution_cost(max_cost);
+        }
         let interpreter = vm
             .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
