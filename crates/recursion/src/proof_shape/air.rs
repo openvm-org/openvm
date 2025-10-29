@@ -23,7 +23,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         AirHeightsBus, AirHeightsBusMessage, AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus,
-        AirShapeBusMessage, CommitmentsBus, CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage,
+        AirShapeBusMessage, AirShapeProperty, CommitmentsBus, GkrModuleBus, GkrModuleMessage,
         TranscriptBus, TranscriptBusMessage,
     },
     primitives::{
@@ -684,11 +684,48 @@ where
             local.proof_idx,
             AirShapeBusMessage {
                 sort_idx: local.sorted_idx.into(),
-                air_id: local.idx.into(),
-                hypercube_dim: hypercube_dim.clone(),
-                has_preprocessed: has_preprocessed.clone(),
-                num_main_parts,
-                num_interactions,
+                property_idx: AirShapeProperty::AirId.to_field(),
+                value: local.idx.into(),
+            },
+            local.is_present,
+        );
+        self.air_shape_bus.send(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                property_idx: AirShapeProperty::HypercubeDim.to_field(),
+                value: hypercube_dim.clone(),
+            },
+            local.is_present,
+        );
+        self.air_shape_bus.send(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                property_idx: AirShapeProperty::HasPreprocessed.to_field(),
+                value: has_preprocessed.clone(),
+            },
+            local.is_present,
+        );
+        self.air_shape_bus.send(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                property_idx: AirShapeProperty::NumMainParts.to_field(),
+                value: num_main_parts,
+            },
+            local.is_present,
+        );
+        self.air_shape_bus.send(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                property_idx: AirShapeProperty::NumInteractions.to_field(),
+                value: num_interactions,
             },
             local.is_present,
         );

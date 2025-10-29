@@ -110,6 +110,12 @@ pub struct ProofShapePreflight {
     pub l_skip: usize,
 }
 
+impl ProofShapePreflight {
+    pub fn n_global(&self) -> usize {
+        self.n_max.max(self.n_logup)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct GkrPreflight {
     pub post_tidx: usize,
@@ -126,7 +132,11 @@ pub struct GkrPreflight {
 
 #[derive(Debug, Default)]
 pub struct BatchConstraintPreflight {
+    pub tidx_before_univariate: usize,
+    pub tidx_before_multilinear: usize,
+    pub tidx_before_column_openings: usize,
     pub post_tidx: usize,
+    pub xi: Vec<EF>,
     pub sumcheck_rnd: Vec<EF>,
 }
 
@@ -224,7 +234,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
             exp_bits_len_air.clone(),
         );
         let batch_constraint_module =
-            BatchConstraintModule::new(child_mvk.clone(), bus_inventory.clone());
+            BatchConstraintModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
         let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
         let whir_module = WhirModule::new(
             child_mvk.clone(),

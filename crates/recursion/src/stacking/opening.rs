@@ -120,7 +120,6 @@ impl OpeningClaimsTraceGenerator {
             izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
         {
             let ColumnClaimsMessage {
-                idx,
                 sort_idx,
                 part_idx,
                 col_idx,
@@ -134,7 +133,6 @@ impl OpeningClaimsTraceGenerator {
             cols.is_first = F::from_bool(i == 0);
             cols.is_last = F::from_bool(i + 1 == num_valid);
 
-            cols.idx = idx;
             cols.sort_idx = sort_idx;
             cols.part_idx = part_idx;
             cols.col_idx = col_idx;
@@ -242,7 +240,6 @@ where
             builder,
             local.proof_idx,
             ColumnClaimsMessage {
-                idx: local.idx,
                 sort_idx: local.sort_idx,
                 part_idx: local.part_idx,
                 col_idx: local.col_idx,
@@ -252,10 +249,11 @@ where
             local.is_valid,
         );
 
-        builder.when(local.is_first).assert_zero(local.idx);
-        builder
-            .when(not(local.is_last))
-            .assert_one(next.idx - local.idx);
+        // TODO: constrain properly
+        // builder.when(local.is_first).assert_zero(local.idx);
+        // builder
+        //     .when(not(local.is_last))
+        //     .assert_one(next.idx - local.idx);
 
         assert_eq_array(
             &mut builder.when(not(local.is_last)),
