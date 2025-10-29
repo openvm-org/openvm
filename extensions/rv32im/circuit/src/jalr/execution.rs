@@ -116,8 +116,8 @@ where
     F: PrimeField32,
 {
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        false //JALR is wrong, failing test_decompress
-               // opcode == Rv32JalrOpcode::JALR.global_opcode()
+        false //JALR is wrong, failing test_decompress, test_nonzero_a
+        // opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
@@ -127,6 +127,7 @@ where
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
             c_i24 as i16
         };
+        eprintln!("Instruction: {:?}", inst);
         let a = to_i16(inst.a);
         let b = to_i16(inst.b);
         debug_assert_eq!(a % 4, 0);
@@ -152,7 +153,7 @@ where
         asm_str += &format!("   mov {}, {}\n", REG_AUX, imm_extended);
         asm_str += &format!("   add {}, {}\n", REG_B, REG_AUX);
         asm_str += &format!("   and {}, -2\n", REG_B); // used to zero the low bit, -2 in twos complement; same as ~1
-        asm_str += &format!("   mov {}, {}\n", REG_PC, REG_B);
+        asm_str += &format!("   mov {}, {}\n", REG_PC, REG_B); // this is PC on RISCV side, need to update the PC on x86 side
 
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
@@ -166,6 +167,10 @@ where
         }
 
         asm_str += &format!("   add {}, 1\n", REG_INSTRET);
+        asm_str += "   lea rdx, [rip + map_pc_base]\n";
+        asm_str += &format!("   movsxd rcx, [rdx + {}]\n", REG_PC);
+        asm_str += "   add rcx, rdx\n";
+        asm_str += "   jmp rcx\n";
 
         asm_str
     }

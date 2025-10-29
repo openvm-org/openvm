@@ -247,12 +247,12 @@ where
     }
 
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        // false
-        BaseAluOpcode::ADD.global_opcode() == opcode
-            || BaseAluOpcode::SUB.global_opcode() == opcode
-            || BaseAluOpcode::AND.global_opcode() == opcode
-            || BaseAluOpcode::OR.global_opcode() == opcode
-            || BaseAluOpcode::XOR.global_opcode() == opcode
+        false
+        // BaseAluOpcode::ADD.global_opcode() == opcode
+        //     || BaseAluOpcode::SUB.global_opcode() == opcode
+        //     || BaseAluOpcode::AND.global_opcode() == opcode
+        //     || BaseAluOpcode::OR.global_opcode() == opcode
+        //     || BaseAluOpcode::XOR.global_opcode() == opcode
     }
 }
 
