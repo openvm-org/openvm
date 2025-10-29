@@ -107,6 +107,8 @@ where
     /*
     Assertions for Pure Execution AOT
     */
+
+    println!("[EYEBALL CHECK]: pure assertions done");
     let interp_state_pure = vm
         .interpreter(&exe)?
         .execute(input.clone(), None)
