@@ -71,11 +71,6 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    println!(
-        "extern_handler called with pc: {}, instret: {}",
-        cur_pc, cur_instret
-    );
-
     // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
     // it would be able to dereference instret and pc correctly
     let mut instret: Box<u64> = Box::new(cur_instret);
