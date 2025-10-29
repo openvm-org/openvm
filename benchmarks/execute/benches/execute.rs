@@ -256,7 +256,7 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
-#[divan::bench(args = APP_PROGRAMS, sample_count=10)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=1)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -272,7 +272,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
 }
         
 
-#[divan::bench(args = APP_PROGRAMS, sample_count=5)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=0)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
