@@ -108,7 +108,7 @@ macro_rules! define_typed_per_proof_permutation_bus {
             pub fn send<AB>(
                 &self,
                 builder: &mut AB,
-                proof_idx: AB::Var,
+                proof_idx: impl Into<AB::Expr>,
                 message: $Msg<impl Into<AB::Expr> + Clone>,
                 enabled: impl Into<AB::Expr>,
             ) where
@@ -124,7 +124,7 @@ macro_rules! define_typed_per_proof_permutation_bus {
             pub fn receive<AB>(
                 &self,
                 builder: &mut AB,
-                proof_idx: AB::Var,
+                proof_idx: impl Into<AB::Expr>,
                 message: $Msg<impl Into<AB::Expr> + Clone>,
                 enabled: impl Into<AB::Expr>,
             ) where
@@ -156,7 +156,7 @@ pub struct BatchConstraintModuleMessage<T> {
     pub tidx_alpha_beta: T,
     // TODO(ayush): can this be derived?
     pub tidx: T,
-    pub n_max: T,
+    pub n_global: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
 }
 
@@ -316,6 +316,22 @@ pub struct Poseidon2BusMessage<T> {
 
 define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub(crate) enum AirShapeProperty {
+    AirId,
+    HypercubeDim,
+    HasPreprocessed,
+    NumMainParts,
+    NumInteractions,
+}
+
+impl AirShapeProperty {
+    pub fn to_field<T: FieldAlgebra>(self) -> T {
+        T::from_canonical_u8(self as u8)
+    }
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct MerkleVerifyBusMessage<T> {
@@ -332,11 +348,15 @@ define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage)
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
-    pub air_id: T,
-    pub hypercube_dim: T,
-    pub has_preprocessed: T,
-    pub num_main_parts: T,
-    pub num_interactions: T,
+    /// The property this message encodes.
+    /// - 0 means `air_id`,
+    /// - 1 means `hypercube_dim`,
+    /// - 2 means `has_preprocessed`,
+    /// - 3 means `num_main_parts`,
+    /// - 4 means `num_interactions`.
+    pub property_idx: T,
+    /// The value of the corresponding property.
+    pub value: T,
 }
 
 define_typed_per_proof_permutation_bus!(AirShapeBus, AirShapeBusMessage);
@@ -409,7 +429,7 @@ define_typed_per_proof_permutation_bus!(
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct ColumnClaimsMessage<T> {
-    pub idx: T,
+    // pub idx: T,
     pub sort_idx: T,
     pub part_idx: T,
     pub col_idx: T,

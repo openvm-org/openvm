@@ -1,3 +1,5 @@
+#![cfg(debug_assertions)]
+
 use core::borrow::Borrow;
 
 use openvm_circuit_primitives::SubAir;
