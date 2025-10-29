@@ -16,9 +16,9 @@ use crate::arch::{SystemConfig, VmState};
 use crate::system::memory::online::GuestMemory;
 use crate::{
     arch::{
-        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, ExitCode,
-        Executor, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams,
-        VmBuilder, VmCircuitConfig, VmConfig, VmExecutionConfig,
+        debug_proving_ctx, execution_mode::Segment, vm::VirtualMachine, Executor, ExitCode,
+        MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
+        VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
     system::memory::{MemoryImage, CHUNK},
 };

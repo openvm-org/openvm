@@ -9,9 +9,12 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode,
+    LocalOpcode,
 };
+#[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{adapters::imm_to_bytes, BaseAluExecutor};
@@ -152,7 +155,6 @@ where
     F: PrimeField32,
 {
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
-        eprintln!("generate_x86_asm called with instruction: {:?}", inst);
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
@@ -246,10 +248,6 @@ where
     }
 
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        eprintln!(
-            "supports_aot_for_opcode override called with opcode: {:?}",
-            opcode
-        );
         // false
         BaseAluOpcode::ADD.global_opcode() == opcode
             || BaseAluOpcode::SUB.global_opcode() == opcode

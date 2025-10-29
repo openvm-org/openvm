@@ -20,8 +20,11 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{exe::VmExe, program::Program, riscv::RV32_REGISTER_AS, SystemOpcode};
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 #[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
+#[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
+
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
