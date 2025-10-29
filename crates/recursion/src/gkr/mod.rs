@@ -58,24 +58,24 @@
 use core::iter::zip;
 use std::sync::Arc;
 
-use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
+use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*, prover::types::AirProofRawInput};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra};
 use stark_backend_v2::{
     D_EF, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
+    poseidon2::sponge::{FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory},
     proof::{GkrProof, Proof},
 };
 
 use crate::{
     gkr::{
         bus::{GkrLayerInputBus, GkrLayerOutputBus, GkrXiSamplerBus},
-        input::GkrInputAir,
-        layer::GkrLayerAir,
-        sumcheck::GkrLayerSumcheckAir,
-        xi_sampler::GkrXiSamplerAir,
+        input::{GkrInputAir, GkrInputRecord},
+        layer::{GkrLayerAir, GkrLayerRecord},
+        sumcheck::{GkrLayerSumcheckAir, GkrSumcheckRecord},
+        xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord},
     },
     primitives::exp_bits_len::ExpBitsLenAir,
     system::{AirModule, BusIndexManager, BusInventory, GkrPreflight, Preflight},
@@ -89,10 +89,10 @@ pub use bus::{
 };
 
 // Sub-modules for different AIRs
-mod input;
-mod layer;
-mod sumcheck;
-mod xi_sampler;
+pub mod input;
+pub mod layer;
+pub mod sumcheck;
+pub mod xi_sampler;
 
 pub struct GkrModule {
     // System Params
@@ -108,6 +108,15 @@ pub struct GkrModule {
     sumcheck_input_bus: GkrSumcheckInputBus,
     sumcheck_output_bus: GkrSumcheckOutputBus,
     sumcheck_challenge_bus: GkrSumcheckChallengeBus,
+}
+
+pub struct GkrProofRecord {
+    input: GkrInputRecord,
+    layer: GkrLayerRecord,
+    sumcheck: GkrSumcheckRecord,
+    xi_sampler: GkrXiSamplerRecord,
+    mus: Vec<EF>,
+    q0_claim: EF,
 }
 
 impl GkrModule {
@@ -200,10 +209,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
         let _beta_logup = ts.sample_ext();
 
         let mut xi = vec![(0, EF::ZERO); claims_per_layer.len()];
-        let mut sumcheck_round_data = Vec::new();
-        let mut layer_sumcheck_output = Vec::new();
-        let mut layer_claim = Vec::new();
-        let mut gkr_r: Vec<EF> = Vec::new();
+        let mut gkr_r = vec![EF::ZERO];
         let mut numer_claim = EF::ZERO;
         let mut denom_claim = EF::ONE;
 
@@ -236,14 +242,10 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
             // Compute initial claim for this layer using numer_claim and denom_claim from previous
             // layer
             let mut claim = numer_claim + lambda * denom_claim;
-            layer_claim.push(claim);
             let mut eq = EF::ONE;
             let mut gkr_r_prime = Vec::with_capacity(layer_idx);
 
             for (j, poly) in polys.iter().enumerate() {
-                let claim_in = claim;
-                let eq_in = eq;
-
                 for eval in poly {
                     ts.observe_ext(*eval);
                 }
@@ -258,8 +260,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
                 let xi_j = gkr_r[j];
                 let eq_out = eq * (xi_j * ri + (EF::ONE - xi_j) * (EF::ONE - ri));
 
-                sumcheck_round_data.push((layer_idx, j, claim_in, claim_out, eq_in, eq_out));
-
                 claim = claim_out;
                 eq = eq_out;
                 gkr_r_prime.push(ri);
@@ -268,9 +268,6 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
                     xi[j + 1] = (ts.len() - D_EF, ri);
                 }
             }
-
-            // Store the final sumcheck output for this layer (new_claim, eq_at_r_prime)
-            layer_sumcheck_output.push((claim, eq));
 
             ts.observe_ext(claims.p_xi_0);
             ts.observe_ext(claims.q_xi_0);
@@ -288,18 +285,13 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
             }
         }
 
-        let post_layer_tidx = ts.len();
         for _ in sumcheck_polys.len()..preflight.proof_shape.n_max + self.l_skip {
             xi.push((ts.len(), ts.sample_ext()));
         }
 
         preflight.gkr = GkrPreflight {
             post_tidx: ts.len(),
-            post_layer_tidx,
             xi,
-            sumcheck_round_data,
-            layer_sumcheck_output,
-            layer_claim,
         };
     }
 
@@ -308,38 +300,235 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
         proofs: &[Proof],
         preflights: &[Preflight],
     ) -> Vec<AirProofRawInput<F>> {
-        // TODO: support multiple proofs
-        debug_assert_eq!(proofs.len(), 1);
-        debug_assert_eq!(preflights.len(), 1);
+        debug_assert_eq!(proofs.len(), preflights.len());
+
+        let per_proof_records: Vec<GkrProofRecord> = proofs
+            .par_iter()
+            .zip(preflights.par_iter())
+            .map(|(proof, preflight)| {
+                let start_idx = preflight.proof_shape.post_tidx;
+                let mut ts = ReadOnlyTranscript::new(&preflight.transcript, start_idx);
+
+                let gkr_proof = &proof.gkr_proof;
+                let GkrProof {
+                    q0_claim,
+                    claims_per_layer,
+                    sumcheck_polys,
+                    logup_pow_witness,
+                } = gkr_proof;
+
+                ts.observe(*logup_pow_witness);
+                let logup_pow_sample = ts.sample();
+                let alpha_logup = ts.sample_ext();
+                let _beta_logup = ts.sample_ext();
+
+                let xi = &preflight.gkr.xi;
+
+                let input_layer_claim = claims_per_layer
+                    .last()
+                    .and_then(|last_layer| {
+                        xi.first().map(|(_, rho)| {
+                            let p_claim =
+                                last_layer.p_xi_0 + *rho * (last_layer.p_xi_1 - last_layer.p_xi_0);
+                            let q_claim =
+                                last_layer.q_xi_0 + *rho * (last_layer.q_xi_1 - last_layer.q_xi_0);
+                            [p_claim, q_claim]
+                        })
+                    })
+                    .unwrap_or([EF::ZERO, alpha_logup]);
+
+                let input_record = GkrInputRecord {
+                    tidx: preflight.proof_shape.post_tidx,
+                    n_logup: preflight.proof_shape.n_logup,
+                    n_max: preflight.proof_shape.n_max,
+                    logup_pow_witness: *logup_pow_witness,
+                    logup_pow_sample,
+                    input_layer_claim,
+                };
+
+                let num_layers = claims_per_layer.len();
+                let sumcheck_layer_count = sumcheck_polys.len();
+                let total_sumcheck_rounds: usize = sumcheck_polys.iter().map(Vec::len).sum();
+
+                let tidx_first_gkr_layer = preflight.proof_shape.post_tidx + 2 + 2 * D_EF + D_EF;
+                let mut layer_record = GkrLayerRecord {
+                    tidx: tidx_first_gkr_layer,
+                    layer_claims: Vec::with_capacity(num_layers),
+                    lambdas: Vec::with_capacity(sumcheck_layer_count),
+                    eq_at_r_primes: Vec::with_capacity(sumcheck_layer_count),
+                };
+                let mut mus = Vec::with_capacity(num_layers.max(1));
+
+                let tidx_first_sumcheck_round = tidx_first_gkr_layer + 5 * D_EF + D_EF;
+                let mut sumcheck_record = GkrSumcheckRecord {
+                    tidx: tidx_first_sumcheck_round,
+                    ris: Vec::with_capacity(total_sumcheck_rounds),
+                    evals: Vec::with_capacity(total_sumcheck_rounds),
+                    claims: Vec::with_capacity(sumcheck_layer_count),
+                };
+
+                let mut gkr_r: Vec<EF> = Vec::new();
+                let mut numer_claim = EF::ZERO;
+                let mut denom_claim = EF::ONE;
+
+                if let Some(root_claims) = claims_per_layer.first() {
+                    ts.observe_ext(*q0_claim);
+                    ts.observe_ext(root_claims.p_xi_0);
+                    ts.observe_ext(root_claims.q_xi_0);
+                    ts.observe_ext(root_claims.p_xi_1);
+                    ts.observe_ext(root_claims.q_xi_1);
+
+                    let mu = ts.sample_ext();
+                    numer_claim =
+                        interpolate_linear_at_01(&[root_claims.p_xi_0, root_claims.p_xi_1], mu);
+                    denom_claim =
+                        interpolate_linear_at_01(&[root_claims.q_xi_0, root_claims.q_xi_1], mu);
+
+                    gkr_r.push(mu);
+
+                    layer_record.layer_claims.push([
+                        root_claims.p_xi_0,
+                        root_claims.q_xi_0,
+                        root_claims.p_xi_1,
+                        root_claims.q_xi_1,
+                    ]);
+                    mus.push(mu);
+                }
+
+                for (polys, claims) in sumcheck_polys.iter().zip(claims_per_layer.iter().skip(1)) {
+                    let lambda = ts.sample_ext();
+                    layer_record.lambdas.push(lambda);
+
+                    let mut claim = numer_claim + lambda * denom_claim;
+                    let mut eq_at_r_prime = EF::ONE;
+                    let mut round_r = Vec::with_capacity(polys.len());
+
+                    sumcheck_record.claims.push(claim);
+
+                    for (round_idx, poly) in polys.iter().enumerate() {
+                        for eval in poly {
+                            ts.observe_ext(*eval);
+                        }
+
+                        let ri = ts.sample_ext();
+                        let prev_challenge = gkr_r[round_idx];
+
+                        let ev0 = claim - poly[0];
+                        let evals = [ev0, poly[0], poly[1], poly[2]];
+                        claim = interpolate_cubic_at_0123(&evals, ri);
+
+                        let eq_factor =
+                            prev_challenge * ri + (EF::ONE - prev_challenge) * (EF::ONE - ri);
+                        eq_at_r_prime *= eq_factor;
+
+                        sumcheck_record.ris.push(ri);
+                        sumcheck_record.evals.push(*poly);
+                        round_r.push(ri);
+                    }
+
+                    layer_record.eq_at_r_primes.push(eq_at_r_prime);
+
+                    ts.observe_ext(claims.p_xi_0);
+                    ts.observe_ext(claims.q_xi_0);
+                    ts.observe_ext(claims.p_xi_1);
+                    ts.observe_ext(claims.q_xi_1);
+
+                    let mu = ts.sample_ext();
+                    numer_claim = interpolate_linear_at_01(&[claims.p_xi_0, claims.p_xi_1], mu);
+                    denom_claim = interpolate_linear_at_01(&[claims.q_xi_0, claims.q_xi_1], mu);
+
+                    gkr_r.clear();
+                    gkr_r.push(mu);
+                    gkr_r.extend(round_r);
+
+                    layer_record.layer_claims.push([
+                        claims.p_xi_0,
+                        claims.q_xi_0,
+                        claims.p_xi_1,
+                        claims.q_xi_1,
+                    ]);
+                    mus.push(mu);
+                }
+
+                let xi_sampler_record = if num_layers < xi.len() {
+                    let challenges: Vec<EF> =
+                        xi.iter().skip(num_layers).map(|(_, val)| *val).collect();
+                    let tidx = xi[num_layers].0;
+                    GkrXiSamplerRecord {
+                        tidx,
+                        idx: num_layers,
+                        xis: challenges,
+                    }
+                } else {
+                    GkrXiSamplerRecord::default()
+                };
+
+                GkrProofRecord {
+                    input: input_record,
+                    layer: layer_record,
+                    sumcheck: sumcheck_record,
+                    xi_sampler: xi_sampler_record,
+                    mus,
+                    q0_claim: *q0_claim,
+                }
+            })
+            .collect();
+
+        let mut input_records = Vec::with_capacity(per_proof_records.len());
+        let mut layer_records = Vec::with_capacity(per_proof_records.len());
+        let mut sumcheck_records = Vec::with_capacity(per_proof_records.len());
+        let mut xi_sampler_records = Vec::with_capacity(per_proof_records.len());
+        let mut mus_records = Vec::with_capacity(per_proof_records.len());
+        let mut q0_claims = Vec::with_capacity(per_proof_records.len());
+
+        for records in per_proof_records {
+            let GkrProofRecord {
+                input,
+                layer,
+                sumcheck,
+                xi_sampler,
+                mus,
+                q0_claim,
+            } = records;
+
+            input_records.push(input);
+            layer_records.push(layer);
+            sumcheck_records.push(sumcheck);
+            xi_sampler_records.push(xi_sampler);
+            mus_records.push(mus);
+            q0_claims.push(q0_claim);
+        }
+
         vec![
             // GkrInputAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(input::generate_trace(&proofs[0], &preflights[0]))),
+                common_main: Some(Arc::new(input::generate_trace(input_records, &q0_claims))),
                 public_values: vec![],
             },
             // GkrLayerAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(layer::generate_trace(&proofs[0], &preflights[0]))),
+                common_main: Some(Arc::new(layer::generate_trace(
+                    layer_records,
+                    &mus_records,
+                    &q0_claims,
+                ))),
                 public_values: vec![],
             },
             // GkrLayerSumcheckAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
                 common_main: Some(Arc::new(sumcheck::generate_trace(
-                    &proofs[0],
-                    &preflights[0],
+                    sumcheck_records,
+                    &mus_records,
                 ))),
                 public_values: vec![],
             },
             // GkrXiSamplerAir proof input
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(xi_sampler::generate_trace(
-                    &proofs[0],
-                    &preflights[0],
-                ))),
+                common_main: Some(Arc::new(xi_sampler::generate_trace(xi_sampler_records))),
                 public_values: vec![],
             },
         ]
