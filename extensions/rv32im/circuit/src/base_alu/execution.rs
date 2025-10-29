@@ -145,7 +145,6 @@ where
     }
     #[cfg(feature = "aot")]
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
-        eprintln!("generate_x86_asm called with instruction: {:?}", inst);
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
@@ -239,11 +238,6 @@ where
     }
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        eprintln!(
-            "supports_aot_for_opcode override called with opcode: {:?}",
-            opcode
-        );
-        // false
         BaseAluOpcode::ADD.global_opcode() == opcode
             || BaseAluOpcode::SUB.global_opcode() == opcode
             || BaseAluOpcode::AND.global_opcode() == opcode

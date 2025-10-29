@@ -34,6 +34,7 @@ openvm-stark-sdk = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
+openvm-instructions = { workspace = true }
 openvm = { workspace = true }
 
 alloy-sol-types = { workspace = true, optional = true, features = ["json"] }
