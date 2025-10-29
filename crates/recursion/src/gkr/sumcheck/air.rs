@@ -296,7 +296,7 @@ where
             local.proof_idx,
             XiRandomnessMessage {
                 idx: local.round + AB::Expr::ONE,
-                challenge: local.challenge.map(Into::into),
+                xi: local.challenge.map(Into::into),
             },
             local.is_enabled * local.is_last_layer,
         );
@@ -307,7 +307,7 @@ where
 ///
 /// Given evaluations `claim_in, ev1, ev2, ev3` (where ev0 = claim_in - ev1) and a point `x`,
 /// computes `f(x)` using Lagrange interpolation optimized for these specific points.
-fn interpolate_cubic_at_0123<F, FA>(
+pub(super) fn interpolate_cubic_at_0123<F, FA>(
     ev0: [FA; D_EF],
     ev1: [F; D_EF],
     ev2: [F; D_EF],
@@ -365,7 +365,11 @@ where
 ///
 /// Computes: `eq_out = eq_in * (prev_challenge * challenge + (1 - prev_challenge) * (1 - challenge))`
 /// where `prev_challenge` is xi and `challenge` is ri.
-fn update_eq<F, FA>(eq_in: [F; D_EF], prev_challenge: [F; D_EF], challenge: [F; D_EF]) -> [FA; D_EF]
+pub(super) fn update_eq<F, FA>(
+    eq_in: [F; D_EF],
+    prev_challenge: [F; D_EF],
+    challenge: [F; D_EF],
+) -> [FA; D_EF]
 where
     F: Into<FA> + Copy,
     FA: FieldAlgebra,

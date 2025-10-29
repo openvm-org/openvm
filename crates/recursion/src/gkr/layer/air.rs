@@ -315,7 +315,7 @@ where
             local.proof_idx,
             XiRandomnessMessage {
                 idx: AB::Expr::ZERO,
-                challenge: local.mu.map(Into::into),
+                xi: local.mu.map(Into::into),
             },
             local.is_enabled * is_last_layer,
         );
@@ -362,7 +362,7 @@ where
 /// Returns `(numer, denom)` where:
 /// - `numer = (p_xi_1 - p_xi_0) * mu + p_xi_0`
 /// - `denom = (q_xi_1 - q_xi_0) * mu + q_xi_0`
-fn reduce_to_single_evaluation<F, FA>(
+pub(super) fn reduce_to_single_evaluation<F, FA>(
     p_xi_0: [F; D_EF],
     p_xi_1: [F; D_EF],
     q_xi_0: [F; D_EF],

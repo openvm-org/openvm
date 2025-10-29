@@ -18,6 +18,8 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
 };
 
+// TODO(ayush): can probably get rid of this whole air if challenges -> transcript
+// interactions are constrained in batch constraint module
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrXiSamplerCols<T> {
@@ -28,11 +30,11 @@ pub struct GkrXiSamplerCols<T> {
     pub is_first_challenge: T,
 
     /// Challenge index
-    // TODO(ayush): can probably remove challenge_idx if XiRandomnessMessage takes tidx instead
-    pub challenge_idx: T,
+    // TODO(ayush): can probably remove idx if XiRandomnessMessage takes tidx instead
+    pub idx: T,
 
     /// Sampled challenge
-    pub challenge: [T; D_EF],
+    pub xi: [T; D_EF],
     /// Transcript index
     pub tidx: T,
 }
@@ -99,7 +101,7 @@ where
         // Challenge index increments by 1
         builder
             .when(local.is_enabled * (AB::Expr::ONE - is_last_challenge.clone()))
-            .assert_eq(next.challenge_idx, local.challenge_idx + AB::Expr::ONE);
+            .assert_eq(next.idx, local.idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
         // Transition Constraints
@@ -119,7 +121,7 @@ where
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                challenge_idx: local.challenge_idx.into(),
+                idx: local.idx.into(),
                 tidx: local.tidx.into(),
             },
             local.is_enabled * local.is_first_challenge,
@@ -129,7 +131,7 @@ where
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                challenge_idx: local.challenge_idx.into(),
+                idx: local.idx.into(),
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
             },
             local.is_enabled * is_last_challenge,
@@ -145,7 +147,7 @@ where
             builder,
             local.proof_idx,
             local.tidx,
-            local.challenge,
+            local.xi,
             local.is_enabled,
         );
 
@@ -155,8 +157,8 @@ where
             builder,
             local.proof_idx,
             XiRandomnessMessage {
-                idx: local.challenge_idx.into(),
-                challenge: local.challenge.map(Into::into),
+                idx: local.idx.into(),
+                xi: local.xi.map(Into::into),
             },
             local.is_enabled,
         );
