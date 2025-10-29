@@ -82,12 +82,9 @@ pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnClaimsMessage<F>> {
     let mut ret = Vec::new();
     let column_openings = &proof.batch_constraint_proof.column_openings;
 
-    let mut idx = 0usize;
-
     for (sort_idx, parts) in column_openings.iter().enumerate() {
         for (col_idx, (col_claim, rot_claim)) in parts[0].iter().enumerate() {
             let msg = ColumnClaimsMessage {
-                idx: F::from_canonical_usize(idx),
                 sort_idx: F::from_canonical_usize(sort_idx),
                 part_idx: F::ZERO,
                 col_idx: F::from_canonical_usize(col_idx),
@@ -95,7 +92,6 @@ pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnClaimsMessage<F>> {
                 rot_claim: from_fn(|i| rot_claim.as_base_slice()[i]),
             };
             ret.push(msg);
-            idx += 1;
         }
     }
 
@@ -103,7 +99,6 @@ pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnClaimsMessage<F>> {
         for (part_idx, cols) in parts.iter().enumerate().skip(1) {
             for (col_idx, (col_claim, rot_claim)) in cols.iter().enumerate() {
                 let msg = ColumnClaimsMessage {
-                    idx: F::from_canonical_usize(idx),
                     sort_idx: F::from_canonical_usize(sort_idx),
                     part_idx: F::from_canonical_usize(part_idx),
                     col_idx: F::from_canonical_usize(col_idx),
@@ -111,7 +106,6 @@ pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnClaimsMessage<F>> {
                     rot_claim: from_fn(|i| rot_claim.as_base_slice()[i]),
                 };
                 ret.push(msg);
-                idx += 1;
             }
         }
     }

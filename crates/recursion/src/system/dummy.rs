@@ -1,186 +1,28 @@
 // Utilities for dummy tracegen
-use core::iter::zip;
-
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use stark_backend_v2::{
-    EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::Squarable,
-    proof::{GkrLayerClaims, Proof},
+    EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::Squarable, proof::Proof,
 };
 
 use crate::{
     bus::{
-        AirPartShapeBusMessage, AirShapeBusMessage, BatchConstraintModuleMessage,
-        ColumnClaimsMessage, CommitmentsBusMessage, ConstraintSumcheckRandomness,
-        TranscriptBusMessage, WhirModuleMessage, WhirOpeningPointMessage, XiRandomnessMessage,
+        CommitmentsBusMessage, ConstraintSumcheckRandomness, WhirModuleMessage,
+        WhirOpeningPointMessage,
     },
     system::Preflight,
 };
 
 impl Preflight {
-    pub(crate) fn batch_constraint_module_msgs(
-        &self,
-        proof: &Proof,
-    ) -> Vec<BatchConstraintModuleMessage<F>> {
-        let gkr_input_layer_claim =
-            if let Some(last_layer_claims) = proof.gkr_proof.claims_per_layer.last() {
-                let &GkrLayerClaims {
-                    p_xi_0,
-                    p_xi_1,
-                    q_xi_0,
-                    q_xi_1,
-                } = last_layer_claims;
-                let rho = self.gkr.xi[0].1;
-                let input_layer_p_claim = p_xi_0 + rho * (p_xi_1 - p_xi_0);
-                let input_layer_q_claim = q_xi_0 + rho * (q_xi_1 - q_xi_0);
-                [
-                    input_layer_p_claim.as_base_slice().try_into().unwrap(),
-                    input_layer_q_claim.as_base_slice().try_into().unwrap(),
-                ]
-            } else {
-                [[F::ZERO; 4], [F::ZERO; 4]]
-            };
-
-        vec![BatchConstraintModuleMessage {
-            // Skip grinding nonce observation and grinding challenge sampling
-            tidx_alpha_beta: F::from_canonical_usize(self.proof_shape.post_tidx) + F::TWO,
-            tidx: F::from_canonical_usize(self.gkr.post_tidx),
-            n_max: F::from_canonical_usize(self.proof_shape.n_max),
-            gkr_input_layer_claim,
-        }]
-    }
-
-    pub(crate) fn xi_randomness_messages(&self) -> Vec<XiRandomnessMessage<F>> {
-        self.gkr
-            .xi
-            .iter()
-            .enumerate()
-            .map(|(i, (_, xi))| XiRandomnessMessage {
-                idx: F::from_canonical_usize(i),
-                challenge: xi.as_base_slice().try_into().unwrap(),
-            })
-            .collect()
-    }
-
     pub(crate) fn batch_constraint_sumcheck_randomness(
         &self,
     ) -> Vec<ConstraintSumcheckRandomness<F>> {
-        (0..self.proof_shape.n_max + 1)
+        (0..self.proof_shape.n_global() + 1)
             .map(|i| ConstraintSumcheckRandomness {
                 idx: F::from_canonical_usize(i),
                 challenge: self.batch_constraint.sumcheck_rnd[i]
                     .as_base_slice()
                     .try_into()
                     .unwrap(),
-            })
-            .collect()
-    }
-
-    pub(crate) fn column_claims_messages(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-    ) -> Vec<ColumnClaimsMessage<F>> {
-        let mut i = 0;
-        let mut column_claims_bus_msgs = vec![];
-        for (sort_idx, (air_id, _)) in self.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let vk = &vk.inner.per_air[*air_id];
-            for col in 0..vk.params.width.common_main {
-                let (col_claim, rot_claim) =
-                    proof.batch_constraint_proof.column_openings[sort_idx][0][col];
-                column_claims_bus_msgs.push(ColumnClaimsMessage {
-                    idx: F::from_canonical_usize(i),
-                    sort_idx: F::from_canonical_usize(sort_idx),
-                    part_idx: F::ZERO,
-                    col_idx: F::from_canonical_usize(col),
-                    col_claim: col_claim.as_base_slice().try_into().unwrap(),
-                    rot_claim: rot_claim.as_base_slice().try_into().unwrap(),
-                });
-                i += 1
-            }
-        }
-        for (sort_idx, (air_id, _)) in self.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            let vk = &vk.inner.per_air[*air_id];
-            let width = &vk.params.width;
-            let widths = width.preprocessed.iter().chain(width.cached_mains.iter());
-
-            for (part, width) in widths.enumerate() {
-                for col in 0..*width {
-                    let (col_claim, rot_claim) =
-                        proof.batch_constraint_proof.column_openings[sort_idx][part + 1][col];
-                    column_claims_bus_msgs.push(ColumnClaimsMessage {
-                        idx: F::from_canonical_usize(i),
-                        sort_idx: F::from_canonical_usize(sort_idx),
-                        part_idx: F::from_canonical_usize(part + 1),
-                        col_idx: F::from_canonical_usize(col),
-                        col_claim: col_claim.as_base_slice().try_into().unwrap(),
-                        rot_claim: rot_claim.as_base_slice().try_into().unwrap(),
-                    });
-                    i += 1;
-                }
-            }
-        }
-        column_claims_bus_msgs
-    }
-
-    pub(crate) fn air_bus_msgs(&self, vk: &MultiStarkVerifyingKeyV2) -> Vec<AirShapeBusMessage<F>> {
-        self.proof_shape
-            .sorted_trace_vdata
-            .iter()
-            .enumerate()
-            .map(|(sort_idx, (air_id, vdata))| {
-                let vk = &vk.inner.per_air[*air_id];
-                AirShapeBusMessage {
-                    sort_idx: F::from_canonical_usize(sort_idx),
-                    air_id: F::from_canonical_usize(*air_id),
-                    hypercube_dim: F::from_canonical_usize(vdata.hypercube_dim),
-                    has_preprocessed: F::from_bool(vk.preprocessed_data.is_some()),
-                    num_main_parts: F::from_canonical_usize(1 + vdata.cached_commitments.len()),
-                    num_interactions: F::from_canonical_usize(
-                        vk.symbolic_constraints.interactions.len(),
-                    ),
-                }
-            })
-            .collect()
-    }
-
-    pub(crate) fn air_part_bus_msgs(
-        &self,
-        vk: &MultiStarkVerifyingKeyV2,
-    ) -> Vec<AirPartShapeBusMessage<F>> {
-        self.proof_shape
-            .sorted_trace_vdata
-            .iter()
-            .enumerate()
-            .flat_map(|(sort_idx, (air_id, _))| {
-                let vk = &vk.inner.per_air[*air_id];
-
-                let mut parts = vec![];
-                let mut part = F::ZERO;
-
-                parts.push(AirPartShapeBusMessage {
-                    idx: F::from_canonical_usize(sort_idx),
-                    part,
-                    width: F::from_canonical_usize(vk.params.width.common_main),
-                });
-                if let Some(width) = &vk.params.width.preprocessed {
-                    part += F::ONE;
-                    parts.push(AirPartShapeBusMessage {
-                        idx: F::from_canonical_usize(sort_idx),
-                        part,
-                        width: F::from_canonical_usize(*width),
-                    });
-                }
-                for width in &vk.params.width.cached_mains {
-                    part += F::ONE;
-                    parts.push(AirPartShapeBusMessage {
-                        idx: F::from_canonical_usize(sort_idx),
-                        part,
-                        width: F::from_canonical_usize(*width),
-                    });
-                }
-                parts
             })
             .collect()
     }
@@ -259,19 +101,6 @@ impl Preflight {
             .map(|(i, value)| WhirOpeningPointMessage {
                 idx: F::from_canonical_usize(i),
                 value: value.as_base_slice().try_into().unwrap(),
-            })
-            .collect()
-    }
-
-    pub(crate) fn transcript_msgs(&self, from: usize, to: usize) -> Vec<TranscriptBusMessage<F>> {
-        let values = &self.transcript[from..to];
-        let sample_flags = &self.transcript.samples()[from..to];
-        zip(values, sample_flags)
-            .enumerate()
-            .map(|(i, (v, is_sample))| TranscriptBusMessage {
-                tidx: F::from_canonical_usize(from + i),
-                value: *v,
-                is_sample: F::from_bool(*is_sample),
             })
             .collect()
     }

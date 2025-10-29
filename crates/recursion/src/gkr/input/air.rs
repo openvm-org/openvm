@@ -270,7 +270,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
                 // Skip grinding nonce observation and grinding challenge sampling
                 tidx_alpha_beta: local.tidx.into() + AB::Expr::TWO,
                 tidx: tidx_end,
-                n_max: local.n_max.into(),
+                n_global: local.n_global.into(),
                 gkr_input_layer_claim: local.input_layer_claim.map(|claim| claim.map(Into::into)),
             },
             local.is_enabled,
