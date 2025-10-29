@@ -191,10 +191,10 @@ impl SegmentationCtx {
                 tracing::info!(
                     "instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
+                    padded_height,
+                    self.segmentation_limits.max_trace_height,
                     i,
                     air_name,
-                    padded_height,
-                    self.segmentation_limits.max_trace_height
                 );
                 return true;
             }
