@@ -5,16 +5,15 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-#[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{adapters::imm_to_bytes, BaseAluExecutor};

@@ -10,11 +10,12 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
-#[cfg(feature = "aot")]
-use openvm_rv32im_transpiler::Rv32JalrOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{LocalOpcode, VmOpcode};
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
+use openvm_stark_backend::p3_field::PrimeField32;
+
 use super::core::Rv32JalrExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
