@@ -205,8 +205,8 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
                 cached_mains: vec![],
                 common_main: Some(Arc::new(air::generate_trace::<4, 8>(
                     &self.mvk,
-                    proof,
-                    preflight,
+                    &[proof],
+                    &[preflight],
                     self.idx_encoder.clone(),
                     self.min_cached_idx,
                     self.max_cached,
@@ -217,7 +217,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             },
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(pvs::generate_trace(proof, preflight))),
+                common_main: Some(Arc::new(pvs::generate_trace(&[proof], &[preflight]))),
                 public_values: vec![],
             },
             range_checker.generate_proof_input(),
