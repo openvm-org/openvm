@@ -195,8 +195,8 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
 
     fn generate_proof_inputs(
         &self,
-        proof: &Proof,
-        preflight: &Preflight,
+        proofs: &[Proof],
+        preflights: &[Preflight],
     ) -> Vec<AirProofRawInput<F>> {
         let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
         let pow_checker = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
@@ -205,8 +205,8 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
                 cached_mains: vec![],
                 common_main: Some(Arc::new(air::generate_trace::<4, 8>(
                     &self.mvk,
-                    &[proof],
-                    &[preflight],
+                    proofs,
+                    preflights,
                     self.idx_encoder.clone(),
                     self.min_cached_idx,
                     self.max_cached,
@@ -217,7 +217,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             },
             AirProofRawInput {
                 cached_mains: vec![],
-                common_main: Some(Arc::new(pvs::generate_trace(&[proof], &[preflight]))),
+                common_main: Some(Arc::new(pvs::generate_trace(proofs, preflights))),
                 public_values: vec![],
             },
             range_checker.generate_proof_input(),

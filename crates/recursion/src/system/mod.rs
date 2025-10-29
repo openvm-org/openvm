@@ -32,8 +32,8 @@ pub trait AirModule<TS: FiatShamirTranscript + TranscriptHistory> {
     fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, transcript: &mut TS);
     fn generate_proof_inputs(
         &self,
-        proof: &Proof,
-        preflight: &Preflight,
+        proof: &[Proof],
+        preflight: &[Preflight],
     ) -> Vec<AirProofRawInput<F>>;
 }
 
@@ -280,7 +280,10 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {
-            let module_proof_inputs = module.generate_proof_inputs(proof, &preflight);
+            let module_proof_inputs = module.generate_proof_inputs(
+                std::slice::from_ref(proof),
+                std::slice::from_ref(&preflight),
+            );
             debug_assert_eq!(
                 module_proof_inputs.len(),
                 module.airs().len(),
