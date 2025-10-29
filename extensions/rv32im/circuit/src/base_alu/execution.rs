@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -143,7 +143,14 @@ where
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
-    #[cfg(feature = "aot")]
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
         eprintln!("generate_x86_asm called with instruction: {:?}", inst);
         let to_i16 = |c: F| -> i16 {
@@ -237,7 +244,7 @@ where
 
         asm_str
     }
-    #[cfg(feature = "aot")]
+
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         eprintln!(
             "supports_aot_for_opcode override called with opcode: {:?}",

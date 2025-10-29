@@ -176,6 +176,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for FieldArithmeticCoreExecutor<A> where F: PrimeField32 {}
+
 impl<F, A> MeteredExecutor<F> for FieldArithmeticCoreExecutor<A>
 where
     F: PrimeField32,

@@ -9,7 +9,9 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
+    LocalOpcode, VmOpcode,
 };
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
@@ -104,17 +106,21 @@ where
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, enabled)
     }
+}
 
-    #[cfg(feature = "aot")]
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
+where
+    F: PrimeField32,
+{
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
         eprintln!(
             "supports_aot_for_opcode called with JALR opcode: {:?}",
             opcode
         );
-        Rv32JalrOpcode::JALR.global_opcode() == opcode
+        opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
-    #[cfg(feature = "aot")]
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
         eprintln!("generate_x86_asm called with instruction JALR: {:?}", inst);
         let mut asm_str = String::new();

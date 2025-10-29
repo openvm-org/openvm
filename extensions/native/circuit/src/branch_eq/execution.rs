@@ -135,6 +135,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for NativeBranchEqualExecutor<A> where F: PrimeField32 {}
+
 impl<F, A> MeteredExecutor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,

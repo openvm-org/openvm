@@ -101,6 +101,12 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
+    F: PrimeField32
+{
+}
+
 impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,

@@ -23,6 +23,8 @@ use crate::{
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
 };
+#[cfg(feature = "aot")]
+use crate::arch::AotExecutor;
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
@@ -78,6 +80,9 @@ where
         Ok(execute_e1_handler)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 pub(super) struct PhantomStateMut<'a, F> {
     pub(super) pc: &'a mut u32,

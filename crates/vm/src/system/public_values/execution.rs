@@ -23,6 +23,8 @@ use crate::{
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
 };
+#[cfg(feature = "aot")]
+use crate::arch::AotExecutor;
 
 #[derive(AlignedBytesBorrow)]
 #[repr(C)]
@@ -118,6 +120,9 @@ where
         dispatch!(execute_e1_handler, b_is_imm, c_is_imm)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
 where

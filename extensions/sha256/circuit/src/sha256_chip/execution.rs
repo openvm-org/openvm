@@ -58,6 +58,9 @@ impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotExecutor<F> for Sha256VmExecutor {}
+
 impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<ShaPreCompute>>()

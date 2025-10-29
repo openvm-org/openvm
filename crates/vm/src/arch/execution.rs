@@ -170,11 +170,14 @@ pub trait Executor<F> {
     ) -> Result<Handler<F, Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
+}
 
-    #[cfg(feature = "aot")]
+#[cfg(feature = "aot")]
+pub trait AotExecutor<F>: Executor<F> {
     fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
         false
     }
+
     /*
     Function: Sets up parameters for the extern_handler call in the appropriate registers, and then calls extern_handler
 
@@ -183,7 +186,6 @@ pub trait Executor<F> {
 
     Postcondition: rax = return value of AOT's extern_handler
     */
-    #[cfg(feature = "aot")]
     fn call_extern_handler(&self) -> String {
         let mut asm_str = String::new();
         asm_str += "    mov rdi, rbx\n";
@@ -209,14 +211,12 @@ pub trait Executor<F> {
     - XMM x86 registers are synced with the vm_exec_state
     - base_address of the next instruction is loaded into rcx, and x86 PC is set to the label of the next RV32 instruction, and then jumps to the next instruction
     */
-
-    #[cfg(feature = "aot")]
     fn fallback_to_interpreter(
         &self,
         push_internal_registers_str: &str,
         pop_internal_registers_str: &str,
         rv32_regs_to_xmm_str: &str,
-        inst: &Instruction<F>,
+        _inst: &Instruction<F>,
     ) -> String {
         let mut asm_str = String::new();
 
@@ -251,10 +251,10 @@ pub trait Executor<F> {
     - pc (r13) should be set to the correct value, after executing the corresponding RV32 instruction
     - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
     */
-    #[cfg(feature = "aot")]
     fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> String {
         "".to_string()
     }
+    // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
 }
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -292,7 +292,7 @@ pub trait MeteredExecutor<F> {
         Ctx: MeteredExecutionCtxTrait;
 
     #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
         false
     }
 }

@@ -215,6 +215,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotExecutor<F>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
+}
+
 macro_rules! dispatch2 {
     (
         $execute_pos2_impl:ident,

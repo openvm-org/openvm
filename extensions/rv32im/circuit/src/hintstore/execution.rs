@@ -106,6 +106,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F> AotExecutor<F> for Rv32HintStoreExecutor where F: PrimeField32 {}
+
 impl<F> MeteredExecutor<F> for Rv32HintStoreExecutor
 where
     F: PrimeField32,

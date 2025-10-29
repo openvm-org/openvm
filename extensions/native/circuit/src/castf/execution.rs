@@ -97,6 +97,9 @@ where
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for CastFCoreExecutor<A> where F: PrimeField32 {}
+
 impl<F, A> MeteredExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,

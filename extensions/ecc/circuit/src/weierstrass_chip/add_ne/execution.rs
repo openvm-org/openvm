@@ -213,6 +213,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
     }
 }
 
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
+    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
+{
+}
+
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
     for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
 {
