@@ -179,6 +179,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         );
         // 2. GkrLayerOutputBus
         // 2a. Receive input layer claim from GkrLayerAir
+        // TODO(ayush): input_layer_claim to [0, \alpha] when no interactions
         self.layer_output_bus.receive(
             builder,
             local.proof_idx,
@@ -195,7 +196,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                challenge_idx: has_interactions.clone() * num_layers,
+                idx: has_interactions.clone() * num_layers,
                 tidx: tidx_after_gkr_layers,
             },
             local.is_enabled * needs_challenges.clone(),
@@ -205,7 +206,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                challenge_idx: local.n_max + AB::Expr::from_canonical_usize(self.l_skip - 1),
+                idx: local.n_max + AB::Expr::from_canonical_usize(self.l_skip - 1),
                 tidx: tidx_end.clone(),
             },
             local.is_enabled * needs_challenges,

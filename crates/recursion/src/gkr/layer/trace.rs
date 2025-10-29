@@ -1,86 +1,179 @@
 use core::borrow::BorrowMut;
 
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{D_EF, EF, F, poly_common::interpolate_linear_at_01, proof::Proof};
+use stark_backend_v2::{D_EF, EF, F};
 
-use super::GkrLayerCols;
-use crate::system::Preflight;
+use super::{GkrLayerCols, air::reduce_to_single_evaluation};
 
-pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
-    let width = GkrLayerCols::<F>::width();
+/// Minimal record for parallel gkr layer trace generation
+#[derive(Debug, Clone, Default)]
+pub struct GkrLayerRecord {
+    pub tidx: usize,
+    pub layer_claims: Vec<[EF; 4]>,
+    pub lambdas: Vec<EF>,
+    pub eq_at_r_primes: Vec<EF>,
+}
 
-    let n_logup = preflight.proof_shape.n_logup;
-    let l_skip = preflight.proof_shape.l_skip;
-    let num_layers = if n_logup != 0 { n_logup + l_skip } else { 0 };
-
-    let mut trace = vec![F::ZERO; num_layers.next_power_of_two() * width];
-
-    // Skip grinding nonce observe and grinding challenge sampling
-    // Skip alpha_logup, beta_logup sampling
-    let mut tidx = preflight.proof_shape.post_tidx + 2 + 2 * D_EF + D_EF;
-    let gkr_proof = &proof.gkr_proof;
-    let (mut numer_claim, mut denom_claim) = (EF::ZERO, EF::ZERO);
-
-    for (layer_idx, row_data) in trace.chunks_mut(width).take(num_layers).enumerate() {
-        let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
-
-        // Constant for all rows
-        cols.is_enabled = F::ONE;
-        cols.is_first_layer = F::from_bool(layer_idx == 0);
-
-        cols.layer_idx = F::from_canonical_usize(layer_idx);
-        cols.tidx = F::from_canonical_usize(tidx);
-
-        // Sample lambda
-        let lambda = if layer_idx == 0 {
-            EF::ZERO
-        } else {
-            let lambda_slice = &preflight.transcript[tidx..tidx + D_EF];
-            cols.lambda = lambda_slice.try_into().unwrap();
-            tidx += D_EF;
-            EF::from_base_slice(lambda_slice)
-        };
-
-        // Skip sumcheck rounds for this layer
-        tidx += layer_idx * 4 * D_EF;
-
-        // Observe layer claims: numer0, denom0, numer1, denom1
-        let layer_claims = &gkr_proof.claims_per_layer[layer_idx];
-        cols.p_xi_0 = layer_claims.p_xi_0.as_base_slice().try_into().unwrap();
-        cols.q_xi_0 = layer_claims.q_xi_0.as_base_slice().try_into().unwrap();
-        cols.p_xi_1 = layer_claims.p_xi_1.as_base_slice().try_into().unwrap();
-        cols.q_xi_1 = layer_claims.q_xi_1.as_base_slice().try_into().unwrap();
-        tidx += 4 * D_EF;
-
-        // Sample mu
-        let mu_slice = &preflight.transcript[tidx..tidx + D_EF];
-        let mu_ef = EF::from_base_slice(mu_slice);
-        cols.mu = mu_slice.try_into().unwrap();
-        tidx += D_EF;
-
-        if layer_idx == 0 {
-            cols.sumcheck_claim_in = gkr_proof.q0_claim.as_base_slice().try_into().unwrap();
-        } else {
-            let claim = numer_claim + lambda * denom_claim;
-            cols.sumcheck_claim_in = claim.as_base_slice().try_into().unwrap();
-
-            // Get new_claim and eq_at_r_prime from preflight (for layers 1..num_layers)
-            let (_, eq_at_r_prime) = preflight.gkr.layer_sumcheck_output[layer_idx - 1];
-            cols.eq_at_r_prime = eq_at_r_prime.as_base_slice().try_into().unwrap();
-        }
-
-        numer_claim = interpolate_linear_at_01(&[layer_claims.p_xi_0, layer_claims.p_xi_1], mu_ef);
-        denom_claim = interpolate_linear_at_01(&[layer_claims.q_xi_0, layer_claims.q_xi_1], mu_ef);
-
-        cols.numer_claim = numer_claim.as_base_slice().try_into().unwrap();
-        cols.denom_claim = denom_claim.as_base_slice().try_into().unwrap();
+impl GkrLayerRecord {
+    #[inline]
+    fn layer_count(&self) -> usize {
+        self.layer_claims.len()
     }
 
-    // Fill padding rows
-    for row_data in trace.chunks_mut(width).skip(num_layers) {
-        let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
-        cols.proof_idx = F::ONE;
+    #[inline]
+    fn lambda_at(&self, layer_idx: usize) -> EF {
+        layer_idx
+            .checked_sub(1)
+            .and_then(|idx| self.lambdas.get(idx))
+            .copied()
+            .unwrap_or(EF::ZERO)
+    }
+
+    #[inline]
+    fn eq_at(&self, layer_idx: usize) -> EF {
+        layer_idx
+            .checked_sub(1)
+            .and_then(|idx| self.eq_at_r_primes.get(idx))
+            .copied()
+            .unwrap_or(EF::ZERO)
+    }
+
+    #[inline]
+    fn layer_tidx(&self, layer_idx: usize) -> usize {
+        if layer_idx == 0 {
+            self.tidx
+        } else {
+            let j = layer_idx;
+            self.tidx + D_EF * (2 * j * j + 4 * j - 1)
+        }
+    }
+}
+
+pub fn generate_trace(
+    gkr_layer_records: Vec<GkrLayerRecord>,
+    mus: &[Vec<EF>],
+    q0_claims: &[EF],
+) -> RowMajorMatrix<F> {
+    debug_assert_eq!(gkr_layer_records.len(), mus.len());
+    debug_assert_eq!(gkr_layer_records.len(), q0_claims.len());
+
+    let width = GkrLayerCols::<F>::width();
+
+    if gkr_layer_records.is_empty() {
+        let trace = vec![F::ZERO; width];
+        return RowMajorMatrix::new(trace, width);
+    }
+
+    // Calculate rows per proof (each record has layer_claims.len() rows)
+    let rows_per_proof: Vec<usize> = gkr_layer_records
+        .iter()
+        .map(|record| record.layer_claims.len().max(1))
+        .collect();
+
+    // Calculate total rows
+    let total_rows: usize = rows_per_proof.iter().sum();
+    let padded_rows = total_rows.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_rows * width];
+
+    // Split trace into chunks for each proof and process in parallel
+    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
+    let mut remaining = data_slice;
+
+    for &num_rows in &rows_per_proof {
+        let chunk_size = num_rows * width;
+        let (chunk, rest) = remaining.split_at_mut(chunk_size);
+        trace_slices.push(chunk);
+        remaining = rest;
+    }
+
+    // Process each proof in parallel
+    trace_slices
+        .par_iter_mut()
+        .zip(
+            gkr_layer_records
+                .par_iter()
+                .zip(mus.par_iter())
+                .zip(q0_claims.par_iter()),
+        )
+        .enumerate()
+        .for_each(
+            |(proof_idx, (proof_trace, ((record, mus_for_proof), q0_claim)))| {
+                let mus_for_proof = mus_for_proof.as_slice();
+                let q0_claim = *q0_claim;
+
+                if record.layer_claims.is_empty() {
+                    proof_trace.par_chunks_mut(width).for_each(|row_data| {
+                        let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
+                        cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    });
+                    return;
+                }
+
+                let layer_count = record.layer_count();
+                let mut prev_layer_eval: Option<(EF, EF)> = None;
+
+                proof_trace
+                    .chunks_mut(width)
+                    .take(layer_count)
+                    .enumerate()
+                    .for_each(|(layer_idx, row_data)| {
+                        let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
+                        cols.proof_idx = F::from_canonical_usize(proof_idx);
+                        cols.is_enabled = F::ONE;
+                        cols.is_first_layer = F::from_bool(layer_idx == 0);
+                        cols.layer_idx = F::from_canonical_usize(layer_idx);
+                        cols.tidx = F::from_canonical_usize(record.layer_tidx(layer_idx));
+
+                        let lambda = record.lambda_at(layer_idx);
+                        let eq_at_r_prime = record.eq_at(layer_idx);
+
+                        cols.lambda = lambda.as_base_slice().try_into().unwrap();
+                        cols.eq_at_r_prime = eq_at_r_prime.as_base_slice().try_into().unwrap();
+
+                        let claims = &record.layer_claims[layer_idx];
+                        let mu = mus_for_proof[layer_idx];
+
+                        cols.p_xi_0 = claims[0].as_base_slice().try_into().unwrap();
+                        cols.q_xi_0 = claims[1].as_base_slice().try_into().unwrap();
+                        cols.p_xi_1 = claims[2].as_base_slice().try_into().unwrap();
+                        cols.q_xi_1 = claims[3].as_base_slice().try_into().unwrap();
+
+                        cols.mu = mu.as_base_slice().try_into().unwrap();
+
+                        let sumcheck_claim_in = prev_layer_eval
+                            .map(|(numer_prev, denom_prev)| numer_prev + lambda * denom_prev)
+                            .unwrap_or(q0_claim);
+                        cols.sumcheck_claim_in =
+                            sumcheck_claim_in.as_base_slice().try_into().unwrap();
+
+                        let (numer_base, denom_base): ([F; D_EF], [F; D_EF]) =
+                            reduce_to_single_evaluation::<F, F>(
+                                claims[0].as_base_slice().try_into().unwrap(),
+                                claims[2].as_base_slice().try_into().unwrap(),
+                                claims[1].as_base_slice().try_into().unwrap(),
+                                claims[3].as_base_slice().try_into().unwrap(),
+                                mu.as_base_slice().try_into().unwrap(),
+                            );
+                        cols.numer_claim = numer_base;
+                        cols.denom_claim = denom_base;
+
+                        let numer = claims[0] * (EF::ONE - mu) + claims[2] * mu;
+                        let denom = claims[1] * (EF::ONE - mu) + claims[3] * mu;
+                        prev_layer_eval = Some((numer, denom));
+                    });
+            },
+        );
+
+    // Fill padding rows (proof_idx = number of proofs indicates padding)
+    if !padding_slice.is_empty() {
+        let padding_proof_idx = F::from_canonical_usize(gkr_layer_records.len());
+        padding_slice.par_chunks_mut(width).for_each(|row_data| {
+            let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+        });
     }
 
     RowMajorMatrix::new(trace, width)

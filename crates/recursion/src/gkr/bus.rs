@@ -6,7 +6,7 @@ use crate::define_typed_per_proof_permutation_bus;
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct GkrXiSamplerMessage<T> {
-    pub challenge_idx: T,
+    pub idx: T,
     pub tidx: T,
 }
 

@@ -1,89 +1,98 @@
 use core::borrow::BorrowMut;
-use std::cmp::max;
 
 use openvm_circuit_primitives::{
     TraceSubRowGenerator, is_equal::IsEqSubAir, is_zero::IsZeroSubAir,
 };
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{
-    F,
-    proof::{GkrLayerClaims, Proof},
-};
+use stark_backend_v2::{EF, F};
 
 use super::GkrInputCols;
-use crate::system::Preflight;
 
-pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
+#[derive(Debug, Clone, Default)]
+pub struct GkrInputRecord {
+    pub tidx: usize,
+    pub n_logup: usize,
+    pub n_max: usize,
+    pub logup_pow_witness: F,
+    pub logup_pow_sample: F,
+    pub input_layer_claim: [EF; 2],
+}
+
+pub fn generate_trace(
+    gkr_input_records: Vec<GkrInputRecord>,
+    q0_claims: &[EF],
+) -> RowMajorMatrix<F> {
+    debug_assert_eq!(gkr_input_records.len(), q0_claims.len());
+
     let width = GkrInputCols::<F>::width();
 
-    let gkr_proof = &proof.gkr_proof;
+    if gkr_input_records.is_empty() {
+        let trace = vec![F::ZERO; width];
+        return RowMajorMatrix::new(trace, width);
+    }
 
-    let n_max = preflight.proof_shape.n_max;
-    let n_logup = preflight.proof_shape.n_logup;
-    let n_global = max(n_max, n_logup);
+    // Each record generates exactly 1 row
+    let total_rows = gkr_input_records.len();
+    let padded_rows = total_rows.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_rows * width];
 
-    let tidx = preflight.proof_shape.post_tidx;
+    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
 
-    let logup_pow_witness = gkr_proof.logup_pow_witness;
-    let logup_pow_sample = preflight.transcript[tidx + 1];
+    // Process each proof row
+    data_slice
+        .par_chunks_mut(width)
+        .zip(gkr_input_records.par_iter().zip(q0_claims.par_iter()))
+        .enumerate()
+        .for_each(|(proof_idx, (row_data, (record, q0_claim)))| {
+            let cols: &mut GkrInputCols<F> = row_data.borrow_mut();
 
-    let num_rows: usize = 1;
-    let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];
-    let cols: &mut GkrInputCols<F> = trace[0..width].borrow_mut();
+            cols.is_enabled = F::ONE;
+            cols.proof_idx = F::from_canonical_usize(proof_idx);
 
-    // Constant for all rows
-    cols.is_enabled = F::ONE;
-    // TODO(ayush): fix this
-    cols.proof_idx = F::ZERO;
+            cols.tidx = F::from_canonical_usize(record.tidx);
 
-    cols.tidx = F::from_canonical_usize(tidx);
+            cols.n_logup = F::from_canonical_usize(record.n_logup);
+            cols.n_max = F::from_canonical_usize(record.n_max);
+            cols.n_global = F::from_canonical_usize(std::cmp::max(record.n_logup, record.n_max));
 
-    cols.n_logup = F::from_canonical_usize(n_logup);
-    cols.n_max = F::from_canonical_usize(n_max);
-    cols.n_global = F::from_canonical_usize(n_global);
+            IsZeroSubAir.generate_subrow(
+                cols.n_logup,
+                (&mut cols.is_n_logup_zero_aux.inv, &mut cols.is_n_logup_zero),
+            );
+            IsEqSubAir.generate_subrow(
+                (cols.n_logup, cols.n_global),
+                (
+                    &mut cols.is_n_logup_equal_to_n_global_aux.inv,
+                    &mut cols.is_n_logup_equal_to_n_global,
+                ),
+            );
 
-    IsZeroSubAir.generate_subrow(
-        F::from_canonical_usize(n_logup),
-        (&mut cols.is_n_logup_zero_aux.inv, &mut cols.is_n_logup_zero),
-    );
-    IsEqSubAir.generate_subrow(
-        (
-            F::from_canonical_usize(n_logup),
-            F::from_canonical_usize(n_global),
-        ),
-        (
-            &mut cols.is_n_logup_equal_to_n_global_aux.inv,
-            &mut cols.is_n_logup_equal_to_n_global,
-        ),
-    );
+            cols.logup_pow_witness = record.logup_pow_witness;
+            cols.logup_pow_sample = record.logup_pow_sample;
 
-    cols.logup_pow_witness = logup_pow_witness;
-    cols.logup_pow_sample = logup_pow_sample;
+            cols.q0_claim = q0_claim.as_base_slice().try_into().unwrap();
+            cols.input_layer_claim = [
+                record.input_layer_claim[0]
+                    .as_base_slice()
+                    .try_into()
+                    .unwrap(),
+                record.input_layer_claim[1]
+                    .as_base_slice()
+                    .try_into()
+                    .unwrap(),
+            ];
+        });
 
-    cols.q0_claim = gkr_proof.q0_claim.as_base_slice().try_into().unwrap();
-    cols.input_layer_claim = if let Some(last_layer_claims) = gkr_proof.claims_per_layer.last() {
-        let &GkrLayerClaims {
-            p_xi_0,
-            p_xi_1,
-            q_xi_0,
-            q_xi_1,
-        } = last_layer_claims;
-        let rho = preflight.gkr.xi[0].1;
-        let input_layer_p_claim = p_xi_0 + rho * (p_xi_1 - p_xi_0);
-        let input_layer_q_claim = q_xi_0 + rho * (q_xi_1 - q_xi_0);
-        [
-            input_layer_p_claim.as_base_slice().try_into().unwrap(),
-            input_layer_q_claim.as_base_slice().try_into().unwrap(),
-        ]
-    } else {
-        [
-            [F::ZERO; 4],
-            core::array::from_fn(|i| {
-                preflight.transcript.values()[preflight.proof_shape.post_tidx + 2 + i]
-            }),
-        ]
-    };
+    // Fill padding rows (proof_idx = number of proofs indicates padding)
+    if !padding_slice.is_empty() {
+        let padding_proof_idx = F::from_canonical_usize(gkr_input_records.len());
+        padding_slice.par_chunks_mut(width).for_each(|row_data| {
+            let cols: &mut GkrInputCols<F> = row_data.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+        });
+    }
 
     RowMajorMatrix::new(trace, width)
 }
