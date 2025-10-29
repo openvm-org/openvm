@@ -251,8 +251,8 @@ impl<'a, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool> InterpreterExecutor<F>
-    for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize, const IS_FP2: bool>
+    InterpreterExecutor<F> for FieldExprVecHeapExecutor<BLOCKS, BLOCK_SIZE, IS_FP2>
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {

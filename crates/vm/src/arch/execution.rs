@@ -173,7 +173,7 @@ pub trait InterpreterExecutor<F> {
 }
 
 #[cfg(feature = "aot")]
-pub trait AotExecutor<F>{
+pub trait AotExecutor<F> {
     fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
         false
     }

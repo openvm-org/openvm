@@ -158,9 +158,9 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause
-                .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor<F> });
+            where_clause.predicates.push(
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor<F> },
+            );
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.

@@ -55,7 +55,8 @@ impl<A, const NUM_CELLS: usize> NativeLoadStoreCoreExecutor<A, NUM_CELLS> {
     }
 }
 
-impl<F, A, const NUM_CELLS: usize> InterpreterExecutor<F> for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterExecutor<F>
+    for NativeLoadStoreCoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {

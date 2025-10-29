@@ -47,9 +47,9 @@ use super::{
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
-    ExecutorInventory, ExecutorInventoryError, InterpreterExecutor, MemoryConfig, MeteredExecutor, PreflightExecutor,
-    StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig, VmExecState,
-    VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
+    ExecutorInventory, ExecutorInventoryError, MemoryConfig, MeteredExecutor,
+    PreflightExecutor, StaticProgramError, SystemConfig, VmBuilder, VmChipComplex, VmCircuitConfig,
+    VmExecState, VmExecutionConfig, VmState, CONNECTOR_AIR_ID, MERKLE_AIR_ID, PROGRAM_AIR_ID,
     PROGRAM_CACHED_TRACE_INDEX, PUBLIC_VALUES_AIR_ID,
 };
 use crate::{
@@ -235,7 +235,6 @@ where
     ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
         InterpretedInstance::new(&self.inventory, exe)
     }
-
 }
 
 #[cfg(feature = "aot")]
@@ -281,8 +280,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError>
-    {
+    ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -467,7 +465,7 @@ where
     ) -> Result<AotInstance<Val<E::SC>, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,   
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()

@@ -52,7 +52,8 @@ use crate::{
         RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS,
     },
     jalr::{run_jalr, Rv32JalrChip, Rv32JalrCoreCols, Rv32JalrExecutor},
-    test_utils::get_verification_error, Rv32JalrAir, Rv32JalrFiller,
+    test_utils::get_verification_error,
+    Rv32JalrAir, Rv32JalrFiller,
 };
 
 const IMM_BITS: usize = 16;

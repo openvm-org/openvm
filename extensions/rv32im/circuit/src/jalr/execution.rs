@@ -9,11 +9,10 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
-
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use super::core::Rv32JalrExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]

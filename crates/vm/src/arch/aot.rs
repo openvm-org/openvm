@@ -14,7 +14,7 @@ use crate::{
             get_metered_pre_compute_max_size, get_pre_compute_instructions,
             get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
-        Executor, ExecutionCtxTrait, ExecutionError, ExecutorInventory, ExitCode,
+        ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
         MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
         VmExecState, VmState,
     },

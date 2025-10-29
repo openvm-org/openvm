@@ -538,8 +538,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize> InterpreterExecutor<F>
-    for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
+impl<F, const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_READ_SIZE: usize>
+    InterpreterExecutor<F> for VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE>
 where
     F: PrimeField32,
 {
