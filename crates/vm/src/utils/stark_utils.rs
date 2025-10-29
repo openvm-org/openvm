@@ -142,6 +142,8 @@ where
         .metered_interpreter(&exe)?
         .execute_metered(input.clone(), metered_ctx.clone())?;
 
+    assert_vm_state_eq(&aot_state_pure, &aot_state_metered);
+
     assert_vm_state_eq(&interp_state_metered, &aot_state_metered);
 
     assert_eq!(segments.len(), aot_segments.len());
