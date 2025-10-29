@@ -77,7 +77,12 @@ pub fn generate_trace(proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F>
             input_layer_q_claim.as_base_slice().try_into().unwrap(),
         ]
     } else {
-        [[F::ZERO; 4], [F::ZERO; 4]]
+        [
+            [F::ZERO; 4],
+            core::array::from_fn(|i| {
+                preflight.transcript.values()[preflight.proof_shape.post_tidx + 2 + i]
+            }),
+        ]
     };
 
     RowMajorMatrix::new(trace, width)
