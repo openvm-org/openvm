@@ -1,9 +1,10 @@
 #![cfg(feature = "aot")]
-use std::{ffi::c_void, process::Command};
+use std::{ffi::c_void, fs, process::Command};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rand::Rng;
 
 use crate::{
     arch::{
@@ -19,6 +20,21 @@ use crate::{
     },
     system::memory::online::GuestMemory,
 };
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+
+const REG_AUX: &str = "r11";
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
@@ -50,6 +66,293 @@ where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
+    fn push_external_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    push rbp\n";
+        asm_str += "    push rbx\n";
+        asm_str += "    push r12\n";
+        asm_str += "    push r13\n";
+        asm_str += "    push r14\n";
+        asm_str += "    push r15\n";
+
+        asm_str
+    }
+
+    fn pop_external_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    pop r15\n";
+        asm_str += "    pop r14\n";
+        asm_str += "    pop r13\n";
+        asm_str += "    pop r12\n";
+        asm_str += "    pop rbx\n";
+        asm_str += "    pop rbp\n";
+
+        asm_str
+    }
+
+    fn debug_cur_sting(str: &String) {
+        println!("DEBUG");
+        println!("{}", str);
+    }
+
+    fn push_xmm_regs() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    sub rsp, 16*16";
+        asm_str += "    movaps [rsp + 0*16], xmm0\n";
+        asm_str += "    movaps [rsp + 1*16], xmm1\n";
+        asm_str += "    movaps [rsp + 2*16], xmm2\n";
+        asm_str += "    movaps [rsp + 3*16], xmm3\n";
+        asm_str += "    movaps [rsp + 4*16], xmm4\n";
+        asm_str += "    movaps [rsp + 5*16], xmm5\n";
+        asm_str += "    movaps [rsp + 6*16], xmm6\n";
+        asm_str += "    movaps [rsp + 7*16], xmm7\n";
+        asm_str += "    movaps [rsp + 8*16], xmm8\n";
+        asm_str += "    movaps [rsp + 9*16], xmm9\n";
+        asm_str += "    movaps [rsp + 10*16], xmm10\n";
+        asm_str += "    movaps [rsp + 11*16], xmm11\n";
+        asm_str += "    movaps [rsp + 12*16], xmm12\n";
+        asm_str += "    movaps [rsp + 13*16], xmm13\n";
+        asm_str += "    movaps [rsp + 14*16], xmm14\n";
+        asm_str += "    movaps [rsp + 15*16], xmm15\n";
+
+        asm_str
+    }
+    fn pop_xmm_regs() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    movaps xmm0, [rsp + 0*16]\n";
+        asm_str += "    movaps xmm1, [rsp + 1*16]\n";
+        asm_str += "    movaps xmm2, [rsp + 2*16]\n";
+        asm_str += "    movaps xmm3, [rsp + 3*16]\n";
+        asm_str += "    movaps xmm4, [rsp + 4*16]\n";
+        asm_str += "    movaps xmm5, [rsp + 5*16]\n";
+        asm_str += "    movaps xmm6, [rsp + 6*16]\n";
+        asm_str += "    movaps xmm7, [rsp + 7*16]\n";
+        asm_str += "    movaps xmm8, [rsp + 8*16]\n";
+        asm_str += "    movaps xmm9, [rsp + 9*16]\n";
+        asm_str += "    movaps xmm10, [rsp + 10*16]\n";
+        asm_str += "    movaps xmm11, [rsp + 11*16]\n";
+        asm_str += "    movaps xmm12, [rsp + 12*16]\n";
+        asm_str += "    movaps xmm13, [rsp + 13*16]\n";
+        asm_str += "    movaps xmm14, [rsp + 14*16]\n";
+        asm_str += "    movaps xmm15, [rsp + 15*16]\n";
+        asm_str += "    add rsp, 16*16\n";
+
+        asm_str
+    }
+
+    fn push_internal_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    push rax\n";
+        asm_str += "    push rcx\n";
+        asm_str += "    push rdx\n";
+        asm_str += "    push r8\n";
+        asm_str += "    push r9\n";
+        asm_str += "    push r10\n";
+        asm_str += "    push r11\n";
+        // asm_str += &Self::push_xmm_regs();
+
+        asm_str
+    }
+
+    fn pop_internal_registers() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    pop r11\n";
+        asm_str += "    pop r10\n";
+        asm_str += "    pop r9\n";
+        asm_str += "    pop r8\n";
+        asm_str += "    pop rdx\n";
+        asm_str += "    pop rcx\n";
+        asm_str += "    pop rax\n";
+        // asm_str += &Self::pop_xmm_regs();
+
+        asm_str
+    }
+
+    /*
+    fn sync_vm_registers() -> String  {
+        let mut asm_str = String::new();
+        for r in 0..16 {
+            asm_str += &format!("");
+            asm_str += &format!("   mov xmm{}, \n", r);
+        }
+    }
+    */
+
+    // r15 stores vm_register_address
+    fn rv32_regs_to_xmm() -> String {
+        let mut asm_str = String::new();
+
+        for r in 0..16 {
+            asm_str += &format!("   movq xmm{}, [r15 + 8*{}]\n", r, r);
+        }
+
+        asm_str
+    }
+
+    fn xmm_to_rv32_regs() -> String {
+        let mut asm_str = String::new();
+
+        for r in 0..16 {
+            // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
+            asm_str += &format!("   movq [r15 + 8*{}], xmm{}\n", r, r);
+        }
+
+        asm_str
+    }
+
+    fn initialize_xmm_regs() -> String {
+        let mut asm_str = String::new();
+
+        for r in 0..16 {
+            asm_str += &format!("   pxor xmm{}, xmm{}\n", r, r);
+        }
+
+        asm_str
+    }
+
+    pub fn to_i16(c: F) -> i16 {
+        let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+        let c_i24 = ((c_u24 << 8) as i32) >> 8;
+        c_i24 as i16
+    }
+
+    pub fn create_asm<E>(exe: &VmExe<F>, inventory: &ExecutorInventory<E>) -> String
+    where
+        E: Executor<F>,
+    {
+        let mut asm_str = String::new();
+        // generate the assembly based on exe.program
+
+        // header part
+        asm_str += ".intel_syntax noprefix\n";
+        asm_str += ".code64\n";
+        asm_str += ".section .text\n";
+        asm_str += ".global asm_run_internal\n";
+
+        // asm_run_internal part
+        asm_str += "asm_run_internal:\n";
+        asm_str += &Self::push_external_registers();
+        asm_str += "    mov rbx, rdi\n";
+        asm_str += "    mov rbp, rsi\n";
+        asm_str += "    mov r13, rdx\n";
+        asm_str += "    mov r14, rcx\n";
+
+        asm_str += &Self::push_internal_registers();
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    call get_vm_register_addr\n";
+        asm_str += "    mov r15, rax\n";
+        asm_str += &Self::pop_internal_registers();
+
+        asm_str += &Self::initialize_xmm_regs();
+
+        asm_str += "    lea rdx, [rip + map_pc_base]\n";
+        asm_str += "    movsxd rcx, [rdx + r13]\n";
+        asm_str += "    add rcx, rdx\n";
+        asm_str += "    jmp rcx\n";
+
+        // asm_execute_pc_{pc_num}
+        // do fallback first for now but expand per instruction
+
+        let pc_base = exe.program.pc_base;
+
+        for i in 0..(pc_base / 4) {
+            asm_str += &format!("asm_execute_pc_{}:", i * 4);
+            asm_str += "\n";
+            asm_str += "\n";
+        }
+
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            /* Preprocessing step, to check if we should suspend or not */
+            asm_str += &format!("asm_execute_pc_{}:\n", pc);
+            asm_str += &Self::xmm_to_rv32_regs();
+            // Check if we should suspend or not
+            asm_str += &Self::push_internal_registers();
+            asm_str += "    mov rdi, r14\n";
+            asm_str += "    mov rsi, r13\n";
+            asm_str += "    mov rdx, rbx\n";
+            asm_str += "    call should_suspend\n";
+            asm_str += "    cmp rax, 1\n";
+            asm_str += &Self::pop_internal_registers();
+
+            if instruction.opcode.as_usize() == 0 {
+                // terminal opcode has no associated executor, so can handle with default fallback
+                // for now
+                asm_str += "    je asm_run_end\n";
+                asm_str += &Self::push_internal_registers();
+                asm_str += "    mov rdi, rbx\n";
+                asm_str += "    mov rsi, rbp\n";
+                asm_str += "    mov rdx, r13\n";
+                asm_str += "    mov rcx, r14\n";
+                asm_str += "    call extern_handler\n";
+                asm_str += "    add r14, 1\n"; // increment the instret
+                asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
+                asm_str += "    AND rax, 1\n"; // check if the return value is 1
+                asm_str += "    cmp rax, 1\n"; // compare the return value with 1
+                asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
+
+                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                                                      // registers, to the appropriate XMM registers
+                asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should
+                                                   // terminate)
+                asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
+                asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
+                asm_str += "    add rcx, rdx\n"; // add the base address and the offset
+                asm_str += "    jmp rcx\n"; // jump to the next instruction (rcx is the next instruction)
+                asm_str += "\n";
+                continue;
+            }
+            let executor = inventory
+                .get_executor(instruction.opcode)
+                .expect("executor not found for opcode");
+            if executor.supports_aot_for_opcode(instruction.opcode) {
+                asm_str += &Self::rv32_regs_to_xmm(); // sync registers
+            }
+            asm_str += "    je asm_run_end\n";
+
+            /*
+            x86 assembly for executing the opcode, updating the Rv32 PC (r13) and instret (r14)
+            additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
+            */
+            if executor.supports_aot_for_opcode(instruction.opcode) {
+                asm_str += &executor.generate_x86_asm(&instruction, pc);
+            } else {
+                asm_str += &executor.fallback_to_interpreter(
+                    &Self::push_internal_registers(),
+                    &Self::pop_internal_registers(),
+                    &Self::rv32_regs_to_xmm(),
+                    &instruction,
+                );
+            }
+        }
+
+        // asm_run_end part
+        asm_str += "asm_run_end:\n";
+        asm_str += "    sub r13, 1\n";
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, rbp\n";
+        asm_str += "    mov rdx, r13\n";
+        asm_str += "    mov rcx, r14\n";
+        asm_str += "    call set_instret_and_pc\n";
+        asm_str += "    xor rax, rax\n";
+        asm_str += &Self::pop_external_registers();
+        asm_str += "    ret\n";
+        asm_str += "\n";
+
+        // map_pc_base part
+        asm_str += ".section .rodata\n";
+        asm_str += "map_pc_base:\n";
+
+        for i in 0..(pc_base / 4) {
+            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i * 4);
+        }
+
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
+        }
+
+        return asm_str;
+    }
+
     /// Creates a new instance for pure execution
     pub fn new<E>(
         inventory: &'a ExecutorInventory<E>,
@@ -59,7 +362,8 @@ where
         E: Executor<F>,
     {
         let default_name = String::from("asm_x86_run");
-        Self::new_with_asm_name(inventory, exe, &default_name)
+        let random_name = format!("asm_x86_run_{}", rand::thread_rng().gen_range(0..1000000));
+        Self::new_with_asm_name(inventory, exe, &random_name)
     }
 
     /// Creates a new instance for pure execution
@@ -84,6 +388,11 @@ where
 
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
+
+        fs::write(
+            format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name),
+            Self::create_asm(&exe, &inventory),
+        );
 
         // ar rcs libasm_runtime.a asm_run.o
         // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime

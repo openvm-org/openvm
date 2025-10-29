@@ -199,6 +199,43 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         self.0.pre_compute(pc, inst, data)
                     }
 
+                    #[cfg(feature = "aot")]
+                    #[inline(always)]
+                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
+                        self.0.supports_aot_for_opcode(opcode)
+                    }
+
+                    #[cfg(feature = "aot")]
+                    #[inline(always)]
+                    fn call_extern_handler(&self) -> ::std::string::String {
+                        self.0.call_extern_handler()
+                    }
+
+                    #[cfg(feature = "aot")]
+                    fn fallback_to_interpreter(
+                        &self,
+                        push_internal_registers_str: &str,
+                        pop_internal_registers_str: &str,
+                        rv32_regs_to_xmm_str: &str,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    ) -> ::std::string::String {
+                        self.0.fallback_to_interpreter(
+                            push_internal_registers_str,
+                            pop_internal_registers_str,
+                            rv32_regs_to_xmm_str,
+                            inst,
+                        )
+                    }
+
+                    #[cfg(feature = "aot")]
+                    fn generate_x86_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
+                    ) -> ::std::string::String {
+                        self.0.generate_x86_asm(inst, pc)
+                    }
+
                     #handler
                 }
             }
@@ -273,6 +310,61 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             #[cfg(not(feature = "tco"))]
             let handler = quote! {};
 
+            #[cfg(feature = "aot")]
+            let supports_aot_for_opcode_arms = variants
+                .iter()
+                .map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::supports_aot_for_opcode(x, opcode)
+                    }
+                })
+                .collect::<Vec<_>>();
+            #[cfg(not(feature = "aot"))]
+            let supports_aot_for_opcode_arms: Vec<proc_macro2::TokenStream> = Vec::new();
+            #[cfg(feature = "aot")]
+            let call_extern_handler_arms = variants
+                .iter()
+                .map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::call_extern_handler(x)
+                    }
+                })
+                .collect::<Vec<_>>();
+            #[cfg(not(feature = "aot"))]
+            let call_extern_handler_arms: Vec<proc_macro2::TokenStream> = Vec::new();
+            #[cfg(feature = "aot")]
+            let fallback_to_interpreter_arms = variants
+                .iter()
+                .map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::fallback_to_interpreter(
+                            x,
+                            push_internal_registers_str,
+                            pop_internal_registers_str,
+                            rv32_regs_to_xmm_str,
+                            inst,
+                        )
+                    }
+                })
+                .collect::<Vec<_>>();
+            #[cfg(not(feature = "aot"))]
+            let fallback_to_interpreter_arms: Vec<proc_macro2::TokenStream> = Vec::new();
+            #[cfg(feature = "aot")]
+            let generate_x86_asm_arms = variants
+                .iter()
+                .map(|(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::generate_x86_asm(x, inst, pc)
+                    }
+                })
+                .collect::<Vec<_>>();
+            #[cfg(not(feature = "aot"))]
+            let generate_x86_asm_arms: Vec<proc_macro2::TokenStream> = Vec::new();
+
             // Don't use these ty_generics because it might have extra "F"
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
@@ -297,6 +389,46 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                         Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                         match self {
                             #(#pre_compute_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "aot")]
+                    #[inline(always)]
+                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
+                        match self {
+                            #(#supports_aot_for_opcode_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "aot")]
+                    #[inline(always)]
+                    fn call_extern_handler(&self) -> ::std::string::String {
+                        match self {
+                            #(#call_extern_handler_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "aot")]
+                    fn fallback_to_interpreter(
+                        &self,
+                        push_internal_registers_str: &str,
+                        pop_internal_registers_str: &str,
+                        rv32_regs_to_xmm_str: &str,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    ) -> ::std::string::String {
+                        match self {
+                            #(#fallback_to_interpreter_arms,)*
+                        }
+                    }
+
+                    #[cfg(feature = "aot")]
+                    fn generate_x86_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
+                    ) -> ::std::string::String {
+                        match self {
+                            #(#generate_x86_asm_arms,)*
                         }
                     }
 

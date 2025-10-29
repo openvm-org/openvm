@@ -21,6 +21,7 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+openvm-rv32im-transpiler = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -82,7 +83,7 @@ test-utils = ["dep:openvm-stark-sdk"]
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
 # Ahead-of-time execution
-aot = ["dep:libloading"]
+aot = ["dep:libloading", "dep:openvm-rv32im-transpiler", "openvm-circuit-derive/aot"]
 # Disable bounds checking in memory operations for performance
 unprotected = []
 # performance features:

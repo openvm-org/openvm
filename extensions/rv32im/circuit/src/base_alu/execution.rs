@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -76,6 +76,31 @@ macro_rules! dispatch {
         )
     };
 }
+/// TODO: will clean up constants later
+
+// Callee saved
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
+const REG_GUEST_MEM_PTR: &str = "r15";
+
+// Caller saved
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_FOURTH_ARG: &str = "rcx";
+const REG_THIRD_ARG: &str = "rdx";
+const REG_SECOND_ARG: &str = "rsi";
+const REG_FIRST_ARG: &str = "rdi";
+const REG_RETURN_VAL: &str = "rax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+const REG_AUX: &str = "r11";
 
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -117,6 +142,113 @@ where
         let is_imm = self.pre_compute_impl(pc, inst, data)?;
 
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
+    }
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+        eprintln!("generate_x86_asm called with instruction: {:?}", inst);
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+
+        let xmm_map_reg_a = if (a / 4) % 2 == 0 {
+            a / 8
+        } else {
+            ((a / 4) - 1) / 2 // floor((a/4)/2)
+        };
+
+        let xmm_map_reg_b = if (b / 4) % 2 == 0 {
+            b / 8
+        } else {
+            ((b / 4) - 1) / 2
+        };
+
+        // [a:4]_1 <- [b:4]_1
+        if (b / 4) % 2 == 0 {
+            // get the [0:32) bits of xmm_map_reg_b
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);
+        } else {
+            // get the [32:64) bits of xmm_map_reg_b
+            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
+        }
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
+            asm_opcode += "add";
+        } else if inst.opcode == BaseAluOpcode::SUB.global_opcode() {
+            asm_opcode += "sub";
+        } else if inst.opcode == BaseAluOpcode::AND.global_opcode() {
+            asm_opcode += "and";
+        } else if inst.opcode == BaseAluOpcode::OR.global_opcode() {
+            asm_opcode += "or";
+        } else if inst.opcode == BaseAluOpcode::XOR.global_opcode() {
+            asm_opcode += "xor";
+        }
+        if e == 0 {
+            // [a:4]_1 <- [a:4]_1 + c
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, c);
+        } else {
+            // [a:4]_1 <- [a:4]_1 + [c:4]_1
+            assert_eq!(c % 4, 0);
+            let xmm_map_reg_c = if (c / 4) % 2 == 0 {
+                c / 8
+            } else {
+                ((c / 4) - 1) / 2
+            };
+
+            // XMM -> General Register
+            if (c / 4) % 2 == 0 {
+                // get the [0:32) bits of xmm_map_reg_c
+                asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c);
+            } else {
+                // get the [32:64) bits of xmm_map_reg_b
+                asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
+            }
+
+            // reg_a += reg_c
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, REG_C);
+        }
+
+        // General Register -> XMM
+        if (a / 4) % 2 == 0 {
+            // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
+        } else {
+            // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
+        }
+
+        asm_str += &format!("   add {}, {}\n", REG_PC, 4);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+
+        asm_str
+    }
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        eprintln!(
+            "supports_aot_for_opcode override called with opcode: {:?}",
+            opcode
+        );
+        // false
+        BaseAluOpcode::ADD.global_opcode() == opcode
+            || BaseAluOpcode::SUB.global_opcode() == opcode
+            || BaseAluOpcode::AND.global_opcode() == opcode
+            || BaseAluOpcode::OR.global_opcode() == opcode
+            || BaseAluOpcode::XOR.global_opcode() == opcode
     }
 }
 
