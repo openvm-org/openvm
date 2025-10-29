@@ -217,8 +217,7 @@ where
 
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        LessThanOpcode::SLT.global_opcode() == opcode 
-            || LessThanOpcode::SLTU.global_opcode() == opcode 
+        false
     }
 }
 

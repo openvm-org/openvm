@@ -225,9 +225,7 @@ where
 
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        ShiftOpcode::SLL.global_opcode() == opcode 
-            || ShiftOpcode::SRL.global_opcode() == opcode 
-            || ShiftOpcode::SRA.global_opcode() == opcode 
+        false 
     }
 }
 
