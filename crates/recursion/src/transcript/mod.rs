@@ -79,9 +79,16 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
 
     fn generate_proof_inputs(
         &self,
-        proof: &Proof,
-        preflight: &Preflight,
+        proofs: &[Proof],
+        preflights: &[Preflight],
     ) -> Vec<AirProofRawInput<F>> {
+        // TODO: support multiple proofs
+        debug_assert_eq!(proofs.len(), 1);
+        debug_assert_eq!(preflights.len(), 1);
+
+        let proof = &proofs[0];
+        let preflight = &preflights[0];
+
         let merkle_verify_trace = merkle_verify::generate_trace(proof, preflight);
         // generate transcript first, and then we know what's the poseidon2 lookup that are needed
         let transcript_width = TranscriptCols::<F>::width();
