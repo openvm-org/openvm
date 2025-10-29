@@ -2,4 +2,4 @@ mod air;
 mod trace;
 
 pub use air::{GkrLayerAir, GkrLayerCols};
-pub use trace::generate_trace;
+pub use trace::{GkrLayerRecord, generate_trace};

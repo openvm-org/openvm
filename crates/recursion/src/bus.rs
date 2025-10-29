@@ -409,7 +409,7 @@ define_typed_per_proof_permutation_bus!(CommitmentsBus, CommitmentsBusMessage);
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct XiRandomnessMessage<T> {
     pub idx: T,
-    pub challenge: [T; D_EF],
+    pub xi: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(XiRandomnessBus, XiRandomnessMessage);

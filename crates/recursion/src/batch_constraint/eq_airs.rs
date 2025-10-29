@@ -71,7 +71,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniAir {
             local.proof_idx,
             XiRandomnessMessage {
                 idx: local.xi_idx,
-                challenge: local.xi_times_root_pow,
+                xi: local.xi_times_root_pow,
             },
             local.is_first_iter, // TODO according to the design
         );
@@ -285,7 +285,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqMleAir {
             local.proof_idx,
             XiRandomnessMessage {
                 idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
-                challenge: local.xi.map(|x| x.into()),
+                xi: local.xi.map(|x| x.into()),
             },
             local.is_valid,
         );

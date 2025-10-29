@@ -119,15 +119,7 @@ impl ProofShapePreflight {
 #[derive(Debug, Default)]
 pub struct GkrPreflight {
     pub post_tidx: usize,
-    pub post_layer_tidx: usize,
     pub xi: Vec<(usize, EF)>,
-    /// For each sumcheck round: (layer_idx, sumcheck_round, claim_in, claim_out, eq_in, eq_out)
-    pub sumcheck_round_data: Vec<(usize, usize, EF, EF, EF, EF)>,
-    /// For each layer (1..num_layers): (new_claim, eq_at_r_prime) - the final sumcheck output
-    pub layer_sumcheck_output: Vec<(EF, EF)>,
-    /// For each layer (1..num_layers): the claim sent to sumcheck (numer_claim_prev + lambda *
-    /// denom_claim_prev)
-    pub layer_claim: Vec<EF>,
 }
 
 #[derive(Debug, Default)]
