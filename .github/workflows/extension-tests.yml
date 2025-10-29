@@ -75,7 +75,7 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
             TEST_THREADS="--test-threads=4"
           fi
-          cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass
+          cargo nextest run --cargo-profile=fast --features aot  $TEST_THREADS --no-tests=pass
 
         # We only need to run guest crate tests on CPU since we are not testing prover functionality
       - name: Run ${{ matrix.extension.name }} guest crate tests
@@ -86,11 +86,11 @@ jobs:
           if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
             GUEST_FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
           fi
-          cargo nextest run --cargo-profile=fast $GUEST_FEATURE_ARGS --no-tests=pass
+          cargo nextest run --cargo-profile=fast --features aot  $GUEST_FEATURE_ARGS --no-tests=pass
 
       - name: Run ${{ matrix.extension.name }} integration tests
         if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
         working-directory: extensions/${{ matrix.extension.path }}/tests
         run: |
           rustup component add rust-src --toolchain nightly-2025-08-02
-          cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass
+          cargo nextest run --cargo-profile=fast --features aot  --profile=heavy --no-tests=pass
