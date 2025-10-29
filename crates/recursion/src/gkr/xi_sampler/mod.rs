@@ -2,4 +2,4 @@ mod air;
 mod trace;
 
 pub use air::{GkrXiSamplerAir, GkrXiSamplerCols};
-pub use trace::generate_trace;
+pub use trace::{GkrXiSamplerRecord, generate_trace};

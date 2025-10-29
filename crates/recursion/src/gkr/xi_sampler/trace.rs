@@ -1,53 +1,101 @@
 use core::borrow::BorrowMut;
 
+use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
-use stark_backend_v2::{D_EF, F, proof::Proof};
+use stark_backend_v2::{D_EF, EF, F};
 
 use super::GkrXiSamplerCols;
-use crate::system::Preflight;
 
-pub fn generate_trace(_proof: &Proof, preflight: &Preflight) -> RowMajorMatrix<F> {
+#[derive(Debug, Clone, Default)]
+pub struct GkrXiSamplerRecord {
+    pub tidx: usize,
+    pub idx: usize,
+    pub xis: Vec<EF>,
+}
+
+pub fn generate_trace(xi_sampler_records: Vec<GkrXiSamplerRecord>) -> RowMajorMatrix<F> {
     let width = GkrXiSamplerCols::<F>::width();
 
-    let n_max = preflight.proof_shape.n_max;
-    let n_logup = preflight.proof_shape.n_logup;
-    let l_skip = preflight.proof_shape.l_skip;
-
-    let num_layers = if n_logup != 0 { n_logup + l_skip } else { 0 };
-
-    let num_rows = if n_logup != 0 {
-        n_max.saturating_sub(n_logup)
-    } else {
-        n_max + l_skip
-    };
-
-    let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];
-
-    let mut tidx = preflight.gkr.post_layer_tidx;
-    for (i, row_data) in trace.chunks_mut(width).take(num_rows).enumerate() {
-        let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
-
-        let xi_index = i + num_layers;
-        let xi = preflight.gkr.xi[xi_index].1;
-
-        cols.is_enabled = F::ONE;
-        // TODO(ayush): fix this
-        cols.proof_idx = F::ZERO;
-        cols.is_first_challenge = F::from_bool(i == 0);
-
-        cols.tidx = F::from_canonical_usize(tidx);
-
-        cols.challenge_idx = F::from_canonical_usize(xi_index);
-        cols.challenge = xi.as_base_slice().try_into().unwrap();
-
-        tidx += D_EF;
+    if xi_sampler_records.is_empty() {
+        let trace = vec![F::ZERO; width];
+        return RowMajorMatrix::new(trace, width);
     }
 
-    // Fill padding rows
-    for row_data in trace.chunks_mut(width).skip(num_rows) {
-        let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
-        cols.proof_idx = F::ONE;
+    // Calculate rows per proof (minimum 1 row per proof)
+    let rows_per_proof: Vec<usize> = xi_sampler_records
+        .iter()
+        .map(|record| record.xis.len().max(1))
+        .collect();
+
+    // Calculate total rows
+    let total_rows: usize = rows_per_proof.iter().sum();
+    let padded_rows = total_rows.next_power_of_two();
+
+    let mut trace = vec![F::ZERO; padded_rows * width];
+
+    // Split trace into chunks for each proof
+    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
+    let mut remaining = data_slice;
+
+    for &num_rows in &rows_per_proof {
+        let chunk_size = num_rows * width;
+        let (chunk, rest) = remaining.split_at_mut(chunk_size);
+        trace_slices.push(chunk);
+        remaining = rest;
+    }
+
+    // Process each proof
+    trace_slices
+        .par_iter_mut()
+        .zip(xi_sampler_records.par_iter())
+        .enumerate()
+        .for_each(|(proof_idx, (proof_trace, xi_sampler_record))| {
+            if xi_sampler_record.xis.is_empty() {
+                proof_trace.par_chunks_mut(width).for_each(|row_data| {
+                    let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
+                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                });
+                return;
+            }
+
+            let challenge_indices: Vec<usize> = (0..xi_sampler_record.xis.len())
+                .map(|i| xi_sampler_record.idx + i)
+                .collect();
+            let tidxs: Vec<usize> = (0..xi_sampler_record.xis.len())
+                .map(|i| xi_sampler_record.tidx + i * D_EF)
+                .collect();
+
+            proof_trace
+                .par_chunks_mut(width)
+                .zip(
+                    xi_sampler_record
+                        .xis
+                        .par_iter()
+                        .zip(challenge_indices.par_iter())
+                        .zip(tidxs.par_iter()),
+                )
+                .enumerate()
+                .for_each(|(row_idx, (row_data, ((xi, idx), tidx)))| {
+                    let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
+                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+
+                    cols.is_enabled = F::ONE;
+                    cols.is_first_challenge = F::from_bool(row_idx == 0);
+                    cols.tidx = F::from_canonical_usize(*tidx);
+                    cols.idx = F::from_canonical_usize(*idx);
+                    cols.xi = xi.as_base_slice().try_into().unwrap();
+                });
+        });
+
+    // Fill padding rows (proof_idx = number of proofs indicates padding)
+    if !padding_slice.is_empty() {
+        let padding_proof_idx = F::from_canonical_usize(xi_sampler_records.len());
+        padding_slice.par_chunks_mut(width).for_each(|row_data| {
+            let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
+            cols.proof_idx = padding_proof_idx;
+        });
     }
 
     RowMajorMatrix::new(trace, width)
