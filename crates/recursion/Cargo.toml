@@ -9,8 +9,10 @@ description = "Recursion circuit for v2"
 itertools = { workspace = true }
 p3-maybe-rayon.workspace = true
 p3-air = { workspace = true }
+p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 p3-matrix = { workspace = true }
+p3-symmetric = { workspace = true }
 stark-backend-v2 = { workspace = true }
 stark-recursion-circuit-derive = { workspace = true }
 openvm-stark-backend = { workspace = true }
