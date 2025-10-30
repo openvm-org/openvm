@@ -336,6 +336,7 @@ where
                         })?;
                 asm_str += &segment;
             } else {
+                asm_str += &Self::xmm_to_rv32_regs(); // sync registers
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
