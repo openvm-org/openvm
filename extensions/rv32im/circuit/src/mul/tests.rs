@@ -13,13 +13,10 @@ use openvm_circuit::{
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-#[cfg(feature = "aot")]
-use openvm_circuit::{
-    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
-};
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
+use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{
     exe::VmExe,
@@ -28,7 +25,6 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{
     exe::VmExe,
@@ -73,8 +69,6 @@ use crate::{
     MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir,
     Rv32MultiplicationExecutor,
 };
-#[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
