@@ -1,7 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::izip;
-use openvm_circuit_primitives::utils::{and, not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{and, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -27,6 +30,7 @@ use crate::{
         },
         utils::{compute_coefficients, get_stacked_slice_data, sorted_column_claims},
     },
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{assert_eq_array, assert_one_ext, ext_field_add, ext_field_multiply},
 };
@@ -90,99 +94,128 @@ pub struct OpeningClaimsTraceGenerator;
 impl OpeningClaimsTraceGenerator {
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &Preflight,
+        proofs: &[Proof],
+        preflights: &[Preflight],
     ) -> RowMajorMatrix<F> {
-        let claims = sorted_column_claims(proof);
-        let stacked_slices = get_stacked_slice_data(vk, &preflight.proof_shape.sorted_trace_vdata);
-
-        let (_, per_slice) = compute_coefficients(
-            proof,
-            &stacked_slices,
-            &preflight.stacking.sumcheck_rnd,
-            &preflight.batch_constraint.sumcheck_rnd,
-            &preflight.stacking.lambda,
-            vk.inner.params.l_skip,
-            vk.inner.params.n_stack,
-        );
+        debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = OpeningClaimsCols::<usize>::width();
-        let num_valid = claims.len();
-        let num_rows = num_valid.next_power_of_two();
 
-        let mut trace = vec![F::ZERO; num_rows * width];
+        if proofs.is_empty() {
+            return RowMajorMatrix::new(vec![F::ZERO; width], width);
+        }
 
-        let mut lambda_pows = preflight.stacking.lambda.square().powers().take(num_valid);
-        let mut stacking_claim_coefficient = EF::ZERO;
-        let mut s_0 = EF::ZERO;
+        let mut combined_trace = Vec::<F>::new();
+        let mut total_rows = 0usize;
 
-        for (i, (claim, slice, (eq, k_rot, eq_bits), chunk)) in
-            izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
-        {
-            let ColumnClaimsMessage {
-                sort_idx,
-                part_idx,
-                col_idx,
-                col_claim,
-                rot_claim,
-                ..
-            } = claim;
-            let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
-            // TODO: handle proof_idx
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(i == 0);
-            cols.is_last = F::from_bool(i + 1 == num_valid);
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+            let claims = sorted_column_claims(proof);
+            let stacked_slices =
+                get_stacked_slice_data(vk, &preflight.proof_shape.sorted_trace_vdata);
 
-            cols.sort_idx = sort_idx;
-            cols.part_idx = part_idx;
-            cols.col_idx = col_idx;
-            cols.col_claim = col_claim;
-            cols.rot_claim = rot_claim;
+            let (_, per_slice) = compute_coefficients(
+                proof,
+                &stacked_slices,
+                &preflight.stacking.sumcheck_rnd,
+                &preflight.batch_constraint.sumcheck_rnd,
+                &preflight.stacking.lambda,
+                vk.inner.params.l_skip,
+                vk.inner.params.n_stack,
+            );
 
-            cols.log_height = F::from_canonical_usize(slice.n + vk.inner.params.l_skip);
-            cols.height = F::from_canonical_usize(1 << (slice.n + vk.inner.params.l_skip));
-            cols.height_inv = cols.height.inverse();
+            let num_rows = claims.len();
+            let proof_idx_value = F::from_canonical_usize(proof_idx);
 
-            cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
-            cols.lambda
-                .copy_from_slice(preflight.stacking.lambda.as_base_slice());
+            let mut trace = vec![F::ZERO; num_rows * width];
 
-            let lambda_pow = lambda_pows.next().unwrap();
-            cols.lambda_pow.copy_from_slice(lambda_pow.as_base_slice());
+            let mut lambda_pows = preflight.stacking.lambda.square().powers().take(num_rows);
+            let mut stacking_claim_coefficient = EF::ZERO;
+            let mut s_0 = EF::ZERO;
 
-            cols.commit_idx = F::from_canonical_usize(slice.commit_idx);
-            cols.stacked_col_idx = F::from_canonical_usize(slice.col_idx);
-            cols.row_idx = F::from_canonical_usize(slice.row_idx);
-            cols.is_last_for_claim = F::from_bool(slice.is_last_for_commit);
+            for (i, (claim, slice, (eq, k_rot, eq_bits), chunk)) in
+                izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
+            {
+                let ColumnClaimsMessage {
+                    sort_idx,
+                    part_idx,
+                    col_idx,
+                    col_claim,
+                    rot_claim,
+                    ..
+                } = claim;
+                let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
+                cols.proof_idx = proof_idx_value;
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(i == 0);
+                cols.is_last = F::from_bool(i + 1 == num_rows);
 
-            cols.eq.copy_from_slice(eq.as_base_slice());
-            cols.k_rot.copy_from_slice(k_rot.as_base_slice());
-            cols.eq_bits.copy_from_slice(eq_bits.as_base_slice());
+                cols.sort_idx = sort_idx;
+                cols.part_idx = part_idx;
+                cols.col_idx = col_idx;
+                cols.col_claim = col_claim;
+                cols.rot_claim = rot_claim;
 
-            let lambda_pow_eq_bits = lambda_pow * eq_bits;
-            cols.lambda_pow_eq_bits
-                .copy_from_slice(lambda_pow_eq_bits.as_base_slice());
+                cols.log_height = F::from_canonical_usize(slice.n + vk.inner.params.l_skip);
+                cols.height = F::from_canonical_usize(1 << (slice.n + vk.inner.params.l_skip));
+                cols.height_inv = cols.height.inverse();
 
-            stacking_claim_coefficient +=
-                lambda_pow_eq_bits * (eq + preflight.stacking.lambda * k_rot);
-            cols.stacking_claim_coefficient
-                .copy_from_slice(stacking_claim_coefficient.as_base_slice());
-            if slice.is_last_for_commit {
-                stacking_claim_coefficient = EF::ZERO;
+                cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
+                cols.lambda
+                    .copy_from_slice(preflight.stacking.lambda.as_base_slice());
+
+                let lambda_pow = lambda_pows.next().unwrap();
+                cols.lambda_pow.copy_from_slice(lambda_pow.as_base_slice());
+
+                cols.commit_idx = F::from_canonical_usize(slice.commit_idx);
+                cols.stacked_col_idx = F::from_canonical_usize(slice.col_idx);
+                cols.row_idx = F::from_canonical_usize(slice.row_idx);
+                cols.is_last_for_claim = F::from_bool(slice.is_last_for_commit);
+
+                cols.eq.copy_from_slice(eq.as_base_slice());
+                cols.k_rot.copy_from_slice(k_rot.as_base_slice());
+                cols.eq_bits.copy_from_slice(eq_bits.as_base_slice());
+
+                let lambda_pow_eq_bits = lambda_pow * eq_bits;
+                cols.lambda_pow_eq_bits
+                    .copy_from_slice(lambda_pow_eq_bits.as_base_slice());
+
+                stacking_claim_coefficient +=
+                    lambda_pow_eq_bits * (eq + preflight.stacking.lambda * k_rot);
+                cols.stacking_claim_coefficient
+                    .copy_from_slice(stacking_claim_coefficient.as_base_slice());
+                if slice.is_last_for_commit {
+                    stacking_claim_coefficient = EF::ZERO;
+                }
+
+                let col_claim = EF::from_base_slice(&col_claim);
+                let rot_claim = EF::from_base_slice(&rot_claim);
+                s_0 += lambda_pow * (col_claim + preflight.stacking.lambda * rot_claim);
+                cols.s_0.copy_from_slice(s_0.as_base_slice());
             }
 
-            let col_claim = EF::from_base_slice(&col_claim);
-            let rot_claim = EF::from_base_slice(&rot_claim);
-            s_0 += lambda_pow * (col_claim + preflight.stacking.lambda * rot_claim);
-            cols.s_0.copy_from_slice(s_0.as_base_slice());
+            combined_trace.extend(trace);
+            total_rows += num_rows;
         }
 
-        if num_valid < num_rows {
-            let last_row: &mut OpeningClaimsCols<F> = trace[(num_rows - 1) * width..].borrow_mut();
-            last_row.is_last = F::ONE;
+        let padded_rows = total_rows.next_power_of_two();
+        if padded_rows > total_rows {
+            let padding_start = combined_trace.len();
+            combined_trace.resize(padded_rows * width, F::ZERO);
+
+            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
+            let num_padded_rows = padded_rows - total_rows;
+            for i in 0..num_padded_rows {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
+                cols.proof_idx = padding_proof_idx;
+                if i + 1 == num_padded_rows {
+                    cols.is_last = F::ONE;
+                }
+            }
         }
 
-        RowMajorMatrix::new(trace, width)
+        RowMajorMatrix::new(combined_trace, width)
     }
 }
 
@@ -229,7 +262,36 @@ where
         let local: &OpeningClaimsCols<AB::Var> = (*local).borrow();
         let next: &OpeningClaimsCols<AB::Var> = (*next).borrow();
 
-        // TODO[stephen]: constrain proof_idx, is_valid, is_first, is_last
+        NestedForLoopSubAir::<1, 0> {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
+        );
+
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_first);
+        builder.assert_bool(local.is_last);
+        builder
+            .when(and(local.is_valid, local.is_last))
+            .assert_zero((local.proof_idx + AB::F::ONE - next.proof_idx) * next.proof_idx);
+        builder
+            .when(and(not(local.is_valid), local.is_last))
+            .assert_zero(next.proof_idx);
 
         /*
          * Compute col_claim[0] + lambda * rot_claim + ... (i.e. RLC of column/rotation claims)

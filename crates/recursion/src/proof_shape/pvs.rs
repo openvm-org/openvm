@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct PublicValuesCols<F> {
     pub proof_idx: F,
     pub is_valid: F,
@@ -33,10 +33,15 @@ pub struct PublicValuesCols<F> {
 }
 
 pub(crate) fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> RowMajorMatrix<F> {
-    let total_num_pvs = proofs[0]
-        .public_values
+    let total_num_pvs: usize = proofs
         .iter()
-        .fold(0usize, |acc, per_air| acc + per_air.len());
+        .map(|proof| {
+            proof
+                .public_values
+                .iter()
+                .fold(0usize, |acc, per_air| acc + per_air.len())
+        })
+        .sum();
     let num_rows = total_num_pvs.next_power_of_two();
     let width = PublicValuesCols::<u8>::width();
 
@@ -44,9 +49,10 @@ pub(crate) fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> RowM
 
     let mut trace = vec![F::ZERO; num_rows * width];
     let mut chunks = trace.chunks_exact_mut(width);
-    let mut row_idx = 0usize;
 
     for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+        let mut row_idx = 0usize;
+
         for ((air_idx, pvs), &starting_tidx) in proof
             .public_values
             .iter()

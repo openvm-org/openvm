@@ -1,9 +1,6 @@
 use core::borrow::{Borrow, BorrowMut};
 
-use crate::bus::{
-    CommitmentsBus, CommitmentsBusMessage, MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus,
-};
-use crate::system::Preflight;
+use itertools::Itertools;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -13,6 +10,14 @@ use p3_field::{Field, FieldAlgebra};
 use p3_matrix::Matrix;
 use stark_backend_v2::{DIGEST_SIZE, F, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
+
+use crate::{
+    bus::{
+        CommitmentsBus, CommitmentsBusMessage, MerkleVerifyBus, MerkleVerifyBusMessage,
+        Poseidon2Bus,
+    },
+    system::Preflight,
+};
 
 pub const CHUNK: usize = 8;
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;
@@ -79,20 +84,34 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
 
 pub fn generate_trace(_proofs: &[Proof], preflights: &[Preflight]) -> Vec<F> {
     let width = MerkleVerifyCols::<F>::width();
-    let num_valid_rows: usize = preflights
+    let num_rows_per_proof = preflights
         .iter()
         .map(|preflight| preflight.merkle_verify_logs.len())
-        .sum();
-    let num_rows = num_valid_rows.next_power_of_two();
-    let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-            let cols: &mut MerkleVerifyCols<F> = row.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.proof_idx = F::from_canonical_usize(pidx);
-            cols.merkle_verify_bus_msg = preflight.merkle_verify_logs[i].0.clone();
-            cols.commitment = preflight.merkle_verify_logs[i].1;
-        }
+        .collect_vec();
+    let num_rows_cum_sums: Vec<usize> = num_rows_per_proof
+        .iter()
+        .scan(0usize, |acc, &x| {
+            *acc += x;
+            Some(*acc)
+        })
+        .collect();
+    let num_valid_rows = *num_rows_cum_sums.last().unwrap();
+    let height = num_valid_rows.next_power_of_two();
+    let mut trace = vec![F::ZERO; height * width];
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = num_rows_cum_sums.partition_point(|&x| x <= row_idx);
+        let preflight = &preflights[proof_idx];
+        let i = if proof_idx == 0 {
+            row_idx
+        } else {
+            row_idx % num_rows_cum_sums[proof_idx - 1]
+        };
+
+        let cols: &mut MerkleVerifyCols<F> = row.borrow_mut();
+        cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
+        cols.merkle_verify_bus_msg = preflight.merkle_verify_logs[i].0.clone();
+        cols.commitment = preflight.merkle_verify_logs[i].1;
     }
 
     trace

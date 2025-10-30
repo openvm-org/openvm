@@ -118,11 +118,11 @@ pub(crate) fn generate_trace<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     let mut trace = vec![F::ZERO; num_rows * total_width];
     let mut chunks = trace.chunks_exact_mut(total_width);
 
-    let mut sorted_idx = 0usize;
-    let mut total_interactions = 0usize;
-    let mut cidx = 1usize;
-
     for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights.iter()).enumerate() {
+        let mut sorted_idx = 0usize;
+        let mut total_interactions = 0usize;
+        let mut cidx = 1usize;
+
         // Present AIRs
         for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
             let chunk = chunks.next().unwrap();

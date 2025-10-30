@@ -1,7 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::utils::{and, not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{and, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -24,6 +27,7 @@ use crate::{
         EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqRandValuesLookupBus,
         EqRandValuesLookupMessage,
     },
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
         assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
@@ -69,78 +73,113 @@ pub struct EqBaseTraceGenerator;
 impl EqBaseTraceGenerator {
     pub fn generate_trace(
         vk: &MultiStarkVerifyingKeyV2,
-        proof: &Proof,
-        preflight: &Preflight,
+        proofs: &[Proof],
+        preflights: &[Preflight],
     ) -> RowMajorMatrix<F> {
-        let mut mult = 0usize;
-        for (sort_idx, (_, vdata)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-            if vdata.hypercube_dim == 0 {
-                mult += proof.batch_constraint_proof.column_openings[sort_idx]
-                    .iter()
-                    .flatten()
-                    .collect_vec()
-                    .len();
-            }
-        }
+        debug_assert_eq!(proofs.len(), preflights.len());
 
         let width = EqBaseCols::<usize>::width();
-        let num_valid = vk.inner.params.l_skip + 1;
-        let num_rows = num_valid.next_power_of_two();
 
-        let mut trace = vec![F::ZERO; num_rows * width];
+        if proofs.is_empty() {
+            return RowMajorMatrix::new(vec![F::ZERO; width], width);
+        }
 
-        let omega = F::two_adic_generator(vk.inner.params.l_skip);
-        let mut u = preflight.stacking.sumcheck_rnd[0];
-        let mut r = preflight.batch_constraint.sumcheck_rnd[0];
-        let mut r_omega = r * omega;
+        let mut combined_trace = Vec::<F>::new();
+        let mut total_rows = 0usize;
 
-        let mut prod_u_r = u * (u + r);
-        let mut prod_u_r_omega = u * (u + r_omega);
-        let mut prod_u_1 = u + F::ONE;
-        let mut prod_r_omega_1 = r_omega + F::ONE;
-
-        for (row_idx, chunk) in trace.chunks_mut(width).take(num_valid).enumerate() {
-            let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
-            let is_last = row_idx + 1 == num_valid;
-
-            // TODO[stephen]: handle proof_idx
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(row_idx == 0);
-            cols.is_last = F::from_bool(is_last);
-
-            cols.row_idx = F::from_canonical_usize(row_idx);
-
-            cols.u_pow.copy_from_slice(u.as_base_slice());
-            cols.r_pow.copy_from_slice(r.as_base_slice());
-            cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
-
-            cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
-            cols.prod_u_r_omega
-                .copy_from_slice(prod_u_r_omega.as_base_slice());
-            cols.prod_u_1.copy_from_slice(prod_u_1.as_base_slice());
-            cols.prod_r_omega_1
-                .copy_from_slice(prod_r_omega_1.as_base_slice());
-
-            if is_last {
-                cols.mult = F::from_canonical_usize(mult);
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
+            let mut mult = 0usize;
+            for (sort_idx, (_, vdata)) in
+                preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
+            {
+                if vdata.hypercube_dim == 0 {
+                    mult += proof.batch_constraint_proof.column_openings[sort_idx]
+                        .iter()
+                        .flatten()
+                        .collect_vec()
+                        .len();
+                }
             }
 
-            u *= u;
-            r *= r;
-            r_omega *= r_omega;
+            let num_rows = vk.inner.params.l_skip + 1;
+            let proof_idx_value = F::from_canonical_usize(proof_idx);
 
-            prod_u_r *= u + r;
-            prod_u_r_omega *= u + r_omega;
-            prod_u_1 *= u + F::ONE;
-            prod_r_omega_1 *= r_omega + F::ONE;
+            let mut trace = vec![F::ZERO; num_rows * width];
+
+            for chunk in trace.chunks_mut(width) {
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                cols.proof_idx = proof_idx_value;
+            }
+
+            let omega = F::two_adic_generator(vk.inner.params.l_skip);
+            let mut u = preflight.stacking.sumcheck_rnd[0];
+            let mut r = preflight.batch_constraint.sumcheck_rnd[0];
+            let mut r_omega = r * omega;
+
+            let mut prod_u_r = u * (u + r);
+            let mut prod_u_r_omega = u * (u + r_omega);
+            let mut prod_u_1 = u + F::ONE;
+            let mut prod_r_omega_1 = r_omega + F::ONE;
+
+            for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows).enumerate() {
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                let is_last = row_idx + 1 == num_rows;
+
+                cols.proof_idx = proof_idx_value;
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(row_idx == 0);
+                cols.is_last = F::from_bool(is_last);
+
+                cols.row_idx = F::from_canonical_usize(row_idx);
+
+                cols.u_pow.copy_from_slice(u.as_base_slice());
+                cols.r_pow.copy_from_slice(r.as_base_slice());
+                cols.r_omega_pow.copy_from_slice(r_omega.as_base_slice());
+
+                cols.prod_u_r.copy_from_slice(prod_u_r.as_base_slice());
+                cols.prod_u_r_omega
+                    .copy_from_slice(prod_u_r_omega.as_base_slice());
+                cols.prod_u_1.copy_from_slice(prod_u_1.as_base_slice());
+                cols.prod_r_omega_1
+                    .copy_from_slice(prod_r_omega_1.as_base_slice());
+
+                if is_last {
+                    cols.mult = F::from_canonical_usize(mult);
+                }
+
+                u *= u;
+                r *= r;
+                r_omega *= r_omega;
+
+                prod_u_r *= u + r;
+                prod_u_r_omega *= u + r_omega;
+                prod_u_1 *= u + F::ONE;
+                prod_r_omega_1 *= r_omega + F::ONE;
+            }
+
+            combined_trace.extend(trace);
+            total_rows += num_rows;
         }
 
-        if num_valid < num_rows {
-            let last_row: &mut EqBaseCols<F> = trace[(num_rows - 1) * width..].borrow_mut();
-            last_row.is_last = F::ONE;
+        let padded_rows = total_rows.next_power_of_two();
+        if padded_rows > total_rows {
+            let padding_start = combined_trace.len();
+            combined_trace.resize(padded_rows * width, F::ZERO);
+
+            let padding_proof_idx = F::from_canonical_usize(proofs.len());
+            let mut chunks = combined_trace[padding_start..].chunks_mut(width);
+            let num_padded_rows = padded_rows - total_rows;
+            for i in 0..num_padded_rows {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
+                cols.proof_idx = padding_proof_idx;
+                if i + 1 == num_padded_rows {
+                    cols.is_last = F::ONE;
+                }
+            }
         }
 
-        RowMajorMatrix::new(trace, width)
+        RowMajorMatrix::new(combined_trace, width)
     }
 }
 
@@ -182,7 +221,36 @@ where
         let local: &EqBaseCols<AB::Var> = (*local).borrow();
         let next: &EqBaseCols<AB::Var> = (*next).borrow();
 
-        // TODO[stephen]: constrain proof_idx, is_valid, is_first, is_last
+        NestedForLoopSubAir::<1, 0> {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
+        );
+
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_first);
+        builder.assert_bool(local.is_last);
+        builder
+            .when(and(local.is_valid, local.is_last))
+            .assert_zero((local.proof_idx + AB::F::ONE - next.proof_idx) * next.proof_idx);
+        builder
+            .when(and(not(local.is_valid), local.is_last))
+            .assert_zero(next.proof_idx);
 
         /*
          * Constrain value of row_idx and send u^{2^row} to WhirOpeningPointBus when
