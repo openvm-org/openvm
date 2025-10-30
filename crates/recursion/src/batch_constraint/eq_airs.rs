@@ -382,7 +382,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir {
 
 pub(crate) fn generate_eq_sharp_uni_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    _proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = EqSharpUniCols::<F>::width();
@@ -408,7 +408,7 @@ pub(crate) fn generate_eq_sharp_uni_trace(
 
 pub(crate) fn generate_eq_sharp_uni_receiver_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    _proofs: &[Proof],
     _preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = EqSharpUniReceiverCols::<F>::width();
@@ -417,7 +417,7 @@ pub(crate) fn generate_eq_sharp_uni_receiver_trace(
 
 pub(crate) fn generate_eq_ns_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    _proofs: &[Proof],
     _preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = EqNsColumns::<F>::width();
@@ -426,7 +426,7 @@ pub(crate) fn generate_eq_ns_trace(
 
 pub(crate) fn generate_eq_mle_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    _proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = EqMleColumns::<F>::width();
@@ -453,7 +453,7 @@ pub(crate) fn generate_eq_mle_trace(
 
 pub(crate) fn generate_eq_3b_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    _proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = Eq3bColumns::<F>::width();

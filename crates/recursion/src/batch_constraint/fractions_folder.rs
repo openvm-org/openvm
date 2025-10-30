@@ -134,53 +134,69 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FractionFolderAir {
 
 pub(crate) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
+    proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = FractionsFolderCols::<F>::width();
 
-    let (npa, dpa) = (
-        &proof.batch_constraint_proof.numerator_term_per_air,
-        &proof.batch_constraint_proof.denominator_term_per_air,
-    );
-    let height = npa.len();
-    let mut trace = vec![F::ZERO; height * width];
-    let mu_tidx = preflight.batch_constraint.tidx_before_univariate - D_EF;
-    let mu_slice = &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF];
-    let tidx_alpha_beta = preflight.proof_shape.post_tidx + 2;
-    let gkr_post_tidx = preflight.gkr.post_tidx;
-    let n_global = preflight.proof_shape.n_global();
+    let height = proofs
+        .iter()
+        .map(|p| {
+            let res = p.batch_constraint_proof.numerator_term_per_air.len();
+            debug_assert!(res > 0);
+            res
+        })
+        .sum::<usize>();
+    let padded_height = height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
+    let mut cur_height = 0;
 
-    trace
-        .par_chunks_exact_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
+    for (pidx, proof) in proofs.iter().enumerate() {
+        let (npa, dpa) = (
+            &proof.batch_constraint_proof.numerator_term_per_air,
+            &proof.batch_constraint_proof.denominator_term_per_air,
+        );
+        let height = npa.len();
+        let mu_tidx = preflight.batch_constraint.tidx_before_univariate - D_EF;
+        let mu_slice = &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF];
+        let tidx_alpha_beta = preflight.proof_shape.post_tidx + 2;
+        let gkr_post_tidx = preflight.gkr.post_tidx;
+        let n_global = preflight.proof_shape.n_global();
+
+        trace[cur_height..cur_height + height * width]
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(i == 0);
+                cols.is_last = F::from_bool(i + 1 == height);
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.airs_remaining = F::from_canonical_usize(height - 1 - i);
+                cols.n_global = F::from_canonical_usize(n_global);
+                cols.tidx_alpha_beta = F::from_canonical_usize(tidx_alpha_beta);
+                cols.sum_claim_p.copy_from_slice(npa[i].as_base_slice());
+                cols.sum_claim_q.copy_from_slice(dpa[i].as_base_slice());
+                cols.gkr_post_tidx = F::from_canonical_usize(gkr_post_tidx);
+                cols.mu.copy_from_slice(mu_slice);
+                cols.tidx = F::from_canonical_usize(gkr_post_tidx + (1 + 2 * i) * D_EF);
+            });
+
+        let mut cur_p_sum = [F::ZERO; D_EF];
+        let mut cur_q_sum: [_; D_EF] =
+            core::array::from_fn(|i| preflight.transcript.values()[tidx_alpha_beta + i]);
+
+        for chunk in trace.chunks_exact_mut(width) {
             let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(i == 0);
-            cols.is_last = F::from_bool(i + 1 == height);
-            cols.airs_remaining = F::from_canonical_usize(height - 1 - i);
-            cols.n_global = F::from_canonical_usize(n_global);
-            cols.tidx_alpha_beta = F::from_canonical_usize(tidx_alpha_beta);
-            cols.sum_claim_p.copy_from_slice(npa[i].as_base_slice());
-            cols.sum_claim_q.copy_from_slice(dpa[i].as_base_slice());
-            cols.gkr_post_tidx = F::from_canonical_usize(gkr_post_tidx);
-            cols.mu.copy_from_slice(mu_slice);
-            cols.tidx = F::from_canonical_usize(gkr_post_tidx + (1 + 2 * i) * D_EF);
-        });
-
-    let mut cur_p_sum = [F::ZERO; D_EF];
-    let mut cur_q_sum: [_; D_EF] =
-        core::array::from_fn(|i| preflight.transcript.values()[tidx_alpha_beta + i]);
-
-    for chunk in trace.chunks_exact_mut(width) {
-        let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
-        for j in 0..D_EF {
-            cur_p_sum[j] += cols.sum_claim_p[j];
-            cur_q_sum[j] += cols.sum_claim_q[j];
+            for j in 0..D_EF {
+                cur_p_sum[j] += cols.sum_claim_p[j];
+                cur_q_sum[j] += cols.sum_claim_q[j];
+            }
+            cols.cur_p_sum.copy_from_slice(&cur_p_sum);
+            cols.cur_q_sum.copy_from_slice(&cur_q_sum);
         }
-        cols.cur_p_sum.copy_from_slice(&cur_p_sum);
-        cols.cur_q_sum.copy_from_slice(&cur_q_sum);
+
+        cur_height += height;
     }
 
     RowMajorMatrix::new(trace, width)
