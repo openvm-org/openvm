@@ -82,142 +82,143 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
         proofs: &[Proof],
         preflights: &[Preflight],
     ) -> Vec<AirProofRawInput<F>> {
-        // TODO: support multiple proofs
-        debug_assert_eq!(proofs.len(), 1);
-        debug_assert_eq!(preflights.len(), 1);
+        // TODO: need to "extract" the poseidon2 lookups from merkle verify
+        let merkle_verify_trace = merkle_verify::generate_trace(proofs, preflights);
 
-        let proof = &proofs[0];
-        let preflight = &preflights[0];
-
-        let merkle_verify_trace = merkle_verify::generate_trace(proof, preflight);
-        // generate transcript first, and then we know what's the poseidon2 lookup that are needed
         let transcript_width = TranscriptCols::<F>::width();
+        let inner_width = self.sub_chip.air.width();
+        let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
+        let mut valid_rows = Vec::with_capacity(preflights.len());
 
-        // First pass, just calculate number of rows.
-        let mut cur_is_sample = false; // should always start with observe?
-        let mut count = 0;
-        let mut num_valid_rows: usize = 0;
-        for op_is_sample in preflight.transcript.samples() {
-            if *op_is_sample {
-                // sample
-                if !cur_is_sample {
-                    // observe -> sample, need a new row and permute
-                    num_valid_rows += 1;
-                    cur_is_sample = true;
-                    count = 1;
-                } else {
-                    if count == CHUNK {
+        let mut transcript_valid_rows = 0;
+        // First pass, calculate number of rows for transcript
+        for preflight in preflights.iter() {
+            let mut cur_is_sample = false; // should always start with observe?
+            let mut count = 0;
+            let mut num_valid_rows: usize = 0;
+            for op_is_sample in preflight.transcript.samples() {
+                if *op_is_sample {
+                    // sample
+                    if !cur_is_sample {
+                        // observe -> sample, need a new row and permute
                         num_valid_rows += 1;
-                        count = 0;
+                        cur_is_sample = true;
+                        count = 1;
+                    } else {
+                        if count == CHUNK {
+                            num_valid_rows += 1;
+                            count = 0;
+                        }
+                        count += 1;
                     }
-                    count += 1;
-                }
-            } else {
-                // observe
-                if cur_is_sample {
-                    // sample -> observe, no need to permute, but still need a new row
-                    num_valid_rows += 1;
-                    cur_is_sample = false;
-                    count = 1;
                 } else {
-                    if count == CHUNK {
+                    // observe
+                    if cur_is_sample {
+                        // sample -> observe, no need to permute, but still need a new row
                         num_valid_rows += 1;
-                        count = 0;
+                        cur_is_sample = false;
+                        count = 1;
+                    } else {
+                        if count == CHUNK {
+                            num_valid_rows += 1;
+                            count = 0;
+                        }
+                        count += 1;
                     }
-                    count += 1;
                 }
             }
+            if count > 0 {
+                num_valid_rows += 1;
+            }
+            valid_rows.push(num_valid_rows);
+            transcript_valid_rows += num_valid_rows;
         }
-        if count > 0 {
-            num_valid_rows += 1;
-        }
+        let transcript_num_rows = transcript_valid_rows.next_power_of_two();
+        let mut transcript_trace = vec![F::ZERO; transcript_num_rows * transcript_width];
+        // TODO: need to also add poseidon2 lookups from merkle verify
+        let mut poseidon_inputs = Vec::with_capacity(transcript_valid_rows);
+        let mut poseidon_flags = Vec::with_capacity(transcript_valid_rows);
 
-        let num_rows = num_valid_rows.next_power_of_two();
-        let mut transcript_trace = vec![F::ZERO; num_rows.next_power_of_two() * transcript_width];
-
-        // Second pass, fill in the trace.
-        let mut tidx = 0;
-        let mut prev_poseidon_state = [F::ZERO; POSEIDON2_WIDTH];
-        let mut poseidon_inputs = Vec::with_capacity(num_valid_rows);
-        let mut poseidon_flags = Vec::with_capacity(num_valid_rows);
-        for (i, row) in transcript_trace
-            .chunks_mut(transcript_width)
-            .take(num_valid_rows)
-            .enumerate()
-        {
-            let cols: &mut TranscriptCols<F> = row.borrow_mut();
-            if i == 0 {
-                cols.is_proof_start = F::ONE;
-            }
-            let is_sample = preflight.transcript.samples()[tidx];
-
-            cols.is_sample = F::from_bool(is_sample);
-            cols.tidx = F::from_canonical_usize(tidx);
-            cols.mask[0] = F::from_bool(true);
-            cols.lookup[0] = F::from_canonical_usize(1);
-
-            cols.prev_state = prev_poseidon_state;
-
-            if is_sample {
-                cols.prev_state[CHUNK - 1] = preflight.transcript.values()[tidx];
-            } else {
-                cols.prev_state[0] = preflight.transcript.values()[tidx];
-            }
-
-            tidx += 1;
-            let mut idx: usize = 1;
-
-            let mut permuted = false;
-            loop {
-                if tidx >= preflight.transcript.len() {
-                    // at the end, no permutation needed
-                    break;
+        // Second pass, fill in the transcript trace.
+        for (pidx, preflight) in preflights.iter().enumerate() {
+            let mut tidx = 0;
+            let mut prev_poseidon_state = [F::ZERO; POSEIDON2_WIDTH];
+            for (i, row) in transcript_trace
+                .chunks_mut(transcript_width)
+                .take(valid_rows[pidx])
+                .enumerate()
+            {
+                let cols: &mut TranscriptCols<F> = row.borrow_mut();
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                if i == 0 {
+                    cols.is_proof_start = F::ONE;
                 }
+                let is_sample = preflight.transcript.samples()[tidx];
 
-                if preflight.transcript.samples()[tidx] != is_sample {
-                    // encounter a different type of operation. Permute if it's going to sample
-                    permuted = preflight.transcript.samples()[tidx];
-                    break;
-                }
+                cols.is_sample = F::from_bool(is_sample);
+                cols.tidx = F::from_canonical_usize(tidx);
+                cols.mask[0] = F::from_bool(true);
+                cols.lookup[0] = F::from_canonical_usize(1);
 
-                cols.mask[idx] = F::from_bool(true);
-                cols.lookup[idx] = F::from_canonical_usize(1);
+                cols.prev_state = prev_poseidon_state;
+
                 if is_sample {
-                    cols.prev_state[CHUNK - 1 - idx] = preflight.transcript.values()[tidx];
+                    cols.prev_state[CHUNK - 1] = preflight.transcript.values()[tidx];
                 } else {
-                    cols.prev_state[idx] = preflight.transcript.values()[tidx];
+                    cols.prev_state[0] = preflight.transcript.values()[tidx];
                 }
 
                 tidx += 1;
-                idx += 1;
-                if idx == CHUNK {
-                    permuted = true;
-                    break;
+                let mut idx: usize = 1;
+
+                let mut permuted = false;
+                loop {
+                    if tidx >= preflight.transcript.len() {
+                        // at the end, no permutation needed
+                        break;
+                    }
+
+                    if preflight.transcript.samples()[tidx] != is_sample {
+                        // encounter a different type of operation. Permute if it's going to sample
+                        permuted = preflight.transcript.samples()[tidx];
+                        break;
+                    }
+
+                    cols.mask[idx] = F::from_bool(true);
+                    cols.lookup[idx] = F::from_canonical_usize(1);
+                    if is_sample {
+                        cols.prev_state[CHUNK - 1 - idx] = preflight.transcript.values()[tidx];
+                    } else {
+                        cols.prev_state[idx] = preflight.transcript.values()[tidx];
+                    }
+
+                    tidx += 1;
+                    idx += 1;
+                    if idx == CHUNK {
+                        permuted = true;
+                        break;
+                    }
                 }
-            }
-            cols.permuted = F::from_bool(permuted);
+                cols.permuted = F::from_bool(permuted);
 
-            prev_poseidon_state = cols.prev_state;
-            if permuted {
-                self.perm.permute_mut(&mut prev_poseidon_state);
-            }
-            cols.post_state = prev_poseidon_state;
+                prev_poseidon_state = cols.prev_state;
+                if permuted {
+                    self.perm.permute_mut(&mut prev_poseidon_state);
+                }
+                cols.post_state = prev_poseidon_state;
 
-            poseidon_inputs.push(cols.prev_state);
-            poseidon_flags.push(cols.permuted);
+                poseidon_inputs.push(cols.prev_state);
+                poseidon_flags.push(cols.permuted);
+            }
+            assert_eq!(tidx, preflight.transcript.len());
         }
-        assert_eq!(tidx, preflight.transcript.len());
 
-        let transcript_width = TranscriptCols::<F>::width();
-        let transcript_height = transcript_trace.len() / transcript_width; // should be power of two already
-
-        poseidon_inputs.resize(transcript_height, [F::ZERO; POSEIDON2_WIDTH]);
-        poseidon_flags.resize(transcript_height, F::ZERO);
+        // TODO: add poseidon2 lookups from merkle verify
+        poseidon_inputs.resize(transcript_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
+        poseidon_flags.resize(transcript_num_rows, F::ZERO);
         let inner_trace = self.sub_chip.generate_trace(poseidon_inputs);
-        let inner_width = self.sub_chip.air.width();
-        let poseidon2_width = Poseidon2Cols::<F, SBOX_REGISTERS>::width();
 
-        let mut poseidon_trace = F::zero_vec(transcript_height * poseidon2_width);
+        let mut poseidon_trace = F::zero_vec(transcript_num_rows * poseidon2_width);
         poseidon_trace
             .par_chunks_mut(poseidon2_width)
             .zip(inner_trace.values.par_chunks(inner_width))

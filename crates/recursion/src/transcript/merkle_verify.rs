@@ -77,16 +77,22 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MerkleVerifyAir {
     }
 }
 
-pub fn generate_trace(_proof: &Proof, preflight: &Preflight) -> Vec<F> {
+pub fn generate_trace(_proofs: &[Proof], preflights: &[Preflight]) -> Vec<F> {
     let width = MerkleVerifyCols::<F>::width();
-    let num_valid_rows = preflight.merkle_verify_logs.len();
+    let num_valid_rows: usize = preflights
+        .iter()
+        .map(|preflight| preflight.merkle_verify_logs.len())
+        .sum();
     let num_rows = num_valid_rows.next_power_of_two();
     let mut trace = vec![F::ZERO; num_rows.next_power_of_two() * width];
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
-        let cols: &mut MerkleVerifyCols<F> = row.borrow_mut();
-        cols.is_valid = F::ONE;
-        cols.merkle_verify_bus_msg = preflight.merkle_verify_logs[i].0.clone();
-        cols.commitment = preflight.merkle_verify_logs[i].1;
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+            let cols: &mut MerkleVerifyCols<F> = row.borrow_mut();
+            cols.is_valid = F::ONE;
+            cols.proof_idx = F::from_canonical_usize(pidx);
+            cols.merkle_verify_bus_msg = preflight.merkle_verify_logs[i].0.clone();
+            cols.commitment = preflight.merkle_verify_logs[i].1;
+        }
     }
 
     trace
