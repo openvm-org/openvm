@@ -210,7 +210,10 @@ pub struct VerifierCircuit<TS> {
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
-impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
+impl<TS> VerifierCircuit<TS>
+where
+    TS: FiatShamirTranscript + TranscriptHistory,
+{
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
@@ -267,15 +270,21 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> VerifierCircuit<TS> {
         preflight
     }
 
-    pub fn generate_proof_inputs(&self, sponge: TS, proof: &Proof) -> Vec<AirProofRawInput<F>> {
-        let preflight = self.run_preflight(sponge, proof);
+    pub fn generate_proof_inputs(&self, proofs: &[Proof]) -> Vec<AirProofRawInput<F>>
+    where
+        TS: Default,
+    {
+        let preflights = proofs
+            .iter()
+            .map(|proof| {
+                let sponge = TS::default();
+                self.run_preflight(sponge, proof)
+            })
+            .collect::<Vec<_>>();
 
         let mut proof_inputs = vec![];
         for (i, module) in self.modules.iter().enumerate() {
-            let module_proof_inputs = module.generate_proof_inputs(
-                std::slice::from_ref(proof),
-                std::slice::from_ref(&preflight),
-            );
+            let module_proof_inputs = module.generate_proof_inputs(proofs, &preflights);
             debug_assert_eq!(
                 module_proof_inputs.len(),
                 module.airs().len(),
