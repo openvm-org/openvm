@@ -23,7 +23,6 @@ use crate::{
         program::ProgramBus,
     },
 };
-use openvm_instructions::LocalOpcode;
 
 #[derive(Error, Debug)]
 pub enum ExecutionError {

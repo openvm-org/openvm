@@ -134,15 +134,13 @@ where
 
         if lane_b == 0 {
             asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);
-        } 
-        else {
+        } else {
             asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_map_reg_b, lane_b);
         }
 
         if lane_c == 0 {
             asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c);
-        } 
-        else {
+        } else {
             asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_C_W, xmm_map_reg_c, lane_c);
         }
 

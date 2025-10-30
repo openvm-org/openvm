@@ -2,6 +2,10 @@ use std::{array, borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::{VmExecutor, VmState};
+#[cfg(feature = "aot")]
+use openvm_circuit::{
+    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, RANGE_TUPLE_CHECKER_BUS},
@@ -9,13 +13,10 @@ use openvm_circuit::{
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-#[cfg(feature = "aot")]
-use openvm_circuit::{
-    arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
-};
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
+use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{
     exe::VmExe,
@@ -24,7 +25,6 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
@@ -49,6 +49,8 @@ use {
 };
 
 use super::core::run_mul;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -56,12 +58,9 @@ use crate::{
     },
     mul::{MultiplicationCoreCols, Rv32MultiplicationChip},
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
-    MultiplicationCoreAir, MultiplicationExecutor, MultiplicationFiller, Rv32MultiplicationAir,
+    MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir,
     Rv32MultiplicationExecutor,
-    
 };
-#[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -303,13 +302,8 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     assert_eq!(interp_state.pc(), aot_state.pc());
 
     let hasher = vm_poseidon2_hasher::<BabyBear>();
-    let tree1 = MerkleTree::from_memory(
-        &interp_state.memory.memory,
-        &memory_dimensions,
-        &hasher,
-    );
-    let tree2 =
-        MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
+    let tree1 = MerkleTree::from_memory(&interp_state.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&aot_state.memory.memory, &memory_dimensions, &hasher);
     assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
 
     (interp_state, aot_state)

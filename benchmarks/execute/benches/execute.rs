@@ -1,7 +1,7 @@
 use std::{
-    fs, io,
+    io,
     path::Path,
-    sync::{Arc, OnceLock},
+    sync::OnceLock,
 };
 
 use divan::Bencher;
@@ -11,27 +11,22 @@ use openvm_algebra_circuit::{
     ModularExtensionExecutor,
 };
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
-use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, read_elf_file};
+use openvm_benchmarks_utils::{get_elf_path, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
-        ContinuationVmProof, *,
+        execution_mode::MeteredCostCtx, instructions::exe::VmExe, *,
     },
     derive::VmConfig,
     system::*,
 };
-use openvm_continuations::{
-    verifier::{internal::types::InternalVmVerifierInput, leaf::types::LeafVmVerifierInput},
-    SC,
-};
+use openvm_continuations::SC;
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
-use openvm_native_recursion::hints::Hintable;
+use openvm_native_circuit::NativeCpuBuilder;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
 };
@@ -43,10 +38,6 @@ use openvm_rv32im_circuit::{
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_sdk::{
-    commit::VmCommittedExe,
-    config::{AggregationConfig, DEFAULT_NUM_CHILDREN_INTERNAL, DEFAULT_NUM_CHILDREN_LEAF},
-};
 use openvm_sha256_circuit::{Sha256, Sha256Executor, Sha2CpuProverExt};
 use openvm_sha256_transpiler::Sha256TranspilerExtension;
 use openvm_stark_sdk::{
@@ -57,7 +48,6 @@ use openvm_stark_sdk::{
         config::{StarkGenericConfig, Val},
         keygen::types::MultiStarkProvingKey,
         p3_field::PrimeField32,
-        proof::Proof,
         prover::{
             cpu::{CpuBackend, CpuDevice},
             hal::DeviceDataTransporter,
@@ -68,11 +58,7 @@ use openvm_stark_sdk::{
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
-const APP_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
-    "keccak256",
-    "sha256",
-];
+const APP_PROGRAMS: &[&str] = &["fibonacci_recursive", "keccak256", "sha256"];
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
@@ -264,7 +250,6 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
                 .expect("Failed to execute program in interpreted mode");
         });
 }
-        
 
 /*
 #[divan::bench(args = APP_PROGRAMS, sample_count=0)]

@@ -9,8 +9,10 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode,
+    LocalOpcode, 
 };
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -237,7 +239,6 @@ where
 
         asm_str
     }
-
 
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {

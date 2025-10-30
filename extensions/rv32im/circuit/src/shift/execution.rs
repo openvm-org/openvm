@@ -9,8 +9,10 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode, VmOpcode,
+    LocalOpcode,
 };
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -142,35 +144,35 @@ where
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
             c_i24 as i16
         };
-        let mut asm_str = String::new();  
-        let a : i16 = to_i16(inst.a);
-        let b : i16 = to_i16(inst.b);
-        let c : i16 = to_i16(inst.c);
-        let e : i16 = to_i16(inst.e);
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
 
         assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
-        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");   
-        
-        let xmm_map_reg_a = if (a/4) % 2 == 0 {
-            a/8
+        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");
+
+        let xmm_map_reg_a = if (a / 4) % 2 == 0 {
+            a / 8
         } else {
-            ((a/4)-1)/2 // floor((a/4)/2)
+            ((a / 4) - 1) / 2 // floor((a/4)/2)
         };
 
-        let xmm_map_reg_b = if (b/4) % 2 == 0 {
-            b/8
+        let xmm_map_reg_b = if (b / 4) % 2 == 0 {
+            b / 8
         } else {
-            ((b/4)-1)/2
+            ((b / 4) - 1) / 2
         };
 
-        // note: for shift we will use REG_B since 
+        // note: for shift we will use REG_B since
         // it is a hardware requirement that cl is used as the shift value
         // and we don't want to override the written [b:4]_1
 
         // [a:4]_1 <- [b:4]_1
-        if (b/4)%2 == 0 {
+        if (b / 4) % 2 == 0 {
             // get the [0:32) bits of xmm_map_reg_b
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B, xmm_map_reg_b);                                            
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B, xmm_map_reg_b);
         } else {
             // get the [32:64) bits of xmm_map_reg_b
             asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_B_W, xmm_map_reg_b);
@@ -184,23 +186,23 @@ where
         } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
             asm_opcode += "sar";
         }
-        
+
         if e == 0 {
             // [b:4]_1 <- [b:4]_1 (shift) c
             asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_B_W, c);
         } else {
             // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
             assert_eq!(c % 4, 0);
-            let xmm_map_reg_c = if (c/4) % 2 == 0 {
-                c/8
+            let xmm_map_reg_c = if (c / 4) % 2 == 0 {
+                c / 8
             } else {
-                ((c/4)-1)/2
+                ((c / 4) - 1) / 2
             };
 
             // XMM -> General Register
-            if (c/4) % 2 == 0 {
+            if (c / 4) % 2 == 0 {
                 // get the [0:32) bits of xmm_map_reg_c
-                asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c); 
+                asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c);
             } else {
                 // get the [32:64) bits of xmm_map_reg_b
                 asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
@@ -212,26 +214,34 @@ where
         }
 
         // General Register -> XMM
-        if (a/4)%2 == 0 {
-            // make the [0:32) bits of xmm_map_reg_a equal to REG_B_W without modifying the other bits
-            asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_B_W}, 0\n", xmm_map_reg_a, xmm_map_reg_a);
+        if (a / 4) % 2 == 0 {
+            // make the [0:32) bits of xmm_map_reg_a equal to REG_B_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_B_W}, 0\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
         } else {
-            // make the [32:64) bits of xmm_map_reg_a equal to REG_B_W without modifying the other bits
-            asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_B_W}, 1\n", xmm_map_reg_a, xmm_map_reg_a);
+            // make the [32:64) bits of xmm_map_reg_a equal to REG_B_W without modifying the other
+            // bits
+            asm_str += &format!(
+                "   vpinsrd xmm{}, xmm{}, {REG_B_W}, 1\n",
+                xmm_map_reg_a, xmm_map_reg_a
+            );
         }
 
         asm_str += &format!("   add {}, {}\n", REG_PC, 4);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
 
-        // let it fall to the next instruction 
+        // let it fall to the next instruction
 
         asm_str
     }
 
     #[cfg(feature = "aot")]
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        ShiftOpcode::SLL.global_opcode() == opcode 
-            || ShiftOpcode::SRA.global_opcode() == opcode 
+        ShiftOpcode::SLL.global_opcode() == opcode
+            || ShiftOpcode::SRA.global_opcode() == opcode
             || ShiftOpcode::SRL.global_opcode() == opcode
     }
 }
