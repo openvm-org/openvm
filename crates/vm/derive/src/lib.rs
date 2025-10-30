@@ -338,8 +338,8 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                 #[cfg(feature = "aot")]
                 impl #impl_generics ::openvm_circuit::arch::AotExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
-                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
-                        self.0.supports_aot_for_opcode(opcode)
+                    fn is_aot_supported(&self, inst: &::openvm_instructions::instruction::Instruction<F>) -> bool {
+                        self.0.is_aot_supported(inst)
                     }
 
                     #[inline(always)]
@@ -403,7 +403,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     &default_ty_generic
                 });
             let (
-                supports_aot_for_opcode_arms,
+                is_aot_supported_arms,
                 call_extern_handler_arms,
                 fallback_to_interpreter_arms,
                 generate_x86_asm_arms,
@@ -411,8 +411,8 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
             ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(
                 |(variant_name, field)| {
                     let field_ty = &field.ty;
-                    let supports_aot_for_opcode_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::supports_aot_for_opcode(x, opcode)
+                    let is_aot_supported_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::is_aot_supported(x, inst)
                     };
                     let call_extern_handler_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x)
@@ -436,7 +436,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     let where_predicate =
                         syn::parse_quote! { #field_ty: ::openvm_circuit::arch::AotExecutor<#first_ty_generic> };
                     (
-                        supports_aot_for_opcode_arm,
+                        is_aot_supported_arm,
                         call_extern_handler_arm,
                         fallback_to_interpreter_arm,
                         generate_x86_asm_arm,
@@ -454,9 +454,9 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                 #[cfg(feature = "aot")]
                 impl #impl_generics ::openvm_circuit::arch::AotExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
-                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
+                    fn is_aot_supported(&self, inst: &::openvm_instructions::instruction::Instruction<F>) -> bool {
                         match self {
-                            #(#supports_aot_for_opcode_arms,)*
+                            #(#is_aot_supported_arms,)*
                         }
                     }
 
