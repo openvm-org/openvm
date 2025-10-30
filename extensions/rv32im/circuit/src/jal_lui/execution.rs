@@ -89,6 +89,50 @@ where
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+        use crate::common::gpr_to_rv32_register;
+
+        let local_opcode = Rv32JalLuiOpcode::from_usize(
+            inst.opcode.local_opcode_idx(Rv32JalLuiOpcode::CLASS_OFFSET),
+        );
+        let is_jal = local_opcode == JAL;
+        let signed_imm = get_signed_imm(is_jal, inst.c);
+        let a = inst.a.as_canonical_u32() as u8;
+        let enabled = !inst.f.is_zero();
+
+        let mut asm_str = String::new();
+        let a_reg = a / 4;
+
+        // instret += 1
+        asm_str += "   add r14, 1\n";
+        let rd = if is_jal {
+            pc + DEFAULT_PC_STEP
+        } else {
+            let imm = signed_imm as u32;
+            imm << 12
+        };
+
+        asm_str += &format!("   mov edx, {}\n", rd);
+        if enabled {
+            asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+        }
+        if is_jal {
+            let next_pc = pc as i32 + signed_imm;
+            debug_assert!(next_pc >= 0);
+            asm_str += &format!("   mov r13, {}\n", next_pc);
+            asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+        } else {
+            asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+        };
+
+        asm_str
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, _opcode: openvm_instructions::VmOpcode) -> bool {
+        true
+    }
 }
 
 #[cfg(feature = "aot")]

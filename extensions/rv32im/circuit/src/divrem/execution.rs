@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -96,6 +98,68 @@ where
         let data: &mut DivRemPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, local_opcode)
+    }
+
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+        use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        // TODO: this should return an error instead.
+        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+
+        let mut asm_str = String::new();
+        let a_reg = a.as_canonical_u32() / 4;
+        let b_reg = b.as_canonical_u32() / 4;
+        let c_reg = c.as_canonical_u32() / 4;
+
+        // Calculate the result. Inputs: eax, ecx. Outputs: edx.
+        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
+        asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
+        asm_str += "   move edx, 0\n";
+
+        match local_opcode {
+            DivRemOpcode::DIV => {
+                // sign-extend EAX into EDX:EAX
+                asm_str += "   cdq\n";
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   idiv ecx\n";
+                asm_str += "   mov edx, eax\n";
+            }
+            DivRemOpcode::DIVU => {
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   div ecx\n";
+
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   mov edx, eax\n";
+            }
+            DivRemOpcode::REM => {
+                // sign-extend EAX into EDX:EAX
+                asm_str += "   cdq\n";
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   idiv ecx\n";
+            }
+            DivRemOpcode::REMU => {
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   div ecx\n";
+            }
+        }
+        asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+
+        // pc += DEFAULT_PC_STEP
+        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+        // instret += 1
+        asm_str += &format!("   add r14, 1\n");
+
+        asm_str
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+        true
     }
 }
 

@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
 };
@@ -75,6 +77,47 @@ where
         let data: &mut AuiPcPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
         Ok(execute_e1_handler)
+    }
+
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+        use openvm_instructions::riscv::RV32_CELL_BITS;
+
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let c: i16 = to_i16(inst.c);
+        let d: i16 = to_i16(inst.d);
+        let rd = pc.wrapping_add((c as u32) << RV32_CELL_BITS);
+
+        let xmm_map_reg_a = a / 8;
+        // TODO: this should return an error instead.
+        assert_eq!(d as u32, RV32_REGISTER_AS);
+        asm_str += &format!("   mov eax, {}\n", rd);
+
+        if (a / 4) % 2 == 0 {
+            // write eax to the [0:32) bits of xmm_map_reg_a
+            asm_str += &format!("   pinsrd xmm{}, eax, 0\n", xmm_map_reg_a);
+        } else {
+            // write eax to the [32:64) bits of xmm_map_reg_a
+            asm_str += &format!("   pinsrd xmm{}, eax, 1\n", xmm_map_reg_a);
+        }
+
+        // pc += DEFAULT_PC_STEP
+        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+        // instret += 1
+        asm_str += &format!("   add r14, 1\n");
+
+        asm_str
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+        true
     }
 }
 
