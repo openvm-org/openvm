@@ -279,86 +279,121 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MultilinearSumcheckAir {
 
 pub(crate) fn generate_univariate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
+    proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = UnivariateSumcheckCols::<F>::width();
-    let msgs = preflight
-        .batch_constraint_sumcheck_randomness()
-        .into_iter()
-        .filter(|x| x.idx == F::ZERO)
-        .collect::<Vec<_>>();
-    assert_eq!(msgs.len(), 1);
-    let coeffs = &proof.batch_constraint_proof.univariate_round_coeffs;
-    let height = coeffs.len();
-    let mut trace = vec![F::ZERO; width * height];
-    let challenge = msgs[0].challenge;
-    let coeff_tidx_base = preflight.batch_constraint.tidx_before_univariate;
-    let tidx_offset = proof.batch_constraint_proof.univariate_round_coeffs.len() * D_EF;
-    let tidx_constant = coeff_tidx_base + tidx_offset;
+    let height = proofs
+        .iter()
+        .map(|p| {
+            let res = p.batch_constraint_proof.univariate_round_coeffs.len();
+            debug_assert!(res > 0);
+            res
+        })
+        .sum::<usize>();
+    let padded_height = height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
+    let mut cur_height = 0;
 
-    trace
-        .par_chunks_exact_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.r.copy_from_slice(&challenge);
-            cols.is_first = F::from_bool(i == 0);
-            cols.is_last = F::from_bool(i + 1 == height);
-            cols.coeff.copy_from_slice(coeffs[i].as_base_slice());
-            cols.coeff_tidx = F::from_canonical_usize(coeff_tidx_base + i * D_EF);
-            cols.tidx = F::from_canonical_usize(tidx_constant);
-        });
+    for (pidx, proof) in proofs.iter().enumerate() {
+        let msgs = preflight
+            .batch_constraint_sumcheck_randomness()
+            .into_iter()
+            .filter(|x| x.idx == F::ZERO)
+            .collect::<Vec<_>>();
+        assert_eq!(msgs.len(), 1);
+        let coeffs = &proof.batch_constraint_proof.univariate_round_coeffs;
+        let height = coeffs.len();
+        let challenge = msgs[0].challenge;
+        let coeff_tidx_base = preflight.batch_constraint.tidx_before_univariate;
+        let tidx_offset = proof.batch_constraint_proof.univariate_round_coeffs.len() * D_EF;
+        let tidx_constant = coeff_tidx_base + tidx_offset;
+
+        trace[cur_height..cur_height + height * width]
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.r.copy_from_slice(&challenge);
+                cols.is_first = F::from_bool(i == 0);
+                cols.is_last = F::from_bool(i + 1 == height);
+                cols.coeff.copy_from_slice(coeffs[i].as_base_slice());
+                cols.coeff_tidx = F::from_canonical_usize(coeff_tidx_base + i * D_EF);
+                cols.tidx = F::from_canonical_usize(tidx_constant);
+            });
+
+        cur_height += height;
+    }
 
     RowMajorMatrix::new(trace, width)
 }
 
 pub(crate) fn generate_multilinear_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
+    proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let width = MultilinearSumcheckCols::<F>::width();
     let one_poly_height = vk.inner.max_constraint_degree + 2;
-    let polys = &proof.batch_constraint_proof.sumcheck_round_polys;
-    let height = polys.len() * one_poly_height;
-    let mut trace = vec![F::ZERO; width * height];
-    let transcript_values = preflight.transcript.values();
-    let tidx_before_multilinear = preflight.batch_constraint.tidx_before_multilinear;
-    let stride = one_poly_height * D_EF;
+    let height = proofs
+        .iter()
+        .map(|p| p.batch_constraint_proof.sumcheck_round_polys.len().max(1))
+        .sum::<usize>()
+        * one_poly_height;
+    let padded_height = height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
+    let mut cur_height = 0;
 
-    trace
-        .par_chunks_exact_mut(width)
-        .enumerate()
-        .for_each(|(row_idx, chunk)| {
-            let poly_idx = row_idx / one_poly_height;
-            let within_poly = row_idx % one_poly_height;
-            let poly = &polys[poly_idx];
+    for (pidx, proof) in proofs.iter().enumerate() {
+        let polys = &proof.batch_constraint_proof.sumcheck_round_polys;
+        let height = polys.len() * one_poly_height;
+        let transcript_values = preflight.transcript.values();
+        let tidx_before_multilinear = preflight.batch_constraint.tidx_before_multilinear;
+        let stride = one_poly_height * D_EF;
 
-            let local_tidx_start = tidx_before_multilinear + poly_idx * stride;
-            let r_tidx = local_tidx_start + (one_poly_height - 1) * D_EF;
-            let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
+        if height > 0 {
+            trace[cur_height..cur_height + height * width]
+                .par_chunks_exact_mut(width)
+                .enumerate()
+                .for_each(|(row_idx, chunk)| {
+                    let poly_idx = row_idx / one_poly_height;
+                    let within_poly = row_idx % one_poly_height;
+                    let poly = &polys[poly_idx];
 
-            cols.is_valid = F::ONE;
-            cols.round = F::from_canonical_usize(poly_idx);
-            cols.r
-                .copy_from_slice(&transcript_values[r_tidx..r_tidx + D_EF]);
+                    let local_tidx_start = tidx_before_multilinear + poly_idx * stride;
+                    let r_tidx = local_tidx_start + (one_poly_height - 1) * D_EF;
+                    let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
 
-            if within_poly == 0 {
-                cols.tidx = F::from_canonical_usize(r_tidx);
-                cols.i = F::ZERO;
-                cols.i_is_zero = F::ONE;
-                cols.eval_at_i.fill(F::ZERO);
-            } else {
-                let eval_idx = within_poly - 1;
-                cols.tidx = F::from_canonical_usize(local_tidx_start + eval_idx * D_EF);
-                cols.i = F::from_canonical_usize(within_poly);
-                cols.i_is_zero = F::ZERO;
-                cols.eval_at_i
-                    .copy_from_slice(poly[eval_idx].as_base_slice());
-            }
-        });
+                    cols.is_valid = F::ONE;
+                    cols.proof_idx = F::from_canonical_usize(pidx);
+                    cols.round = F::from_canonical_usize(poly_idx);
+                    cols.r
+                        .copy_from_slice(&transcript_values[r_tidx..r_tidx + D_EF]);
+
+                    if within_poly == 0 {
+                        cols.tidx = F::from_canonical_usize(r_tidx);
+                        cols.i = F::ZERO;
+                        cols.i_is_zero = F::ONE;
+                        cols.eval_at_i.fill(F::ZERO);
+                    } else {
+                        let eval_idx = within_poly - 1;
+                        cols.tidx = F::from_canonical_usize(local_tidx_start + eval_idx * D_EF);
+                        cols.i = F::from_canonical_usize(within_poly);
+                        cols.i_is_zero = F::ZERO;
+                        cols.eval_at_i
+                            .copy_from_slice(poly[eval_idx].as_base_slice());
+                    }
+                });
+        } else {
+            let cols: &mut MultilinearSumcheckCols<F> =
+                trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(pidx);
+            cur_height += 1;
+        }
+        cur_height += height;
+    }
 
     RowMajorMatrix::new(trace, width)
 }
