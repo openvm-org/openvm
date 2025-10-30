@@ -54,7 +54,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for Rv32JalrExecutor<A>
+impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
