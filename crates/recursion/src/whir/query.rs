@@ -126,23 +126,31 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for WhirQueryAir {
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    _proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let num_valid_rows: usize = preflight.whir.queries.len();
-    let num_rows = num_valid_rows.next_power_of_two();
+    let params = mvk.inner.params;
+
+    let num_rows_per_proof = params.num_whir_rounds() * params.num_whir_queries;
+    let num_valid_rows: usize = num_rows_per_proof * preflights.len();
+    let height = num_valid_rows.next_power_of_two();
     let width = WhirQueryCols::<usize>::width();
+    let mut trace = vec![F::ZERO; height * width];
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+    let m = params.n_stack + params.l_skip + params.log_blowup;
 
-    let m = vk.inner.params.n_stack + vk.inner.params.l_skip + vk.inner.params.log_blowup;
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let preflight = &preflights[proof_idx];
+
         let cols: &mut WhirQueryCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
-        let whir_round = i / vk.inner.params.num_whir_queries;
-        let query_idx = i % vk.inner.params.num_whir_queries;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
+        let whir_round = i / params.num_whir_queries;
+        let query_idx = i % params.num_whir_queries;
 
         cols.tidx =
             F::from_canonical_usize(preflight.whir.query_tidx_per_round[whir_round] + query_idx);
@@ -150,8 +158,8 @@ pub(crate) fn generate_trace(
         cols.sample = preflight.whir.queries[i];
         cols.whir_round = F::from_canonical_usize(whir_round);
         cols.query_idx = F::from_canonical_usize(query_idx);
-        cols.omega = F::two_adic_generator(m - whir_round - vk.inner.params.k_whir);
-        cols.num_bits = F::from_canonical_usize(m - whir_round - vk.inner.params.k_whir);
+        cols.omega = F::two_adic_generator(m - whir_round - params.k_whir);
+        cols.num_bits = F::from_canonical_usize(m - whir_round - params.k_whir);
         cols.zi = preflight.whir.zjs[whir_round][query_idx];
         cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
         cols.yi = preflight.whir.yjs[whir_round][query_idx]
