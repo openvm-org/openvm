@@ -1,39 +1,34 @@
-use std::borrow::Borrow;
-use std::borrow::BorrowMut;
-use std::ops::Deref;
+use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
+    air_builders::PartitionedAirBuilder,
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
-use p3_matrix::Matrix;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::keygen::types::MultiStarkVerifyingKeyV2;
-use stark_backend_v2::proof::Proof;
-use stark_backend_v2::{D_EF, F};
+use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::batch_constraint::bus::{
-    ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus, InteractionsFoldingMessage,
-    SymbolicExpressionBus,
+use crate::{
+    batch_constraint::bus::{
+        ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus,
+        InteractionsFoldingMessage, SymbolicExpressionBus,
+    },
+    bus::{
+        AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
+        ColumnClaimsBus, ColumnClaimsMessage, StackingModuleBus, StackingModuleMessage,
+        TranscriptBus, TranscriptBusMessage,
+    },
+    system::Preflight,
 };
-use crate::bus::AirShapeProperty;
-use crate::bus::{
-    AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, ColumnClaimsBus,
-    ColumnClaimsMessage, StackingModuleBus, StackingModuleMessage, TranscriptBus,
-    TranscriptBusMessage,
-};
-use crate::system::Preflight;
-
-type NodeInputValues<T> = [[T; D_EF]; 2];
 
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
-pub struct SymbolicExpressionColumnsHeader<T> {
+pub struct CachedSymbolicExpressionColumns<T> {
     is_valid: T,
 
     air_idx: T,
@@ -42,7 +37,8 @@ pub struct SymbolicExpressionColumnsHeader<T> {
     arg_ids: [T; 2],
 
     is_constraint: T,
-    constraint_idx: T, // TODO: we can use one `constraint_idx + 1` and make it 0 on non-constraints
+    constraint_idx: T, /* TODO: we can use one `constraint_idx + 1` and make it 0 on
+                        * non-constraints */
 
     /// Interactions will always be the duplicates of previous rows,
     /// but each describing a particular interaction component
@@ -51,18 +47,14 @@ pub struct SymbolicExpressionColumnsHeader<T> {
     interaction_idx: T,
     idx_in_message: T,
     interaction_mult: T,
-
-    tidx: T,
 }
 
-#[derive(Clone)]
+#[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
-pub struct SymbolicExpressionColumns<T> {
-    header: SymbolicExpressionColumnsHeader<T>,
-
-    // TODO add a bunch of other stuff
-    /// A different pair of input values per proof
-    arg_vals: Vec<NodeInputValues<T>>,
+pub struct SingleMainSymbolicExpressionColumns<T> {
+    args: [[T; D_EF]; 2],
+    tidx: T,
+    is_existing_proof: T,
 }
 
 pub struct SymbolicExpressionAir {
@@ -75,121 +67,96 @@ pub struct SymbolicExpressionAir {
     pub cnt_proofs: usize,
 }
 
-impl SymbolicExpressionAir {
-    fn deref_to_columns<T: Copy>(
-        &self,
-        row: impl Deref<Target = [T]>,
-    ) -> SymbolicExpressionColumns<T> {
-        // Get offset of arg_vals field
-        // TODO: this is obviously highly cursed
-        let header_width = SymbolicExpressionColumnsHeader::<T>::width();
-
-        let header: SymbolicExpressionColumnsHeader<_> = *(row[..header_width]).borrow();
-        let mut arg_vals = Vec::with_capacity(self.cnt_proofs);
-
-        // Copy arg_vals from remaining row data
-        let mut row_idx = header_width;
-        for _ in 0..self.cnt_proofs {
-            let input_vals = core::array::from_fn(|_| {
-                core::array::from_fn(|_| {
-                    let val = row[row_idx];
-                    row_idx += 1;
-                    val
-                })
-            });
-            arg_vals.push(input_vals);
-        }
-
-        // Verify we used exactly all of row
-        debug_assert_eq!(row_idx, row.len());
-
-        SymbolicExpressionColumns { header, arg_vals }
-    }
-}
-
 impl<F> BaseAirWithPublicValues<F> for SymbolicExpressionAir {}
-impl<F> PartitionedBaseAir<F> for SymbolicExpressionAir {}
+impl<F> PartitionedBaseAir<F> for SymbolicExpressionAir {
+    fn cached_main_widths(&self) -> Vec<usize> {
+        vec![CachedSymbolicExpressionColumns::<F>::width()]
+    }
 
-fn width_by_cnt_proofs(cnt_proofs: usize) -> usize {
-    SymbolicExpressionColumnsHeader::<u32>::width()
-        + cnt_proofs * size_of::<NodeInputValues<[u32; 4]>>() / size_of::<[u32; 4]>()
+    fn common_main_width(&self) -> usize {
+        SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
+    }
 }
 
 impl<F> BaseAir<F> for SymbolicExpressionAir {
     fn width(&self) -> usize {
-        width_by_cnt_proofs(self.cnt_proofs)
+        CachedSymbolicExpressionColumns::<F>::width()
+            + SingleMainSymbolicExpressionColumns::<F>::width() * self.cnt_proofs
     }
 }
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SymbolicExpressionAir {
+impl<AB: PartitionedAirBuilder + InteractionBuilder> Air<AB> for SymbolicExpressionAir {
     fn eval(&self, builder: &mut AB) {
-        let main = builder.main();
-        let local = main.row_slice(0);
-        let local = self.deref_to_columns(local);
+        let main_local = builder.common_main().row_slice(0).to_vec();
+        let cached_local = builder.cached_mains()[0].row_slice(0).to_vec();
+        let single_main_width = SingleMainSymbolicExpressionColumns::<AB::Var>::width();
+        let cached_cols: &CachedSymbolicExpressionColumns<AB::Var> = cached_local[..].borrow();
+        let main_cols: Vec<&SingleMainSymbolicExpressionColumns<AB::Var>> = main_local
+            .chunks(single_main_width)
+            .map(|chunk| chunk.borrow())
+            .collect();
 
-        for i in 0..self.cnt_proofs {
+        for (i, &cols) in main_cols.iter().enumerate() {
             let value = core::array::from_fn(|_| AB::Expr::ZERO);
             // TODO actually compute the value and uncomment
             // self.expr_bus.send(
             //     builder,
             //     AB::Expr::from_canonical_usize(i),
             //     SymbolicExpressionMessage {
-            //         air_idx: local.header.air_idx.into(),
-            //         node_idx: local.header.node_idx.into(),
+            //         air_idx: cached_cols.air_idx.into(),
+            //         node_idx: cached_cols.node_idx.into(),
             //         value: value.clone(),
             //     },
-            //     local.header.is_valid,
+            //     cached_cols.is_valid,
             // );
 
             // self.expr_bus.receive(
             //     builder,
             //     AB::Expr::from_canonical_usize(i),
             //     SymbolicExpressionMessage {
-            //         air_idx: local.header.air_idx,
-            //         node_idx: local.header.arg_ids[0],
+            //         air_idx: cached_cols.air_idx,
+            //         node_idx: cached_cols.arg_ids[0],
             //         value: local.arg_vals[i][0],
             //     },
-            //     local.header.is_valid, // TODO the indicator that the node type is not constant or something
-            // );
+            //     cached_cols.is_valid, // TODO the indicator that the node type is not constant
+            // or something );
             // self.expr_bus.receive(
             //     builder,
             //     AB::Expr::from_canonical_usize(i),
             //     SymbolicExpressionMessage {
-            //         air_idx: local.header.air_idx,
-            //         node_idx: local.header.arg_ids[1],
+            //         air_idx: cached_cols.air_idx,
+            //         node_idx: cached_cols.arg_ids[1],
             //         value: local.arg_vals[i][1],
             //     },
-            //     local.header.is_valid, // TODO the indicator that the node type is a binary operation
-            // );
+            //     cached_cols.is_valid, // TODO the indicator that the node type is a binary
+            // operation );
             self.stacking_module_bus.send(
                 builder,
                 AB::Expr::from_canonical_usize(i),
-                StackingModuleMessage {
-                    tidx: local.header.tidx,
-                },
-                local.header.is_valid,
+                StackingModuleMessage { tidx: cols.tidx },
+                cols.is_existing_proof,
             );
             self.claim_bus.send(
                 builder,
                 AB::Expr::from_canonical_usize(i),
                 ExpressionClaimMessage {
                     is_interaction: AB::Expr::ZERO,
-                    idx: local.header.constraint_idx.into(),
+                    idx: cached_cols.constraint_idx.into(),
                     value: value.clone(),
                 },
-                local.header.is_constraint,
+                cached_cols.is_constraint,
             );
             self.interactions_folding_bus.send(
                 builder,
                 AB::Expr::from_canonical_usize(i),
                 InteractionsFoldingMessage {
-                    node_idx: local.header.node_idx.into(),
-                    interaction_idx: local.header.interaction_idx.into(),
-                    is_mult: local.header.is_mult.into(),
-                    idx_in_message: local.header.idx_in_message.into(),
+                    node_idx: cached_cols.node_idx.into(),
+                    interaction_idx: cached_cols.interaction_idx.into(),
+                    is_mult: cached_cols.is_mult.into(),
+                    idx_in_message: cached_cols.idx_in_message.into(),
                     value: value.clone(),
                 },
-                local.header.is_interaction,
+                cached_cols.is_interaction,
             );
         }
     }
@@ -464,51 +431,44 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir {
     }
 }
 
-pub(crate) fn generate_symbolic_expression_trace(
+/// Returns the pair (cached main trace, common main trace).
+pub(crate) fn generate_symbolic_expression_traces(
     _vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflight: &Preflight,
-) -> RowMajorMatrix<F> {
-    let width = width_by_cnt_proofs(proofs.len());
+    _proofs: &[Proof],
+    preflights: &[Preflight],
+    max_num_proofs: usize,
+) -> (RowMajorMatrix<F>, RowMajorMatrix<F>) {
+    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+    let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
+    let main_width = single_main_width * max_num_proofs;
 
-    let mut trace = vec![F::ZERO; width];
-    let cols: &mut SymbolicExpressionColumnsHeader<_> =
-        trace[..SymbolicExpressionColumnsHeader::<F>::width()].borrow_mut();
-    cols.is_valid = F::ONE;
-    cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
+    let mut cached_trace = vec![F::ZERO; cached_width];
+    {
+        let cols: &mut CachedSymbolicExpressionColumns<_> = cached_trace[..].borrow_mut();
+        cols.is_valid = F::ONE;
+    }
 
-    RowMajorMatrix::new(trace, width)
+    let mut main_trace = vec![F::ZERO; main_width];
+    for (preflight, chunk) in preflights
+        .iter()
+        .zip(main_trace[..].chunks_mut(single_main_width))
+    {
+        let cols: &mut SingleMainSymbolicExpressionColumns<_> = chunk[..].borrow_mut();
+        cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
+        cols.is_existing_proof = F::ONE;
+    }
+
+    (
+        RowMajorMatrix::new(cached_trace, cached_width),
+        RowMajorMatrix::new(main_trace, main_width),
+    )
 }
 
 pub(crate) fn generate_column_claim_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let vdata = &preflight.proof_shape.sorted_trace_vdata;
-    let mut main_tidx = Vec::with_capacity(vdata.len());
-    let mut nonmain_tidx = Vec::with_capacity(vdata.len());
-    let mut cur_main_tidx = 0;
-    let mut cur_nonmain_tidx = 0;
-    for (air_id, _) in vdata.iter() {
-        let ws = &vk.inner.per_air[*air_id].params.width;
-        main_tidx.push(cur_main_tidx);
-        cur_main_tidx += ws.common_main;
-        nonmain_tidx.push(cur_nonmain_tidx);
-        cur_nonmain_tidx += ws.total_width(0) - ws.common_main;
-    }
-    let height = cur_main_tidx + cur_nonmain_tidx;
-    for x in main_tidx.iter_mut() {
-        let tidx = preflight.batch_constraint.tidx_before_column_openings + *x * 2 * D_EF;
-        *x = tidx;
-    }
-    for x in nonmain_tidx.iter_mut() {
-        let tidx = preflight.batch_constraint.tidx_before_column_openings
-            + (cur_main_tidx + *x) * 2 * D_EF;
-        *x = tidx;
-    }
-    debug_assert!(height > 0);
-
     let width = ColumnClaimCols::<F>::width();
 
     #[derive(Clone)]
@@ -526,10 +486,33 @@ pub(crate) fn generate_column_claim_trace(
         rot_claim: [F; D_EF],
     }
 
-    let total_height = height * proofs.len();
-    let mut rows = Vec::with_capacity(total_height);
+    let mut rows = Vec::new();
 
-    for (pidx, proof) in proofs.iter().enumerate() {
+    for (pidx, (proof, preflight)) in proofs.iter().zip(preflights.iter()).enumerate() {
+        let vdata = &preflight.proof_shape.sorted_trace_vdata;
+        let mut main_tidx = Vec::with_capacity(vdata.len());
+        let mut nonmain_tidx = Vec::with_capacity(vdata.len());
+        let mut cur_main_tidx = 0;
+        let mut cur_nonmain_tidx = 0;
+        for (air_id, _) in vdata.iter() {
+            let ws = &vk.inner.per_air[*air_id].params.width;
+            main_tidx.push(cur_main_tidx);
+            cur_main_tidx += ws.common_main;
+            nonmain_tidx.push(cur_nonmain_tidx);
+            cur_nonmain_tidx += ws.total_width(0) - ws.common_main;
+        }
+        let height = cur_main_tidx + cur_nonmain_tidx;
+        for x in main_tidx.iter_mut() {
+            let tidx = preflight.batch_constraint.tidx_before_column_openings + *x * 2 * D_EF;
+            *x = tidx;
+        }
+        for x in nonmain_tidx.iter_mut() {
+            let tidx = preflight.batch_constraint.tidx_before_column_openings
+                + (cur_main_tidx + *x) * 2 * D_EF;
+            *x = tidx;
+        }
+        debug_assert!(height > 0);
+
         let initial_len = rows.len();
         for (sort_idx, &(air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
@@ -593,12 +576,11 @@ pub(crate) fn generate_column_claim_trace(
         rows.last_mut().unwrap().is_last = true;
     }
 
-    debug_assert_eq!(rows.len(), total_height);
-
+    let total_height = rows.len();
     let padded_height = total_height.next_power_of_two();
     let mut trace = vec![F::ZERO; padded_height * width];
 
-    trace[..padded_height * width]
+    trace[..total_height * width]
         .par_chunks_exact_mut(width)
         .zip(rows.into_par_iter())
         .for_each(|(chunk, row)| {
@@ -616,31 +598,51 @@ pub(crate) fn generate_column_claim_trace(
             cols.col_claim.copy_from_slice(&row.col_claim);
             cols.rot_claim.copy_from_slice(&row.rot_claim);
         });
+    trace[total_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut ColumnClaimCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
+        });
 
     RowMajorMatrix::new(trace, width)
 }
 
 pub(crate) fn generate_expression_claim_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
-    preflight: &Preflight,
+    _proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = ExpressionClaimCols::<F>::width();
-    let mut trace = vec![F::ZERO; width];
-    let cols: &mut ExpressionClaimCols<_> = trace[..].borrow_mut();
-    cols.is_first = F::ONE;
-    cols.is_valid = F::ONE;
-    let tidx = preflight.gkr.post_tidx;
-    cols.lambda_tidx = F::from_canonical_usize(tidx);
-    cols.lambda
-        .copy_from_slice(&preflight.transcript.values()[tidx..tidx + D_EF]);
+
+    let height = preflights.len();
+    let padded_height = height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
+    for (i, preflight) in preflights.iter().enumerate() {
+        let cols: &mut ExpressionClaimCols<_> = trace[i * width..(i + 1) * width].borrow_mut();
+        cols.is_first = F::ONE;
+        cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(i);
+        let tidx = preflight.gkr.post_tidx;
+        cols.lambda_tidx = F::from_canonical_usize(tidx);
+        cols.lambda
+            .copy_from_slice(&preflight.transcript.values()[tidx..tidx + D_EF]);
+    }
+    trace[height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut ExpressionClaimCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+        });
     RowMajorMatrix::new(trace, width)
 }
 
 pub(crate) fn generate_interactions_folding_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
-    preflight: &Preflight,
+    _proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = InteractionsFoldingCols::<F>::width();
     let interactions = vk
@@ -660,18 +662,32 @@ pub(crate) fn generate_interactions_folding_trace(
         .map(|inters| inters.iter().map(|i| i.message.len() + 2).sum::<usize>())
         .sum::<usize>();
 
-    let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+    let total_height = height.max(1) * preflights.len();
+    let padding_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padding_height * width];
 
     if height == 0 {
-        let mut trace = vec![F::ZERO; width];
-        let cols: &mut InteractionsFoldingCols<_> = trace[..].borrow_mut();
-        cols.is_valid = F::ONE;
-        cols.is_first = F::ONE;
-        cols.is_last = F::ONE;
-        cols.is_fictious = F::ONE;
-        cols.beta_tidx = F::from_canonical_usize(beta_tidx);
-        cols.beta
-            .copy_from_slice(&preflight.transcript.values()[beta_tidx..beta_tidx + D_EF]);
+        for (i, preflight) in preflights.iter().enumerate() {
+            let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+            let cols: &mut InteractionsFoldingCols<_> =
+                trace[i * width..(i + 1) * width].borrow_mut();
+            cols.is_valid = F::ONE;
+            cols.is_first = F::ONE;
+            cols.is_last = F::ONE;
+            cols.is_fictious = F::ONE;
+            cols.proof_idx = F::from_canonical_usize(i);
+            cols.beta_tidx = F::from_canonical_usize(beta_tidx);
+            cols.beta
+                .copy_from_slice(&preflight.transcript.values()[beta_tidx..beta_tidx + D_EF]);
+        }
+        trace[preflights.len() * width..]
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
+                cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            });
+
         return RowMajorMatrix::new(trace, width);
     }
 
@@ -681,81 +697,92 @@ pub(crate) fn generate_interactions_folding_trace(
         is_last: bool,
         is_first_in_message: bool,
         is_last_in_message: bool,
+        proof_idx: usize,
         idx_in_message: usize,
         sort_idx: usize,
         interaction_idx: usize,
         node_idx: usize,
     }
 
-    let mut rows = Vec::with_capacity(height);
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let mut rows = Vec::with_capacity(height);
+        let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
 
-    for (sort_idx, inters) in interactions.into_iter().enumerate() {
-        for (interaction_idx, inter) in inters.into_iter().enumerate() {
-            let is_first = rows.is_empty();
-            rows.push(InteractionRowInfo {
-                is_first,
-                is_last: false,
-                is_first_in_message: true,
-                is_last_in_message: false,
-                idx_in_message: 0,
-                sort_idx,
-                interaction_idx,
-                node_idx: inter.count,
-            });
+        for (sort_idx, inters) in interactions.iter().enumerate() {
+            for (interaction_idx, inter) in inters.iter().enumerate() {
+                let is_first = rows.is_empty();
+                rows.push(InteractionRowInfo {
+                    is_first,
+                    is_last: false,
+                    is_first_in_message: true,
+                    is_last_in_message: false,
+                    proof_idx: pidx,
+                    idx_in_message: 0,
+                    sort_idx,
+                    interaction_idx,
+                    node_idx: inter.count,
+                });
 
-            for (j, &node_idx) in inter.message.iter().enumerate() {
+                for (j, &node_idx) in inter.message.iter().enumerate() {
+                    rows.push(InteractionRowInfo {
+                        is_first: false,
+                        is_last: false,
+                        is_first_in_message: false,
+                        is_last_in_message: false,
+                        proof_idx: pidx,
+                        idx_in_message: j,
+                        sort_idx,
+                        interaction_idx,
+                        node_idx,
+                    });
+                }
+
                 rows.push(InteractionRowInfo {
                     is_first: false,
                     is_last: false,
                     is_first_in_message: false,
-                    is_last_in_message: false,
-                    idx_in_message: j,
+                    is_last_in_message: true,
+                    proof_idx: pidx,
+                    idx_in_message: inter.message.len() + 1,
                     sort_idx,
                     interaction_idx,
-                    node_idx,
+                    node_idx: usize::from(inter.bus_index + 1),
                 });
             }
-
-            rows.push(InteractionRowInfo {
-                is_first: false,
-                is_last: false,
-                is_first_in_message: false,
-                is_last_in_message: true,
-                idx_in_message: inter.message.len() + 1,
-                sort_idx,
-                interaction_idx,
-                node_idx: usize::from(inter.bus_index + 1),
-            });
         }
+
+        debug_assert_eq!(rows.len(), height);
+        rows.last_mut().unwrap().is_last = true;
+
+        let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
+
+        trace[pidx * height * width..]
+            .par_chunks_exact_mut(width)
+            .zip(rows.par_iter())
+            .for_each(|(chunk, row)| {
+                let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(row.is_first);
+                cols.is_last = F::from_bool(row.is_last);
+                cols.proof_idx = F::from_canonical_usize(row.proof_idx);
+                cols.beta_tidx = F::from_canonical_usize(beta_tidx);
+                cols.beta.copy_from_slice(beta_slice);
+                cols.sort_idx = F::from_canonical_usize(row.sort_idx);
+                cols.interaction_idx = F::from_canonical_usize(row.interaction_idx);
+                cols.node_idx = F::from_canonical_usize(row.node_idx);
+                cols.idx_in_message = F::from_canonical_usize(row.idx_in_message);
+                cols.is_first_in_message = F::from_bool(row.is_first_in_message);
+                cols.is_last_in_message = F::from_bool(row.is_last_in_message);
+                cols.value.fill(F::ZERO);
+                cols.cur_sum.fill(F::ZERO);
+            });
     }
-
-    if let Some(last) = rows.last_mut() {
-        last.is_last = true;
-    }
-
-    debug_assert_eq!(rows.len(), height);
-
-    let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
-    let mut trace = vec![F::ZERO; height * width];
-
-    trace
-        .par_chunks_exact_mut(width)
-        .zip(rows.into_par_iter())
-        .for_each(|(chunk, row)| {
-            let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(row.is_first);
-            cols.is_last = F::from_bool(row.is_last);
-            cols.beta_tidx = F::from_canonical_usize(beta_tidx);
-            cols.beta.copy_from_slice(beta_slice);
-            cols.sort_idx = F::from_canonical_usize(row.sort_idx);
-            cols.interaction_idx = F::from_canonical_usize(row.interaction_idx);
-            cols.node_idx = F::from_canonical_usize(row.node_idx);
-            cols.idx_in_message = F::from_canonical_usize(row.idx_in_message);
-            cols.is_first_in_message = F::from_bool(row.is_first_in_message);
-            cols.is_last_in_message = F::from_bool(row.is_last_in_message);
-            cols.value.fill(F::ZERO);
-            cols.cur_sum.fill(F::ZERO);
+    trace[preflights.len() * height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
         });
 
     RowMajorMatrix::new(trace, width)

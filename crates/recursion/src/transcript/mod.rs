@@ -21,9 +21,11 @@ use stark_backend_v2::{
 
 use crate::{
     system::{AirModule, BusInventory, Preflight},
-    transcript::merkle_verify::{MerkleVerifyAir, MerkleVerifyCols},
-    transcript::poseidon2::{CHUNK, Poseidon2Air, Poseidon2Cols},
-    transcript::transcript::{TranscriptAir, TranscriptCols},
+    transcript::{
+        merkle_verify::{MerkleVerifyAir, MerkleVerifyCols},
+        poseidon2::{CHUNK, Poseidon2Air, Poseidon2Cols},
+        transcript::{TranscriptAir, TranscriptCols},
+    },
 };
 
 pub mod merkle_verify;
@@ -139,13 +141,15 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
         let mut poseidon_inputs = Vec::with_capacity(transcript_valid_rows);
         let mut poseidon_flags = Vec::with_capacity(transcript_valid_rows);
 
+        let mut skip = 0;
         // Second pass, fill in the transcript trace.
         for (pidx, preflight) in preflights.iter().enumerate() {
             let mut tidx = 0;
             let mut prev_poseidon_state = [F::ZERO; POSEIDON2_WIDTH];
-            for (i, row) in transcript_trace
-                .chunks_mut(transcript_width)
-                .take(valid_rows[pidx])
+            let off = skip * transcript_width;
+            let end = off + valid_rows[pidx] * transcript_width;
+            for (i, row) in transcript_trace[off..end]
+                .chunks_exact_mut(transcript_width)
                 .enumerate()
             {
                 let cols: &mut TranscriptCols<F> = row.borrow_mut();
@@ -204,12 +208,12 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
                 prev_poseidon_state = cols.prev_state;
                 if permuted {
                     self.perm.permute_mut(&mut prev_poseidon_state);
+                    poseidon_inputs.push(cols.prev_state);
+                    poseidon_flags.push(F::ONE);
                 }
                 cols.post_state = prev_poseidon_state;
-
-                poseidon_inputs.push(cols.prev_state);
-                poseidon_flags.push(cols.permuted);
             }
+            skip += valid_rows[pidx];
             assert_eq!(tidx, preflight.transcript.len());
         }
 

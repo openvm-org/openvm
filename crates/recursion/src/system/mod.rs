@@ -205,12 +205,12 @@ impl BusInventory {
     }
 }
 
-pub struct VerifierCircuit<TS> {
+pub struct VerifierCircuit<TS, const MAX_NUM_PROOFS: usize> {
     modules: Vec<Box<dyn AirModule<TS>>>,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
-impl<TS> VerifierCircuit<TS>
+impl<TS, const MAX_NUM_PROOFS: usize> VerifierCircuit<TS, MAX_NUM_PROOFS>
 where
     TS: FiatShamirTranscript + TranscriptHistory,
 {
@@ -228,8 +228,12 @@ where
             bus_inventory.clone(),
             exp_bits_len_air.clone(),
         );
-        let batch_constraint_module =
-            BatchConstraintModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let batch_constraint_module = BatchConstraintModule::new(
+            child_mvk.clone(),
+            &mut b,
+            bus_inventory.clone(),
+            MAX_NUM_PROOFS,
+        );
         let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
         let whir_module = WhirModule::new(
             child_mvk.clone(),
@@ -274,6 +278,7 @@ where
     where
         TS: Default,
     {
+        debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         let preflights = proofs
             .iter()
             .map(|proof| {
