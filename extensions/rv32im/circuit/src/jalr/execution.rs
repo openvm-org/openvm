@@ -90,6 +90,8 @@ where
         dispatch!(execute_e1_handler, enabled)
     }
 }
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for Rv32JalrExecutor<A>
 where

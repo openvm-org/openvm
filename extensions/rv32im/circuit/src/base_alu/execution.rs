@@ -119,6 +119,8 @@ where
         dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
     }
 }
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> where F: PrimeField32 {}
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
