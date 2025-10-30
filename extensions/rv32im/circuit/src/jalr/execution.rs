@@ -10,10 +10,6 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
-#[cfg(feature = "aot")]
-use openvm_instructions::{LocalOpcode, VmOpcode};
-#[cfg(feature = "aot")]
-use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
@@ -58,20 +54,7 @@ macro_rules! dispatch {
     };
 }
 
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "ecx";
-#[cfg(feature = "aot")]
-const REG_PC: &str = "r13";
-#[cfg(feature = "aot")]
-const REG_PC_W: &str = "r13d";
-#[cfg(feature = "aot")]
-const REG_INSTRET: &str = "r14";
-#[cfg(feature = "aot")]
-const REG_A: &str = "rcx"; // used when building jump address
-
-impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
+impl<F, A> Executor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
@@ -105,68 +88,6 @@ where
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, enabled)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        opcode == Rv32JalrOpcode::JALR.global_opcode()
-    }
-
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        let mut asm_str = String::new();
-        let to_i16 = |c: F| -> i16 {
-            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-            let c_i24 = ((c_u24 << 8) as i32) >> 8;
-            c_i24 as i16
-        };
-        let a = to_i16(inst.a);
-        let b = to_i16(inst.b);
-        debug_assert_eq!(a % 4, 0);
-        debug_assert_eq!(b % 4, 0);
-
-        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
-        let write_rd = !inst.f.is_zero();
-
-        let map_reg = |reg: i16| -> (i16, bool) {
-            let chunk = reg / 4;
-            let is_low = chunk % 2 == 0;
-            let xmm = if is_low { reg / 8 } else { (chunk - 1) / 2 };
-            (xmm, is_low)
-        };
-
-        let (rs1_xmm, rs1_low) = map_reg(b);
-        if rs1_low {
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B_W, rs1_xmm);
-        } else {
-            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_B_W, rs1_xmm);
-        }
-
-        asm_str += &format!("   add {}, {}\n", REG_B_W, imm_extended);
-        asm_str += &format!("   and {}, -2\n", REG_B_W); // clear bit 0 per RISC-V jalr
-        asm_str += &format!("   mov {}, {}\n", REG_PC_W, REG_B_W); // zero-extend into r13
-
-        if write_rd {
-            let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
-            asm_str += &format!("   mov {}, {}\n", REG_A_W, next_pc);
-            let (rd_xmm, rd_low) = map_reg(a);
-            if rd_low {
-                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", rd_xmm, rd_xmm);
-            } else {
-                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", rd_xmm, rd_xmm);
-            }
-        }
-
-        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
-        asm_str += "   lea rdx, [rip + map_pc_base]\n";
-        asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
-        asm_str += "   add rcx, rdx\n";
-        asm_str += "   jmp rcx\n";
-        Ok(asm_str)
     }
 }
 
