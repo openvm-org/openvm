@@ -268,7 +268,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(fractions_folder::generate_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -277,7 +277,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(sumcheck::generate_univariate_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -286,7 +286,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(sumcheck::generate_multilinear_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -295,7 +295,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_ns_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -304,7 +304,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_mle_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -313,7 +313,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_sharp_uni_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -322,7 +322,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_sharp_uni_receiver_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -331,7 +331,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(eq_airs::generate_eq_3b_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -340,7 +340,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_symbolic_expression_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
@@ -349,7 +349,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for BatchConstr
                 cached_mains: vec![],
                 common_main: Some(Arc::new(expr_eval::generate_column_claim_trace(
                     &self.mvk,
-                    &proofs[0],
+                    proofs,
                     &preflights[0],
                 ))),
                 public_values: vec![],
