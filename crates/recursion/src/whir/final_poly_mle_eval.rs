@@ -107,30 +107,31 @@ where
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let params = vk.inner.params;
+    let params = mvk.inner.params;
 
-    let num_sumcheck_rounds = params.n_stack + params.l_skip - params.log_final_poly_len;
-    let mut whir_opening_point_msgs = preflight
-        .whir_opening_point_messages(params.l_skip)
-        .into_iter()
-        .skip(num_sumcheck_rounds);
-
-    let num_valid_rows: usize = 1 << params.log_final_poly_len;
+    let num_rows_per_proof = 1 << params.log_final_poly_len;
+    let num_valid_rows = num_rows_per_proof * proofs.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = FinalyPolyMleEvalCols::<F>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
-    let tidx = preflight.whir.tidx_per_round.last().unwrap() + 3 * params.k_whir * D_EF; // skip sumcheck
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
+
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
+
         let cols: &mut FinalyPolyMleEvalCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
         cols.is_first = F::from_bool(i == 0);
 
+        let tidx = preflight.whir.tidx_per_round.last().unwrap() + 3 * params.k_whir * D_EF; // skip sumcheck
         cols.tidx = F::from_canonical_usize(tidx + D_EF * i);
         cols.idx = F::from_canonical_usize(i);
         cols.coeff = proof.whir_proof.final_poly[i]
@@ -153,8 +154,11 @@ pub(crate) fn generate_trace(
             .try_into()
             .unwrap();
 
-        if let Some(msg) = whir_opening_point_msgs.next() {
-            cols.whir_opening_point_msg = msg;
+        if let Some(msg) = preflight
+            .whir_opening_point_messages(params.l_skip)
+            .get(params.num_whir_sumcheck_rounds() + i)
+        {
+            cols.whir_opening_point_msg = msg.clone();
             cols.has_whir_opening_point_msg = F::ONE;
         }
     }

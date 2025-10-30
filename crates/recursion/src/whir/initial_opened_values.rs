@@ -1,5 +1,6 @@
 use core::borrow::{Borrow, BorrowMut};
 
+use itertools::Itertools;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -107,21 +108,37 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InitialOpenedValuesAir {
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let k_whir = vk.inner.params.k_whir;
-    let num_valid_rows = proof
-        .whir_proof
-        .initial_round_opened_rows
+    let params = mvk.inner.params;
+    let k_whir = params.k_whir;
+    let num_rows_per_proof = proofs
         .iter()
-        .flat_map(|opened_rows| opened_rows.iter().flatten())
-        .count();
-    let num_rows = num_valid_rows.next_power_of_two();
+        .map(|proof| {
+            proof
+                .whir_proof
+                .initial_round_opened_rows
+                .iter()
+                .flat_map(|opened_rows| opened_rows.iter().flatten())
+                .count()
+        })
+        .collect_vec();
+
+    let num_rows_cum_sums: Vec<usize> = num_rows_per_proof
+        .iter()
+        .scan(0usize, |acc, &x| {
+            *acc += x;
+            Some(*acc)
+        })
+        .collect();
+
+    let num_valid_rows = *num_rows_cum_sums.last().unwrap();
+    let height = num_valid_rows.next_power_of_two();
     let width = InitialOpenedValuesCols::<F>::width();
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+    let mut trace = vec![F::ZERO; height * width];
 
     // for query_idx in 0..num_queries {
     //     for commit_idx in num_commits {
@@ -140,10 +157,27 @@ pub(crate) fn generate_trace(
     let mut col_idx = 0;
     let mut codeword_idx = 0;
 
-    for row in trace.chunks_mut(width).take(num_valid_rows) {
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut InitialOpenedValuesCols<F> = row.borrow_mut();
 
+        let proof_idx = num_rows_cum_sums.partition_point(|&x| x <= row_idx);
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
+
+        let proof_start_row_idx = if proof_idx == 0 {
+            0
+        } else {
+            num_rows_cum_sums[proof_idx - 1]
+        };
+        if row_idx == proof_start_row_idx {
+            query_idx = 0;
+            commit_idx = 0;
+            col_idx = 0;
+            codeword_idx = 0;
+        }
+
         cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.is_first_in_query = F::from_bool(commit_idx == 0 && col_idx == 0 && codeword_idx == 0);
         cols.is_query_zero = F::from_bool(query_idx == 0);
         cols.is_codeword_idx_zero = F::from_bool(codeword_idx == 0);

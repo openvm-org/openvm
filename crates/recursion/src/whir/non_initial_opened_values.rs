@@ -86,24 +86,34 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for NonInitialOpenedValuesAir 
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let num_rounds = preflight.whir.pow_samples.len();
-    let num_queries = vk.inner.params.num_whir_queries;
-    let k_whir = vk.inner.params.k_whir;
+    let params = mvk.inner.params;
+
+    let num_rounds = params.num_whir_rounds();
+    let num_queries = params.num_whir_queries;
+    let k_whir = params.k_whir;
     let omega_k = F::two_adic_generator(k_whir);
 
-    let num_valid_rows: usize = ((num_rounds - 1) * num_queries) << k_whir;
+    let num_rows_per_proof: usize = ((num_rounds - 1) * num_queries) << k_whir;
+    let num_valid_rows = num_rows_per_proof * proofs.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = NonInitialOpenedValuesCols::<F>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
+
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
+
         let cols: &mut NonInitialOpenedValuesCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
 
         let coset_idx = i % (1 << k_whir);
         let query_idx = (i >> k_whir) % num_queries;
