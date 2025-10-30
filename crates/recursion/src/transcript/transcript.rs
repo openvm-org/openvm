@@ -1,6 +1,5 @@
-use core::borrow::{Borrow, BorrowMut};
+use core::borrow::Borrow;
 
-use crate::bus::{Poseidon2Bus, Poseidon2BusMessage, TranscriptBus};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -8,12 +7,10 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, FieldAlgebra};
 use p3_matrix::Matrix;
-use stark_backend_v2::{F, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::TranscriptBusMessage,
-    system::Preflight,
+    bus::{Poseidon2Bus, Poseidon2BusMessage, TranscriptBus, TranscriptBusMessage},
     transcript::poseidon2::{CHUNK, POSEIDON2_WIDTH},
 };
 

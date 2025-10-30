@@ -128,23 +128,30 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirFoldingAir {
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    _proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let num_rounds = preflight.whir.pow_samples.len();
-    let num_queries = vk.inner.params.num_whir_queries;
-    let k_whir = vk.inner.params.k_whir;
+    let params = mvk.inner.params;
+
+    let num_rounds = params.num_whir_rounds();
+    let num_queries = params.num_whir_queries;
+    let k_whir = params.k_whir;
     let internal_nodes = (1 << k_whir) - 1;
 
-    let num_valid_rows: usize = num_rounds * num_queries * internal_nodes;
-    assert_eq!(num_valid_rows, preflight.whir.fold_records.len());
-    let num_rows = num_valid_rows.next_power_of_two();
+    let num_rows_per_proof = num_rounds * num_queries * internal_nodes;
+    let num_valid_rows = num_rows_per_proof * preflights.len();
+    let height = num_valid_rows.next_power_of_two();
     let width = WhirFoldingCols::<F>::width();
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+    let mut trace = vec![F::ZERO; height * width];
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
+
+        let preflight = &preflights[proof_idx];
+
         let &FoldRecord {
             whir_round,
             query_idx,
@@ -160,6 +167,7 @@ pub(crate) fn generate_trace(
 
         let cols: &mut WhirFoldingCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.is_root = F::from_bool(coset_size == 1);
         cols.alpha = preflight.whir.alphas[whir_round * k_whir + height - 1]
             .as_base_slice()

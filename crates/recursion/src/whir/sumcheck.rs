@@ -125,24 +125,35 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for SumcheckAir {
 
 pub(crate) fn generate_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let params = vk.inner.params;
     let num_sumcheck_rounds = params.n_stack + params.l_skip - params.log_final_poly_len;
-    let mut whir_opening_point_msgs = preflight
-        .whir_opening_point_messages(params.l_skip)
-        .into_iter()
-        .take(num_sumcheck_rounds);
+    let num_rows_per_proof = num_sumcheck_rounds;
 
-    let num_valid_rows = num_sumcheck_rounds;
+    let num_valid_rows = num_rows_per_proof * proofs.len();
     let num_rows = num_valid_rows.next_power_of_two();
     let width = SumcheckCols::<F>::width();
 
     let mut trace = vec![F::ZERO; num_rows * width];
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+    let mut whir_opening_point_msgs = preflights.iter().flat_map(|preflight| {
+        preflight
+            .whir_opening_point_messages(params.l_skip)
+            .into_iter()
+            .take(num_sumcheck_rounds)
+    });
+
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
+
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
+
         let cols: &mut SumcheckCols<F> = row.borrow_mut();
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.is_valid = F::ONE;
         let whir_round = i / vk.inner.params.k_whir;
         let j = i % vk.inner.params.k_whir;
@@ -169,7 +180,7 @@ pub(crate) fn generate_trace(
             .try_into()
             .unwrap();
         cols.alpha = preflight.whir.alphas[i].as_base_slice().try_into().unwrap();
-        cols.pre_claim = if i % params.k_whir == 0 {
+        cols.pre_claim = if i.is_multiple_of(params.k_whir) {
             preflight.whir.initial_claim_per_round[i / params.k_whir]
                 .as_base_slice()
                 .try_into()

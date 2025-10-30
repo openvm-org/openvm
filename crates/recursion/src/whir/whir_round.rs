@@ -252,23 +252,28 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
 }
 
 pub(crate) fn generate_trace(
-    _vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let num_whir_rounds = proof.whir_proof.whir_pow_witnesses.len() + 1;
-    let commitments_bus_msgs = preflight.whir_commitments_msgs(proof);
-
-    let num_valid_rows: usize = num_whir_rounds;
-    let num_rows = num_valid_rows.next_power_of_two();
+    let params = mvk.inner.params;
+    let rows_per_proof = params.num_whir_rounds() + 1;
+    let num_valid_rows = rows_per_proof * proofs.len();
+    let height = num_valid_rows.next_power_of_two();
     let width = WhirRoundCols::<F>::width();
+    let mut trace = vec![F::ZERO; height * width];
 
-    let whir_proof = &proof.whir_proof;
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / rows_per_proof;
+        let i = row_idx % rows_per_proof;
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+        let commitments_bus_msgs = preflight.whir_commitments_msgs(proof);
+        let whir_proof = &proof.whir_proof;
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
         let cols: &mut WhirRoundCols<F> = row.borrow_mut();
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         if i == 0 {
             cols.is_first_round = F::ONE;
             cols.whir_module_msg = preflight.whir_module_msg(proof);

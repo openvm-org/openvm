@@ -118,24 +118,33 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FinalPolyQueryEvalAir {
 }
 
 pub(crate) fn generate_trace(
-    vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
-    preflight: &Preflight,
+    mvk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let k_whir = vk.inner.params.k_whir;
-    let num_in_domain_queries = vk.inner.params.num_whir_queries;
-    let num_rounds = proof.whir_proof.whir_pow_witnesses.len();
-    let num_alphas = proof.stacking_proof.sumcheck_round_polys.len() - k_whir;
+    let params = mvk.inner.params;
 
-    let num_valid_rows: usize = num_rounds * (num_in_domain_queries + 1) * num_alphas;
-    let num_rows = num_valid_rows.next_power_of_two();
+    let k_whir = params.k_whir;
+    let num_in_domain_queries = params.num_whir_queries;
+    let num_rounds = params.num_whir_rounds();
+    let num_alphas = params.num_whir_sumcheck_rounds();
+
+    let num_rows_per_proof = num_rounds * (num_in_domain_queries + 1) * num_alphas;
+    let num_valid_rows = num_rows_per_proof * proofs.len();
+    let height = num_valid_rows.next_power_of_two();
     let width = FinalyPolyQueryEvalCols::<F>::width();
+    let mut trace = vec![F::ZERO; height * width];
 
-    let mut trace = vec![F::ZERO; num_rows * width];
+    for (row_idx, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof_idx = row_idx / num_rows_per_proof;
+        let i = row_idx % num_rows_per_proof;
 
-    for (i, row) in trace.chunks_mut(width).take(num_valid_rows).enumerate() {
+        let proof = &proofs[proof_idx];
+        let preflight = &preflights[proof_idx];
+
         let cols: &mut FinalyPolyQueryEvalCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         let alpha_idx = i % num_alphas + k_whir;
         let global_query = i / num_alphas;
         let query_idx = global_query % (num_in_domain_queries + 1);
