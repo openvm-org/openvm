@@ -22,6 +22,7 @@ mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
+pub(crate) mod common;
 mod divrem;
 mod hintstore;
 mod jal_lui;
