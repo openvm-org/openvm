@@ -90,7 +90,7 @@ where
         asm_str
     }
 
-    fn debug_cur_sting(str: &String) {
+    fn debug_cur_string(str: &String) {
         println!("DEBUG");
         println!("{}", str);
     }

@@ -59,19 +59,17 @@ macro_rules! dispatch {
 }
 
 #[cfg(feature = "aot")]
-const REG_A: &str = "rcx";
+const REG_B_W: &str = "eax";
 #[cfg(feature = "aot")]
 const REG_A_W: &str = "ecx";
 #[cfg(feature = "aot")]
-const REG_B: &str = "rax";
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_AUX: &str = "r11";
-#[cfg(feature = "aot")]
 const REG_PC: &str = "r13";
 #[cfg(feature = "aot")]
+const REG_PC_W: &str = "r13d";
+#[cfg(feature = "aot")]
 const REG_INSTRET: &str = "r14";
+#[cfg(feature = "aot")]
+const REG_A: &str = "rcx"; // used when building jump address
 
 impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
 where
@@ -116,8 +114,7 @@ where
     F: PrimeField32,
 {
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        false //JALR is wrong, failing test_decompress, test_nonzero_a
-        // opcode == Rv32JalrOpcode::JALR.global_opcode()
+        opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
@@ -127,7 +124,6 @@ where
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
             c_i24 as i16
         };
-        eprintln!("Instruction: {:?}", inst);
         let a = to_i16(inst.a);
         let b = to_i16(inst.b);
         debug_assert_eq!(a % 4, 0);
@@ -145,19 +141,18 @@ where
 
         let (rs1_xmm, rs1_low) = map_reg(b);
         if rs1_low {
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B, rs1_xmm);
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B_W, rs1_xmm);
         } else {
             asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_B_W, rs1_xmm);
         }
 
-        asm_str += &format!("   mov {}, {}\n", REG_AUX, imm_extended);
-        asm_str += &format!("   add {}, {}\n", REG_B, REG_AUX);
-        asm_str += &format!("   and {}, -2\n", REG_B); // used to zero the low bit, -2 in twos complement; same as ~1
-        asm_str += &format!("   mov {}, {}\n", REG_PC, REG_B); // this is PC on RISCV side, need to update the PC on x86 side
+        asm_str += &format!("   add {}, {}\n", REG_B_W, imm_extended);
+        asm_str += &format!("   and {}, -2\n", REG_B_W); // clear bit 0 per RISC-V jalr
+        asm_str += &format!("   mov {}, {}\n", REG_PC_W, REG_B_W); // zero-extend into r13
 
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
-            asm_str += &format!("   mov {}, {}\n", REG_A, next_pc);
+            asm_str += &format!("   mov {}, {}\n", REG_A_W, next_pc);
             let (rd_xmm, rd_low) = map_reg(a);
             if rd_low {
                 asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", rd_xmm, rd_xmm);
@@ -168,10 +163,9 @@ where
 
         asm_str += &format!("   add {}, 1\n", REG_INSTRET);
         asm_str += "   lea rdx, [rip + map_pc_base]\n";
-        asm_str += &format!("   movsxd rcx, [rdx + {}]\n", REG_PC);
+        asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
         asm_str += "   add rcx, rdx\n";
         asm_str += "   jmp rcx\n";
-
         asm_str
     }
 }
