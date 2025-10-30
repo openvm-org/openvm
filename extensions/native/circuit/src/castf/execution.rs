@@ -51,7 +51,7 @@ impl<A> CastFCoreExecutor<A> {
     }
 }
 
-impl<F, A> Executor<F> for CastFCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for CastFCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -96,6 +96,9 @@ where
         Ok(fn_ptr)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for CastFCoreExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for CastFCoreExecutor<A>
 where

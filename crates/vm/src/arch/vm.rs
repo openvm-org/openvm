@@ -255,8 +255,14 @@ where
         println!("aot instance called yay");
         Self::aot_instance(&self, exe)
     }
-
-    #[cfg(feature = "aot")]
+}
+#[cfg(feature = "aot")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: Executor<F>,
+{
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
@@ -264,7 +270,6 @@ where
         AotInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
     pub fn aot_instance_with_asm_name(
         &self,
         exe: &VmExe<F>,

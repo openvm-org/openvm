@@ -104,7 +104,7 @@ const REG_C: &str = "r10";
 const REG_C_W: &str = "r10d";
 const REG_AUX: &str = "r11";
 
-impl<F, A, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -249,6 +249,8 @@ where
             || BaseAluOpcode::XOR.global_opcode() == opcode
     }
 }
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> where F: PrimeField32 {}
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>

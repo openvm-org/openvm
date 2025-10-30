@@ -144,7 +144,7 @@ pub type Handler<F, CTX> = unsafe fn(
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
 // @dev: In the codebase this is sometimes referred to as (E1).
-pub trait Executor<F> {
+pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
     #[cfg(not(feature = "tco"))]

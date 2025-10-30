@@ -47,7 +47,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco"]
-aot = ["openvm-rv32im-circuit/aot"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot"]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",

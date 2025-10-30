@@ -85,6 +85,7 @@ cfg_if::cfg_if! {
 pub struct Native;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
 pub enum NativeExecutor<F: Field> {
     LoadStore(NativeLoadStoreExecutor<1>),
     BlockLoadStore(NativeLoadStoreExecutor<BLOCK_LOAD_STORE_SIZE>),
@@ -500,6 +501,7 @@ pub(crate) mod phantom {
 pub struct CastFExtension;
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
 pub enum CastFExtensionExecutor {
     CastF(CastFExecutor),
 }

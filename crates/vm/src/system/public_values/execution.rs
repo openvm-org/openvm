@@ -10,6 +10,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::PublicValuesExecutor;
+#[cfg(feature = "aot")]
+use crate::arch::AotExecutor;
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
@@ -18,7 +20,7 @@ use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, Executor, MeteredExecutor, StaticProgramError, VmExecState,
+        E2PreCompute, InterpreterExecutor, MeteredExecutor, StaticProgramError, VmExecState,
     },
     system::memory::online::GuestMemory,
     utils::{transmute_field_to_u32, transmute_u32_to_field},
@@ -76,7 +78,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for PublicValuesExecutor<F, A>
+impl<F, A> InterpreterExecutor<F> for PublicValuesExecutor<F, A>
 where
     F: PrimeField32,
 {
@@ -118,6 +120,9 @@ where
         dispatch!(execute_e1_handler, b_is_imm, c_is_imm)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for PublicValuesExecutor<F, A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for PublicValuesExecutor<F, A>
 where

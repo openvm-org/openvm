@@ -69,6 +69,7 @@ impl ModularExtension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv32_32(ModularExecutor<1, 32>), // ModularAddSub

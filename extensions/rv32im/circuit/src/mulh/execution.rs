@@ -52,7 +52,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LIMB_BITS: usize> Executor<F>
+impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
     F: PrimeField32,
@@ -89,6 +89,14 @@ where
         let local_opcode = self.pre_compute_impl(inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

@@ -36,6 +36,7 @@ openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm = { workspace = true }
+openvm-instructions = { workspace = true }
 
 alloy-sol-types = { workspace = true, optional = true, features = ["json"] }
 bitcode = { workspace = true }

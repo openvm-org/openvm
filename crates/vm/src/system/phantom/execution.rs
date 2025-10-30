@@ -10,6 +10,8 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
+#[cfg(feature = "aot")]
+use crate::arch::AotExecutor;
 #[cfg(not(feature = "tco"))]
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
@@ -18,7 +20,7 @@ use crate::{
     arch::{
         create_handler,
         execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait},
-        E2PreCompute, ExecutionError, Executor, MeteredExecutor, PhantomSubExecutor,
+        E2PreCompute, ExecutionError, InterpreterExecutor, MeteredExecutor, PhantomSubExecutor,
         StaticProgramError, Streams, VmExecState,
     },
     system::{memory::online::GuestMemory, phantom::PhantomExecutor},
@@ -39,7 +41,7 @@ struct PhantomPreCompute<F> {
     sub_executor: *const dyn PhantomSubExecutor<F>,
 }
 
-impl<F> Executor<F> for PhantomExecutor<F>
+impl<F> InterpreterExecutor<F> for PhantomExecutor<F>
 where
     F: PrimeField32,
 {
@@ -78,6 +80,9 @@ where
         Ok(execute_e1_handler)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 pub(super) struct PhantomStateMut<'a, F> {
     pub(super) pc: &'a mut u32,
