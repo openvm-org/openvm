@@ -145,9 +145,11 @@ fn test_recursion_circuit_two_fib_proofs() {
 
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
-    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    let fib1 = FibFixture::new(0, 1, 1 << log_trace_degree);
+    let fib2 = FibFixture::new(1, 1, 1 << log_trace_degree);
 
-    let (vk, proof) = fib.keygen_and_prove(&engine);
+    let (vk, proof1) = fib1.keygen_and_prove(&engine);
+    let (_, proof2) = fib2.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::<DuplexSpongeRecorder, 2>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
@@ -158,7 +160,7 @@ fn test_recursion_circuit_two_fib_proofs() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&[proof.clone(), proof]);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof1, proof2]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -169,9 +171,17 @@ fn test_recursion_circuit_multiple_fib_proofs() {
 
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
-    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
+    let fib1 = FibFixture::new(0, 1, 1 << log_trace_degree);
+    let fib2 = FibFixture::new(1, 1, 1 << log_trace_degree);
+    let fib3 = FibFixture::new(2, 3, 1 << log_trace_degree);
+    let fib4 = FibFixture::new(3, 5, 1 << log_trace_degree);
+    let fib5 = FibFixture::new(5, 8, 1 << log_trace_degree);
 
-    let (vk, proof) = fib.keygen_and_prove(&engine);
+    let (vk, proof1) = fib1.keygen_and_prove(&engine);
+    let (_, proof2) = fib2.keygen_and_prove(&engine);
+    let (_, proof3) = fib3.keygen_and_prove(&engine);
+    let (_, proof4) = fib4.keygen_and_prove(&engine);
+    let (_, proof5) = fib5.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::<DuplexSpongeRecorder, 5>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
@@ -182,13 +192,7 @@ fn test_recursion_circuit_multiple_fib_proofs() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&[
-        proof.clone(),
-        proof.clone(),
-        proof.clone(),
-        proof.clone(),
-        proof,
-    ]);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof1, proof2, proof3, proof4, proof5]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -200,9 +204,11 @@ fn test_recursion_circuit_two_preprocessed() {
     let height = 1 << 4;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
 
-    let preprocessed = PreprocessedFibFixture::new(0, 1, sels.clone());
+    let preprocessed1 = PreprocessedFibFixture::new(0, 1, sels.clone());
+    let preprocessed2 = PreprocessedFibFixture::new(1, 1, sels.clone());
 
-    let (vk, proof) = preprocessed.keygen_and_prove(&engine);
+    let (vk, proof1) = preprocessed1.keygen_and_prove(&engine);
+    let (_, proof2) = preprocessed2.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::<DuplexSpongeRecorder, 2>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
@@ -213,7 +219,7 @@ fn test_recursion_circuit_two_preprocessed() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&[proof.clone(), proof]);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof1, proof2]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -225,9 +231,17 @@ fn test_recursion_circuit_multiple_preprocessed() {
     let height = 1 << 4;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
 
-    let preprocessed = PreprocessedFibFixture::new(0, 1, sels.clone());
+    let preprocessed1 = PreprocessedFibFixture::new(0, 1, sels.clone());
+    let preprocessed2 = PreprocessedFibFixture::new(1, 1, sels.clone());
+    let preprocessed3 = PreprocessedFibFixture::new(2, 3, sels.clone());
+    let preprocessed4 = PreprocessedFibFixture::new(3, 5, sels.clone());
+    let preprocessed5 = PreprocessedFibFixture::new(5, 8, sels.clone());
 
-    let (vk, proof) = preprocessed.keygen_and_prove(&engine);
+    let (vk, proof1) = preprocessed1.keygen_and_prove(&engine);
+    let (_, proof2) = preprocessed2.keygen_and_prove(&engine);
+    let (_, proof3) = preprocessed3.keygen_and_prove(&engine);
+    let (_, proof4) = preprocessed4.keygen_and_prove(&engine);
+    let (_, proof5) = preprocessed5.keygen_and_prove(&engine);
 
     let circuit = VerifierCircuit::<DuplexSpongeRecorder, 5>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
@@ -238,13 +252,7 @@ fn test_recursion_circuit_multiple_preprocessed() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(&[
-        proof.clone(),
-        proof.clone(),
-        proof.clone(),
-        proof.clone(),
-        proof,
-    ]);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof1, proof2, proof3, proof4, proof5]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
