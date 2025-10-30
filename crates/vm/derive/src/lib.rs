@@ -366,7 +366,10 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                         pc: u32,
-                    ) -> ::std::string::String {
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
                         self.0.generate_x86_asm(inst, pc)
                     }
                 }
@@ -480,7 +483,10 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         &self,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
                         pc: u32,
-                    ) -> ::std::string::String {
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
                         match self {
                             #(#generate_x86_asm_arms,)*
                         }

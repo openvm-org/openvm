@@ -153,7 +153,7 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
@@ -203,7 +203,9 @@ where
             asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, c);
         } else {
             // [a:4]_1 <- [a:4]_1 + [c:4]_1
-            assert_eq!(c % 4, 0);
+            if c % 4 != 0 {
+                return Err(AotError::InvalidInstruction);
+            }
             let xmm_map_reg_c = if (c / 4) % 2 == 0 {
                 c / 8
             } else {
@@ -243,7 +245,7 @@ where
         asm_str += &format!("   add {}, {}\n", REG_PC, 4);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
 
-        asm_str
+        Ok(asm_str)
     }
 
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {

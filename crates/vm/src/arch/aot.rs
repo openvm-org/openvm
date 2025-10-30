@@ -14,7 +14,7 @@ use crate::{
             get_metered_pre_compute_max_size, get_pre_compute_instructions,
             get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
-        ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
+        AotError, ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
         MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
         VmExecState, VmState,
     },
@@ -216,7 +216,10 @@ where
         c_i24 as i16
     }
 
-    pub fn create_asm<E>(exe: &VmExe<F>, inventory: &ExecutorInventory<E>) -> String
+    pub fn create_asm<E>(
+        exe: &VmExe<F>,
+        inventory: &ExecutorInventory<E>,
+    ) -> Result<String, StaticProgramError>
     where
         E: Executor<F>,
     {
@@ -315,7 +318,23 @@ where
             additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
             */
             if executor.supports_aot_for_opcode(instruction.opcode) {
-                asm_str += &executor.generate_x86_asm(&instruction, pc);
+                let segment =
+                    executor
+                        .generate_x86_asm(&instruction, pc)
+                        .map_err(|err| match err {
+                            AotError::InvalidInstruction => {
+                                StaticProgramError::InvalidInstruction(pc)
+                            }
+                            AotError::NotSupported => StaticProgramError::DisabledOperation {
+                                pc,
+                                opcode: instruction.opcode,
+                            },
+                            AotError::NoExecutorFound(opcode) => {
+                                StaticProgramError::ExecutorNotFound { opcode }
+                            }
+                            AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
+                        })?;
+                asm_str += &segment;
             } else {
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
@@ -351,7 +370,7 @@ where
             asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
         }
 
-        return asm_str;
+        Ok(asm_str)
     }
 
     /// Creates a new instance for pure execution
@@ -390,10 +409,12 @@ where
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
+        let asm_source = Self::create_asm(&exe, &inventory)?;
         fs::write(
             format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name),
-            Self::create_asm(&exe, &inventory),
-        );
+            asm_source,
+        )
+        .expect("Failed to write generated assembly");
 
         // ar rcs libasm_runtime.a asm_run.o
         // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime

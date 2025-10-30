@@ -117,7 +117,7 @@ where
         opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         let mut asm_str = String::new();
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
@@ -166,7 +166,7 @@ where
         asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
         asm_str += "   add rcx, rdx\n";
         asm_str += "   jmp rcx\n";
-        asm_str
+        Ok(asm_str)
     }
 }
 

@@ -251,8 +251,8 @@ pub trait AotExecutor<F> {
     - pc (r13) should be set to the correct value, after executing the corresponding RV32 instruction
     - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
     */
-    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> String {
-        "".to_string()
+    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        Ok(String::new())
     }
     // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
 }
