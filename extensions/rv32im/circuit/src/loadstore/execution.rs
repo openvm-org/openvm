@@ -109,7 +109,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_CELLS: usize> Executor<F> for LoadStoreExecutor<A, NUM_CELLS>
+impl<F, A, const NUM_CELLS: usize> InterpreterExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
@@ -147,6 +147,12 @@ where
             self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode, enabled, is_native_store)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_CELLS> where
+    F: PrimeField32
+{
 }
 
 impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>

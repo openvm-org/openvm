@@ -166,7 +166,7 @@ macro_rules! dispatch1 {
     };
 }
 
-impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> InterpreterExecutor<F>
     for NativePoseidon2Executor<F, SBOX_REGISTERS>
 {
     #[inline(always)]
@@ -213,6 +213,12 @@ impl<F: PrimeField32, const SBOX_REGISTERS: usize> Executor<F>
             data
         )
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const SBOX_REGISTERS: usize> AotExecutor<F>
+    for NativePoseidon2Executor<F, SBOX_REGISTERS>
+{
 }
 
 macro_rules! dispatch2 {

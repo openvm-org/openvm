@@ -31,6 +31,7 @@ openvm-sha256-transpiler.workspace = true
 openvm-continuations = { workspace = true }
 openvm-native-recursion = { workspace = true }
 openvm-sdk = { workspace = true }
+openvm-instructions = { workspace = true }
 
 clap.workspace = true
 eyre.workspace = true

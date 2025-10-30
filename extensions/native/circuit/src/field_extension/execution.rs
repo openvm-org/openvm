@@ -70,7 +70,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for FieldExtensionCoreExecutor<A>
+impl<F, A> InterpreterExecutor<F> for FieldExtensionCoreExecutor<A>
 where
     F: PrimeField32,
 {
@@ -111,6 +111,9 @@ where
         dispatch!(execute_e1_handler, opcode)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for FieldExtensionCoreExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for FieldExtensionCoreExecutor<A>
 where

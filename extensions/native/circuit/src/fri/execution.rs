@@ -65,7 +65,7 @@ impl FriReducedOpeningExecutor {
     }
 }
 
-impl<F> Executor<F> for FriReducedOpeningExecutor
+impl<F> InterpreterExecutor<F> for FriReducedOpeningExecutor
 where
     F: PrimeField32,
 {
@@ -108,6 +108,9 @@ where
         Ok(fn_ptr)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F> AotExecutor<F> for FriReducedOpeningExecutor where F: PrimeField32 {}
 
 impl<F> MeteredExecutor<F> for FriReducedOpeningExecutor
 where

@@ -110,7 +110,7 @@ pub extern "C" fn extern_handler(
         _ => {
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
-            1
+            (*pc) + 1
         }
     }
 }
@@ -128,4 +128,19 @@ pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_
     } else {
         0 // should suspend is `false`
     }
+}
+
+#[no_mangle]
+pub extern "C" fn get_vm_register_addr(exec_state_ptr: *mut c_void) -> *mut u64 {
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[1];
+    ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
+}
+
+#[no_mangle]
+pub extern "C" fn debug_vm_register_addr(mmap_ptr: *mut u32) {
+    let first_val = unsafe { *mmap_ptr };
+
+    let second_val = unsafe { *(mmap_ptr.wrapping_add(1)) };
 }

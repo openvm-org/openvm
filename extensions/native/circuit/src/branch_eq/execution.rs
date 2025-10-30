@@ -93,7 +93,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A> Executor<F> for NativeBranchEqualExecutor<A>
+impl<F, A> InterpreterExecutor<F> for NativeBranchEqualExecutor<A>
 where
     F: PrimeField32,
 {
@@ -134,6 +134,9 @@ where
         dispatch!(execute_e1_handler, a_is_imm, b_is_imm, is_bne)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for NativeBranchEqualExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for NativeBranchEqualExecutor<A>
 where

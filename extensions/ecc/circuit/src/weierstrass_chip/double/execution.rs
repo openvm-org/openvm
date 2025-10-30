@@ -136,7 +136,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> InterpreterExecutor<F>
     for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
 {
     #[inline(always)]
@@ -175,6 +175,12 @@ impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> Executor<F>
 
         dispatch!(execute_e1_handler, pre_compute, is_setup)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> AotExecutor<F>
+    for EcDoubleExecutor<BLOCKS, BLOCK_SIZE>
+{
 }
 
 impl<F: PrimeField32, const BLOCKS: usize, const BLOCK_SIZE: usize> MeteredExecutor<F>
