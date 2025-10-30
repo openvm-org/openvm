@@ -5,6 +5,10 @@ use std::{
 };
 
 use itertools::Itertools;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::execution_mode::metered_cost::MeteredCostCtx;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::VmState;
 #[cfg(feature = "cuda")]
 use openvm_circuit::system::cuda::extensions::SystemGpuBuilder as SystemBuilder;
 #[cfg(not(feature = "cuda"))]
@@ -984,6 +988,61 @@ fn test_single_segment_executor_no_segmentation() {
         .unwrap();
 }
 
+#[cfg(feature = "aot")]
+fn compare_vm_states(
+    vm_state1: &VmState<BabyBear>,
+    vm_state2: &VmState<BabyBear>,
+    memory_dimensions: openvm_circuit::system::memory::dimensions::MemoryDimensions,
+) {
+    assert_eq!(vm_state1.instret(), vm_state2.instret());
+    assert_eq!(vm_state1.pc(), vm_state2.pc());
+    use openvm_circuit::{
+        arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
+    };
+
+    let hasher = vm_poseidon2_hasher::<BabyBear>();
+
+    let tree1 = MerkleTree::from_memory(&vm_state1.memory.memory, &memory_dimensions, &hasher);
+    let tree2 = MerkleTree::from_memory(&vm_state2.memory.memory, &memory_dimensions, &hasher);
+
+    assert_eq!(tree1.root(), tree2.root(), "Memory states differ");
+}
+
+// Helper to run AOT metered-cost and compare against interpreter baseline.
+#[cfg(feature = "aot")]
+fn run_aot_metered_cost_and_compare(
+    vm: &VirtualMachine<TestEngine, NativeBuilder>,
+    exe: VmExe<BabyBear>,
+    executor_idx_to_air_idx: Vec<usize>,
+    ctx: MeteredCostCtx,
+    instructions_len: usize,
+    baseline_cost: u64,
+    baseline_state: VmState<BabyBear>,
+    config: NativeConfig,
+    resume_state: Option<VmState<BabyBear>>,
+) -> (u64, VmState<BabyBear>) {
+    let mut aot_instance = vm
+        .executor()
+        .metered_cost_aot_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap();
+    let (mut aot_cost, mut aot_vm_state) = aot_instance
+        .execute_metered_cost(vec![], ctx.clone())
+        .expect("Failed to execute");
+    if resume_state.is_some() {
+        (aot_cost, aot_vm_state) = aot_instance
+            .execute_metered_cost_from_state(resume_state.clone().unwrap(), ctx.clone())
+            .expect("Failed to execute");
+    }
+    assert_eq!(aot_vm_state.instret(), instructions_len as u64);
+    assert_eq!(baseline_cost, aot_cost);
+    compare_vm_states(
+        &aot_vm_state,
+        &baseline_state,
+        config.clone().system.memory_config.memory_dimensions(),
+    );
+    (aot_cost, aot_vm_state)
+}
+
 #[test]
 fn test_vm_execute_metered_cost_native_chips() {
     type F = BabyBear;
@@ -993,7 +1052,7 @@ fn test_vm_execute_metered_cost_native_chips() {
 
     let engine = TestEngine::new(FriParameters::new_for_testing(3));
     let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config).unwrap();
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
 
     let instructions = vec![
         // Field Arithmetic operations (FieldArithmeticChip)
@@ -1014,11 +1073,26 @@ fn test_vm_execute_metered_cost_native_chips() {
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
     let (cost, vm_state) = instance
-        .execute_metered_cost(vec![], ctx)
+        .execute_metered_cost(vec![], ctx.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state.instret(), instructions.len() as u64);
     assert!(cost > 0);
+
+    #[cfg(feature = "aot")]
+    {
+        let _ = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx.clone(),
+            ctx,
+            instructions.len(),
+            cost,
+            vm_state,
+            config.clone(),
+            None::<VmState<F>>,
+        );
+    }
 }
 
 #[test]
@@ -1051,7 +1125,7 @@ fn test_vm_execute_metered_cost_halt() {
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
     let (cost1, vm_state1) = instance1
-        .execute_metered_cost(vec![], ctx)
+        .execute_metered_cost(vec![], ctx.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state1.instret(), instructions.len() as u64);
@@ -1063,9 +1137,137 @@ fn test_vm_execute_metered_cost_halt() {
         .unwrap();
     let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
     let (cost2, vm_state2) = instance2
-        .execute_metered_cost(vec![], ctx2)
+        .execute_metered_cost(vec![], ctx2.clone())
         .expect("Failed to execute");
 
     assert_eq!(vm_state2.instret(), 1);
     assert!(cost2 < cost1);
+
+    let executor_idx_to_air_idx3 = vm.executor_idx_to_air_idx();
+    let instance3 = vm
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx3)
+        .unwrap();
+    let ctx3 = vm.build_metered_cost_ctx().with_max_execution_cost(100);
+    let (cost3, vm_state3) = instance3
+        .execute_metered_cost(vec![], ctx3.clone())
+        .expect("Failed to execute");
+
+    assert_eq!(vm_state3.instret(), 3);
+    assert!(cost2 < cost3);
+    assert!(cost3 < cost1);
+
+    #[cfg(feature = "aot")]
+    {
+        let (aot_cost1, _aot_vm_state1) = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx.clone(),
+            ctx,
+            instructions.len(),
+            cost1,
+            vm_state1,
+            config.clone(),
+            None::<VmState<F>>,
+        );
+        let (aot_cost2, _aot_vm_state2) = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx2.clone(),
+            ctx2,
+            1usize,
+            cost2,
+            vm_state2,
+            config.clone(),
+            None::<VmState<F>>,
+        );
+        let (aot_cost3, _aot_vm_state3) = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx3.clone(),
+            ctx3,
+            3usize,
+            cost3,
+            vm_state3,
+            config.clone(),
+            None::<VmState<F>>,
+        );
+
+        assert!(aot_cost2 < aot_cost1);
+        assert!(aot_cost2 < aot_cost3);
+        assert!(aot_cost3 < aot_cost1);
+    }
+}
+
+#[test]
+fn test_vm_execute_metered_cost_resume_parity() {
+    type F = BabyBear;
+
+    setup_tracing();
+    let config = test_native_config();
+
+    let engine = TestEngine::new(FriParameters::new_for_testing(3));
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(engine, NativeBuilder::default(), config.clone()).unwrap();
+
+    // Simple multi-instruction program to ensure we can suspend and then resume to completion.
+    let instructions = vec![
+        Instruction::large_from_isize(ADD.global_opcode(), 0, 0, 1, 4, 0, 0, 0),
+        Instruction::large_from_isize(SUB.global_opcode(), 1, 10, 2, 4, 0, 0, 0),
+        Instruction::large_from_isize(MUL.global_opcode(), 2, 3, 4, 4, 0, 0, 0),
+        Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let exe = VmExe::new(Program::<F>::from_instructions(&instructions));
+
+    // Create interpreter instance and suspend after very small budget
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+    let interp_instance = vm
+        .executor()
+        .metered_cost_instance(&exe, &executor_idx_to_air_idx)
+        .unwrap();
+    let ctx_suspend = vm.build_metered_cost_ctx().with_max_execution_cost(0);
+    let (cost_suspend_interp, vm_state_suspend_interp) = interp_instance
+        .execute_metered_cost(vec![], ctx_suspend.clone())
+        .expect("Failed to execute");
+    assert_eq!(vm_state_suspend_interp.instret(), 1);
+
+    // Resume with unlimited budget
+    let ctx_unlimited = vm.build_metered_cost_ctx();
+    let (cost_interp_resume, vm_state_final_interp) = interp_instance
+        .execute_metered_cost_from_state(vm_state_suspend_interp.clone(), ctx_unlimited.clone())
+        .expect("Failed to resume interp");
+
+    assert!(cost_suspend_interp < cost_interp_resume);
+    assert_eq!(vm_state_final_interp.instret(), instructions.len() as u64);
+
+    // Do the same with AOT, compare suspended states, then resume both to completion
+    #[cfg(feature = "aot")]
+    {
+        let (cost_suspend_aot, vm_state_suspend_aot) = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx.clone(),
+            ctx_suspend,
+            1usize,
+            cost_suspend_interp,
+            vm_state_suspend_interp,
+            config.clone(),
+            None::<VmState<F>>,
+        );
+
+        let (cost_resume_aot, vm_state_final_aot) = run_aot_metered_cost_and_compare(
+            &vm,
+            exe.clone(),
+            executor_idx_to_air_idx.clone(),
+            ctx_unlimited,
+            instructions.len(),
+            cost_interp_resume,
+            vm_state_final_interp,
+            config.clone(),
+            Some(vm_state_suspend_aot.clone()),
+        );
+        assert_eq!(cost_interp_resume, cost_resume_aot);
+        assert_eq!(cost_suspend_aot, cost_suspend_interp);
+    }
 }

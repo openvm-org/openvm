@@ -8,6 +8,8 @@ use num_bigint::BigUint;
 use openvm_algebra_circuit::*;
 use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
 use openvm_bigint_circuit::*;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{aot::AotInstance, execution_mode::ExecutionCtx};
 use openvm_circuit::{
     arch::{InitFileGenerator, SystemConfig, VmExecutor},
     derive::VmConfig,
@@ -20,6 +22,8 @@ use openvm_platform::memory::MEM_SIZE;
 use openvm_rv32im_circuit::{
     Rv32I, Rv32IExecutor, Rv32ImBuilder, Rv32ImConfig, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
 };
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };

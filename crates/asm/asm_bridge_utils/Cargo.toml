@@ -1,0 +1,18 @@
+[package]
+name = "asm_bridge_utils"
+version.workspace = true 
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[package.metadata.cargo-shear]
+ignored = ["cc"]
+
+[lib]
+
+[dependencies]
+cc = "1.0"
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-stark-sdk = { workspace = true }
+openvm-instructions.workspace = true

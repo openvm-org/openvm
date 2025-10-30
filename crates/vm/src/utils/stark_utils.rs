@@ -104,6 +104,7 @@ where
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     let metered_ctx = vm.build_metered_ctx(&exe);
+    let metered_cost_ctx = vm.build_metered_cost_ctx();
     /*
     Assertions for Pure Execution AOT
     */
@@ -150,6 +151,21 @@ where
         assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
         assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
     }
+
+    /*
+    Assertions for Metered Cost AOT
+    */
+    let (aot_cost, aot_state_metered_cost) = vm
+        .get_metered_cost_aot_instance(&exe)?
+        .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+    let (cost, interp_state_metered_cost) = vm
+        .metered_cost_interpreter(&exe)?
+        .execute_metered_cost(input.clone(), metered_cost_ctx.clone())?;
+
+    assert_vm_state_eq(&interp_state_metered_cost, &aot_state_metered_cost);
+
+    assert_eq!(cost, aot_cost);
     Ok(())
 }
 

@@ -841,17 +841,37 @@ dependencies = [
 
 [[package]]
 name = "asm_bridge"
-version = "1.4.1-rc.1"
+version = "1.4.1-rc.2"
 dependencies = [
+ "asm_bridge_utils",
  "cc",
  "openvm-circuit",
- "openvm-instructions",
  "openvm-stark-sdk",
 ]
 
 [[package]]
 name = "asm_bridge_metered"
-version = "1.4.1-rc.1"
+version = "1.4.1-rc.2"
+dependencies = [
+ "asm_bridge_utils",
+ "cc",
+ "openvm-circuit",
+ "openvm-stark-sdk",
+]
+
+[[package]]
+name = "asm_bridge_metered_cost"
+version = "1.4.1-rc.2"
+dependencies = [
+ "asm_bridge_utils",
+ "cc",
+ "openvm-circuit",
+ "openvm-stark-sdk",
+]
+
+[[package]]
+name = "asm_bridge_utils"
+version = "1.4.1-rc.2"
 dependencies = [
  "cc",
  "openvm-circuit",
