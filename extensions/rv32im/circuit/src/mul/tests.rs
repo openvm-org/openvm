@@ -63,6 +63,9 @@ use crate::{
     MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
 
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
+
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
 const MAX_NUM_LIMBS: u32 = 32;
