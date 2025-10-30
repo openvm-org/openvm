@@ -26,8 +26,7 @@ fn test_recursion_circuit_single_fib() {
     let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
     let (vk, proof) = fib.keygen_and_prove(&engine);
 
-    let sponge = DuplexSpongeRecorder::default();
-    let circuit = VerifierCircuit::new(Arc::new(vk));
+    let circuit = VerifierCircuit::<DuplexSpongeRecorder>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(2),
     );
@@ -36,7 +35,7 @@ fn test_recursion_circuit_single_fib() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let proof_inputs = circuit.generate_proof_inputs(sponge, &proof);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -47,7 +46,7 @@ fn test_recursion_circuit_interactions() {
     let fx = InteractionsFixture11;
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let circuit = VerifierCircuit::new(Arc::new(vk));
+    let circuit = VerifierCircuit::<DuplexSpongeRecorder>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(2),
     );
@@ -56,8 +55,7 @@ fn test_recursion_circuit_interactions() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let sponge = DuplexSpongeRecorder::default();
-    let proof_inputs = circuit.generate_proof_inputs(sponge, &proof);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -85,7 +83,7 @@ fn test_preflight_cached_trace() {
     let fx = CachedFixture11::new(params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let circuit = VerifierCircuit::new(Arc::new(vk));
+    let circuit = VerifierCircuit::<DuplexSpongeRecorder>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(2),
     );
@@ -94,8 +92,7 @@ fn test_preflight_cached_trace() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let sponge = DuplexSpongeRecorder::default();
-    let proof_inputs = circuit.generate_proof_inputs(sponge, &proof);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
@@ -107,7 +104,7 @@ fn test_preflight_preprocessed_trace() {
     let fx = PreprocessedFibFixture::new(0, 1, sels);
     let (vk, proof) = fx.keygen_and_prove(&engine);
 
-    let circuit = VerifierCircuit::new(Arc::new(vk));
+    let circuit = VerifierCircuit::<DuplexSpongeRecorder>::new(Arc::new(vk));
     let engine = BabyBearPoseidon2Engine::new(
         FriParameters::standard_with_100_bits_conjectured_security(2),
     );
@@ -116,8 +113,7 @@ fn test_preflight_preprocessed_trace() {
         keygen_builder.add_air(air);
     }
     let pk = keygen_builder.generate_pk();
-    let sponge = DuplexSpongeRecorder::default();
-    let proof_inputs = circuit.generate_proof_inputs(sponge, &proof);
+    let proof_inputs = circuit.generate_proof_inputs(&[proof]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
 }
 
