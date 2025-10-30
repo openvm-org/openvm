@@ -267,7 +267,7 @@ where
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
-            asm_str += &Self::xmm_to_rv32_regs();
+        
             // Check if we should suspend or not
             asm_str += &Self::push_internal_registers();
             asm_str += "    mov rdi, r14\n";
@@ -279,7 +279,7 @@ where
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
-                // for now
+                
                 asm_str += "    je asm_run_end\n";
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
@@ -304,6 +304,9 @@ where
                 asm_str += "\n";
                 continue;
             }
+
+
+
             // executor doesnt have aotexecutor trait
             let executor = inventory
                 .get_executor(instruction.opcode)
