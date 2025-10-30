@@ -119,7 +119,7 @@ where
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
         asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
         asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
-        asm_str += "   move edx, 0\n";
+        asm_str += "   mov edx, 0\n";
 
         match local_opcode {
             DivRemOpcode::DIV => {
