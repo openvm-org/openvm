@@ -95,9 +95,6 @@ impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirRoundAir {
         let local: &WhirRoundCols<AB::Var> = (*local).borrow();
         let next: &WhirRoundCols<AB::Var> = (*next).borrow();
 
-        builder.when_first_row().assert_one(local.is_first_round);
-        builder.when_transition().assert_zero(next.is_first_round);
-
         self.whir_module_bus.receive(
             builder,
             local.proof_idx,
@@ -287,17 +284,17 @@ pub(crate) fn generate_trace(
             .as_base_slice()
             .try_into()
             .unwrap();
-        if i == num_valid_rows - 1 {
+        if i == rows_per_proof - 1 {
             cols.y0 = (preflight.whir.final_poly_at_u
                 * *preflight.whir.eq_partials.last().unwrap())
             .as_base_slice()
             .try_into()
             .unwrap();
-        } else if i < num_valid_rows - 1 {
+        } else if i < rows_per_proof - 1 {
             cols.is_valid = F::ONE;
             cols.tidx = F::from_canonical_usize(preflight.whir.tidx_per_round[i]);
-            cols.is_last_round = F::from_bool(i == num_valid_rows - 2);
-            if i < num_valid_rows - 2 {
+            cols.is_last_round = F::from_bool(i == rows_per_proof - 2);
+            if i < rows_per_proof - 2 {
                 cols.commit = whir_proof.codeword_commits[i];
                 cols.z0 = preflight.whir.z0s[i].as_base_slice().try_into().unwrap();
                 cols.y0 = whir_proof.ood_values[i].as_base_slice().try_into().unwrap();

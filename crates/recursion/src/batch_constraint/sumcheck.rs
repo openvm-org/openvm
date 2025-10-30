@@ -1,3 +1,4 @@
+use core::iter::zip;
 use std::borrow::{Borrow, BorrowMut};
 
 use openvm_stark_backend::{
@@ -280,7 +281,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MultilinearSumcheckAir {
 pub(crate) fn generate_univariate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = UnivariateSumcheckCols::<F>::width();
     let height = proofs
@@ -295,7 +296,7 @@ pub(crate) fn generate_univariate_trace(
     let mut trace = vec![F::ZERO; padded_height * width];
     let mut cur_height = 0;
 
-    for (pidx, proof) in proofs.iter().enumerate() {
+    for (pidx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
         let msgs = preflight
             .batch_constraint_sumcheck_randomness()
             .into_iter()
@@ -309,7 +310,7 @@ pub(crate) fn generate_univariate_trace(
         let tidx_offset = proof.batch_constraint_proof.univariate_round_coeffs.len() * D_EF;
         let tidx_constant = coeff_tidx_base + tidx_offset;
 
-        trace[cur_height..cur_height + height * width]
+        trace[cur_height * width..(cur_height + height) * width]
             .par_chunks_exact_mut(width)
             .enumerate()
             .for_each(|(i, chunk)| {
@@ -326,6 +327,13 @@ pub(crate) fn generate_univariate_trace(
 
         cur_height += height;
     }
+    trace[cur_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
+        });
 
     RowMajorMatrix::new(trace, width)
 }
@@ -333,7 +341,7 @@ pub(crate) fn generate_univariate_trace(
 pub(crate) fn generate_multilinear_trace(
     vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = MultilinearSumcheckCols::<F>::width();
     let one_poly_height = vk.inner.max_constraint_degree + 2;
@@ -346,7 +354,7 @@ pub(crate) fn generate_multilinear_trace(
     let mut trace = vec![F::ZERO; padded_height * width];
     let mut cur_height = 0;
 
-    for (pidx, proof) in proofs.iter().enumerate() {
+    for (pidx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
         let polys = &proof.batch_constraint_proof.sumcheck_round_polys;
         let height = polys.len() * one_poly_height;
         let transcript_values = preflight.transcript.values();
@@ -354,7 +362,7 @@ pub(crate) fn generate_multilinear_trace(
         let stride = one_poly_height * D_EF;
 
         if height > 0 {
-            trace[cur_height..cur_height + height * width]
+            trace[cur_height * width..cur_height * width + height * width]
                 .par_chunks_exact_mut(width)
                 .enumerate()
                 .for_each(|(row_idx, chunk)| {
@@ -394,6 +402,13 @@ pub(crate) fn generate_multilinear_trace(
         }
         cur_height += height;
     }
+    trace[cur_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut MultilinearSumcheckCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
+        });
 
     RowMajorMatrix::new(trace, width)
 }

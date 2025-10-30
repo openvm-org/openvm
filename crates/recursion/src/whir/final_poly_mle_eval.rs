@@ -129,6 +129,7 @@ pub(crate) fn generate_trace(
 
         let cols: &mut FinalyPolyMleEvalCols<F> = row.borrow_mut();
         cols.is_valid = F::ONE;
+        cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.is_first = F::from_bool(i == 0);
 
         let tidx = preflight.whir.tidx_per_round.last().unwrap() + 3 * params.k_whir * D_EF; // skip sumcheck
