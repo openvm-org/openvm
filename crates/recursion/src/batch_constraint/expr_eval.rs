@@ -466,10 +466,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir {
 
 pub(crate) fn generate_symbolic_expression_trace(
     _vk: &MultiStarkVerifyingKeyV2,
-    _proof: &Proof,
+    proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
-    let width = width_by_cnt_proofs(1); // TODO!
+    let width = width_by_cnt_proofs(proofs.len());
 
     let mut trace = vec![F::ZERO; width];
     let cols: &mut SymbolicExpressionColumnsHeader<_> =
@@ -482,7 +482,7 @@ pub(crate) fn generate_symbolic_expression_trace(
 
 pub(crate) fn generate_column_claim_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    proof: &Proof,
+    proofs: &[Proof],
     preflight: &Preflight,
 ) -> RowMajorMatrix<F> {
     let vdata = &preflight.proof_shape.sorted_trace_vdata;
@@ -507,6 +507,7 @@ pub(crate) fn generate_column_claim_trace(
             + (cur_main_tidx + *x) * 2 * D_EF;
         *x = tidx;
     }
+    debug_assert!(height > 0);
 
     let width = ColumnClaimCols::<F>::width();
 
@@ -514,6 +515,7 @@ pub(crate) fn generate_column_claim_trace(
     struct ColumnRowInfo {
         is_first: bool,
         is_last: bool,
+        proof_idx: usize,
         tidx: usize,
         air_idx: usize,
         sort_idx: usize,
@@ -524,74 +526,79 @@ pub(crate) fn generate_column_claim_trace(
         rot_claim: [F; D_EF],
     }
 
-    let mut rows = Vec::with_capacity(height);
+    let total_height = height * proofs.len();
+    let mut rows = Vec::with_capacity(total_height);
 
-    for (sort_idx, &(air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate() {
-        let air_vk = &vk.inner.per_air[air_id];
-        let widths = &air_vk.params.width;
-        let has_preprocessed = widths.preprocessed.is_some();
-
-        for col in 0..widths.common_main {
-            let (col_claim, rot_claim) =
-                proof.batch_constraint_proof.column_openings[sort_idx][0][col];
-            let mut col_claim_arr = [F::ZERO; D_EF];
-            col_claim_arr.copy_from_slice(col_claim.as_base_slice());
-            let mut rot_claim_arr = [F::ZERO; D_EF];
-            rot_claim_arr.copy_from_slice(rot_claim.as_base_slice());
-            rows.push(ColumnRowInfo {
-                is_first: rows.is_empty(),
-                is_last: false,
-                tidx: main_tidx[sort_idx] + col * 2 * D_EF,
-                air_idx: air_id,
-                sort_idx,
-                part_idx: 0,
-                has_preprocessed,
-                col_idx: col,
-                col_claim: col_claim_arr,
-                rot_claim: rot_claim_arr,
-            });
-        }
-
-        let mut cur_tidx = nonmain_tidx[sort_idx];
-        for (part, &w) in widths
-            .preprocessed
-            .iter()
-            .chain(widths.cached_mains.iter())
-            .enumerate()
+    for (pidx, proof) in proofs.iter().enumerate() {
+        let initial_len = rows.len();
+        for (sort_idx, &(air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
-            for col in 0..w {
+            let air_vk = &vk.inner.per_air[air_id];
+            let widths = &air_vk.params.width;
+            let has_preprocessed = widths.preprocessed.is_some();
+
+            for col in 0..widths.common_main {
                 let (col_claim, rot_claim) =
-                    proof.batch_constraint_proof.column_openings[sort_idx][part + 1][col];
+                    proof.batch_constraint_proof.column_openings[sort_idx][0][col];
                 let mut col_claim_arr = [F::ZERO; D_EF];
                 col_claim_arr.copy_from_slice(col_claim.as_base_slice());
                 let mut rot_claim_arr = [F::ZERO; D_EF];
                 rot_claim_arr.copy_from_slice(rot_claim.as_base_slice());
                 rows.push(ColumnRowInfo {
-                    is_first: rows.is_empty(),
+                    is_first: rows.len() == initial_len,
                     is_last: false,
-                    tidx: cur_tidx,
+                    proof_idx: pidx,
+                    tidx: main_tidx[sort_idx] + col * 2 * D_EF,
                     air_idx: air_id,
                     sort_idx,
-                    part_idx: part + 1,
+                    part_idx: 0,
                     has_preprocessed,
                     col_idx: col,
                     col_claim: col_claim_arr,
                     rot_claim: rot_claim_arr,
                 });
-                cur_tidx += 2 * D_EF;
+            }
+
+            let mut cur_tidx = nonmain_tidx[sort_idx];
+            for (part, &w) in widths
+                .preprocessed
+                .iter()
+                .chain(widths.cached_mains.iter())
+                .enumerate()
+            {
+                for col in 0..w {
+                    let (col_claim, rot_claim) =
+                        proof.batch_constraint_proof.column_openings[sort_idx][part + 1][col];
+                    let mut col_claim_arr = [F::ZERO; D_EF];
+                    col_claim_arr.copy_from_slice(col_claim.as_base_slice());
+                    let mut rot_claim_arr = [F::ZERO; D_EF];
+                    rot_claim_arr.copy_from_slice(rot_claim.as_base_slice());
+                    rows.push(ColumnRowInfo {
+                        is_first: rows.len() == initial_len,
+                        is_last: false,
+                        proof_idx: pidx,
+                        tidx: cur_tidx,
+                        air_idx: air_id,
+                        sort_idx,
+                        part_idx: part + 1,
+                        has_preprocessed,
+                        col_idx: col,
+                        col_claim: col_claim_arr,
+                        rot_claim: rot_claim_arr,
+                    });
+                    cur_tidx += 2 * D_EF;
+                }
             }
         }
+        rows.last_mut().unwrap().is_last = true;
     }
 
-    if let Some(last) = rows.last_mut() {
-        last.is_last = true;
-    }
+    debug_assert_eq!(rows.len(), total_height);
 
-    debug_assert_eq!(rows.len(), height);
+    let padded_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
 
-    let mut trace = vec![F::ZERO; width * height];
-
-    trace
+    trace[..padded_height * width]
         .par_chunks_exact_mut(width)
         .zip(rows.into_par_iter())
         .for_each(|(chunk, row)| {
@@ -599,6 +606,7 @@ pub(crate) fn generate_column_claim_trace(
             cols.is_valid = F::ONE;
             cols.is_first = F::from_bool(row.is_first);
             cols.is_last = F::from_bool(row.is_last);
+            cols.proof_idx = F::from_canonical_usize(row.proof_idx);
             cols.tidx = F::from_canonical_usize(row.tidx);
             cols.air_idx = F::from_canonical_usize(row.air_idx);
             cols.sort_idx = F::from_canonical_usize(row.sort_idx);
