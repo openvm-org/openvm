@@ -174,7 +174,7 @@ pub trait InterpreterExecutor<F> {
 
 #[cfg(feature = "aot")]
 pub trait AotExecutor<F> {
-    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         false
     }
 
@@ -301,7 +301,7 @@ pub trait MeteredExecutor<F> {
         Ctx: MeteredExecutionCtxTrait;
 
     #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         false
     }
 }
