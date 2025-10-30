@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -47,6 +49,22 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
         Ok(())
     }
 }
+
+// Callee saved registers
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+
+// Caller saved registers
+#[cfg(feature = "aot")]
+const REG_A: &str = "rax";
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_B: &str = "rcx";
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "ecx";
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -93,6 +111,52 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        MulOpcode::MUL.global_opcode() == opcode
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let map_reg = |reg: i16| -> (i16, u8) {
+            let index = reg / 4;
+            (index / 2, (index % 2) as u8)
+        };
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        let c = to_i16(inst.c);
+
+        let (xmm_a, lane_a) = map_reg(a);
+        let (xmm_b, lane_b) = map_reg(b);
+        let (xmm_c, lane_c) = map_reg(c);
+
+        let mut asm_str = String::new();
+
+        if lane_b == 0 {
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B_W, xmm_b);
+        } else {
+            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_B_W, xmm_b, lane_b);
+        }
+
+        if lane_c == 0 {
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A_W, xmm_c);
+        } else {
+            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_c, lane_c);
+        }
+
+        asm_str += &format!("   imul {}, {}\n", REG_A_W, REG_B_W);
+        asm_str += &format!(
+            "   vpinsrd xmm{}, xmm{}, {REG_A_W}, {}\n",
+            xmm_a, xmm_a, lane_a
+        );
+        asm_str += &format!("   add {}, 4\n", REG_PC);
+        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
+
+        Ok(asm_str)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

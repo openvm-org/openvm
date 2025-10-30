@@ -20,11 +20,8 @@ use openvm_circuit_primitives::{
 use openvm_instructions::{exe::VmExe, program::Program, riscv::RV32_REGISTER_AS, SystemOpcode};
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
 #[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
-#[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::Rv32JalrOpcode::{self, *};
-
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::{FieldAlgebra, PrimeField32},
@@ -49,6 +46,8 @@ use {
 };
 
 use super::Rv32JalrCoreAir;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         compose, Rv32JalrAdapterAir, Rv32JalrAdapterExecutor, Rv32JalrAdapterFiller,
@@ -383,7 +382,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
-        .instance(&exe)
+        .interp_instance(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter
         .execute(vec![], None)
