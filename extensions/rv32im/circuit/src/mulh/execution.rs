@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -22,6 +24,30 @@ struct MulHPreCompute {
     a: u8,
     b: u8,
     c: u8,
+}
+
+// Callee saved registers (shared with MUL AOT)
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+
+// Caller saved registers
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "ecx";
+
+#[cfg(feature = "aot")]
+#[inline(always)]
+fn map_reg(reg: i16) -> (i16, u8) {
+    debug_assert_eq!(
+        reg % 4,
+        0,
+        "register operands must align to 4-byte boundary"
+    );
+    let index = reg / 4;
+    (index / 2, (index % 2) as u8)
 }
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
@@ -97,6 +123,68 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        opcode == MulHOpcode::MULH.global_opcode()
+            || opcode == MulHOpcode::MULHSU.global_opcode()
+            || opcode == MulHOpcode::MULHU.global_opcode()
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        let c = to_i16(inst.c);
+
+        let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
+
+        let (xmm_dst, lane_dst) = map_reg(a);
+        let (xmm_rs1, lane_rs1) = map_reg(b);
+        let (xmm_rs2, lane_rs2) = map_reg(c);
+
+        let mut asm = String::new();
+
+        if lane_rs1 == 0 {
+            asm += &format!("   vmovd {}, xmm{}\n", REG_A_W, xmm_rs1);
+        } else {
+            asm += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_rs1, lane_rs1);
+        }
+
+        if lane_rs2 == 0 {
+            asm += &format!("   vmovd {}, xmm{}\n", REG_B_W, xmm_rs2);
+        } else {
+            asm += &format!("   vpextrd {}, xmm{}, {}\n", REG_B_W, xmm_rs2, lane_rs2);
+        }
+
+        match opcode {
+            MulHOpcode::MULH => {
+                asm += "   movsxd rax, eax\n";
+                asm += "   movsxd rcx, ecx\n";
+                asm += "   imul rcx\n";
+            }
+            MulHOpcode::MULHSU => {
+                asm += "   movsxd rax, eax\n";
+                asm += "   imul rcx\n";
+            }
+            MulHOpcode::MULHU => {
+                asm += "   mul ecx\n";
+            }
+        }
+
+        asm += "   mov eax, edx\n";
+        asm += &format!(
+            "   vpinsrd xmm{}, xmm{}, {REG_A_W}, {}\n",
+            xmm_dst, xmm_dst, lane_dst
+        );
+        asm += &format!("   add {}, 4\n", REG_PC);
+        asm += &format!("   add {}, 1\n", REG_INSTRET);
+
+        Ok(asm)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
