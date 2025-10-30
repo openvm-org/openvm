@@ -1,5 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
+use itertools::Itertools;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -87,7 +88,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqSharpUniAir {
         //     },
         //     local.is_valid - local.is_first,
         // );
-        // let product_after: [AB::Expr; D_EF] = local.product_before.map(|x| x.into()); // TODO multiply
+        // let product_after: [AB::Expr; D_EF] = local.product_before.map(|x| x.into()); // TODO
+        // // multiply
+        //
         // self.eq_bus.send(
         //     builder,
         //     local.proof_idx,
@@ -381,26 +384,38 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir {
 }
 
 pub(crate) fn generate_eq_sharp_uni_trace(
-    _vk: &MultiStarkVerifyingKeyV2,
-    _proofs: &[Proof],
-    preflight: &Preflight,
+    vk: &MultiStarkVerifyingKeyV2,
+    proofs: &[Proof],
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqSharpUniCols::<F>::width();
-    let height = preflight.proof_shape.l_skip;
-    let mut trace = vec![F::ZERO; width * height];
+    let height = vk.inner.params.l_skip;
+    let total_height = height * proofs.len();
+    let padded_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padded_height * width];
 
-    trace
-        .par_chunks_exact_mut(width)
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        trace[(pidx * height * width)..((pidx + 1) * height * width)]
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut EqSharpUniCols<_> = chunk.borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(i == 0);
+                cols.is_last = F::from_bool(i + 1 == height);
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.is_first_iter = F::ONE;
+                cols.xi_idx = F::from_canonical_usize(i);
+                cols.xi_times_root_pow
+                    .copy_from_slice(preflight.gkr.xi[i].1.as_base_slice());
+            });
+    }
+    trace[total_height * width..]
+        .par_chunks_mut(width)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let cols: &mut EqSharpUniCols<_> = chunk.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(i == 0);
-            cols.is_last = F::from_bool(i + 1 == height);
-            cols.is_first_iter = F::ONE;
-            cols.xi_idx = F::from_canonical_usize(i);
-            cols.xi_times_root_pow
-                .copy_from_slice(preflight.gkr.xi[i].1.as_base_slice());
+            let cols: &mut EqSharpUniCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
         });
 
     RowMajorMatrix::new(trace, width)
@@ -409,7 +424,7 @@ pub(crate) fn generate_eq_sharp_uni_trace(
 pub(crate) fn generate_eq_sharp_uni_receiver_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
-    _preflight: &Preflight,
+    _preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqSharpUniReceiverCols::<F>::width();
     RowMajorMatrix::new(vec![F::ZERO; width], width)
@@ -418,34 +433,58 @@ pub(crate) fn generate_eq_sharp_uni_receiver_trace(
 pub(crate) fn generate_eq_ns_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
-    _preflight: &Preflight,
+    _preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqNsColumns::<F>::width();
     RowMajorMatrix::new(vec![F::ZERO; width], width)
 }
 
 pub(crate) fn generate_eq_mle_trace(
-    _vk: &MultiStarkVerifyingKeyV2,
+    vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = EqMleColumns::<F>::width();
-    let height = preflight.proof_shape.n_global();
-    let l_skip = preflight.proof_shape.l_skip;
-    let mut trace = vec![F::ZERO; width * height];
-    let xi = &preflight.batch_constraint.xi;
-    let gkr_post_tidx = preflight.gkr.post_tidx;
+    let l_skip = vk.inner.params.l_skip;
+    let heights = preflights
+        .iter()
+        .map(|p| p.proof_shape.n_global().max(1))
+        .collect_vec();
+    let total_height = heights.iter().sum::<usize>();
+    let padding_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padding_height * width];
 
-    trace
-        .par_chunks_exact_mut(width)
+    let mut cur_height = 0;
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let xi = &preflight.batch_constraint.xi;
+        let gkr_post_tidx = preflight.gkr.post_tidx;
+        let height = heights[pidx];
+
+        if height == 0 {
+            todo!();
+        }
+        trace[cur_height * width..(cur_height + height) * width]
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut EqMleColumns<_> = chunk.borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.n = F::from_canonical_usize(i);
+                cols.idx = F::from_canonical_usize(i);
+                cols.xi.copy_from_slice(xi[l_skip + i].as_base_slice());
+                cols.xi_tidx = F::from_canonical_usize(gkr_post_tidx + (i + 1) * D_EF);
+            });
+
+        cur_height += height;
+    }
+
+    trace[cur_height * width..]
+        .par_chunks_mut(width)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let cols: &mut EqMleColumns<_> = chunk.borrow_mut();
-            cols.is_valid = F::ONE;
-            cols.n = F::from_canonical_usize(i);
-            cols.idx = F::from_canonical_usize(i);
-            cols.xi.copy_from_slice(xi[l_skip + i].as_base_slice());
-            cols.xi_tidx = F::from_canonical_usize(gkr_post_tidx + (i + 1) * D_EF);
+            let cols: &mut EqMleColumns<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
         });
 
     RowMajorMatrix::new(trace, width)
@@ -454,24 +493,47 @@ pub(crate) fn generate_eq_mle_trace(
 pub(crate) fn generate_eq_3b_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = Eq3bColumns::<F>::width();
-    let sorted = &preflight.proof_shape.sorted_trace_vdata;
-    let height = sorted.len();
-    let mut trace = vec![F::ZERO; height * width];
 
-    trace
-        .par_chunks_exact_mut(width)
+    let vdatas_and_heights = preflights
+        .iter()
+        .map(|p| {
+            let sorted = &p.proof_shape.sorted_trace_vdata;
+            let height = sorted.len();
+            debug_assert!(height > 0);
+            (sorted, height)
+        })
+        .collect_vec();
+    let total_height = vdatas_and_heights.iter().map(|x| x.1).sum::<usize>();
+    let padding_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padding_height * width];
+
+    let mut cur_height = 0;
+
+    for (pidx, &(sorted, height)) in vdatas_and_heights.iter().enumerate() {
+        trace[cur_height * width..(cur_height + height) * width]
+            .par_chunks_exact_mut(width)
+            .enumerate()
+            .for_each(|(i, chunk)| {
+                let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
+                let (_, v) = &sorted[i];
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(i == 0);
+                cols.is_last = F::from_bool(i + 1 == height);
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.sort_idx = F::from_canonical_usize(i);
+                cols.n = F::from_canonical_usize(v.hypercube_dim);
+            });
+        cur_height += height;
+    }
+    trace[cur_height * width..]
+        .par_chunks_mut(width)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
-            let (_, v) = &sorted[i];
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(i == 0);
-            cols.is_last = F::from_bool(i + 1 == height);
-            cols.sort_idx = F::from_canonical_usize(i);
-            cols.n = F::from_canonical_usize(v.hypercube_dim);
+            let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
         });
 
     RowMajorMatrix::new(trace, width)

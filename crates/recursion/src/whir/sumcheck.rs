@@ -163,7 +163,7 @@ pub(crate) fn generate_trace(
             cols.has_whir_opening_point_msg = F::ONE;
         }
         cols.is_first_in_group = F::from_bool(j == 0);
-        cols.is_last = F::from_bool(i == num_valid_rows - 1);
+        cols.is_last = F::from_bool(i == num_rows_per_proof - 1);
         cols.sumcheck_idx = F::from_canonical_usize(i);
         cols.tidx =
             F::from_canonical_usize(preflight.whir.tidx_per_round[whir_round] + 3 * D_EF * j);

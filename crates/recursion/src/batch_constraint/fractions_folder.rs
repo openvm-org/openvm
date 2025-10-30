@@ -1,3 +1,6 @@
+use core::iter::zip;
+use std::borrow::{Borrow, BorrowMut};
+
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -8,7 +11,6 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
-use std::borrow::{Borrow, BorrowMut};
 
 use crate::{
     batch_constraint::bus::{SumcheckClaimBus, SumcheckClaimMessage},
@@ -18,7 +20,7 @@ use crate::{
     system::Preflight,
 };
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct FractionsFolderCols<T> {
     is_valid: T,
@@ -135,7 +137,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for FractionFolderAir {
 pub(crate) fn generate_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     proofs: &[Proof],
-    preflight: &Preflight,
+    preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let width = FractionsFolderCols::<F>::width();
 
@@ -151,7 +153,7 @@ pub(crate) fn generate_trace(
     let mut trace = vec![F::ZERO; padded_height * width];
     let mut cur_height = 0;
 
-    for (pidx, proof) in proofs.iter().enumerate() {
+    for (pidx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
         let (npa, dpa) = (
             &proof.batch_constraint_proof.numerator_term_per_air,
             &proof.batch_constraint_proof.denominator_term_per_air,
@@ -163,8 +165,8 @@ pub(crate) fn generate_trace(
         let gkr_post_tidx = preflight.gkr.post_tidx;
         let n_global = preflight.proof_shape.n_global();
 
-        trace[cur_height..cur_height + height * width]
-            .par_chunks_exact_mut(width)
+        let rows = &mut trace[cur_height * width..(cur_height + height) * width];
+        rows.par_chunks_exact_mut(width)
             .enumerate()
             .for_each(|(i, chunk)| {
                 let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
@@ -186,7 +188,7 @@ pub(crate) fn generate_trace(
         let mut cur_q_sum: [_; D_EF] =
             core::array::from_fn(|i| preflight.transcript.values()[tidx_alpha_beta + i]);
 
-        for chunk in trace.chunks_exact_mut(width) {
+        for chunk in rows.chunks_exact_mut(width) {
             let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
             for j in 0..D_EF {
                 cur_p_sum[j] += cols.sum_claim_p[j];
@@ -198,6 +200,13 @@ pub(crate) fn generate_trace(
 
         cur_height += height;
     }
+    trace[cur_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
+        });
 
     RowMajorMatrix::new(trace, width)
 }
