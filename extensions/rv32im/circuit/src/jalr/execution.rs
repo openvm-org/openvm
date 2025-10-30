@@ -9,7 +9,6 @@ use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
-    LocalOpcode, VmOpcode,
 };
 #[cfg(feature = "aot")]
 use openvm_instructions::{LocalOpcode, VmOpcode};
