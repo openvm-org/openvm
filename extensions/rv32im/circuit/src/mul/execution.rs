@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -48,6 +50,17 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
     }
 }
 
+// Callee saved registers
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
+
+// Caller saved registers
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+
 impl<F, A, const LIMB_BITS: usize> Executor<F>
     for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -84,6 +97,71 @@ where
         let pre_compute: &mut MultiPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
         Ok(execute_e1_handler)
+    }
+
+    #[cfg(feature = "aot")]
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+
+        let map_reg = |reg: i16| -> (i16, u8) {
+            assert!(
+                reg >= 0 && reg % 4 == 0,
+                "register operands must be aligned to 4-byte boundaries"
+            );
+            let index = reg / 4;
+            let xmm = index / 2;
+            let lane = (index % 2) as u8;
+            (xmm, lane)
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+
+        assert_eq!(
+            inst.opcode,
+            MulOpcode::MUL.global_opcode(),
+            "generate_x86_asm only supports MUL opcode"
+        );
+
+        let (xmm_map_reg_a, lane_a) = map_reg(a);
+        let (xmm_map_reg_b, lane_b) = map_reg(b);
+        let (xmm_map_reg_c, lane_c) = map_reg(c);
+
+        if lane_b == 0 {
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);
+        } 
+        else {
+            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_map_reg_b, lane_b);
+        }
+
+        if lane_c == 0 {
+            asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c);
+        } 
+        else {
+            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_C_W, xmm_map_reg_c, lane_c);
+        }
+
+        asm_str += &format!("   imul {}, {}\n", REG_A_W, REG_C_W);
+
+        asm_str += &format!(
+            "   vpinsrd xmm{}, xmm{}, {REG_A_W}, {}\n",
+            xmm_map_reg_a, xmm_map_reg_a, lane_a
+        );
+
+        asm_str += &format!("   add {}, {}\n", REG_PC, 4);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+
+        asm_str
+    }
+
+    #[cfg(feature = "aot")]
+    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+        MulOpcode::MUL.global_opcode() == opcode
     }
 }
 
