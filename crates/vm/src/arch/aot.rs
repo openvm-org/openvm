@@ -466,6 +466,11 @@ where
             .join("libasm_bridge.so");
 
         let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
+        // Cleanup artifacts after library is loaded into memory
+        let _ = fs::remove_file(format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_file(format!("{}/{}.o", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_file(format!("{}/lib{}.a", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_dir_all(root_dir.join("target").join(asm_name));
 
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
