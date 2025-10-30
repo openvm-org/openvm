@@ -75,6 +75,7 @@ impl Fp2Extension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
+#[cfg_attr(feature = "aot", derive(openvm_circuit_derive::AotExecutor))]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
     Fp2AddSubRv32_32(Fp2Executor<2, 32>), // Fp2AddSub

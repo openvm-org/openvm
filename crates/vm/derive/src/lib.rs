@@ -158,9 +158,9 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             // crate. Assume F is already generic of the field.
             let mut new_generics = generics.clone();
             let where_clause = new_generics.make_where_clause();
-            where_clause
-                .predicates
-                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::Executor<F> });
+            where_clause.predicates.push(
+                syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::InterpreterExecutor<F> },
+            );
 
             // We use the macro's feature to decide whether to generate the impl or not. This avoids
             // the target crate needing the "tco" feature defined.
@@ -181,7 +181,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let handler = quote! {};
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::Executor<F> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<F> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         self.0.pre_compute_size()
@@ -236,16 +236,16 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let (pre_compute_size_arms, pre_compute_arms, _handler_arms, where_predicates): (Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(|(variant_name, field)| {
                 let field_ty = &field.ty;
                 let pre_compute_size_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute_size(x)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute_size(x)
                 };
                 let pre_compute_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::pre_compute(x, pc, instruction, data)
                 };
                 let handler_arm = quote! {
-                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::Executor<#first_ty_generic>>::handler(x, pc, instruction, data)
+                    #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>>::handler(x, pc, instruction, data)
                 };
                 let where_predicate = syn::parse_quote! {
-                    #field_ty: ::openvm_circuit::arch::Executor<#first_ty_generic>
+                    #field_ty: ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic>
                 };
                 (pre_compute_size_arm, pre_compute_arm, handler_arm, where_predicate)
             }));
@@ -277,7 +277,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
             let (impl_generics, _, where_clause) = new_generics.split_for_impl();
 
             quote! {
-                impl #impl_generics ::openvm_circuit::arch::Executor<#first_ty_generic> for #name #ty_generics #where_clause {
+                impl #impl_generics ::openvm_circuit::arch::InterpreterExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
                     fn pre_compute_size(&self) -> usize {
                         match self {
@@ -299,8 +299,198 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                             #(#pre_compute_arms,)*
                         }
                     }
-
                     #handler
+                }
+            }
+            .into()
+        }
+        Data::Union(_) => unimplemented!("Unions are not supported"),
+    }
+}
+
+#[proc_macro_derive(AotExecutor)]
+pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
+    let ast: syn::DeriveInput = syn::parse(input).unwrap();
+
+    let name = &ast.ident;
+    let generics = &ast.generics;
+    let (_, ty_generics, _) = generics.split_for_impl();
+
+    match &ast.data {
+        Data::Struct(inner) => {
+            let inner_ty = match &inner.fields {
+                Fields::Unnamed(fields) => {
+                    if fields.unnamed.len() != 1 {
+                        panic!("Only one unnamed field is supported");
+                    }
+                    fields.unnamed.first().unwrap().ty.clone()
+                }
+                _ => panic!("Only unnamed fields are supported"),
+            };
+            let mut new_generics = generics.clone();
+            let where_clause = new_generics.make_where_clause();
+            where_clause
+                .predicates
+                .push(syn::parse_quote! { #inner_ty: ::openvm_circuit::arch::AotExecutor<F> });
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            quote! {
+                #[cfg(feature = "aot")]
+                impl #impl_generics ::openvm_circuit::arch::AotExecutor<F> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
+                        self.0.supports_aot_for_opcode(opcode)
+                    }
+
+                    #[inline(always)]
+                    fn call_extern_handler(&self) -> ::std::string::String {
+                        self.0.call_extern_handler()
+                    }
+
+                    fn fallback_to_interpreter(
+                        &self,
+                        push_internal_registers_str: &str,
+                        pop_internal_registers_str: &str,
+                        rv32_regs_to_xmm_str: &str,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                    ) -> ::std::string::String {
+                        self.0.fallback_to_interpreter(
+                            push_internal_registers_str,
+                            pop_internal_registers_str,
+                            rv32_regs_to_xmm_str,
+                            inst,
+                        )
+                    }
+
+                    fn generate_x86_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
+                        self.0.generate_x86_asm(inst, pc)
+                    }
+                }
+            }
+            .into()
+        }
+        Data::Enum(e) => {
+            let variants = e
+                .variants
+                .iter()
+                .map(|variant| {
+                    let variant_name = &variant.ident;
+                    let mut fields = variant.fields.iter();
+                    let field = fields.next().unwrap();
+                    assert!(fields.next().is_none(), "Only one field is supported");
+                    (variant_name, field)
+                })
+                .collect::<Vec<_>>();
+            let default_ty_generic = Ident::new("F", proc_macro2::Span::call_site());
+            let mut new_generics = generics.clone();
+            let first_ty_generic = ast
+                .generics
+                .params
+                .first()
+                .and_then(|param| match param {
+                    GenericParam::Type(type_param) => Some(&type_param.ident),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    new_generics.params.push(syn::parse_quote! { F });
+                    &default_ty_generic
+                });
+            let (
+                supports_aot_for_opcode_arms,
+                call_extern_handler_arms,
+                fallback_to_interpreter_arms,
+                generate_x86_asm_arms,
+                where_predicates,
+            ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) = multiunzip(variants.iter().map(
+                |(variant_name, field)| {
+                    let field_ty = &field.ty;
+                    let supports_aot_for_opcode_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::supports_aot_for_opcode(x, opcode)
+                    };
+                    let call_extern_handler_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x)
+                    };
+                    let fallback_to_interpreter_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::fallback_to_interpreter(
+                            x,
+                            push_internal_registers_str,
+                            pop_internal_registers_str,
+                            rv32_regs_to_xmm_str,
+                            inst,
+                        )
+                    };
+                    let generate_x86_asm_arm = quote! {
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::generate_x86_asm(
+                            x,
+                            inst,
+                            pc,
+                        )
+                    };
+                    let where_predicate =
+                        syn::parse_quote! { #field_ty: ::openvm_circuit::arch::AotExecutor<#first_ty_generic> };
+                    (
+                        supports_aot_for_opcode_arm,
+                        call_extern_handler_arm,
+                        fallback_to_interpreter_arm,
+                        generate_x86_asm_arm,
+                        where_predicate,
+                    )
+                },
+            ));
+            let where_clause = new_generics.make_where_clause();
+            for predicate in where_predicates {
+                where_clause.predicates.push(predicate);
+            }
+            let (impl_generics, _, where_clause) = new_generics.split_for_impl();
+
+            quote! {
+                #[cfg(feature = "aot")]
+                impl #impl_generics ::openvm_circuit::arch::AotExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
+                    #[inline(always)]
+                    fn supports_aot_for_opcode(&self, opcode: ::openvm_instructions::VmOpcode) -> bool {
+                        match self {
+                            #(#supports_aot_for_opcode_arms,)*
+                        }
+                    }
+
+                    #[inline(always)]
+                    fn call_extern_handler(&self) -> ::std::string::String {
+                        match self {
+                            #(#call_extern_handler_arms,)*
+                        }
+                    }
+
+                    fn fallback_to_interpreter(
+                        &self,
+                        push_internal_registers_str: &str,
+                        pop_internal_registers_str: &str,
+                        rv32_regs_to_xmm_str: &str,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                    ) -> ::std::string::String {
+                        match self {
+                            #(#fallback_to_interpreter_arms,)*
+                        }
+                    }
+
+                    fn generate_x86_asm(
+                        &self,
+                        inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        pc: u32,
+                    ) -> ::std::result::Result<
+                        ::std::string::String,
+                        ::openvm_circuit::arch::AotError,
+                    > {
+                        match self {
+                            #(#generate_x86_asm_arms,)*
+                        }
+                    }
                 }
             }
             .into()
@@ -674,6 +864,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::derive::MeteredExecutor,
             ::openvm_circuit::derive::PreflightExecutor,
         )]
+        #[cfg_attr(feature = "aot", derive(::openvm_circuit::derive::AotExecutor))]
         pub enum #executor_type<F: openvm_stark_backend::p3_field::Field> {
             #[any_enum]
             #source_name_upper(#source_executor_type),

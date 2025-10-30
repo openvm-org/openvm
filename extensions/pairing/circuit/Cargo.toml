@@ -56,7 +56,7 @@ openvm-pairing-guest = { workspace = true, features = [
 [features]
 default = []
 tco = ["openvm-rv32im-circuit/tco", "openvm-ecc-circuit/tco"]
-aot = ["openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot"]
+aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "openvm-ecc-circuit/aot"]
 cuda = [
     "dep:openvm-cuda-backend",
     "dep:openvm-stark-sdk",

@@ -5273,6 +5273,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
@@ -5499,8 +5500,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.6#b94688fbe95d8f551a7430eaf023755f0a5511f6"
+version = "1.2.1-rc.7"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.7#a177e80c441ae74ab4d8349cbec87983a5383031"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -5531,8 +5532,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.6#b94688fbe95d8f551a7430eaf023755f0a5511f6"
+version = "1.2.1-rc.7"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.7#a177e80c441ae74ab4d8349cbec87983a5383031"
 dependencies = [
  "cc",
  "glob",
@@ -5540,8 +5541,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.6#b94688fbe95d8f551a7430eaf023755f0a5511f6"
+version = "1.2.1-rc.7"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.7#a177e80c441ae74ab4d8349cbec87983a5383031"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6180,6 +6181,7 @@ dependencies = [
  "openvm-cuda-backend",
  "openvm-ecc-circuit",
  "openvm-ecc-transpiler",
+ "openvm-instructions",
  "openvm-keccak256-circuit",
  "openvm-keccak256-transpiler",
  "openvm-native-circuit",
@@ -6287,8 +6289,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.6#b94688fbe95d8f551a7430eaf023755f0a5511f6"
+version = "1.2.1-rc.7"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.7#a177e80c441ae74ab4d8349cbec87983a5383031"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -6317,8 +6319,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "1.2.1-rc.6"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.6#b94688fbe95d8f551a7430eaf023755f0a5511f6"
+version = "1.2.1-rc.7"
+source = "git+https://github.com/openvm-org/stark-backend.git?tag=v1.2.1-rc.7#a177e80c441ae74ab4d8349cbec87983a5383031"
 dependencies = [
  "dashmap",
  "derivative",

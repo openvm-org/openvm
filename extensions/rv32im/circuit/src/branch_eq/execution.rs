@@ -63,7 +63,7 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const NUM_LIMBS: usize> Executor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
 where
     F: PrimeField32,
 {
@@ -99,6 +99,12 @@ where
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_bne)
     }
+}
+
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
+    F: PrimeField32
+{
 }
 
 impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>

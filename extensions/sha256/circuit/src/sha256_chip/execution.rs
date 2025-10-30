@@ -22,7 +22,7 @@ struct ShaPreCompute {
     c: u8,
 }
 
-impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
+impl<F: PrimeField32> InterpreterExecutor<F> for Sha256VmExecutor {
     #[cfg(feature = "tco")]
     fn handler<Ctx>(
         &self,
@@ -57,6 +57,9 @@ impl<F: PrimeField32> Executor<F> for Sha256VmExecutor {
         Ok(execute_e1_impl::<_, _>)
     }
 }
+
+#[cfg(feature = "aot")]
+impl<F: PrimeField32> AotExecutor<F> for Sha256VmExecutor {}
 
 impl<F: PrimeField32> MeteredExecutor<F> for Sha256VmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
