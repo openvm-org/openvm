@@ -51,7 +51,7 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32,
+    pc_start: u32
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -59,6 +59,7 @@ type AsmRunFn = unsafe extern "C" fn(
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
     from_state_instret: u64,
+    instret_end: u64
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -239,6 +240,7 @@ where
         asm_str += "    mov rbp, rsi\n";
         asm_str += "    mov r13, rdx\n";
         asm_str += "    mov r14, rcx\n";
+        asm_str += "    mov r12, r8\n";
 
         asm_str += &Self::push_internal_registers();
         asm_str += "    mov rdi, rbx\n";
@@ -269,18 +271,12 @@ where
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
         
             // Check if we should suspend or not
-            asm_str += &Self::push_internal_registers();
-            asm_str += "    mov rdi, r14\n";
-            asm_str += "    mov rsi, r13\n";
-            asm_str += "    mov rdx, rbx\n";
-            asm_str += "    call should_suspend\n";
-            asm_str += "    cmp rax, 1\n";
-            asm_str += &Self::pop_internal_registers();
+
+            asm_str += "    cmp r14, r12\n";
+            asm_str += "    jae asm_run_end\n";
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
-                
-                asm_str += "    je asm_run_end\n";
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
@@ -305,15 +301,10 @@ where
                 continue;
             }
 
-
-
-            // executor doesnt have aotexecutor trait
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-            asm_str += "    je asm_run_end\n";
-
-
+        
             if executor.supports_aot_for_opcode(instruction.opcode) {
                 let segment =
                     executor
@@ -333,7 +324,7 @@ where
                         })?;
                 asm_str += &segment;
             } else {
-                asm_str += &Self::xmm_to_rv32_regs(); // sync registers
+                asm_str += &Self::xmm_to_rv32_regs(); 
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
@@ -558,6 +549,7 @@ where
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
+        let instret_end = ctx.instret_end;
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
@@ -577,6 +569,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
+                instret_end
             );
         }
 
@@ -802,6 +795,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
+                0 // TODO: this is a placeholder because in the pure case asm_run needs to take in 5 args. Fix later
             );
         }
 

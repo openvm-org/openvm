@@ -13,6 +13,7 @@ extern "C" {
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
         from_state_instret: u64,              // rcx = from_state.instret
+        instret_end: u64
     );
 }
 
@@ -30,12 +31,14 @@ pub unsafe extern "C" fn asm_run(
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
     from_state_instret: u64,
+    instret_end: u64
 ) {
     asm_run_internal(
         vm_exec_state_ptr,
         pre_compute_insns_ptr,
         from_state_pc,
         from_state_instret,
+        instret_end
     );
 }
 
