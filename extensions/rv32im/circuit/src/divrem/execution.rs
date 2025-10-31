@@ -99,17 +99,24 @@ where
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, local_opcode)
     }
+}
 
-    #[cfg(feature = "aot")]
-    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> String {
+#[cfg(feature = "aot")]
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
+{
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 
         let &Instruction {
             opcode, a, b, c, d, ..
         } = inst;
         let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        // TODO: this should return an error instead.
-        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(AotError::InvalidInstruction);
+        }
 
         let mut asm_str = String::new();
         let a_reg = a.as_canonical_u32() / 4;
@@ -154,21 +161,12 @@ where
         // instret += 1
         asm_str += &format!("   add r14, 1\n");
 
-        asm_str
+        Ok(asm_str)
     }
 
-    #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for DivRemExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
-{
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

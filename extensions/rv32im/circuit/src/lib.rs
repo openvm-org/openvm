@@ -18,7 +18,6 @@ use openvm_stark_backend::{
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;
-pub(crate) mod common;
 mod auipc;
 mod base_alu;
 mod branch_eq;

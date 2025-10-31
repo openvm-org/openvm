@@ -89,8 +89,14 @@ where
         let (is_jal, enabled) = self.pre_compute_impl(inst, data)?;
         dispatch!(execute_e1_handler, is_jal, enabled)
     }
-    #[cfg(feature = "aot")]
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+}
+
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for Rv32JalLuiExecutor<A>
+where
+    F: PrimeField32,
+{
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         use crate::common::gpr_to_rv32_register;
 
         let local_opcode = Rv32JalLuiOpcode::from_usize(
@@ -126,17 +132,13 @@ where
             asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
         };
 
-        asm_str
+        Ok(asm_str)
     }
 
-    #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, _opcode: openvm_instructions::VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32JalLuiExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for Rv32JalLuiExecutor<A>
 where

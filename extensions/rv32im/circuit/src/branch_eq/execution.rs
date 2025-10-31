@@ -101,9 +101,14 @@ where
         let is_bne = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, is_bne)
     }
+}
 
-    #[cfg(feature = "aot")]
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+#[cfg(feature = "aot")]
+impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+where
+    F: PrimeField32,
+{
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         use crate::common::rv32_register_to_gpr;
 
         let &Instruction {
@@ -118,7 +123,9 @@ where
         };
         let next_pc = (pc as isize + imm) as u32;
         // TODO: this should return an error instead.
-        assert_eq!(d.as_canonical_u32(), RV32_REGISTER_AS);
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(AotError::InvalidInstruction);
+        }
         let a = a.as_canonical_u32() as u8;
         let b = b.as_canonical_u32() as u8;
 
@@ -148,19 +155,12 @@ where
         asm_str += &format!("{}:\n", not_jump_label);
         asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
 
-        asm_str
+        Ok(asm_str)
     }
 
-    #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
-    F: PrimeField32
-{
 }
 
 impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>

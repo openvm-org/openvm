@@ -78,9 +78,14 @@ where
         self.pre_compute_impl(pc, inst, data)?;
         Ok(execute_e1_handler)
     }
+}
 
-    #[cfg(feature = "aot")]
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> String {
+#[cfg(feature = "aot")]
+impl<F, A> AotExecutor<F> for Rv32AuipcExecutor<A>
+where
+    F: PrimeField32,
+{
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         use openvm_instructions::riscv::RV32_CELL_BITS;
 
         let to_i16 = |c: F| -> i16 {
@@ -94,9 +99,11 @@ where
         let d: i16 = to_i16(inst.d);
         let rd = pc.wrapping_add((c as u32) << RV32_CELL_BITS);
 
+        if d as u32 != RV32_REGISTER_AS {
+            return Err(AotError::InvalidInstruction);
+        }
+
         let xmm_map_reg_a = a / 8;
-        // TODO: this should return an error instead.
-        assert_eq!(d as u32, RV32_REGISTER_AS);
         asm_str += &format!("   mov eax, {}\n", rd);
 
         if (a / 4) % 2 == 0 {
@@ -112,17 +119,13 @@ where
         // instret += 1
         asm_str += &format!("   add r14, 1\n");
 
-        asm_str
+        Ok(asm_str)
     }
 
-    #[cfg(feature = "aot")]
-    fn supports_aot_for_opcode(&self, _opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
         true
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32AuipcExecutor<A> where F: PrimeField32 {}
 
 impl<F, A> MeteredExecutor<F> for Rv32AuipcExecutor<A>
 where

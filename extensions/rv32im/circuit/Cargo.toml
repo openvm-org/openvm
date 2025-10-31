@@ -39,7 +39,7 @@ test-case.workspace = true
 openvm-cuda-builder = { workspace = true, optional = true }
 
 [features]
-default = ["parallel", "jemalloc", "aot"]
+default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 tco = ["openvm-circuit/tco"]
