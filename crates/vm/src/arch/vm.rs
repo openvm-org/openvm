@@ -238,11 +238,20 @@ where
     }
 
     #[cfg(feature = "aot")]
+    pub fn interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+        println!("[eyeball check] interpreter instance called yay");
+        InterpretedInstance::new(&self.inventory, exe)
+    }
+
+    #[cfg(feature = "aot")]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        println!("aot instance called yay");
+        println!("[eyeball check] aot instance called yay");
         Self::aot_instance(&self, exe)
     }
 }
@@ -284,6 +293,16 @@ where
     ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
+
+    #[cfg(feature = "aot")]
+    pub fn metered_interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
 
     #[cfg(feature = "aot")]
     pub fn metered_instance(
@@ -463,6 +482,20 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         self.executor().instance(exe)
+    }
+
+    // Pure AOT execution
+    #[cfg(feature = "aot")]
+    pub fn naive_interpreter(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        println!("[eyeball check] Naive Interpreter version being called");
+        self.executor().interpreter_instance(exe)
     }
 
     // Pure AOT execution

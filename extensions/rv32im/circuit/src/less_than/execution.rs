@@ -9,7 +9,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, VmOpcode
 };
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -75,6 +75,31 @@ macro_rules! dispatch {
         }
     };
 }
+
+// Callee saved
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_INSTRET: &str = "r14";
+const REG_GUEST_MEM_PTR: &str = "r15";
+
+// Caller saved
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_FOURTH_ARG: &str = "rcx";
+const REG_THIRD_ARG: &str = "rdx";
+const REG_SECOND_ARG: &str = "rsi";
+const REG_FIRST_ARG: &str = "rdi";
+const REG_RETURN_VAL: &str = "rax";
+
+const REG_C: &str = "r10";
+const REG_C_W: &str = "r10d";
+const REG_C_B: &str = "r10b";
+const REG_AUX: &str = "r11";
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>

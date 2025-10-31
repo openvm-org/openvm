@@ -59,6 +59,7 @@ type AsmRunFn = unsafe extern "C" fn(
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
     from_state_instret: u64,
+    instret_end: u64,
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -239,6 +240,7 @@ where
         asm_str += "    mov rbp, rsi\n";
         asm_str += "    mov r13, rdx\n";
         asm_str += "    mov r14, rcx\n";
+        asm_str += "    mov r12, r8\n";
 
         asm_str += &Self::push_internal_registers();
         asm_str += "    mov rdi, rbx\n";
@@ -267,20 +269,14 @@ where
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
-            asm_str += &Self::xmm_to_rv32_regs();
+
             // Check if we should suspend or not
-            asm_str += &Self::push_internal_registers();
-            asm_str += "    mov rdi, r14\n";
-            asm_str += "    mov rsi, r13\n";
-            asm_str += "    mov rdx, rbx\n";
-            asm_str += "    call should_suspend\n";
-            asm_str += "    cmp rax, 1\n";
-            asm_str += &Self::pop_internal_registers();
+
+            asm_str += "    cmp r14, r12\n";
+            asm_str += "    jae asm_run_end\n";
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
-                // for now
-                asm_str += "    je asm_run_end\n";
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
@@ -304,19 +300,11 @@ where
                 asm_str += "\n";
                 continue;
             }
-            // executor doesnt have aotexecutor trait
+
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-            if executor.is_aot_supported(&instruction) {
-                asm_str += &Self::rv32_regs_to_xmm(); // sync registers
-            }
-            asm_str += "    je asm_run_end\n";
 
-            /*
-            x86 assembly for executing the opcode, updating the Rv32 PC (r13) and instret (r14)
-            additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
-            */
             if executor.is_aot_supported(&instruction) {
                 let segment =
                     executor
@@ -336,6 +324,7 @@ where
                         })?;
                 asm_str += &segment;
             } else {
+                asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
@@ -559,6 +548,7 @@ where
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
+        let instret_end = ctx.instret_end;
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
@@ -578,6 +568,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
+                instret_end,
             );
         }
 
@@ -834,6 +825,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
+                0, // TODO: this is a placeholder because in the pure case asm_run needs to take in 5 args. Fix later
             );
         }
 
@@ -848,68 +840,4 @@ where
     }
 
     // TODO: implement execute_metered_until_suspend for AOT if needed
-}
-
-impl<F> AotInstance<'_, F, MeteredCostCtx>
-where
-    F: PrimeField32,
-{
-    /// Metered cost execution for the given `inputs`. Execution begins from the initial
-    /// state specified by the `VmExe`. This function executes the program until termination.
-    ///
-    /// Returns the cost and the final VM state when execution stops.
-    ///
-    /// Assumes the program doesn't jump to out of bounds pc
-    pub fn execute_metered_cost(
-        &mut self,
-        inputs: impl Into<Streams<F>>,
-        ctx: MeteredCostCtx,
-    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = self.create_initial_vm_state(inputs);
-        self.execute_metered_cost_from_state(vm_state, ctx)
-    }
-
-    /// Metered cost execution for the given `VmState`. This function executes the program until
-    /// termination
-    ///
-    /// Returns the cost and the final VM state when execution stops.
-    ///
-    /// Assume program doesn't jump to out of bounds pc
-    pub fn execute_metered_cost_from_state(
-        &self,
-        from_state: VmState<F, GuestMemory>,
-        ctx: MeteredCostCtx,
-    ) -> Result<(u64, VmState<F, GuestMemory>), ExecutionError> {
-        let from_state_instret = from_state.instret();
-        let from_state_pc = from_state.pc();
-
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCostCtx>> =
-            Box::new(VmExecState::new(from_state, ctx));
-
-        unsafe {
-            let asm_run: libloading::Symbol<AsmRunFn> = self
-                .lib
-                .get(b"asm_run")
-                .expect("Failed to get asm_run symbol");
-
-            let vm_exec_state_ptr =
-                &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCostCtx>;
-            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
-
-            asm_run(
-                vm_exec_state_ptr as *mut c_void,
-                pre_compute_insns_ptr as *const c_void,
-                from_state_pc,
-                from_state_instret,
-            );
-        }
-
-        // handle execution error
-        match vm_exec_state.exit_code {
-            Ok(_) => Ok((vm_exec_state.ctx.cost, vm_exec_state.vm_state)),
-            Err(e) => Err(e),
-        }
-    }
-
-    // TODO: implement execute_metered_cost_until_suspend for AOT if needed
 }
