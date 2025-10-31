@@ -23,11 +23,14 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrXiSamplerCols<T> {
+    /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
-
     pub proof_idx: T,
-
     pub is_first_challenge: T,
+
+    /// An enabled row which is not involved in any interactions
+    /// but should satisfy air constraints
+    pub is_dummy: T,
 
     /// Challenge index
     // TODO(ayush): can probably remove idx if XiRandomnessMessage takes tidx instead
@@ -65,13 +68,7 @@ where
         let next: &GkrXiSamplerCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Boolean Constraints
-        ///////////////////////////////////////////////////////////////////////
-
-        builder.assert_bool(local.is_enabled);
-
-        ///////////////////////////////////////////////////////////////////////
-        // Loop Constraints
+        // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
         type LoopSubAir = NestedForLoopSubAir<1, 0>;
@@ -92,7 +89,7 @@ where
                     }
                     .map_into(),
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols::default(),
             ),
         );
 
@@ -115,6 +112,8 @@ where
         // Module Interactions
         ///////////////////////////////////////////////////////////////////////
 
+        let is_not_dummy = AB::Expr::ONE - local.is_dummy;
+
         // 1. GkrXiSamplerBus
         // 1a. Receive input from GkrInputAir
         self.xi_sampler_bus.receive(
@@ -124,17 +123,18 @@ where
                 idx: local.idx.into(),
                 tidx: local.tidx.into(),
             },
-            local.is_enabled * local.is_first_challenge,
+            local.is_enabled * local.is_first_challenge * is_not_dummy.clone(),
         );
         // 1b. Send output to GkrInputAir
+        let tidx_end = local.tidx + AB::Expr::from_canonical_usize(D_EF);
         self.xi_sampler_bus.send(
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
                 idx: local.idx.into(),
-                tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
+                tidx: tidx_end,
             },
-            local.is_enabled * is_last_challenge,
+            local.is_enabled * is_last_challenge * is_not_dummy.clone(),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -148,7 +148,7 @@ where
             local.proof_idx,
             local.tidx,
             local.xi,
-            local.is_enabled,
+            local.is_enabled * is_not_dummy.clone(),
         );
 
         // 2. XiRandomnessBus
@@ -160,7 +160,7 @@ where
                 idx: local.idx.into(),
                 xi: local.xi.map(Into::into),
             },
-            local.is_enabled,
+            local.is_enabled * is_not_dummy,
         );
     }
 }
