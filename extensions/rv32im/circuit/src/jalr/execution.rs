@@ -113,8 +113,8 @@ impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
 {
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        opcode == Rv32JalrOpcode::JALR.global_opcode()
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        inst.opcode == Rv32JalrOpcode::JALR.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
