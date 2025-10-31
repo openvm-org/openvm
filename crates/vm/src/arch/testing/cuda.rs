@@ -263,19 +263,14 @@ impl Default for GpuChipTestBuilder {
 
 impl GpuChipTestBuilder {
     pub fn new() -> Self {
-        // Allow selecting persistent memory via env var; default to volatile
+        Self::default()
+    }
+
+    pub fn new_persistent() -> Self {
         let mut mem_config = MemoryConfig::default();
         // Currently tests still use gen_pointer for the full 1<<29 range of address space 1.
         mem_config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
-        let persistent = matches!(
-            std::env::var("OPENVM_GPU_TEST_PERSISTENT").as_deref(),
-            Ok("1") | Ok("true") | Ok("TRUE")
-        );
-        if persistent {
-            Self::persistent(mem_config, default_var_range_checker_bus())
-        } else {
-            Self::volatile(mem_config, default_var_range_checker_bus())
-        }
+        Self::persistent(mem_config, default_var_range_checker_bus())
     }
 
     pub fn volatile(mem_config: MemoryConfig, bus: VariableRangeCheckerBus) -> Self {
