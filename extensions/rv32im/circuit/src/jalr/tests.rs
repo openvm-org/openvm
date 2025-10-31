@@ -382,7 +382,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
-        .naive_interpreter(&exe)
+        .interpreter_instance(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter
         .execute(vec![], None)
