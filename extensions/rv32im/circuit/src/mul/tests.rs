@@ -18,14 +18,15 @@ use openvm_circuit::{
 use openvm_circuit_primitives::range_tuple::{
     RangeTupleCheckerAir, RangeTupleCheckerBus, RangeTupleCheckerChip, SharedRangeTupleCheckerChip,
 };
+use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{
     exe::VmExe,
     program::Program,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
+    Instruction,
 };
-use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
