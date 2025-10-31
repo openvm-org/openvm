@@ -38,7 +38,7 @@ pub fn generate_trace(
     let padded_rows = total_rows.next_power_of_two();
     let mut trace = vec![F::ZERO; padded_rows * width];
 
-    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let (data_slice, _) = trace.split_at_mut(total_rows * width);
 
     // Process each proof row
     data_slice
@@ -84,15 +84,6 @@ pub fn generate_trace(
                     .unwrap(),
             ];
         });
-
-    // Fill padding rows (proof_idx = number of proofs indicates padding)
-    if !padding_slice.is_empty() {
-        let padding_proof_idx = F::from_canonical_usize(gkr_input_records.len());
-        padding_slice.par_chunks_mut(width).for_each(|row_data| {
-            let cols: &mut GkrInputCols<F> = row_data.borrow_mut();
-            cols.proof_idx = padding_proof_idx;
-        });
-    }
 
     RowMajorMatrix::new(trace, width)
 }

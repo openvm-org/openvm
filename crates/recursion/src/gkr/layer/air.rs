@@ -28,11 +28,14 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrLayerCols<T> {
+    /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
-
     pub proof_idx: T,
-
     pub is_first_layer: T,
+
+    /// An enabled row which is not involved in any interactions
+    /// but should satisfy air constraints
+    pub is_dummy: T,
 
     /// GKR layer index
     pub layer_idx: T,
@@ -97,17 +100,15 @@ where
         let next: &GkrLayerCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Boolean Constraints
-        ///////////////////////////////////////////////////////////////////////
-
-        builder.assert_bool(local.is_enabled);
-
-        ///////////////////////////////////////////////////////////////////////
-        // Loop Constraints
+        // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
         type LoopSubAir = NestedForLoopSubAir<1, 0>;
 
+        // This subair has the following constraints:
+        // 1. Boolean enabled flag
+        // 2. Disabled rows are followed by disabled rows
+        // 3. Proof index increments by exactly one between enabled rows
         LoopSubAir {}.eval(
             builder,
             (
@@ -125,7 +126,7 @@ where
                     }
                     .map_into(),
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols::default(),
             ),
         );
 
@@ -138,7 +139,7 @@ where
 
         // Layer index increments by 1
         builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_layer.clone()))
+            .when(AB::Expr::ONE - is_last_layer.clone())
             .assert_eq(next.layer_idx, local.layer_idx + AB::Expr::ONE);
 
         ///////////////////////////////////////////////////////////////////////
@@ -206,16 +207,18 @@ where
         // Module Interactions
         ///////////////////////////////////////////////////////////////////////
 
+        let is_not_dummy = AB::Expr::ONE - local.is_dummy;
+
         // 1. GkrLayerInputBus
         // 1a. Receive GKR layers input
         self.layer_input_bus.receive(
             builder,
             local.proof_idx,
             GkrLayerInputMessage {
-                tidx: local.tidx.into(),
-                q0_claim: local.sumcheck_claim_in.map(Into::into),
+                tidx: local.tidx,
+                q0_claim: local.sumcheck_claim_in,
             },
-            local.is_enabled * local.is_first_layer,
+            local.is_enabled * local.is_first_layer * is_not_dummy.clone(),
         );
         // 2. GkrLayerOutputBus
         // 2a. Send GKR input layer claims back
@@ -230,7 +233,7 @@ where
                     local.denom_claim.map(Into::into),
                 ],
             },
-            local.is_enabled * is_last_layer.clone(),
+            local.is_enabled * is_last_layer.clone() * is_not_dummy.clone(),
         );
         // 3. GkrSumcheckInputBus
         // 3a. Send claim to sumcheck
@@ -244,7 +247,7 @@ where
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
                 claim: local.sumcheck_claim_in.map(Into::into),
             },
-            is_non_root_layer.clone(),
+            is_non_root_layer.clone() * is_not_dummy.clone(),
         );
         // 3. GkrSumcheckOutputBus
         // 3a. Receive sumcheck results
@@ -264,7 +267,7 @@ where
                 claim_out: sumcheck_claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_at_r_prime.map(Into::into),
             },
-            is_non_root_layer,
+            is_non_root_layer * is_not_dummy.clone(),
         );
         // 4. GkrSumcheckChallengeBus
         // 4a. Send challenge mu
@@ -276,7 +279,7 @@ where
                 sumcheck_round: AB::Expr::ZERO,
                 challenge: local.mu.map(Into::into),
             },
-            local.is_enabled * (AB::Expr::ONE - is_last_layer.clone()),
+            local.is_enabled * (AB::Expr::ONE - is_last_layer.clone()) * is_not_dummy.clone(),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -290,7 +293,7 @@ where
             local.proof_idx,
             local.tidx,
             local.lambda,
-            local.is_enabled * (AB::Expr::ONE - local.is_first_layer),
+            local.is_enabled * (AB::Expr::ONE - local.is_first_layer) * is_not_dummy.clone(),
         );
         // 1b. Observe layer claims
         let mut tidx = tidx_after_sumcheck;
@@ -300,13 +303,18 @@ where
                 local.proof_idx,
                 tidx.clone(),
                 claim,
-                local.is_enabled,
+                local.is_enabled * is_not_dummy.clone(),
             );
             tidx += AB::Expr::from_canonical_usize(D_EF);
         }
         // 1c. Sample `mu`
-        self.transcript_bus
-            .sample_ext(builder, local.proof_idx, tidx, local.mu, local.is_enabled);
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            tidx,
+            local.mu,
+            local.is_enabled * is_not_dummy.clone(),
+        );
 
         // 2. XiRandomnessBus
         // 2a. Send shared randomness
@@ -317,7 +325,7 @@ where
                 idx: AB::Expr::ZERO,
                 xi: local.mu.map(Into::into),
             },
-            local.is_enabled * is_last_layer,
+            local.is_enabled * is_last_layer * is_not_dummy.clone(),
         );
     }
 }
