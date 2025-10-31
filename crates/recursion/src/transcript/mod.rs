@@ -191,7 +191,11 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
                     cols.mask[idx] = F::from_bool(true);
                     cols.lookup[idx] = F::from_canonical_usize(1);
                     if is_sample {
-                        cols.prev_state[CHUNK - 1 - idx] = preflight.transcript.values()[tidx];
+                        debug_assert_eq!(
+                            cols.prev_state[CHUNK - 1 - idx],
+                            preflight.transcript.values()[tidx],
+                            "sample value mismatch",
+                        );
                     } else {
                         cols.prev_state[idx] = preflight.transcript.values()[tidx];
                     }
@@ -199,7 +203,8 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
                     tidx += 1;
                     idx += 1;
                     if idx == CHUNK {
-                        permuted = true;
+                        // If it's sample -> observe, we don't need to permute. otherwise permute
+                        permuted = !is_sample || preflight.transcript.samples()[tidx];
                         break;
                     }
                 }
