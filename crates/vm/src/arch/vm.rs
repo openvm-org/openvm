@@ -254,6 +254,14 @@ where
         println!("[eyeball check] aot instance called yay");
         Self::aot_instance(&self, exe)
     }
+    #[cfg(feature = "aot")]
+    pub fn interp_instance(
+        &self,
+        exe: &VmExe<F>,
+    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
+        println!("interp instance called yay");
+        InterpretedInstance::new(&self.inventory, exe)
+    }
 }
 #[cfg(feature = "aot")]
 impl<F, VC> VmExecutor<F, VC>
