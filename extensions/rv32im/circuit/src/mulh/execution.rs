@@ -123,10 +123,10 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        opcode == MulHOpcode::MULH.global_opcode()
-            || opcode == MulHOpcode::MULHSU.global_opcode()
-            || opcode == MulHOpcode::MULHU.global_opcode()
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        inst.opcode == MulHOpcode::MULH.global_opcode()
+            || inst.opcode == MulHOpcode::MULHSU.global_opcode()
+            || inst.opcode == MulHOpcode::MULHU.global_opcode()
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
