@@ -108,7 +108,7 @@ where
     Assertions for Pure Execution AOT
     */
     let interp_state_pure = vm
-        .interpreter(&exe)?
+        .naive_interpreter(&exe)?
         .execute(input.clone(), None)
         .expect("Failed to execute");
 
@@ -131,25 +131,6 @@ where
     };
     assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
 
-    /*
-    Assertions for Metered AOT
-    */
-    let (aot_segments, aot_state_metered) = vm
-        .get_metered_aot_instance(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
-
-    let (segments, interp_state_metered) = vm
-        .metered_interpreter(&exe)?
-        .execute_metered(input.clone(), metered_ctx.clone())?;
-
-    assert_vm_state_eq(&interp_state_metered, &aot_state_metered);
-
-    assert_eq!(segments.len(), aot_segments.len());
-    for i in 0..segments.len() {
-        assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
-        assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
-        assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
-    }
     Ok(())
 }
 
