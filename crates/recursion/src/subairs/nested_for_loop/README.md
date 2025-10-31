@@ -2,7 +2,7 @@
 
 ## Overview
 
-This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by const generics `DEPTH_MINUS_ONE` and `DEPTH_MINUS_TWO` (e.g., `NestedForLoopSubAir<1, 0>` for a single nested loop, `NestedForLoopSubAir<2, 1>` for two nested loops).
+This SubAir ensures that the first row of each loop iteration at each nesting level is properly marked with the `is_first` flag. It is parameterized by const generics `DEPTH_MINUS_ONE` and `DEPTH_MINUS_TWO` (e.g., `NestedForLoopSubAir<1, 0>` for a single nested loop, `NestedForLoopSubAir<2, 1>` for two nested loops). It also enforces that `is_enabled` is boolean and that disabled rows only appear after all enabled rows.
 
 ## Columns
 
@@ -20,20 +20,20 @@ For a nested loop with `DEPTH` levels (numbered 0 to `DEPTH-1`), where level 0 i
 
 ### Behavior
 
-- Each `counter[level]` either stays the same or increases by 1 during a transition.
+- Whenever the next row stays enabled, each `counter[level]` either stays the same or increases by 1.
 - `counter[level]` values do not necessarily start at 0.
-- Disabled rows can appear between enabled rows and must have appropriate `counter[level]` values.
-- Padding rows are not zero-filled; their `counter[level]` values form a non-decreasing sequence from the last enabled row (e.g., if the last enabled row has `counter[level] = k`, padding rows can have `counter[level] = k+1, k+1, k+2, k+3, ...`).
+- Enabled rows must be contiguous and once `is_enabled = 0`, all later rows must also be disabled.
+- Padding rows are unconstrained except that they must keep `is_enabled = 0` (by definition).
 
 ## Usage
 
 **What this SubAir constrains:**
+- `is_enabled` is boolean and once it becomes `0`, it stays `0` for all subsequent rows
 - `counter[level]` increments by 0 or 1 for all parent loops (excludes innermost loop, levels 0 to `DEPTH-2`)
 - `is_first[level]` flags for all loops (excludes outermost loop, levels 1 to `DEPTH-1`) are set correctly at loop iteration boundaries (on enabled rows only)
 - `is_transition[level]` auxiliary flags mark transitions within parent loop iterations (excludes outermost loop, levels 1 to `DEPTH-2`) (on enabled rows only)
 
 **What the caller must constrain:**
-- `is_enabled` being boolean (this SubAir does NOT constrain it)
 - Initial or final values of `counter[level]` (for all parent loops, excludes innermost loop)
 - `is_first[level]` flags on disabled rows (if required; this SubAir does NOT constrain them when `is_enabled = 0`)
 - Innermost loop counter and its behavior (see example below)
@@ -58,9 +58,6 @@ Add columns:
 
 Example constraint code:
 ```rust
-// Constrain is_enabled to be boolean
-builder.assert_bool(local_io.loop_io.is_enabled);
-
 // Constrain loop_io.counter columns using builder.when().assert_eq() or interactions
 
 // loop starts at START
@@ -89,7 +86,7 @@ builder
 The same constraint pattern applies at each loop level.
 
 - For level 0 (outermost parent loop), constraints use `builder.when_first_row()` and `builder.when_transition()`.
-- For level > 0 (nested within parent loops), constraints use `builder.when(parent_is_first)` and `builder.when(is_transition)` where parent refers to `level - 1`.
+- For level > 0 (nested within parent loops), constraints use `builder.when(parent_is_first)` and `builder.when(parent_is_transition)` where parent refers to `level - 1`.
 
 At a given level, let $\Delta\text{counter} = \text{counter}\_{\text{next}} - \text{counter}\_{\text{local}}$
 ```rust
@@ -98,25 +95,45 @@ let counter_diff = next_io.counter[level] - local_io.counter[level];
 
 ### 1. Base Constraints
 
-#### `counter[level]` increments by 0 or 1
+#### `counter[level]` increments by 0 or 1 while enabled
 
 $$
-\Delta\text{counter} \in \\\{0, 1\\\}\quad \text{(transition within level)} \qquad (1)
+\text{is\\_enabled}\_{\text{next}} \Rightarrow \Delta\text{counter} \in \\\{0, 1\\\}\qquad (1)
 $$
 ```rust
 // Level 0
-builder.when_transition().assert_bool(counter_diff.clone());
+builder
+    .when_transition()
+    .when(next_io.is_enabled.clone())
+    .assert_bool(counter_diff.clone());
 
 // Level > 0
-builder.when(is_transition).assert_bool(counter_diff.clone());
+builder
+    .when(parent_is_transition)
+    .when(next_io.is_enabled.clone())
+    .assert_bool(counter_diff.clone());
 ```
 
-### 2. Boundary Constraints
+### 2. Contiguous Enabled Rows
+
+Disabled rows can only appear once all enabled rows have finished.
+
+$$
+\neg \text{is\\_enabled}\_{\text{local}} \Rightarrow \neg \text{is\\_enabled}\_{\text{next}} \qquad (2)
+$$
+```rust
+builder
+    .when_transition()
+    .when_ne(local_io.is_enabled.clone(), AB::Expr::ONE)
+    .assert_zero(next_io.is_enabled.clone());
+```
+
+### 3. Boundary Constraints
 
 #### First row enabled sets `is_first`
 
 $$
-\text{is\\_enabled} \Rightarrow \text{is\\_first} = 1\quad \text{(first row of level)} \qquad (2)
+\text{is\\_enabled} \Rightarrow \text{is\\_first} = 1\quad \text{(first row of level)} \qquad (3)
 $$
 ```rust
 // Level 0 (outermost parent loop)
@@ -126,23 +143,11 @@ builder.when_first_row().when(local_io.is_enabled).assert_one(local_io.is_first[
 builder.when(parent_is_first).when(local_io.is_enabled).assert_one(local_io.is_first[level]);
 ```
 
-### 3. Loop Constraints
+### 4. Loop Constraints
 
-#### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$)
+#### 4.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$)
 
 At transition rows within a level, $\Delta\text{counter} \neq 1 \iff \Delta\text{counter} = 0$ by (1), indicating we are within the same loop iteration.
-
-##### Enabled state consistency
-
-$$
-\text{is\\_enabled}\_{\text{local}} = \text{is\\_enabled}\_{\text{next}}\quad (\Delta\text{counter} \neq 1,\ \text{transition within level}) \qquad (3)
-$$
-```rust
-builder
-    .when(level_transition)
-    .when_ne(counter_diff.clone(), AB::Expr::ONE)
-    .assert_eq(local_io.is_enabled, next_io.is_enabled);
-```
 
 ##### `is_first` not set within iteration
 
@@ -152,12 +157,12 @@ $$
 ```rust
 builder
     .when(level_transition)
-    .when_ne(counter_diff.clone(), AB::Expr::ONE)
     .when(local_io.is_enabled)
+    .when_ne(counter_diff.clone(), AB::Expr::ONE)
     .assert_zero(next_io.is_first[level]);
 ```
 
-#### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$)
+#### 4.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$)
 
 When $\Delta\text{counter} \neq 0$, we are at a loop iteration boundary.
 
@@ -168,8 +173,8 @@ $$
 $$
 ```rust
 builder
-    .when(counter_diff)
     .when(next_io.is_enabled)
+    .when(counter_diff)
     .assert_one(next_io.is_first[level]);
 ```
 
@@ -179,13 +184,13 @@ These cases apply at each loop level independently.
 
 ### 1. Single Row ($\text{is\\_enabled} = 1$)
 
-- By (2): $\text{is\\_first} = 1$
+- By (3): $\text{is\\_first} = 1$
 
 Single enabled row has `is_first` set.
 
 ### 2. Single Loop Iteration ($\Delta\text{counter} \neq 1$ for all transition rows, $\text{is\\_enabled} = 1$)
 
-- By (2): $\text{is\\_first} = 1$ on first row
+- By (3): $\text{is\\_first} = 1$ on first row
 - By (4): $\text{is\\_first} = 0$ on all interior rows
 
 Loop iteration has `is_first` set on first row only.
@@ -194,10 +199,10 @@ Loop iteration has `is_first` set on first row only.
 
 #### 3.1. Within Loop Iteration ($\Delta\text{counter} \neq 1$, $\text{is\\_enabled}\_{\text{local}} = 1$)
 
-- By (3): $\text{is\\_enabled}\_{\text{next}} = 1$
 - By (4): $\text{is\\_first}\_{\text{next}} = 0$
+- By (2): once a row disables the loop, later rows stay disabled
 
-Interior enabled rows maintain enabled state with `is_first` unset.
+Interior enabled rows keep `is_first` unset, and once disabled the loop cannot resume.
 
 #### 3.2. At Loop Iteration Boundaries ($\Delta\text{counter} \neq 0$, $\text{is\\_enabled}\_{\text{next}} = 1$)
 

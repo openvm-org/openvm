@@ -24,11 +24,13 @@ use crate::{
         GkrLayerInputBus, GkrLayerInputMessage, GkrLayerOutputBus, GkrLayerOutputMessage,
         GkrXiSamplerBus, GkrXiSamplerMessage,
     },
+    subairs::proof_idx::{ProofIdxIoCols, ProofIdxSubAir},
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrInputCols<T> {
+    /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
 
     pub proof_idx: T,
@@ -83,31 +85,33 @@ impl<F: Field> PartitionedBaseAir<F> for GkrInputAir {}
 impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
-        let (local, _next) = (main.row_slice(0), main.row_slice(1));
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &GkrInputCols<AB::Var> = (*local).borrow();
+        let next: &GkrInputCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Boolean Constraints
+        // Proof Index Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        builder.assert_bool(local.is_enabled);
-
-        ///////////////////////////////////////////////////////////////////////
-        // Loop Constraints
-        ///////////////////////////////////////////////////////////////////////
-
-        // TODO(ayush): do i need something like these?
-        //
-        // builder.when_first_row().assert_zero(local.proof_idx);
-        //
-        // let proof_idx_diff = next.proof_idx - local.proof_idx;
-        // builder.when_transition().assert_bool(proof_idx_diff.clone());
-        // builder
-        //     .when_transition()
-        //     .when(local.is_enabled)
-        //     .assert_eq(proof_idx_diff.clone(), AB::Expr::ONE)
-        //
-        // builder.when_last_row().assert_eq(local.proof_idx, NUM_PROOFS);
+        // This subair has the following constraints:
+        // 1. Boolean enabled flag
+        // 2. Disabled rows are followed by disabled rows
+        // 3. Proof index increments by exactly one between enabled rows
+        ProofIdxSubAir.eval(
+            builder,
+            (
+                ProofIdxIoCols {
+                    is_enabled: local.is_enabled,
+                    proof_idx: local.proof_idx,
+                }
+                .map_into(),
+                ProofIdxIoCols {
+                    is_enabled: next.is_enabled,
+                    proof_idx: next.proof_idx,
+                }
+                .map_into(),
+            ),
+        );
 
         ///////////////////////////////////////////////////////////////////////
         // Base Constraints
@@ -172,7 +176,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             local.proof_idx,
             GkrLayerInputMessage {
                 // Skip q0_claim
-                tidx: tidx_after_pow_and_alpha_beta + AB::Expr::from_canonical_usize(D_EF),
+                tidx: (tidx_after_pow_and_alpha_beta + AB::Expr::from_canonical_usize(D_EF))
+                    * has_interactions.clone(),
                 q0_claim: local.q0_claim.map(Into::into),
             },
             local.is_enabled * has_interactions.clone(),
@@ -196,8 +201,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrXiSamplerMessage {
-                idx: has_interactions.clone() * num_layers,
-                tidx: tidx_after_gkr_layers,
+                idx: needs_challenges.clone() * has_interactions.clone() * num_layers,
+                tidx: needs_challenges.clone() * tidx_after_gkr_layers,
             },
             local.is_enabled * needs_challenges.clone(),
         );

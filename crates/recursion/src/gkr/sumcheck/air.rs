@@ -27,15 +27,18 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct GkrLayerSumcheckCols<T> {
+    /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
-
     pub proof_idx: T,
     pub layer_idx: T,
-
     pub is_layer_start: T,
     pub is_first_round: T,
 
     pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
+
+    /// An enabled row which is not involved in any interactions
+    /// but should satisfy air constraints
+    pub is_dummy: T,
 
     pub is_last_layer: T,
 
@@ -116,13 +119,7 @@ where
         let next: &GkrLayerSumcheckCols<AB::Var> = (*next).borrow();
 
         ///////////////////////////////////////////////////////////////////////
-        // Boolean Constraints
-        ///////////////////////////////////////////////////////////////////////
-
-        builder.assert_bool(local.is_enabled);
-
-        ///////////////////////////////////////////////////////////////////////
-        // Loop Constraints
+        // Proof Index and Loop Constraints
         ///////////////////////////////////////////////////////////////////////
 
         type LoopSubAir = NestedForLoopSubAir<2, 1>;
@@ -154,7 +151,7 @@ where
 
         // Sumcheck round flag increments by 1
         builder
-            .when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone()))
+            .when(AB::Expr::ONE - is_last_round.clone())
             .assert_eq(next.round, local.round + AB::Expr::ONE);
 
         // Sumcheck round flag end
@@ -212,6 +209,8 @@ where
         // Module Interactions
         ///////////////////////////////////////////////////////////////////////
 
+        let is_not_dummy = AB::Expr::ONE - local.is_dummy;
+
         // 1. GkrSumcheckInputBus
         // 1a. Receive initial sumcheck input on first round
         self.sumcheck_input_bus.receive(
@@ -223,7 +222,7 @@ where
                 tidx: local.tidx,
                 claim: local.claim_in,
             },
-            local.is_enabled * local.is_first_round,
+            local.is_enabled * local.is_first_round * is_not_dummy.clone(),
         );
         // 2. GkrSumcheckOutputBus
         // 2a. Send output back to GkrLayerAir on final round
@@ -236,7 +235,7 @@ where
                 claim_out: local.claim_out.map(Into::into),
                 eq_at_r_prime: local.eq_out.map(Into::into),
             },
-            local.is_enabled * is_last_round,
+            local.is_enabled * is_last_round * is_not_dummy.clone(),
         );
 
         // 3. GkrSumcheckChallengeBus
@@ -249,7 +248,7 @@ where
                 sumcheck_round: local.round.into(),
                 challenge: local.prev_challenge.map(Into::into),
             },
-            local.is_enabled,
+            local.is_enabled * is_not_dummy.clone(),
         );
         // 3b. Send challenge to next GKR layer_idx sumcheck for eq calculation
         self.sumcheck_challenge_bus.send(
@@ -260,7 +259,7 @@ where
                 sumcheck_round: local.round.into() + AB::Expr::ONE,
                 challenge: local.challenge.map(Into::into),
             },
-            local.is_enabled * (AB::Expr::ONE - local.is_last_layer),
+            local.is_enabled * (AB::Expr::ONE - local.is_last_layer) * is_not_dummy.clone(),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -276,7 +275,7 @@ where
                 local.proof_idx,
                 tidx.clone(),
                 eval,
-                local.is_enabled,
+                local.is_enabled * is_not_dummy.clone(),
             );
             tidx += AB::Expr::from_canonical_usize(D_EF);
         }
@@ -286,7 +285,7 @@ where
             local.proof_idx,
             tidx,
             local.challenge,
-            local.is_enabled,
+            local.is_enabled * is_not_dummy.clone(),
         );
 
         // 2. XiRandomnessBus
@@ -298,7 +297,7 @@ where
                 idx: local.round + AB::Expr::ONE,
                 xi: local.challenge.map(Into::into),
             },
-            local.is_enabled * local.is_last_layer,
+            local.is_enabled * local.is_last_layer * is_not_dummy.clone(),
         );
     }
 }
