@@ -146,8 +146,8 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        true
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        false
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
