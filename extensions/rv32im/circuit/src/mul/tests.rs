@@ -22,10 +22,10 @@ use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_instructions::{
     exe::VmExe,
+    instruction::Instruction,
     program::Program,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
-    instruction::Instruction,
 };
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
@@ -53,6 +53,8 @@ use {
 use super::core::run_mul;
 #[cfg(feature = "aot")]
 use crate::Rv32ImConfig;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -62,9 +64,6 @@ use crate::{
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
     MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
-
-#[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -291,7 +290,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
-        .interp_instance(&exe)
+        .naive_interpreter(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter
         .execute(vec![], None)

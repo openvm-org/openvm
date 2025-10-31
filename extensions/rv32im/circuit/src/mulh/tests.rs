@@ -522,7 +522,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
 
     let interpreter = executor
-        .interp_instance(&exe)
+        .naive_interpreter(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter
         .execute(vec![], None)

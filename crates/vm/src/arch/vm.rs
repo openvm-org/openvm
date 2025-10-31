@@ -254,14 +254,6 @@ where
         println!("[eyeball check] aot instance called yay");
         Self::aot_instance(&self, exe)
     }
-    #[cfg(feature = "aot")]
-    pub fn interp_instance(
-        &self,
-        exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
-        println!("interp instance called yay");
-        InterpretedInstance::new(&self.inventory, exe)
-    }
 }
 #[cfg(feature = "aot")]
 impl<F, VC> VmExecutor<F, VC>
@@ -526,18 +518,6 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         self.executor().aot_instance(exe)
-    }
-
-    #[cfg(feature = "aot")]
-    pub fn get_interp_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
-    {
-        self.executor().interp_instance(exe)
     }
 
     #[cfg(not(feature = "aot"))]
