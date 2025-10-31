@@ -82,7 +82,7 @@ pub fn generate_trace(
     let mut trace = vec![F::ZERO; padded_rows * width];
 
     // Split trace into chunks for each proof
-    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let (data_slice, _) = trace.split_at_mut(total_rows * width);
     let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
     let mut remaining = data_slice;
 
@@ -108,10 +108,21 @@ pub fn generate_trace(
             debug_assert!(mus_for_proof.len() >= num_layers);
 
             if total_rounds == 0 {
-                proof_trace.par_chunks_mut(width).for_each(|row_data| {
-                    let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
-                });
+                debug_assert_eq!(proof_trace.len(), width);
+                let row_data = &mut proof_trace[..width];
+                let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
+                cols.is_enabled = F::ONE;
+                cols.tidx = F::from_canonical_usize(D_EF);
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.layer_idx = F::ONE;
+                cols.is_first_round = F::ONE;
+                cols.is_layer_start = F::ONE;
+                cols.is_last_layer = F::ONE;
+                cols.is_dummy = F::ONE;
+                cols.eq_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                cols.eq_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                cols.claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                cols.claim_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                 return;
             }
 
@@ -195,15 +206,6 @@ pub fn generate_trace(
 
             debug_assert_eq!(global_round_idx, total_rounds);
         });
-
-    // Fill padding rows (proof_idx = number of proofs indicates padding)
-    if !padding_slice.is_empty() {
-        let padding_proof_idx = F::from_canonical_usize(gkr_sumcheck_records.len());
-        padding_slice.par_chunks_mut(width).for_each(|row_data| {
-            let cols: &mut GkrLayerSumcheckCols<F> = row_data.borrow_mut();
-            cols.proof_idx = padding_proof_idx;
-        });
-    }
 
     RowMajorMatrix::new(trace, width)
 }

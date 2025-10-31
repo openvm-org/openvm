@@ -301,9 +301,10 @@ fn test_three_outer_iterations() {
 }
 
 #[test]
-fn test_outer_iterations_with_padding_between() {
+#[should_panic(expected = "Zerocheck sum is not zero")]
+fn test_fail_outer_iterations_with_padding_between() {
     // for i in 0..3 { for j in 0..M { ... }}
-    // With disabled padding between outer iterations
+    // Disabled padding between iterations should now fail
     let trace =
         generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[1, 0, 1], [0, 1, 0], [1, 2, 1]]);
     prove_and_verify_test_air::<1, 0>(trace);
@@ -343,14 +344,16 @@ fn test_enabled_then_disabled_iterations() {
 }
 
 #[test]
-fn test_disabled_then_enabled() {
+#[should_panic(expected = "Zerocheck sum is not zero")]
+fn test_fail_disabled_then_enabled() {
     let trace =
         generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![[0, 0, 0], [0, 0, 0], [1, 1, 1]]);
     prove_and_verify_test_air::<1, 0>(trace);
 }
 
 #[test]
-fn test_complex_enabled_disabled_mix() {
+#[should_panic(expected = "Zerocheck sum is not zero")]
+fn test_fail_complex_enabled_disabled_mix() {
     let trace = generate_trace::<_, 1, 0, { width::<1, 0>() }>(vec![
         [1, 0, 1],
         [1, 0, 0],

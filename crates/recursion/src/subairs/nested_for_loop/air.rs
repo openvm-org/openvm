@@ -5,6 +5,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 /// A SubAir that constrains the `is_first` flags for nested for-loops.
 ///
+/// Enabled rows must appear contiguously at the beginning of the trace (no interspersed padding),
+/// and the `is_enabled` flag is enforced to be boolean.
+///
 /// Tracks `DEPTH_MINUS_ONE` loop counters (all loops except the innermost).
 #[derive(Default)]
 pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>;
@@ -12,7 +15,7 @@ pub struct NestedForLoopSubAir<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_T
 #[repr(C)]
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
 pub struct NestedForLoopIoCols<T, const DEPTH_MINUS_ONE: usize> {
-    /// Whether the current row is enabled
+    /// Whether the current row is enabled (i.e. not padding)
     pub is_enabled: T,
     /// Array of loop counters for all parent loops (excludes innermost loop).
     /// For DEPTH=3 (i,j,k loops): contains [i, j].
@@ -44,6 +47,12 @@ pub struct NestedForLoopAuxCols<T, const DEPTH_MINUS_TWO: usize> {
     /// For DEPTH=3 (i,j,k loops): contains only j_is_transition.
     /// The outermost loop's transitions are handled by `when_transition()` and have no stored column.
     pub is_transition: [T; DEPTH_MINUS_TWO],
+}
+
+impl<T> Default for NestedForLoopAuxCols<T, 0> {
+    fn default() -> Self {
+        Self { is_transition: [] }
+    }
 }
 
 impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopAuxCols<T, DEPTH_MINUS_ONE> {
@@ -81,6 +90,13 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
         debug_assert_eq!(DEPTH_MINUS_ONE, DEPTH_MINUS_TWO + 1);
 
         let ((local_io, next_io), local_aux) = ctx;
+
+        // Enforce boolean enabled flag and forbid re-enabling after a disabled row.
+        builder.assert_bool(local_io.is_enabled.clone());
+        builder
+            .when_transition()
+            .when_ne(local_io.is_enabled.clone(), AB::Expr::ONE)
+            .assert_zero(next_io.is_enabled.clone());
 
         for level in 0..DEPTH_MINUS_ONE {
             let counter_diff = next_io.counter[level].clone() - local_io.counter[level].clone();
@@ -124,8 +140,8 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
 
             // At Loop Boundaries (Δcounter ≠ 0)
             builder
-                .when(counter_diff)
                 .when(next_io.is_enabled.clone())
+                .when(counter_diff)
                 .assert_one(next_is_first.clone());
         }
     }
@@ -139,11 +155,11 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     /// Constraint: First row enabled sets `is_first`
     fn eval_first_row<AB: AirBuilder>(
         &self,
-        builder: &mut AB,
+        builder_first_row: &mut AB,
         local_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
         local_is_first: AB::Expr,
     ) {
-        builder
+        builder_first_row
             .when(local_io.is_enabled.clone())
             .assert_one(local_is_first);
     }
@@ -151,29 +167,25 @@ impl<const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
     /// Evaluates transition constraints for a loop level.
     ///
     /// Constraints:
-    /// 1. `counter[level]` increments by 0 or 1
-    /// 2. Within Loop: Enabled state remains same
-    /// 3. Within Loop: `is_first` not set within iteration
+    /// 1. When the next row remains enabled, `counter[level]` increments by 0 or 1
+    /// 2. Within Loop: `is_first` not set within iteration
     fn eval_transition<AB: AirBuilder>(
         &self,
-        builder: &mut AB,
+        builder_transition: &mut AB,
         local_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
         next_io: &NestedForLoopIoCols<AB::Expr, DEPTH_MINUS_ONE>,
         next_is_first: AB::Expr,
         counter_diff: AB::Expr,
     ) {
-        // 1. Base Constraint: `counter[level]` increments by 0 or 1
-        builder.assert_bool(counter_diff.clone());
+        // 1. Base Constraint: `counter[level]` increments by 0 or 1 while enabled
+        builder_transition
+            .when(next_io.is_enabled.clone())
+            .assert_bool(counter_diff.clone());
 
-        // 2. Within Loop (Δcounter ≠ 1): Enabled state consistency
-        builder
-            .when_ne(counter_diff.clone(), AB::Expr::ONE)
-            .assert_eq(local_io.is_enabled.clone(), next_io.is_enabled.clone());
-
-        // 3. Within Loop (Δcounter ≠ 1): `is_first` not set within iteration
-        builder
-            .when_ne(counter_diff, AB::Expr::ONE)
+        // 2. Within Loop (Δcounter ≠ 1): `is_first` not set within iteration
+        builder_transition
             .when(local_io.is_enabled.clone())
+            .when_ne(counter_diff, AB::Expr::ONE)
             .assert_zero(next_is_first);
     }
 
