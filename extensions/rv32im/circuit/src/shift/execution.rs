@@ -143,7 +143,7 @@ where
     F: PrimeField32,
 {
     fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
-        false
+        true
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
