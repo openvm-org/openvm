@@ -25,7 +25,7 @@ use openvm_instructions::{
     program::Program,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
-    Instruction,
+    instruction::Instruction,
 };
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
