@@ -7,6 +7,7 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, FieldAlgebra};
 use p3_matrix::Matrix;
+use stark_backend_v2::{DIGEST_SIZE, F, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -60,6 +61,55 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
         ///////////////////////////////////////////////////////////////////////
         // Constraints
         ///////////////////////////////////////////////////////////////////////
+        let is_valid = local.mask[0];
+
+        builder.when(local.is_proof_start).assert_zero(local.tidx);
+        builder.when(local.is_proof_start).assert_one(is_valid);
+        builder.assert_bool(local.is_sample);
+
+        // Initial state constraints
+        for i in 0..CHUNK {
+            builder
+                .when(local.is_proof_start)
+                .assert_eq(local.prev_state[i + CHUNK], AB::Expr::ZERO);
+
+            builder
+                .when(local.is_proof_start * (AB::Expr::ONE - local.mask[i]))
+                .assert_eq(local.prev_state[i], AB::Expr::ZERO);
+        }
+
+        let mut count = AB::Expr::ZERO;
+        let local_next_same_proof = next.mask[0] * (AB::Expr::ONE - next.is_proof_start);
+        for i in 0..CHUNK {
+            builder.assert_bool(local.mask[i]);
+            count += local.mask[i].into();
+
+            let skip = local.mask[i] - AB::Expr::ONE;
+            if i < CHUNK - 1 {
+                // if mask[i] = 0, then mask[i+1] = 0
+                builder.when(skip.clone()).assert_zero(local.mask[i + 1]);
+            }
+            builder.when(skip).assert_zero(local.lookup[i]);
+
+            // The state after permutation of this round, should check against next round's input
+            // if next.mask[i] = 0 --> i-th not touched --> it should stay the same (if next is valid)
+            builder
+                .when((AB::Expr::ONE - next.mask[i]) * local_next_same_proof.clone())
+                .assert_eq(local.post_state[i], next.prev_state[i]);
+            // When it's squeeze(sample), the state always remains the same
+            builder
+                .when(next.is_sample * local_next_same_proof.clone())
+                .assert_eq(local.post_state[i], next.prev_state[i]);
+
+            // The capacity part should always be the same
+            builder
+                .when(local_next_same_proof.clone()) // if next is valid
+                .assert_eq(local.post_state[i + CHUNK], next.prev_state[i + CHUNK]);
+        }
+
+        builder
+            .when(local_next_same_proof) // if next is valid
+            .assert_eq(next.tidx, local.tidx + count);
 
         ///////////////////////////////////////////////////////////////////////
         // Interactions
