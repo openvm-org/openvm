@@ -304,15 +304,7 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-            if executor.is_aot_supported(&instruction) {
-                asm_str += &Self::rv32_regs_to_xmm(); // sync registers
-            }
-            asm_str += "    je asm_run_end\n";
-
-            /*
-            x86 assembly for executing the opcode, updating the Rv32 PC (r13) and instret (r14)
-            additionally, transfers control to the appropriate location, implemented in the x86 assembly for the next RV32 instruction
-            */
+        
             if executor.is_aot_supported(&instruction) {
                 let segment =
                     executor
