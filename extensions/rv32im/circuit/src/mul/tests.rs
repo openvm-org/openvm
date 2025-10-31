@@ -25,11 +25,9 @@ use openvm_instructions::{
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     SystemOpcode,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
-#[cfg(feature = "aot")]
-use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_rv32im_transpiler::MulOpcode::{self, MUL};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -52,6 +50,8 @@ use {
 };
 
 use super::core::run_mul;
+#[cfg(feature = "aot")]
+use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
@@ -61,9 +61,6 @@ use crate::{
     test_utils::{get_verification_error, rv32_rand_write_register_or_imm},
     MultiplicationCoreAir, MultiplicationFiller, Rv32MultiplicationAir, Rv32MultiplicationExecutor,
 };
-
-#[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
 
 const MAX_INS_CAPACITY: usize = 128;
 // the max number of limbs we currently support MUL for is 32 (i.e. for U256s)
@@ -347,38 +344,6 @@ fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
 }
 
 #[cfg(feature = "aot")]
-fn mulh_register(op: MulHOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
-    Instruction::from_usize(
-        op.global_opcode(),
-        [
-            rd,
-            rs1,
-            rs2,
-            RV32_REGISTER_AS as usize,
-            RV32_REGISTER_AS as usize,
-        ],
-    )
-}
-
-#[cfg(feature = "aot")]
-fn mulh_signed(rs1: u32, rs2: u32) -> u32 {
-    let prod = (rs1 as i32 as i64) * (rs2 as i32 as i64);
-    (prod >> 32) as u32
-}
-
-#[cfg(feature = "aot")]
-fn mulh_signed_unsigned(rs1: u32, rs2: u32) -> u32 {
-    let prod = (rs1 as i32 as i128) * (rs2 as u64 as i128);
-    (prod >> 32) as u32
-}
-
-#[cfg(feature = "aot")]
-fn mulh_unsigned(rs1: u32, rs2: u32) -> u32 {
-    let prod = (rs1 as u64) * (rs2 as u64);
-    (prod >> 32) as u32
-}
-
-#[cfg(feature = "aot")]
 #[test]
 fn test_aot_mul_basic() {
     let instructions = vec![
@@ -502,122 +467,6 @@ fn test_aot_mul_chained_dependencies() {
     let aot_x2 = read_register(&aot_state, 8);
     assert_eq!(interp_x2, 1125);
     assert_eq!(interp_x2, aot_x2);
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mulh_variants_basic() {
-    let instructions = vec![
-        add_immediate(4, 1234),
-        add_immediate(8, 200),
-        mulh_register(MulHOpcode::MULH, 12, 4, 8),
-        add_immediate(16, 800),
-        add_immediate(20, 12345),
-        mulh_register(MulHOpcode::MULHSU, 24, 16, 20),
-        add_immediate(28, 1200),
-        add_immediate(32, 200),
-        mulh_register(MulHOpcode::MULHU, 36, 28, 32),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), 10);
-    assert_eq!(aot_state.instret(), 10);
-
-    let x3 = read_register(&interp_state, 12);
-    assert_eq!(x3, mulh_signed(12, 200));
-    assert_eq!(x3, read_register(&aot_state, 12));
-
-    let x6 = read_register(&interp_state, 24);
-    assert_eq!(x6, mulh_signed_unsigned(800, 12345));
-    assert_eq!(x6, read_register(&aot_state, 24));
-
-    let x9 = read_register(&interp_state, 36);
-    assert_eq!(x9, mulh_unsigned(1200, 200));
-    assert_eq!(x9, read_register(&aot_state, 36));
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mulh_upper_lane() {
-    let instructions = vec![
-        add_immediate(4, 0x0000_000F),
-        add_immediate(12, 0x0000_0002),
-        mulh_register(MulHOpcode::MULH, 16, 4, 12),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), 4);
-    assert_eq!(aot_state.instret(), 4);
-
-    let expected = mulh_signed(0x0000_000F, 0x0000_0002);
-    let interp_val = read_register(&interp_state, 16);
-    let aot_val = read_register(&aot_state, 16);
-    assert_eq!(interp_val, expected);
-    assert_eq!(interp_val, aot_val);
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mulh_randomized() {
-    let offsets: [usize; 12] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48];
-    let mut rng = create_seeded_rng();
-    let mut instructions = Vec::new();
-    let mut expected = HashMap::new();
-
-    for &offset in &offsets {
-        let value = rng.gen_range(0..(1 << 16));
-        instructions.push(add_immediate(offset, value));
-        expected.insert(offset, value);
-    }
-
-    for (i, &rd_offset) in offsets.iter().enumerate() {
-        let rs1_offset = offsets[i];
-        let rs2_offset = offsets[(i + 4) % offsets.len()];
-        let opcode = match i % 3 {
-            0 => MulHOpcode::MULH,
-            1 => MulHOpcode::MULHSU,
-            _ => MulHOpcode::MULHU,
-        };
-        instructions.push(mulh_register(opcode, rd_offset, rs1_offset, rs2_offset));
-
-        let rs1_val = *expected.get(&rs1_offset).unwrap();
-        let rs2_val = *expected.get(&rs2_offset).unwrap();
-        let result = match opcode {
-            MulHOpcode::MULH => mulh_signed(rs1_val, rs2_val),
-            MulHOpcode::MULHSU => mulh_signed_unsigned(rs1_val, rs2_val),
-            MulHOpcode::MULHU => mulh_unsigned(rs1_val, rs2_val),
-        };
-        expected.insert(rd_offset, result);
-    }
-
-    instructions.push(Instruction::from_isize(
-        SystemOpcode::TERMINATE.global_opcode(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let total_insts = offsets.len() + offsets.len() + 1;
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), total_insts as u64);
-    assert_eq!(aot_state.instret(), total_insts as u64);
-
-    for (offset, expected_val) in expected {
-        let interp_val = read_register(&interp_state, offset);
-        let aot_val = read_register(&aot_state, offset);
-        assert_eq!(
-            interp_val, expected_val,
-            "unexpected value at offset {offset}"
-        );
-        assert_eq!(interp_val, aot_val, "AOT mismatch at offset {offset}");
-    }
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

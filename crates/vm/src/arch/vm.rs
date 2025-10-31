@@ -528,6 +528,18 @@ where
         self.executor().aot_instance(exe)
     }
 
+    #[cfg(feature = "aot")]
+    pub fn get_interp_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<InterpretedInstance<Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().interp_instance(exe)
+    }
+
     #[cfg(not(feature = "aot"))]
     pub fn metered_interpreter(
         &self,
