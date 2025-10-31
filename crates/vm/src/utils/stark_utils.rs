@@ -108,7 +108,7 @@ where
     Assertions for Pure Execution AOT
     */
     let interp_state_pure = vm
-        .get_interp_instance(&exe)?
+        .naive_interpreter(&exe)?
         .execute(input.clone(), None)
         .expect("Failed to execute");
 
