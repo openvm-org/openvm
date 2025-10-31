@@ -99,6 +99,7 @@ const REG_RETURN_VAL: &str = "rax";
 
 const REG_C: &str = "r10";
 const REG_C_W: &str = "r10d";
+const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
