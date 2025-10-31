@@ -78,7 +78,7 @@ pub fn generate_trace(
     let mut trace = vec![F::ZERO; padded_rows * width];
 
     // Split trace into chunks for each proof and process in parallel
-    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let (data_slice, _) = trace.split_at_mut(total_rows * width);
     let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
     let mut remaining = data_slice;
 
@@ -105,10 +105,17 @@ pub fn generate_trace(
                 let q0_claim = *q0_claim;
 
                 if record.layer_claims.is_empty() {
-                    proof_trace.par_chunks_mut(width).for_each(|row_data| {
-                        let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
-                        cols.proof_idx = F::from_canonical_usize(proof_idx);
-                    });
+                    debug_assert_eq!(proof_trace.len(), width);
+                    let row_data = &mut proof_trace[..width];
+                    let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
+                    cols.is_enabled = F::ONE;
+                    cols.proof_idx = F::from_canonical_usize(proof_idx);
+                    cols.is_first_layer = F::ONE;
+                    cols.is_dummy = F::ONE;
+                    cols.sumcheck_claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                    cols.q_xi_0 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                    cols.q_xi_1 = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                    cols.denom_claim = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
                     return;
                 }
 
@@ -166,15 +173,6 @@ pub fn generate_trace(
                     });
             },
         );
-
-    // Fill padding rows (proof_idx = number of proofs indicates padding)
-    if !padding_slice.is_empty() {
-        let padding_proof_idx = F::from_canonical_usize(gkr_layer_records.len());
-        padding_slice.par_chunks_mut(width).for_each(|row_data| {
-            let cols: &mut GkrLayerCols<F> = row_data.borrow_mut();
-            cols.proof_idx = padding_proof_idx;
-        });
-    }
 
     RowMajorMatrix::new(trace, width)
 }

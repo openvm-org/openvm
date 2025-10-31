@@ -35,7 +35,7 @@ pub fn generate_trace(xi_sampler_records: Vec<GkrXiSamplerRecord>) -> RowMajorMa
     let mut trace = vec![F::ZERO; padded_rows * width];
 
     // Split trace into chunks for each proof
-    let (data_slice, padding_slice) = trace.split_at_mut(total_rows * width);
+    let (data_slice, _) = trace.split_at_mut(total_rows * width);
     let mut trace_slices: Vec<&mut [F]> = Vec::with_capacity(rows_per_proof.len());
     let mut remaining = data_slice;
 
@@ -53,10 +53,13 @@ pub fn generate_trace(xi_sampler_records: Vec<GkrXiSamplerRecord>) -> RowMajorMa
         .enumerate()
         .for_each(|(proof_idx, (proof_trace, xi_sampler_record))| {
             if xi_sampler_record.xis.is_empty() {
-                proof_trace.par_chunks_mut(width).for_each(|row_data| {
-                    let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
-                    cols.proof_idx = F::from_canonical_usize(proof_idx);
-                });
+                debug_assert_eq!(proof_trace.len(), width);
+                let row_data = &mut proof_trace[..width];
+                let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
+                cols.is_enabled = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.is_first_challenge = F::ONE;
+                cols.is_dummy = F::ONE;
                 return;
             }
 
@@ -88,15 +91,6 @@ pub fn generate_trace(xi_sampler_records: Vec<GkrXiSamplerRecord>) -> RowMajorMa
                     cols.xi = xi.as_base_slice().try_into().unwrap();
                 });
         });
-
-    // Fill padding rows (proof_idx = number of proofs indicates padding)
-    if !padding_slice.is_empty() {
-        let padding_proof_idx = F::from_canonical_usize(xi_sampler_records.len());
-        padding_slice.par_chunks_mut(width).for_each(|row_data| {
-            let cols: &mut GkrXiSamplerCols<F> = row_data.borrow_mut();
-            cols.proof_idx = padding_proof_idx;
-        });
-    }
 
     RowMajorMatrix::new(trace, width)
 }
