@@ -305,7 +305,7 @@ where
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
         
-            if executor.supports_aot_for_opcode(instruction.opcode) {
+            if executor.is_aot_supported(&instruction) {
                 let segment =
                     executor
                         .generate_x86_asm(&instruction, pc)

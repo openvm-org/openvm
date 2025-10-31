@@ -142,7 +142,7 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn supports_aot_for_opcode(&self, opcode: VmOpcode) -> bool {
+    fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
         true
     }
 
