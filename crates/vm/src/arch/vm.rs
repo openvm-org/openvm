@@ -303,7 +303,6 @@ where
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
-
     #[cfg(feature = "aot")]
     pub fn metered_instance(
         &self,

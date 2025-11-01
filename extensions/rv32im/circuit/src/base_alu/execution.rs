@@ -9,15 +9,16 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::common::rv32_register_to_gpr;
-use crate::common::gpr_to_rv32_register;
-
-use crate::{adapters::imm_to_bytes, BaseAluExecutor};
+use crate::{
+    adapters::imm_to_bytes,
+    common::{gpr_to_rv32_register, rv32_register_to_gpr},
+    BaseAluExecutor,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -198,7 +199,10 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> where F: PrimeField32
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
 {
     fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
         true
