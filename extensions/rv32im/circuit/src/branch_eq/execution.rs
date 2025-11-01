@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
@@ -102,9 +104,63 @@ where
 }
 
 #[cfg(feature = "aot")]
-impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS> where
-    F: PrimeField32
+impl<F, A, const NUM_LIMBS: usize> AotExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>
+where
+    F: PrimeField32,
 {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+        use crate::common::rv32_register_to_gpr;
+
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = BranchEqualOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let c = c.as_canonical_u32();
+        let imm = if F::ORDER_U32 - c < c {
+            -((F::ORDER_U32 - c) as isize)
+        } else {
+            c as isize
+        };
+        let next_pc = (pc as isize + imm) as u32;
+        // TODO: this should return an error instead.
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(AotError::InvalidInstruction);
+        }
+        let a = a.as_canonical_u32() as u8;
+        let b = b.as_canonical_u32() as u8;
+
+        let mut asm_str = String::new();
+        let a_reg = a / 4;
+        let b_reg = b / 4;
+
+        // Calculate the result. Inputs: eax, ecx. Outputs: edx.
+        asm_str += &rv32_register_to_gpr(a_reg as u8, "eax");
+        asm_str += &rv32_register_to_gpr(b_reg as u8, "ecx");
+        // instret += 1
+        asm_str += "   add r14, 1\n";
+        asm_str += "   cmp eax, ecx\n";
+        let not_jump_label = format!(".asm_execute_pc_{}_not_jump", pc);
+        match local_opcode {
+            BranchEqualOpcode::BEQ => {
+                asm_str += &format!("   jne {}\n", not_jump_label);
+                asm_str += &format!("   mov r13, {}\n", next_pc);
+                asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+            }
+            BranchEqualOpcode::BNE => {
+                asm_str += &format!("   je {}\n", not_jump_label);
+                asm_str += &format!("   mov r13, {}\n", next_pc);
+                asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+            }
+        }
+        asm_str += &format!("{}:\n", not_jump_label);
+        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+
+        Ok(asm_str)
+    }
+
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
 }
 
 impl<F, A, const NUM_LIMBS: usize> MeteredExecutor<F> for BranchEqualExecutor<A, NUM_LIMBS>

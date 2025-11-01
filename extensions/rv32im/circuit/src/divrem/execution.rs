@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -105,6 +107,66 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+
+        let &Instruction {
+            opcode, a, b, c, d, ..
+        } = inst;
+        let local_opcode = DivRemOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        if d.as_canonical_u32() != RV32_REGISTER_AS {
+            return Err(AotError::InvalidInstruction);
+        }
+
+        let mut asm_str = String::new();
+        let a_reg = a.as_canonical_u32() / 4;
+        let b_reg = b.as_canonical_u32() / 4;
+        let c_reg = c.as_canonical_u32() / 4;
+
+        // Calculate the result. Inputs: eax, ecx. Outputs: edx.
+        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
+        asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
+        asm_str += "   mov edx, 0\n";
+
+        match local_opcode {
+            DivRemOpcode::DIV => {
+                // sign-extend EAX into EDX:EAX
+                asm_str += "   cdq\n";
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   idiv ecx\n";
+                asm_str += "   mov edx, eax\n";
+            }
+            DivRemOpcode::DIVU => {
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   div ecx\n";
+
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   mov edx, eax\n";
+            }
+            DivRemOpcode::REM => {
+                // sign-extend EAX into EDX:EAX
+                asm_str += "   cdq\n";
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   idiv ecx\n";
+            }
+            DivRemOpcode::REMU => {
+                // eax = eax / ecx, edx = eax % ecx
+                asm_str += "   div ecx\n";
+            }
+        }
+        asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+
+        // pc += DEFAULT_PC_STEP
+        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+        // instret += 1
+        asm_str += &format!("   add r14, 1\n");
+
+        Ok(asm_str)
+    }
+
+    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
+        true
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>
