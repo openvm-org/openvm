@@ -142,6 +142,17 @@ pub extern "C" fn get_vm_register_addr(exec_state_ptr: *mut c_void) -> *mut u64 
 }
 
 #[no_mangle]
+pub extern "C" fn get_vm_address_space_addr(
+    exec_state_ptr: *mut c_void,
+    addr_space: u64,
+) -> *mut u64 {
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
+    ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
+}
+
+#[no_mangle]
 pub extern "C" fn debug_vm_register_addr(mmap_ptr: *mut u32) {
     let first_val = unsafe { *mmap_ptr };
 
