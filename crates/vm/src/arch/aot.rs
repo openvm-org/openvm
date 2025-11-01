@@ -51,7 +51,7 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32
+    pc_start: u32,
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -59,7 +59,7 @@ type AsmRunFn = unsafe extern "C" fn(
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
     from_state_instret: u64,
-    instret_end: u64
+    instret_end: u64,
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -184,9 +184,23 @@ where
         let mut asm_str = String::new();
 
         for r in 0..16 {
-            asm_str += &format!("   movq xmm{}, [r15 + 8*{}]\n", r, r);
+            asm_str += &format!("   mov rdi, [r15 + 8*{}]\n", r);
+            asm_str += &format!("   pinsrq xmm{}, rdi, 0\n", r);
         }
 
+        asm_str
+    }
+
+    fn pop_address_space_start() -> String {
+        let mut asm_str = String::new();
+        // For byte alignment
+        asm_str += "   pop rdi\n";
+        asm_str += "   pop rdi\n";
+        asm_str += "   pinsrq xmm2, rdi, 1\n";
+        asm_str += "   pop rdi\n";
+        asm_str += "   pinsrq xmm1, rdi, 1\n";
+        asm_str += "   pop rdi\n";
+        asm_str += "   pinsrq xmm0, rdi, 1\n";
         asm_str
     }
 
@@ -201,11 +215,26 @@ where
         asm_str
     }
 
-    fn initialize_xmm_regs() -> String {
+    fn push_address_space_start() -> String {
         let mut asm_str = String::new();
 
+        asm_str += "   pextrq rdi, xmm0, 1\n";
+        asm_str += "   push rdi\n";
+        asm_str += "   pextrq rdi, xmm1, 1\n";
+        asm_str += "   push rdi\n";
+        asm_str += "   pextrq rdi, xmm2, 1\n";
+        asm_str += "   push rdi\n";
+        // For byte alignment
+        asm_str += "   push rdi\n";
+
+        asm_str
+    }
+
+    fn initialize_xmm_regs() -> String {
+        let mut asm_str = String::new();
+        asm_str += "    mov rax, 0\n";
         for r in 0..16 {
-            asm_str += &format!("   pxor xmm{}, xmm{}\n", r, r);
+            asm_str += &format!("   pinsrq xmm{}, rax, 0\n", r);
         }
 
         asm_str
@@ -243,9 +272,25 @@ where
         asm_str += "    mov r12, r8\n";
 
         asm_str += &Self::push_internal_registers();
+        // Store the start of register address space in r15
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    call get_vm_register_addr\n";
         asm_str += "    mov r15, rax\n";
+        // Store the start of address space 2 in high 64 bits of xmm0
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, 2\n";
+        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    pinsrq  xmm0, rax, 1\n";
+        // Store the start of address space 3 in high 64 bits of xmm1
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, 3\n";
+        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    pinsrq  xmm1, rax, 1\n";
+        // Store the start of address space 4 in high 64 bits of xmm2
+        asm_str += "    mov rdi, rbx\n";
+        asm_str += "    mov rsi, 4\n";
+        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    pinsrq  xmm2, rax, 1\n";
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::initialize_xmm_regs();
@@ -269,7 +314,7 @@ where
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
-        
+
             // Check if we should suspend or not
 
             asm_str += "    cmp r14, r12\n";
@@ -277,6 +322,7 @@ where
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
+                asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
@@ -288,7 +334,7 @@ where
                 asm_str += "    AND rax, 1\n"; // check if the return value is 1
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
-
+                asm_str += &Self::pop_address_space_start();
                 asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
                 asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should
@@ -304,7 +350,7 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-        
+
             if executor.is_aot_supported(&instruction) {
                 let segment =
                     executor
@@ -324,11 +370,12 @@ where
                         })?;
                 asm_str += &segment;
             } else {
-                asm_str += &Self::xmm_to_rv32_regs(); 
+                asm_str += &Self::xmm_to_rv32_regs();
+                asm_str += &Self::push_address_space_start();
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
-                    &Self::rv32_regs_to_xmm(),
+                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
                     &instruction,
                 );
             }
@@ -355,7 +402,7 @@ where
             asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", i * 4);
         }
 
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
         }
 
@@ -569,7 +616,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
-                instret_end
+                instret_end,
             );
         }
 
@@ -795,7 +842,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
-                0 // TODO: this is a placeholder because in the pure case asm_run needs to take in 5 args. Fix later
+                0, // TODO: this is a placeholder because in the pure case asm_run needs to take in 5 args. Fix later
             );
         }
 
