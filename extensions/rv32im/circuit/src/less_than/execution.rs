@@ -9,13 +9,16 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanExecutor;
-use crate::adapters::imm_to_bytes;
+use crate::{
+    adapters::imm_to_bytes,
+    common::{gpr_to_rv32_register, rv32_register_to_gpr},
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -101,6 +104,8 @@ const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
+const DEFAULT_PC_OFFSET: i32 = 4;
+
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -146,6 +151,50 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+        assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");
+
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == LessThanOpcode::SLT.global_opcode() {
+            asm_opcode += "setl";
+        } else if inst.opcode == LessThanOpcode::SLTU.global_opcode() {
+            asm_opcode += "setb";
+        }
+
+        if e == 0 {
+            asm_str += &format!("   cmp {}, {}\n", REG_A_W, c);
+        } else {
+            // [a:4]_1 <- [a:4]_1 + [c:4]_1
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
+            asm_str += &format!("   cmp {}, {}\n", REG_A_W, REG_C_W);
+        }
+
+        // Set REG_A to 1 if less than (signed), 0 otherwise
+        asm_str += &format!("   {} cl\n", asm_opcode); // setl cl or setb cl
+        asm_str += &format!("   movzx {}, cl\n", REG_A_W); // zero-extend to 32-bit
+
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+        // let it fall to the next instruction
+        Ok(asm_str)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

@@ -9,12 +9,16 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{adapters::imm_to_bytes, BaseAluExecutor};
+use crate::{
+    adapters::imm_to_bytes,
+    common::{gpr_to_rv32_register, rv32_register_to_gpr},
+    BaseAluExecutor,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -101,6 +105,8 @@ const REG_C: &str = "r10";
 const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
+
+const DEFAULT_PC_OFFSET: i32 = 4;
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -192,10 +198,58 @@ where
     }
 }
 
-
 #[cfg(feature = "aot")]
-impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> where F: PrimeField32
+impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
+    for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
+where
+    F: PrimeField32,
 {
+    fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
+        true
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+
+        // load the left operand of the opcode
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
+            asm_opcode += "add";
+        } else if inst.opcode == BaseAluOpcode::SUB.global_opcode() {
+            asm_opcode += "sub";
+        } else if inst.opcode == BaseAluOpcode::AND.global_opcode() {
+            asm_opcode += "and";
+        } else if inst.opcode == BaseAluOpcode::OR.global_opcode() {
+            asm_opcode += "or";
+        } else if inst.opcode == BaseAluOpcode::XOR.global_opcode() {
+            asm_opcode += "xor";
+        }
+
+        if e == 0 {
+            // [a:4]_1 = [a:4]_1 + c
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, c);
+        } else {
+            // load the right operand of the opcode
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, REG_C_W);
+        }
+
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+        Ok(asm_str)
+    }
 }
 
 #[inline(always)]

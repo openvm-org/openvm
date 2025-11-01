@@ -9,13 +9,16 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
-    LocalOpcode, VmOpcode
+    LocalOpcode, VmOpcode,
 };
 use openvm_rv32im_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftExecutor;
-use crate::adapters::imm_to_bytes;
+use crate::{
+    adapters::imm_to_bytes,
+    common::{gpr_to_rv32_register, rv32_register_to_gpr},
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -97,6 +100,8 @@ const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
+const DEFAULT_PC_OFFSET: i32 = 4;
+
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
@@ -142,7 +147,56 @@ impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
+        true
+    }
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let mut asm_str = String::new();
+        let a: i16 = to_i16(inst.a);
+        let b: i16 = to_i16(inst.b);
+        let c: i16 = to_i16(inst.c);
+        let e: i16 = to_i16(inst.e);
+        assert!(a % 4 == 0, "instruction.a must be a multiple of 4");
+        assert!(b % 4 == 0, "instruction.b must be a multiple of 4");
 
+        // note: for shift we will use REG_B since
+        // it is a hardware requirement that cl is used as the shift value
+        // and we don't want to override the written [b:4]_1
+        // [a:4]_1 <- [b:4]_1
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+
+        let mut asm_opcode = String::new();
+        if inst.opcode == ShiftOpcode::SLL.global_opcode() {
+            asm_opcode += "shl";
+        } else if inst.opcode == ShiftOpcode::SRL.global_opcode() {
+            asm_opcode += "shr";
+        } else if inst.opcode == ShiftOpcode::SRA.global_opcode() {
+            asm_opcode += "sar";
+        }
+
+        if e == 0 {
+            // [b:4]_1 <- [b:4]_1 (shift) c
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_B_W, c);
+        } else {
+            // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
+
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
+            asm_str += &format!("   mov cl, {}\n", REG_C_B);
+            // reg_a = reg_a << c
+            asm_str += &format!("   {} {}, cl\n", asm_opcode, REG_B_W);
+        }
+        // General Register -> XMM
+        asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
+        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
+        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
+        // let it fall to the next instruction
+        Ok(asm_str)
+    }
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> MeteredExecutor<F>
