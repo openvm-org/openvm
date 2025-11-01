@@ -17,13 +17,13 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use super::bus::{
+use crate::primitives::bus::{
     PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-struct PowerCheckerCols<T> {
+pub struct PowerCheckerCols<T> {
     log: T,
     pow: T,
     mult_pow: T,
@@ -31,12 +31,12 @@ struct PowerCheckerCols<T> {
 }
 
 #[derive(Debug)]
-pub struct PowerCheckerTraceGenerator<const BASE: usize, const N: usize> {
+pub struct PowerCheckerCpuTraceGenerator<const BASE: usize, const N: usize> {
     count_pow: Vec<AtomicU32>,
     count_range: Vec<AtomicU32>,
 }
 
-impl<const BASE: usize, const N: usize> Default for PowerCheckerTraceGenerator<BASE, N> {
+impl<const BASE: usize, const N: usize> Default for PowerCheckerCpuTraceGenerator<BASE, N> {
     fn default() -> Self {
         assert!(N.is_power_of_two());
         let mut count_pow = Vec::with_capacity(N);
@@ -52,7 +52,7 @@ impl<const BASE: usize, const N: usize> Default for PowerCheckerTraceGenerator<B
     }
 }
 
-impl<const BASE: usize, const N: usize> PowerCheckerTraceGenerator<BASE, N> {
+impl<const BASE: usize, const N: usize> PowerCheckerCpuTraceGenerator<BASE, N> {
     pub fn add_pow(&self, log: usize) -> usize {
         self.count_pow[log].fetch_add(1, Ordering::Relaxed);
         1 << log

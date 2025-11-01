@@ -24,6 +24,14 @@ use crate::{
     transcript::TranscriptModule,
     whir::{FoldRecord, WhirModule},
 };
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+    cuda_backend_v2::GpuBackendV2,
+    itertools::Itertools,
+    openvm_cuda_backend::data_transporter::transport_matrix_to_device,
+    stark_backend_v2::prover::AirProvingContextV2,
+};
 
 mod dummy;
 
@@ -35,6 +43,26 @@ pub trait AirModule<TS: FiatShamirTranscript + TranscriptHistory> {
         proof: &[Proof],
         preflight: &[Preflight],
     ) -> Vec<AirProofRawInput<F>>;
+
+    #[cfg(feature = "cuda")]
+    fn generate_proving_ctx_gpu(
+        &self,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        _vk_gpu: &VerifyingKeyGpu,
+        _proofs_gpu: &[ProofGpu],
+        _preflights_gpu: &[PreflightGpu],
+    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+        let raw_inputs = self.generate_proof_inputs(proofs, preflights);
+        raw_inputs
+            .into_iter()
+            .map(|input| AirProvingContextV2 {
+                cached_mains: vec![],
+                common_main: transport_matrix_to_device(input.common_main.unwrap()),
+                public_values: vec![],
+            })
+            .collect_vec()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -86,7 +114,7 @@ pub struct BusInventory {
     pub exp_bits_len_bus: ExpBitsLenBus,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Preflight {
     /// The concatenated sequence of observes/samples. Not available during preflight; populated
     /// after.
@@ -100,7 +128,7 @@ pub struct Preflight {
     pub merkle_verify_logs: Vec<(MerkleVerifyBusMessage<F>, [F; DIGEST_SIZE])>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ProofShapePreflight {
     pub sorted_trace_vdata: Vec<(usize, TraceVData)>,
     pub pvs_tidx: Vec<usize>,
@@ -116,13 +144,13 @@ impl ProofShapePreflight {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct GkrPreflight {
     pub post_tidx: usize,
     pub xi: Vec<(usize, EF)>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct BatchConstraintPreflight {
     pub tidx_before_univariate: usize,
     pub tidx_before_multilinear: usize,
@@ -132,7 +160,7 @@ pub struct BatchConstraintPreflight {
     pub sumcheck_rnd: Vec<EF>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct StackingPreflight {
     pub intermediate_tidx: [usize; 3],
     pub post_tidx: usize,
@@ -142,7 +170,7 @@ pub struct StackingPreflight {
     pub sumcheck_rnd: Vec<EF>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct WhirPreflight {
     pub alphas: Vec<EF>,
     pub z0s: Vec<EF>,
@@ -165,7 +193,7 @@ pub struct WhirPreflight {
 }
 
 impl BusInventory {
-    fn new(b: &mut BusIndexManager) -> Self {
+    pub(crate) fn new(b: &mut BusIndexManager) -> Self {
         Self {
             transcript_bus: TranscriptBus::new(b.new_bus_idx()),
             poseidon2_bus: Poseidon2Bus::new(b.new_bus_idx()),
@@ -302,5 +330,28 @@ where
         }
         proof_inputs.push(self.exp_bits_len_air.generate_proof_input());
         proof_inputs
+    }
+
+    #[cfg(feature = "cuda")]
+    pub fn generate_proving_ctx_gpu(
+        &self,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        vk_gpu: &VerifyingKeyGpu,
+        proofs_gpu: &[ProofGpu],
+        preflights_gpu: &[PreflightGpu],
+    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+        let mut proving_ctx = vec![];
+        for module in &self.modules {
+            let module_proving_ctx = module.generate_proving_ctx_gpu(
+                proofs,
+                preflights,
+                vk_gpu,
+                proofs_gpu,
+                preflights_gpu,
+            );
+            proving_ctx.extend(module_proving_ctx);
+        }
+        proving_ctx
     }
 }

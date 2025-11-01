@@ -419,7 +419,6 @@ where
             local.lambda_pow_eq_bits,
         );
 
-        // HERE
         assert_eq_array(
             &mut builder.when(local.is_first),
             ext_field_multiply(

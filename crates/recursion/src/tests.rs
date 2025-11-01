@@ -17,6 +17,15 @@ use stark_backend_v2::{
 
 use crate::system::VerifierCircuit;
 
+#[cfg(feature = "cuda")]
+use {
+    crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+    openvm_cuda_common::copy::MemCopyD2H,
+    openvm_stark_backend::prover::MatrixDimensions,
+    p3_matrix::Matrix,
+    stark_backend_v2::StarkEngineV2,
+};
+
 #[test]
 fn test_recursion_circuit_single_fib() {
     let params = test_system_params_small();
@@ -357,4 +366,115 @@ fn test_recursion_circuit_multiple_cached() {
         proof,
     ]);
     engine.debug(&circuit.airs(), &pk.per_air, &proof_inputs);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// CUDA TRACEGEN TESTS
+///////////////////////////////////////////////////////////////////////////////
+#[cfg(feature = "cuda")]
+fn compare_cpu_tracegen_vs_gpu_tracegen<Fx: TestFixture, E: StarkEngineV2>(
+    fx: Fx,
+    engine: E,
+    num_proofs: usize,
+) {
+    let (vk, proof) = fx.keygen_and_prove(&engine);
+    let vk = Arc::new(vk);
+
+    let circuit = VerifierCircuit::<DuplexSpongeRecorder, 5>::new(vk.clone());
+
+    let sponge = DuplexSpongeRecorder::default();
+    let preflight = circuit.run_preflight(sponge, &proof);
+
+    let vk_gpu = VerifyingKeyGpu::new(&vk);
+    let proofs_gpu = (0..num_proofs)
+        .map(|_| ProofGpu::new(&vk, &proof))
+        .collect_vec();
+    let preflights_gpu = (0..num_proofs)
+        .map(|_| PreflightGpu::new(&vk, &proof, &preflight))
+        .collect_vec();
+
+    let proofs = vec![proof.clone(); num_proofs];
+    let preflights = vec![preflight.clone(); num_proofs];
+
+    let cpu_inputs = circuit.generate_proof_inputs(&proofs);
+    let gpu_ctx = circuit.generate_proving_ctx_gpu(
+        &proofs,
+        &preflights,
+        &vk_gpu,
+        &proofs_gpu,
+        &preflights_gpu,
+    );
+
+    for (i, (cpu, gpu)) in cpu_inputs.into_iter().zip(gpu_ctx).enumerate() {
+        let cpu = cpu.common_main.unwrap();
+        let gpu = gpu.common_main;
+        assert_eq!(gpu.width(), cpu.width(), "Width mismatch at AIR {i}");
+        assert_eq!(gpu.height(), cpu.height(), "Height mismatch at AIR {i}");
+        let gpu = gpu.to_host().unwrap();
+        for r in 0..cpu.height() {
+            for c in 0..cpu.width() {
+                assert_eq!(
+                    gpu[c * cpu.height() + r],
+                    cpu.get(r, c),
+                    "Mismatch for AIR {i} at row {r} column {c}"
+                );
+            }
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_single_fib() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = FibFixture::new(0, 1, 1 << 3);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 1);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_cached() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = CachedFixture11::new(params);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 1);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_preprocessed() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let sels = (0..(1 << 5)).map(|i| i % 2 == 0).collect_vec();
+    let fx = PreprocessedFibFixture::new(0, 1, sels);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 1);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_multi_fib() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = FibFixture::new(0, 1, 1 << 3);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 4);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_multi_cached() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let fx = CachedFixture11::new(params);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 4);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_tracegen_multi_preprocessed() {
+    let params = test_system_params_small();
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
+    let sels = (0..(1 << 5)).map(|i| i % 2 == 0).collect_vec();
+    let fx = PreprocessedFibFixture::new(0, 1, sels);
+    compare_cpu_tracegen_vs_gpu_tracegen(fx, engine, 4);
 }

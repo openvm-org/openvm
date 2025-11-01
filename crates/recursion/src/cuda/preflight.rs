@@ -1,17 +1,24 @@
 use itertools::Itertools;
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use stark_backend_v2::Digest;
+use openvm_cuda_common::d_buffer::DeviceBuffer;
+use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
-use crate::{cuda::types::TraceMetadata, system::Preflight};
+use crate::{
+    cuda::{to_device_or_nullptr, types::TraceMetadata},
+    system::Preflight,
+};
 
+/*
+ * Tracegen information (i.e. records) on a GPU device. Each field should
+ * be computable as soon as the verifier circuit runs preflight.
+ */
 #[derive(Debug)]
-pub struct GpuPreflight {
+pub struct PreflightGpu {
     pub transcript: TranscriptLog,
-    pub proof_shape: ProofShapePreflight,
-    pub gkr: GkrPreflight,
-    pub batch_constraint: BatchConstraintPreflight,
-    pub stacking: StackingPreflight,
-    pub whir: WhirPreflight,
+    pub proof_shape: ProofShapePreflightGpu,
+    pub gkr: GkrPreflightGpu,
+    pub batch_constraint: BatchConstraintPreflightGpu,
+    pub stacking: StackingPreflightGpu,
+    pub whir: WhirPreflightGpu,
 }
 
 #[derive(Debug)]
@@ -20,41 +27,46 @@ pub struct TranscriptLog {
 }
 
 #[derive(Debug)]
-pub struct ProofShapePreflight {
-    pub sorted_trace_vdata: DeviceBuffer<(usize, TraceMetadata)>,
+pub struct ProofShapePreflightGpu {
+    pub sorted_trace_vdata: DeviceBuffer<TraceMetadata>,
     pub sorted_cached_commits: DeviceBuffer<Digest>,
+
     pub pvs_tidx: DeviceBuffer<usize>,
     pub post_tidx: usize,
+
+    pub num_present: usize,
     pub n_max: usize,
     pub n_logup: usize,
-    pub l_skip: usize,
+    pub final_cidx: usize,
+    pub final_total_interactions: usize,
+    pub main_commit: Digest,
 }
 
 #[derive(Debug)]
-pub struct GkrPreflight {
+pub struct GkrPreflightGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct BatchConstraintPreflight {
+pub struct BatchConstraintPreflightGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct StackingPreflight {
+pub struct StackingPreflightGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct WhirPreflight {
+pub struct WhirPreflightGpu {
     _dummy: usize,
 }
 
-impl GpuPreflight {
-    pub fn new(preflight: &Preflight) -> Self {
-        GpuPreflight {
+impl PreflightGpu {
+    pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof, preflight: &Preflight) -> Self {
+        PreflightGpu {
             transcript: Self::transcript(preflight),
-            proof_shape: Self::proof_shape(preflight),
+            proof_shape: Self::proof_shape(vk, proof, preflight),
             gkr: Self::gkr(preflight),
             batch_constraint: Self::batch_constraint(preflight),
             stacking: Self::stacking(preflight),
@@ -66,48 +78,79 @@ impl GpuPreflight {
         TranscriptLog { _dummy: 0 }
     }
 
-    fn proof_shape(preflight: &Preflight) -> ProofShapePreflight {
-        // TODO[stephen]: we should derive this using the GPU vdata in GpuProof
+    fn proof_shape(
+        vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &Preflight,
+    ) -> ProofShapePreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];
+        let mut cidx = 1;
+        let mut total_interactions = 0;
+
         let sorted_trace_vdata = preflight
             .proof_shape
             .sorted_trace_vdata
             .iter()
             .map(|(air_idx, vdata)| {
-                let ret = TraceMetadata {
+                let metadata = TraceMetadata {
+                    air_idx: *air_idx,
                     hypercube_dim: vdata.hypercube_dim,
-                    is_present: true,
-                    num_cached: vdata.cached_commitments.len(),
                     cached_idx: sorted_cached_commits.len(),
+                    starting_cidx: cidx,
+                    total_interactions,
                 };
+                cidx += vdata.cached_commitments.len()
+                    + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;
+                total_interactions += (1 << (vdata.hypercube_dim + vk.inner.params.l_skip))
+                    * vk.inner.per_air[*air_idx].num_interactions();
                 sorted_cached_commits.extend_from_slice(&vdata.cached_commitments);
-                (*air_idx, ret)
+                metadata
             })
+            .chain(
+                proof
+                    .trace_vdata
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(air_idx, vdata)| {
+                        if vdata.is_none() {
+                            Some(TraceMetadata {
+                                air_idx,
+                                ..Default::default()
+                            })
+                        } else {
+                            None
+                        }
+                    }),
+            )
             .collect_vec();
-        ProofShapePreflight {
-            sorted_trace_vdata: sorted_trace_vdata.to_device().unwrap(),
-            sorted_cached_commits: sorted_cached_commits.to_device().unwrap(),
-            pvs_tidx: preflight.proof_shape.pvs_tidx.to_device().unwrap(),
+
+        ProofShapePreflightGpu {
+            sorted_trace_vdata: to_device_or_nullptr(&sorted_trace_vdata).unwrap(),
+            sorted_cached_commits: to_device_or_nullptr(&sorted_cached_commits).unwrap(),
+            pvs_tidx: to_device_or_nullptr(&preflight.proof_shape.pvs_tidx).unwrap(),
             post_tidx: preflight.proof_shape.post_tidx,
+            num_present: preflight.proof_shape.sorted_trace_vdata.len(),
             n_max: preflight.proof_shape.n_max,
             n_logup: preflight.proof_shape.n_logup,
-            l_skip: preflight.proof_shape.l_skip,
+            final_cidx: cidx,
+            final_total_interactions: total_interactions,
+            main_commit: proof.common_main_commit,
         }
     }
 
-    fn gkr(_preflight: &Preflight) -> GkrPreflight {
-        GkrPreflight { _dummy: 0 }
+    fn gkr(_preflight: &Preflight) -> GkrPreflightGpu {
+        GkrPreflightGpu { _dummy: 0 }
     }
 
-    fn batch_constraint(_preflight: &Preflight) -> BatchConstraintPreflight {
-        BatchConstraintPreflight { _dummy: 0 }
+    fn batch_constraint(_preflight: &Preflight) -> BatchConstraintPreflightGpu {
+        BatchConstraintPreflightGpu { _dummy: 0 }
     }
 
-    fn stacking(_preflight: &Preflight) -> StackingPreflight {
-        StackingPreflight { _dummy: 0 }
+    fn stacking(_preflight: &Preflight) -> StackingPreflightGpu {
+        StackingPreflightGpu { _dummy: 0 }
     }
 
-    fn whir(_preflight: &Preflight) -> WhirPreflight {
-        WhirPreflight { _dummy: 0 }
+    fn whir(_preflight: &Preflight) -> WhirPreflightGpu {
+        WhirPreflightGpu { _dummy: 0 }
     }
 }

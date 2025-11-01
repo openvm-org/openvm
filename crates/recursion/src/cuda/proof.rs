@@ -1,121 +1,94 @@
 use itertools::Itertools;
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use stark_backend_v2::{Digest, proof::Proof};
+use openvm_cuda_common::d_buffer::DeviceBuffer;
+use stark_backend_v2::{keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
-use crate::cuda::types::{PublicValueData, TraceMetadata};
+use crate::cuda::{to_device_or_nullptr, types::PublicValueData};
+
+/*
+ * Tracegen information (i.e. records) on a GPU device. Each field should
+ * be computable as soon as the verifier circuit has access to the child
+ * proof and verifying key.
+ */
+#[derive(Debug)]
+pub struct ProofGpu {
+    pub proof_shape: ProofShapeProofGpu,
+    pub gkr: GkrProofGpu,
+    pub batch_constraint: BatchConstraintProofGpu,
+    pub stacking: StackingProofGpu,
+    pub whir: WhirProofGpu,
+}
 
 #[derive(Debug)]
-pub struct GpuProof {
-    pub common_main_commit: Digest,
-    pub cached_commits: DeviceBuffer<Digest>,
-    pub trace_vdata: DeviceBuffer<TraceMetadata>,
+pub struct ProofShapeProofGpu {
     pub public_values: DeviceBuffer<PublicValueData>,
-
-    pub gkr_proof: GkrProof,
-    pub batch_constraint_proof: BatchConstraintProof,
-    pub stacking_proof: StackingProof,
-    pub whir_proof: WhirProof,
 }
 
 #[derive(Debug)]
-pub struct GkrProof {
+pub struct GkrProofGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct BatchConstraintProof {
+pub struct BatchConstraintProofGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct StackingProof {
+pub struct StackingProofGpu {
     _dummy: usize,
 }
 
 #[derive(Debug)]
-pub struct WhirProof {
+pub struct WhirProofGpu {
     _dummy: usize,
 }
 
-impl GpuProof {
-    pub fn new(proof: &Proof) -> Self {
-        let (cached_commits, trace_vdata) = Self::trace_vdata_and_cached_commits(proof);
-        GpuProof {
-            common_main_commit: proof.common_main_commit,
-            cached_commits,
-            trace_vdata,
-            public_values: Self::public_values(proof),
-            gkr_proof: Self::gkr_proof(proof),
-            batch_constraint_proof: Self::batch_constraint_proof(proof),
-            stacking_proof: Self::stacking_proof(proof),
-            whir_proof: Self::whir_proof(proof),
+impl ProofGpu {
+    pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Self {
+        ProofGpu {
+            proof_shape: Self::proof_shape(vk, proof),
+            gkr: Self::gkr(proof),
+            batch_constraint: Self::batch_constraint(proof),
+            stacking: Self::stacking(proof),
+            whir: Self::whir(proof),
         }
     }
 
-    fn trace_vdata_and_cached_commits(
-        proof: &Proof,
-    ) -> (DeviceBuffer<Digest>, DeviceBuffer<TraceMetadata>) {
-        let mut cached_commits: Vec<Digest> = vec![];
-        let trace_vdata = proof
-            .trace_vdata
-            .iter()
-            .map(|vdata| {
-                if let Some(vdata) = vdata {
-                    let ret = TraceMetadata {
-                        hypercube_dim: vdata.hypercube_dim,
-                        is_present: true,
-                        num_cached: vdata.cached_commitments.len(),
-                        cached_idx: cached_commits.len(),
-                    };
-                    cached_commits.extend_from_slice(&vdata.cached_commitments);
-                    ret
-                } else {
-                    TraceMetadata {
-                        hypercube_dim: 0,
-                        is_present: false,
-                        num_cached: 0,
-                        cached_idx: cached_commits.len(),
-                    }
-                }
-            })
-            .collect_vec()
-            .to_device()
-            .unwrap();
-        (cached_commits.to_device().unwrap(), trace_vdata)
-    }
-
-    fn public_values(proof: &Proof) -> DeviceBuffer<PublicValueData> {
-        proof
+    fn proof_shape(_vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> ProofShapeProofGpu {
+        let public_values = proof
             .public_values
             .iter()
             .enumerate()
             .flat_map(|(air_idx, pvs)| {
+                let air_num_pvs = pvs.len();
                 pvs.iter()
                     .enumerate()
                     .map(move |(pv_idx, &value)| PublicValueData {
                         air_idx,
+                        air_num_pvs,
                         pv_idx,
                         value,
                     })
             })
-            .collect_vec()
-            .to_device()
-            .unwrap()
+            .collect_vec();
+        ProofShapeProofGpu {
+            public_values: to_device_or_nullptr(&public_values).unwrap(),
+        }
     }
 
-    fn gkr_proof(_proof: &Proof) -> GkrProof {
-        GkrProof { _dummy: 0 }
+    fn gkr(_proof: &Proof) -> GkrProofGpu {
+        GkrProofGpu { _dummy: 0 }
     }
 
-    fn batch_constraint_proof(_proof: &Proof) -> BatchConstraintProof {
-        BatchConstraintProof { _dummy: 0 }
+    fn batch_constraint(_proof: &Proof) -> BatchConstraintProofGpu {
+        BatchConstraintProofGpu { _dummy: 0 }
     }
 
-    fn stacking_proof(_proof: &Proof) -> StackingProof {
-        StackingProof { _dummy: 0 }
+    fn stacking(_proof: &Proof) -> StackingProofGpu {
+        StackingProofGpu { _dummy: 0 }
     }
 
-    fn whir_proof(_proof: &Proof) -> WhirProof {
-        WhirProof { _dummy: 0 }
+    fn whir(_proof: &Proof) -> WhirProofGpu {
+        WhirProofGpu { _dummy: 0 }
     }
 }

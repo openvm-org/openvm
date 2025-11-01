@@ -25,6 +25,7 @@ eyre = { workspace = true }
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+cuda-backend-v2 = { workspace = true, optional = true }
 
 [dev-dependencies]
 stark-backend-v2 = { workspace = true, features = ["test-utils"] }
@@ -40,6 +41,7 @@ cuda = [
     "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "dep:cuda-backend-v2",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
 ]
