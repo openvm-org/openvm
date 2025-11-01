@@ -3,14 +3,15 @@ use std::sync::Arc;
 use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
+use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
 use stark_backend_v2::{
-    DIGEST_SIZE, EF, F,
+    EF, F,
     keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poly_common::{Squarable, interpolate_quadratic_at_012},
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
+    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice},
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
+    verifier::whir::merkle_verify,
 };
 
 use crate::{
@@ -193,17 +194,6 @@ impl WhirModule {
                 ts.observe_commit(codeword_commits[i]);
                 z0s.push(ts.sample_ext());
                 ts.observe_ext(ood_values[i]);
-
-                merkle_verify_logs.push((
-                    MerkleVerifyBusMessage {
-                        leaf_hash: [F::ZERO; DIGEST_SIZE], // TODO: fix this
-                        merkle_idx: F::ZERO,               // TODO: fix this
-                        depth: F::ZERO,                    // TODO: fix this
-                        commit_major: F::from_canonical_usize(i + 1),
-                        commit_minor: F::ZERO,
-                    },
-                    codeword_commits[i],
-                ));
             } else {
                 for coeff in final_poly {
                     ts.observe_ext(*coeff);
@@ -226,7 +216,8 @@ impl WhirModule {
             let mut round_query_indices = vec![];
             for _ in 0..num_whir_queries {
                 let sample = ts.sample();
-                let idx = sample.as_canonical_u32() & (1 << (log_rs_domain_size - 1));
+                let bit_len = (log_rs_domain_size - k_whir) as u32;
+                let idx = sample.as_canonical_u32() & ((1u32 << bit_len) - 1);
                 round_queries.push(sample);
                 round_query_indices.push(idx);
             }
@@ -283,6 +274,22 @@ impl WhirModule {
                 } else {
                     let opened_rows =
                         proof.whir_proof.codeword_opened_rows[i - 1][query_idx].clone();
+                    let leaf_preimage = opened_rows
+                        .iter()
+                        .flat_map(|ef| ef.as_base_slice())
+                        .copied()
+                        .collect_vec();
+                    merkle_verify_logs.push((
+                        MerkleVerifyBusMessage {
+                            leaf_hash: poseidon2_hash_slice(&leaf_preimage),
+                            merkle_idx: index as usize,
+                            query_idx,
+                            depth: proof.whir_proof.codeword_merkle_proofs[i - 1][query_idx].len(),
+                            commit_major: i,
+                            commit_minor: 0,
+                        },
+                        codeword_commits[i - 1],
+                    ));
                     binary_k_fold(
                         opened_rows,
                         &alphas[alphas.len() - k_whir..],
@@ -546,4 +553,3 @@ mod cuda_tracegen {
         }
     }
 }
-
