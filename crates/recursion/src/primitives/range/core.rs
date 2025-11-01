@@ -1,8 +1,4 @@
 use core::borrow::Borrow;
-use std::sync::{
-    Arc,
-    atomic::{AtomicU32, Ordering},
-};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
@@ -15,22 +11,26 @@ use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
+};
 
-use super::bus::{RangeCheckerBus, RangeCheckerBusMessage};
+use crate::primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage};
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
-struct RangeCheckerCols<T> {
+pub struct RangeCheckerCols<T> {
     value: T,
     mult: T,
 }
 
 #[derive(Debug)]
-pub struct RangeCheckerTraceGenerator<const NUM_BITS: usize> {
+pub struct RangeCheckerCpuTraceGenerator<const NUM_BITS: usize> {
     count: Vec<AtomicU32>,
 }
 
-impl<const NUM_BITS: usize> Default for RangeCheckerTraceGenerator<NUM_BITS> {
+impl<const NUM_BITS: usize> Default for RangeCheckerCpuTraceGenerator<NUM_BITS> {
     fn default() -> Self {
         let mut count = Vec::with_capacity(1 << NUM_BITS);
         for _ in 0..(1 << NUM_BITS) {
@@ -40,7 +40,7 @@ impl<const NUM_BITS: usize> Default for RangeCheckerTraceGenerator<NUM_BITS> {
     }
 }
 
-impl<const NUM_BITS: usize> RangeCheckerTraceGenerator<NUM_BITS> {
+impl<const NUM_BITS: usize> RangeCheckerCpuTraceGenerator<NUM_BITS> {
     pub fn add_count(&self, value: usize) {
         self.add_count_mult(value, 1);
     }

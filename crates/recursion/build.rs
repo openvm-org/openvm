@@ -14,7 +14,8 @@ fn main() {
 
         let common = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
-            .include_from_dep("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE");
+            .include_from_dep("DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE")
+            .include("cuda/include");
 
         common.emit_link_directives();
 

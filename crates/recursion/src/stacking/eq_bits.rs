@@ -3,6 +3,8 @@ use std::{
     collections::HashMap,
 };
 
+#[cfg(all(test, feature = "cuda"))]
+use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
     utils::{and, not},
@@ -169,10 +171,13 @@ impl EqBitsTraceGenerator {
                 first_cols.external_mult = F::from_canonical_usize(base_external_mult);
             }
 
+            #[cfg(all(test, feature = "cuda"))]
+            let b_value_iter = b_value_map.iter().sorted();
+            #[cfg(any(not(test), not(feature = "cuda")))]
+            let b_value_iter = b_value_map.iter();
+
             for ((&(b_value, num_bits), &(sub_eval, _, internal_mult, external_mult)), chunk) in
-                b_value_map
-                    .iter()
-                    .zip(trace.chunks_mut(width).skip(1).take(b_value_map.len()))
+                b_value_iter.zip(trace.chunks_mut(width).skip(1).take(b_value_map.len()))
             {
                 let cols: &mut EqBitsCols<F> = chunk.borrow_mut();
                 cols.proof_idx = proof_idx_value;

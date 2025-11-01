@@ -27,9 +27,24 @@ use crate::{
     system::{AirModule, BusIndexManager, BusInventory, Preflight, ProofShapePreflight},
 };
 
+#[cfg(feature = "cuda")]
+use {
+    crate::{
+        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        primitives::{
+            pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
+        },
+    },
+    cuda_backend_v2::GpuBackendV2,
+    stark_backend_v2::prover::AirProvingContextV2,
+};
+
 pub mod air;
 pub mod bus;
 pub mod pvs;
+
+#[cfg(feature = "cuda")]
+mod cuda_abi;
 
 pub struct ProofShapeModule {
     mvk: Arc<MultiStarkVerifyingKeyV2>,
@@ -222,6 +237,33 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             },
             range_checker.generate_proof_input(),
             pow_checker.generate_proof_input(),
+        ]
+    }
+
+    #[cfg(feature = "cuda")]
+    fn generate_proving_ctx_gpu(
+        &self,
+        _proofs: &[Proof],
+        _preflights: &[Preflight],
+        vk_gpu: &VerifyingKeyGpu,
+        proofs_gpu: &[ProofGpu],
+        preflights_gpu: &[PreflightGpu],
+    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+        let range_checker = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
+        let pow_checker = Arc::new(PowerCheckerGpuTraceGenerator::<2, 32>::default());
+        vec![
+            air::cuda::generate_proving_ctx::<4, 8>(
+                vk_gpu,
+                preflights_gpu,
+                self.idx_encoder.width(),
+                self.min_cached_idx,
+                self.max_cached,
+                range_checker.clone(),
+                pow_checker.clone(),
+            ),
+            pvs::cuda::generate_proving_ctx(proofs_gpu, preflights_gpu),
+            range_checker.generate_proving_ctx(),
+            pow_checker.generate_proving_ctx(),
         ]
     }
 }
