@@ -11,6 +11,8 @@ use crate::cuda::types::AirData;
  * circuit, i.e. regardless of the number of proofs.
  */
 pub struct VerifyingKeyGpu {
+    // TODO[TEMP]: cpu vk for hybrid usage; remove this when no longer needed
+    pub cpu: MultiStarkVerifyingKeyV2,
     pub per_air: DeviceBuffer<AirData>,
     pub system_params: SystemParams,
 }
@@ -30,6 +32,7 @@ impl VerifyingKeyGpu {
             .to_device()
             .unwrap();
         Self {
+            cpu: vk.clone(),
             per_air,
             system_params: vk.inner.params,
         }

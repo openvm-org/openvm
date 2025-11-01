@@ -1,9 +1,9 @@
 use core::borrow::Borrow;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use itertools::Itertools;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -11,10 +11,6 @@ use p3_field::FieldAlgebra;
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::F;
 use stark_recursion_circuit_derive::AlignedBorrow;
-use std::sync::{
-    Arc,
-    atomic::{AtomicU32, Ordering},
-};
 
 use crate::primitives::bus::{RangeCheckerBus, RangeCheckerBusMessage};
 
@@ -49,7 +45,7 @@ impl<const NUM_BITS: usize> RangeCheckerCpuTraceGenerator<NUM_BITS> {
         self.count[value].fetch_add(mult, Ordering::Relaxed);
     }
 
-    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
+    pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let trace = self
             .count
             .iter()
@@ -61,14 +57,7 @@ impl<const NUM_BITS: usize> RangeCheckerCpuTraceGenerator<NUM_BITS> {
                 ]
             })
             .collect_vec();
-        AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                trace,
-                RangeCheckerCols::<u8>::width(),
-            ))),
-            public_values: vec![],
-        }
+        RowMajorMatrix::new(trace, RangeCheckerCols::<u8>::width())
     }
 }
 

@@ -7,7 +7,6 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, FieldAlgebra};
 use p3_matrix::Matrix;
-use stark_backend_v2::{DIGEST_SIZE, F, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -92,7 +91,8 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for TranscriptAir {
             builder.when(skip).assert_zero(local.lookup[i]);
 
             // The state after permutation of this round, should check against next round's input
-            // if next.mask[i] = 0 --> i-th not touched --> it should stay the same (if next is valid)
+            // if next.mask[i] = 0 --> i-th not touched --> it should stay the same (if next is
+            // valid)
             builder
                 .when((AB::Expr::ONE - next.mask[i]) * local_next_same_proof.clone())
                 .assert_eq(local.post_state[i], next.prev_state[i]);

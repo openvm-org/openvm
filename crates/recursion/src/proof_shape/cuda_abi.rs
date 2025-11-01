@@ -6,7 +6,7 @@ use openvm_cuda_common::{d_buffer::DeviceBuffer, error::CudaError};
 
 use crate::{
     cuda::types::{AirData, PublicValueData, TraceMetadata},
-    proof_shape::air::cuda::{ProofShapePerProof, ProofShapeTracegenInputs},
+    proof_shape::proof_shape::cuda::{ProofShapePerProof, ProofShapeTracegenInputs},
 };
 
 extern "C" {

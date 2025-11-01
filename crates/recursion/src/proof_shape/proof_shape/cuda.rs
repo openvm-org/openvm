@@ -11,7 +11,7 @@ use crate::{
     primitives::{
         pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
     },
-    proof_shape::{air::ProofShapeCols, cuda_abi::proof_shape_tracegen},
+    proof_shape::{cuda_abi::proof_shape_tracegen, proof_shape::ProofShapeCols},
 };
 
 #[repr(C)]

@@ -11,6 +11,8 @@ use crate::cuda::{to_device_or_nullptr, types::PublicValueData};
  */
 #[derive(Debug)]
 pub struct ProofGpu {
+    // TODO[TEMP]: cpu proof for hybrid usage; remove this when no longer needed
+    pub cpu: Proof,
     pub proof_shape: ProofShapeProofGpu,
     pub gkr: GkrProofGpu,
     pub batch_constraint: BatchConstraintProofGpu,
@@ -46,6 +48,7 @@ pub struct WhirProofGpu {
 impl ProofGpu {
     pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> Self {
         ProofGpu {
+            cpu: proof.clone(),
             proof_shape: Self::proof_shape(vk, proof),
             gkr: Self::gkr(proof),
             batch_constraint: Self::batch_constraint(proof),

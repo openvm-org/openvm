@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use itertools::izip;
 use openvm_circuit_primitives::encoder::Encoder;
-use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
+use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
 use stark_backend_v2::{
@@ -11,6 +11,7 @@ use stark_backend_v2::{
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::Proof,
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 
 use crate::{
@@ -20,33 +21,25 @@ use crate::{
         range::{RangeCheckerAir, RangeCheckerTraceGenerator},
     },
     proof_shape::{
-        air::ProofShapeAir,
         bus::{NumPublicValuesBus, ProofShapePermutationBus},
+        proof_shape::ProofShapeAir,
         pvs::PublicValuesAir,
     },
-    system::{AirModule, BusIndexManager, BusInventory, Preflight, ProofShapePreflight},
-};
-
-#[cfg(feature = "cuda")]
-use {
-    crate::{
-        cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-        primitives::{
-            pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
-        },
+    system::{
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, ProofShapePreflight,
+        TraceGenModule,
     },
-    cuda_backend_v2::GpuBackendV2,
-    stark_backend_v2::prover::AirProvingContextV2,
 };
 
-pub mod air;
 pub mod bus;
+pub mod proof_shape;
 pub mod pvs;
 
 #[cfg(feature = "cuda")]
 mod cuda_abi;
 
 pub struct ProofShapeModule {
+    // TODO[jpw]: remove and only store relevant parts to allow recursion
     mvk: Arc<MultiStarkVerifyingKeyV2>,
     bus_inventory: BusInventory,
 
@@ -101,47 +94,11 @@ impl ProofShapeModule {
             max_cached,
         }
     }
-}
 
-impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeModule {
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let proof_shape_air = ProofShapeAir::<4, 8> {
-            vk: self.mvk.clone(),
-            min_cached_idx: self.min_cached_idx,
-            max_cached: self.max_cached,
-            idx_encoder: self.idx_encoder.clone(),
-            range_bus: self.range_bus,
-            pow_bus: self.pow_bus,
-            permutation_bus: self.permutation_bus,
-            num_pvs_bus: self.num_pvs_bus,
-            gkr_module_bus: self.bus_inventory.gkr_module_bus,
-            air_shape_bus: self.bus_inventory.air_shape_bus,
-            air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
-            air_heights_bus: self.bus_inventory.air_heights_bus,
-            commitments_bus: self.bus_inventory.commitments_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-        };
-        let pvs_air = PublicValuesAir {
-            _public_values_bus: self.bus_inventory.public_values_bus,
-            num_pvs_bus: self.num_pvs_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-        };
-        let range_checker = RangeCheckerAir::<8> {
-            bus: self.range_bus,
-        };
-        let pow_checker = PowerCheckerAir::<2, 32> {
-            pow_bus: self.pow_bus,
-            range_bus: self.range_bus,
-        };
-        vec![
-            Arc::new(proof_shape_air) as AirRef<_>,
-            Arc::new(pvs_air) as AirRef<_>,
-            Arc::new(range_checker) as AirRef<_>,
-            Arc::new(pow_checker) as AirRef<_>,
-        ]
-    }
-
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
+    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
+    where
+        TS: FiatShamirTranscript + TranscriptHistory,
+    {
         ts.observe_commit(self.mvk.pre_hash);
         ts.observe_commit(proof.common_main_commit);
 
@@ -207,63 +164,112 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for ProofShapeM
             l_skip,
         };
     }
+}
 
-    fn generate_proof_inputs(
-        &self,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-    ) -> Vec<AirProofRawInput<F>> {
-        let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
-        let pow_checker = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
+impl AirModule for ProofShapeModule {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let proof_shape_air = ProofShapeAir::<4, 8> {
+            vk: self.mvk.clone(),
+            min_cached_idx: self.min_cached_idx,
+            max_cached: self.max_cached,
+            idx_encoder: self.idx_encoder.clone(),
+            range_bus: self.range_bus,
+            pow_bus: self.pow_bus,
+            permutation_bus: self.permutation_bus,
+            num_pvs_bus: self.num_pvs_bus,
+            gkr_module_bus: self.bus_inventory.gkr_module_bus,
+            air_shape_bus: self.bus_inventory.air_shape_bus,
+            air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
+            air_heights_bus: self.bus_inventory.air_heights_bus,
+            commitments_bus: self.bus_inventory.commitments_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+        };
+        let pvs_air = PublicValuesAir {
+            _public_values_bus: self.bus_inventory.public_values_bus,
+            num_pvs_bus: self.num_pvs_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+        };
+        let range_checker = RangeCheckerAir::<8> {
+            bus: self.range_bus,
+        };
+        let pow_checker = PowerCheckerAir::<2, 32> {
+            pow_bus: self.pow_bus,
+            range_bus: self.range_bus,
+        };
         vec![
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(air::generate_trace::<4, 8>(
-                    &self.mvk,
-                    proofs,
-                    preflights,
-                    self.idx_encoder.clone(),
-                    self.min_cached_idx,
-                    self.max_cached,
-                    range_checker.clone(),
-                    pow_checker.clone(),
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(pvs::generate_trace(proofs, preflights))),
-                public_values: vec![],
-            },
-            range_checker.generate_proof_input(),
-            pow_checker.generate_proof_input(),
+            Arc::new(proof_shape_air) as AirRef<_>,
+            Arc::new(pvs_air) as AirRef<_>,
+            Arc::new(range_checker) as AirRef<_>,
+            Arc::new(pow_checker) as AirRef<_>,
         ]
     }
+}
 
-    #[cfg(feature = "cuda")]
-    fn generate_proving_ctx_gpu(
+impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for ProofShapeModule {
+    fn generate_proving_ctxs(
         &self,
-        _proofs: &[Proof],
-        _preflights: &[Preflight],
-        vk_gpu: &VerifyingKeyGpu,
-        proofs_gpu: &[ProofGpu],
-        preflights_gpu: &[PreflightGpu],
-    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-        let range_checker = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
-        let pow_checker = Arc::new(PowerCheckerGpuTraceGenerator::<2, 32>::default());
-        vec![
-            air::cuda::generate_proving_ctx::<4, 8>(
-                vk_gpu,
-                preflights_gpu,
-                self.idx_encoder.width(),
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        let range_checker = Arc::new(RangeCheckerTraceGenerator::<8>::default());
+        let pow_checker = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
+        [
+            proof_shape::generate_trace::<4, 8>(
+                child_vk,
+                proofs,
+                preflights,
+                self.idx_encoder.clone(),
                 self.min_cached_idx,
                 self.max_cached,
                 range_checker.clone(),
                 pow_checker.clone(),
             ),
-            pvs::cuda::generate_proving_ctx(proofs_gpu, preflights_gpu),
-            range_checker.generate_proving_ctx(),
-            pow_checker.generate_proving_ctx(),
+            pvs::generate_trace(proofs, preflights),
+            range_checker.generate_trace_row_major(),
+            pow_checker.generate_trace_row_major(),
         ]
+        .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+        .into_iter()
+        .collect()
+    }
+}
+
+#[cfg(feature = "cuda")]
+mod cuda_tracegen {
+    use cuda_backend_v2::GpuBackendV2;
+
+    use super::*;
+    use crate::{
+        cuda::{GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
+        primitives::{
+            pow::cuda::PowerCheckerGpuTraceGenerator, range::cuda::RangeCheckerGpuTraceGenerator,
+        },
+    };
+
+    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for ProofShapeModule {
+        fn generate_proving_ctxs(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            let range_checker = Arc::new(RangeCheckerGpuTraceGenerator::<8>::default());
+            let pow_checker = Arc::new(PowerCheckerGpuTraceGenerator::<2, 32>::default());
+            vec![
+                proof_shape::cuda::generate_proving_ctx::<4, 8>(
+                    child_vk,
+                    preflights,
+                    self.idx_encoder.width(),
+                    self.min_cached_idx,
+                    self.max_cached,
+                    range_checker.clone(),
+                    pow_checker.clone(),
+                ),
+                pvs::cuda::generate_proving_ctx(proofs, preflights),
+                range_checker.generate_proving_ctx(),
+                pow_checker.generate_proving_ctx(),
+            ]
+        }
     }
 }
