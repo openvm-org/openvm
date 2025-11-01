@@ -53,8 +53,6 @@ use {
 use super::core::run_mul;
 #[cfg(feature = "aot")]
 use crate::Rv32ImConfig;
-#[cfg(feature = "aot")]
-use crate::Rv32ImConfig;
 use crate::{
     adapters::{
         Rv32MultAdapterAir, Rv32MultAdapterExecutor, Rv32MultAdapterFiller, RV32_CELL_BITS,
