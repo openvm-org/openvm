@@ -100,7 +100,7 @@ const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
-const DEFAULT_PC_OFFSET = 4;
+const DEFAULT_PC_OFFSET: i32 = 4;
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
     for ShiftExecutor<A, NUM_LIMBS, LIMB_BITS>
@@ -191,7 +191,7 @@ where
             asm_str += &format!("   {} {}, cl\n", asm_opcode, REG_B_W);
         }
         // General Register -> XMM
-        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
         asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         // let it fall to the next instruction

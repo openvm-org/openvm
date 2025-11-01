@@ -104,7 +104,7 @@ const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
-const DEFAULT_PC_OFFSET = 4;
+const DEFAULT_PC_OFFSET: i32 = 4;
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for LessThanExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
