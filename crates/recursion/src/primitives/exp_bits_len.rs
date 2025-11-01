@@ -1,9 +1,7 @@
 use core::borrow::{Borrow, BorrowMut};
-use std::sync::Arc;
 
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    prover::types::AirProofRawInput,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
@@ -27,11 +25,11 @@ struct ExpBitsLenCols<T> {
 #[derive(Debug)]
 pub struct ExpBitsLenAir {
     pub exp_bits_len_bus: ExpBitsLenBus,
-    records: std::sync::Mutex<Vec<ExpBitsLenRecord>>,
+    pub(crate) records: std::sync::Mutex<Vec<ExpBitsLenRecord>>,
 }
 
 #[derive(Clone, Debug)]
-struct ExpBitsLenRecord {
+pub(crate) struct ExpBitsLenRecord {
     base: F,
     bit_src: F,
     num_bits: F,
@@ -87,7 +85,7 @@ impl ExpBitsLenAir {
         self.records.lock().unwrap().push(record);
     }
 
-    pub fn generate_proof_input(&self) -> AirProofRawInput<F> {
+    pub fn generate_trace_row_major(&self) -> RowMajorMatrix<F> {
         let records = self.records.lock().unwrap();
         let num_valid_rows = records.len();
         let num_rows = num_valid_rows.next_power_of_two();
@@ -106,13 +104,6 @@ impl ExpBitsLenAir {
             cols.result = record.result;
         }
 
-        AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                trace,
-                BaseAir::<F>::width(self),
-            ))),
-            public_values: vec![],
-        }
+        RowMajorMatrix::new(trace, BaseAir::<F>::width(self))
     }
 }
