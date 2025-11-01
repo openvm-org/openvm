@@ -105,6 +105,8 @@ const REG_C_W: &str = "r10d";
 const REG_C_B: &str = "r10b";
 const REG_AUX: &str = "r11";
 
+const DEFAULT_PC_OFFSET = 4;
+
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -240,7 +242,7 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_
         }
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_PC, 4);
+        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         Ok(asm_str)
     }
