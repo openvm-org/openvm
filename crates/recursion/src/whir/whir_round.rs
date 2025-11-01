@@ -276,7 +276,8 @@ pub(crate) fn generate_trace(
             cols.whir_module_msg = preflight.whir_module_msg(proof);
         }
         if i < commitments_bus_msgs.len() {
-            cols.has_commitments_bus_msg = F::ONE;
+            cols.has_commitments_bus_msg =
+                F::from_canonical_usize(mvk.inner.params.num_whir_queries);
             cols.commitments_bus_msg = commitments_bus_msgs[i].clone();
         }
         cols.whir_round = F::from_canonical_usize(i);
