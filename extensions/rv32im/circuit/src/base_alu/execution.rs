@@ -14,6 +14,9 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+use crate::common::rv32_register_to_gpr;
+use crate::common::gpr_to_rv32_register;
+
 use crate::{adapters::imm_to_bytes, BaseAluExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -196,8 +199,9 @@ where
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> where F: PrimeField32
 {
     fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
-        false
+        true
     }
+
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
@@ -209,24 +213,10 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_
         let b: i16 = to_i16(inst.b);
         let c: i16 = to_i16(inst.c);
         let e: i16 = to_i16(inst.e);
-        let xmm_map_reg_a = if (a / 4) % 2 == 0 {
-            a / 8
-        } else {
-            ((a / 4) - 1) / 2 // floor((a/4)/2)
-        };
-        let xmm_map_reg_b = if (b / 4) % 2 == 0 {
-            b / 8
-        } else {
-            ((b / 4) - 1) / 2
-        };
-        // [a:4]_1 <- [b:4]_1
-        if (b / 4) % 2 == 0 {
-            // get the [0:32) bits of xmm_map_reg_b
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A, xmm_map_reg_b);
-        } else {
-            // get the [32:64) bits of xmm_map_reg_b
-            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_A_W, xmm_map_reg_b);
-        }
+
+        // load the left operand of the opcode
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+
         let mut asm_opcode = String::new();
         if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
             asm_opcode += "add";
@@ -239,44 +229,17 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F> for BaseAluExecutor<A, { RV32_
         } else if inst.opcode == BaseAluOpcode::XOR.global_opcode() {
             asm_opcode += "xor";
         }
+
         if e == 0 {
-            // [a:4]_1 <- [a:4]_1 + c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, c);
+            // [a:4]_1 = [a:4]_1 + c
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, c);
         } else {
-            // [a:4]_1 <- [a:4]_1 + [c:4]_1
-            assert_eq!(c % 4, 0);
-            let xmm_map_reg_c = if (c / 4) % 2 == 0 {
-                c / 8
-            } else {
-                ((c / 4) - 1) / 2
-            };
-            // XMM -> General Register
-            if (c / 4) % 2 == 0 {
-                // get the [0:32) bits of xmm_map_reg_c
-                asm_str += &format!("   vmovd {}, xmm{}\n", REG_C, xmm_map_reg_c);
-            } else {
-                // get the [32:64) bits of xmm_map_reg_b
-                asm_str += &format!("   vpextrd {REG_C_W}, xmm{}, 1\n", xmm_map_reg_c);
-            }
-            // reg_a += reg_c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A, REG_C);
+            // load the right operand of the opcode
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, REG_C_W);
         }
-        // General Register -> XMM
-        if (a / 4) % 2 == 0 {
-            // make the [0:32) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
-            // bits
-            asm_str += &format!(
-                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n",
-                xmm_map_reg_a, xmm_map_reg_a
-            );
-        } else {
-            // make the [32:64) bits of xmm_map_reg_a equal to REG_A_W without modifying the other
-            // bits
-            asm_str += &format!(
-                "   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n",
-                xmm_map_reg_a, xmm_map_reg_a
-            );
-        }
+
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         asm_str += &format!("   add {}, {}\n", REG_PC, 4);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         Ok(asm_str)

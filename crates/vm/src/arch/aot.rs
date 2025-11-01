@@ -322,6 +322,7 @@ where
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
+                asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
@@ -335,7 +336,7 @@ where
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
-                asm_str += &Self::rv32_regs_to_xmm(); // read the memory from the memory location of the RV32 registers in `GuestMemory`
+                 // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                                       // registers, to the appropriate XMM registers
                 asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should
                                                    // terminate)
