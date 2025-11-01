@@ -1,16 +1,25 @@
-use std::sync::Arc;
+//! Traits and types describing the core interfaces of the verifier sub-circuit. The verifier
+//! sub-circuit verifies multiple proofs for the same child verifying key. It supports **recursive**
+//! verification, where the child verifying key is equal to the verifying key of the verifier
+//! circuit itself.
+use std::{iter, sync::Arc};
 
-use openvm_stark_backend::{AirRef, interaction::BusIndex, prover::types::AirProofRawInput};
+use openvm_stark_backend::{AirRef, interaction::BusIndex};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    DIGEST_SIZE, EF, F,
+    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, Digest, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
     proof::{Proof, TraceVData},
+    prover::{
+        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, ProverBackendV2,
+        stacked_pcs::StackedPcsData,
+    },
 };
 
 use crate::{
-    batch_constraint::BatchConstraintModule,
+    batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
         CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
@@ -24,45 +33,46 @@ use crate::{
     transcript::TranscriptModule,
     whir::{FoldRecord, WhirModule},
 };
-#[cfg(feature = "cuda")]
-use {
-    crate::cuda::{preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu},
-    cuda_backend_v2::GpuBackendV2,
-    itertools::Itertools,
-    openvm_cuda_backend::data_transporter::transport_matrix_to_device,
-    stark_backend_v2::prover::AirProvingContextV2,
-};
 
 mod dummy;
 
-pub trait AirModule<TS: FiatShamirTranscript + TranscriptHistory> {
+// TODO[jpw]: make this generic in <SC: StarkGenericConfig>
+pub trait AirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>>;
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, transcript: &mut TS);
-    fn generate_proof_inputs(
-        &self,
-        proof: &[Proof],
-        preflight: &[Preflight],
-    ) -> Vec<AirProofRawInput<F>>;
+}
 
-    #[cfg(feature = "cuda")]
-    fn generate_proving_ctx_gpu(
+/// Trait defining the types for the global input shared across modules for trace generation. These
+/// types are specialized per hardware backend.
+pub trait GlobalTraceGenCtx {
+    /// Verifying key of the child proof to be verified. This is a multi-trace verifying key.
+    type ChildVerifyingKey;
+    /// Type for a collection of proofs.
+    type MultiProof: ?Sized;
+    /// Preflight records corresponding to an instance of `MultiProof`.
+    // NOTE[jpw]: we can add lifetimes if necessary
+    type PreflightRecords: ?Sized;
+}
+
+/// Trait for generating the trace matrices, on device, for a given AIR module.
+/// The module has a view of all proofs being verified as well as the global preflight records from
+/// each proof.
+///
+/// This function should be expected to be called in parallel, one logical thread per module.
+pub trait TraceGenModule<TC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Sync {
+    fn generate_proving_ctxs(
         &self,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-        _vk_gpu: &VerifyingKeyGpu,
-        _proofs_gpu: &[ProofGpu],
-        _preflights_gpu: &[PreflightGpu],
-    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-        let raw_inputs = self.generate_proof_inputs(proofs, preflights);
-        raw_inputs
-            .into_iter()
-            .map(|input| AirProvingContextV2 {
-                cached_mains: vec![],
-                common_main: transport_matrix_to_device(input.common_main.unwrap()),
-                public_values: vec![],
-            })
-            .collect_vec()
-    }
+        child_vk: &TC::ChildVerifyingKey,
+        proofs: &TC::MultiProof,
+        preflights: &TC::PreflightRecords,
+    ) -> Vec<AirProvingContextV2<PB>>;
+}
+
+pub struct GlobalCtxCpu;
+
+impl GlobalTraceGenCtx for GlobalCtxCpu {
+    type ChildVerifyingKey = MultiStarkVerifyingKeyV2;
+    type MultiProof = [Proof];
+    type PreflightRecords = [Preflight];
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -114,11 +124,13 @@ pub struct BusInventory {
     pub exp_bits_len_bus: ExpBitsLenBus,
 }
 
+/// The records from global recursion preflight on CPU for verifying a single proof.
 #[derive(Clone, Debug, Default)]
 pub struct Preflight {
     /// The concatenated sequence of observes/samples. Not available during preflight; populated
     /// after.
     pub transcript: TranscriptLog,
+    // TODO[jpw]: flatten and remove these preflight types if they are mostly trivial
     pub proof_shape: ProofShapePreflight,
     pub gkr: GkrPreflight,
     pub batch_constraint: BatchConstraintPreflight,
@@ -233,125 +245,223 @@ impl BusInventory {
     }
 }
 
-pub struct VerifierCircuit<TS, const MAX_NUM_PROOFS: usize> {
-    modules: Vec<Box<dyn AirModule<TS>>>,
+/// The recursive verifier sub-circuit consists of multiple chips, grouped into **modules**.
+///
+/// This struct is stateful.
+pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
+    transcript: TranscriptModule,
+    proof_shape: ProofShapeModule,
+    gkr: GkrModule,
+    batch_constraint: BatchConstraintModule,
+    stacking: StackingModule,
+    whir: WhirModule,
+
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
-impl<TS, const MAX_NUM_PROOFS: usize> VerifierCircuit<TS, MAX_NUM_PROOFS>
-where
-    TS: FiatShamirTranscript + TranscriptHistory,
-{
+impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn new(child_mvk: Arc<MultiStarkVerifyingKeyV2>) -> Self {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
         let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
 
-        let transcript_module = TranscriptModule::new(child_mvk.clone(), bus_inventory.clone());
-        let proof_shape_module =
-            ProofShapeModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
-        let gkr_module = GkrModule::new(
-            child_mvk.clone(),
+        let transcript = TranscriptModule::new(bus_inventory.clone());
+        let proof_shape = ProofShapeModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let gkr = GkrModule::new(
+            &child_mvk,
             &mut b,
             bus_inventory.clone(),
             exp_bits_len_air.clone(),
         );
-        let batch_constraint_module = BatchConstraintModule::new(
-            child_mvk.clone(),
-            &mut b,
-            bus_inventory.clone(),
-            MAX_NUM_PROOFS,
-        );
-        let stacking_module = StackingModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
-        let whir_module = WhirModule::new(
-            child_mvk.clone(),
+        let batch_constraint =
+            BatchConstraintModule::new(&child_mvk, &mut b, bus_inventory.clone(), MAX_NUM_PROOFS);
+        let stacking = StackingModule::new(&child_mvk, &mut b, bus_inventory.clone());
+        let whir = WhirModule::new(
+            &child_mvk,
             &mut b,
             bus_inventory.clone(),
             exp_bits_len_air.clone(),
         );
 
-        let modules: Vec<Box<dyn AirModule<TS>>> = vec![
-            Box::new(transcript_module),
-            Box::new(proof_shape_module),
-            Box::new(gkr_module),
-            Box::new(batch_constraint_module),
-            Box::new(stacking_module),
-            Box::new(whir_module),
-        ];
-        VerifierCircuit {
-            modules,
+        VerifierSubCircuit {
+            transcript,
+            proof_shape,
+            gkr,
+            batch_constraint,
+            stacking,
+            whir,
             exp_bits_len_air,
         }
     }
 
     pub fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let mut airs = vec![];
-        for module in &self.modules {
-            airs.extend(module.airs());
-        }
-        airs.push(self.exp_bits_len_air.clone());
-        airs
+        iter::empty()
+            .chain(self.transcript.airs())
+            .chain(self.proof_shape.airs())
+            .chain(self.gkr.airs())
+            .chain(self.batch_constraint.airs())
+            .chain(self.stacking.airs())
+            .chain(self.whir.airs())
+            .chain([self.exp_bits_len_air.clone() as AirRef<_>])
+            .collect()
     }
 
-    pub fn run_preflight(&self, mut sponge: TS, proof: &Proof) -> Preflight {
+    /// Runs preflight for a single proof.
+    pub fn run_preflight<TS>(&self, mut sponge: TS, proof: &Proof) -> Preflight
+    where
+        TS: FiatShamirTranscript + TranscriptHistory,
+    {
         let mut preflight = Preflight::default();
-        for module in self.modules.iter() {
-            module.run_preflight(proof, &mut preflight, &mut sponge);
-        }
+        // NOTE: it is not required that we group preflight into modules
+        self.proof_shape
+            .run_preflight(proof, &mut preflight, &mut sponge);
+        self.gkr.run_preflight(proof, &mut preflight, &mut sponge);
+        self.batch_constraint
+            .run_preflight(proof, &mut preflight, &mut sponge);
+        self.stacking
+            .run_preflight(proof, &mut preflight, &mut sponge);
+        self.whir.run_preflight(proof, &mut preflight, &mut sponge);
+
         preflight.transcript = sponge.into_log();
         preflight
     }
 
-    pub fn generate_proof_inputs(&self, proofs: &[Proof]) -> Vec<AirProofRawInput<F>>
+    // TODO: consider making trait for commit_child_vk and generate_proving_ctxs generic in
+    // ProverBackendV2
+    pub fn commit_child_vk(
+        &self,
+        engine: &BabyBearPoseidon2CpuEngineV2,
+        child_vk: &MultiStarkVerifyingKeyV2,
+    ) -> (Digest, Arc<StackedPcsData<F, Digest>>) {
+        let (commit, data) = self.batch_constraint.commit_child_vk(engine, child_vk);
+        (commit, Arc::new(data))
+    }
+
+    /// The generic `TS` allows using different transcript implementations for debugging purposes.
+    /// The default type is use is `DuplexSpongeRecorder`.
+    pub fn generate_proving_ctxs<TS>(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk_pcs_data: (Digest, Arc<StackedPcsData<F, Digest>>),
+        proofs: &[Proof],
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>>
     where
-        TS: Default,
+        TS: FiatShamirTranscript + TranscriptHistory + Default,
     {
         debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
         let preflights = proofs
-            .iter()
+            .par_iter()
             .map(|proof| {
                 let sponge = TS::default();
                 self.run_preflight(sponge, proof)
             })
             .collect::<Vec<_>>();
 
-        let mut proof_inputs = vec![];
-        for (i, module) in self.modules.iter().enumerate() {
-            let module_proof_inputs = module.generate_proof_inputs(proofs, &preflights);
-            debug_assert_eq!(
-                module_proof_inputs.len(),
-                module.airs().len(),
-                "module {} generated {} proof inputs but {} airs",
-                i,
-                module_proof_inputs.len(),
-                module.airs().len()
-            );
-            proof_inputs.extend(module_proof_inputs);
-        }
-        proof_inputs.push(self.exp_bits_len_air.generate_proof_input());
-        proof_inputs
+        const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
+        let modules = vec![
+            &self.transcript as &dyn TraceGenModule<GlobalCtxCpu, CpuBackendV2>,
+            &self.proof_shape as &dyn TraceGenModule<_, _>,
+            &self.gkr as &dyn TraceGenModule<_, _>,
+            &self.batch_constraint as &dyn TraceGenModule<_, _>,
+            &self.stacking as &dyn TraceGenModule<_, _>,
+            &self.whir as &dyn TraceGenModule<_, _>,
+        ];
+        let mut ctxs_by_module = modules
+            .into_par_iter()
+            .map(|module| module.generate_proving_ctxs(child_vk, proofs, &preflights))
+            .collect::<Vec<_>>();
+        ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX].cached_mains =
+            vec![child_vk_pcs_data];
+        let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
+        // Caution: this must be done after GKR and WHIR tracegen
+        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+            ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major()),
+        ));
+        self.clear();
+
+        ctx_per_trace
     }
 
-    #[cfg(feature = "cuda")]
-    pub fn generate_proving_ctx_gpu(
-        &self,
-        proofs: &[Proof],
-        preflights: &[Preflight],
-        vk_gpu: &VerifyingKeyGpu,
-        proofs_gpu: &[ProofGpu],
-        preflights_gpu: &[PreflightGpu],
-    ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
-        let mut proving_ctx = vec![];
-        for module in &self.modules {
-            let module_proving_ctx = module.generate_proving_ctx_gpu(
-                proofs,
-                preflights,
-                vk_gpu,
-                proofs_gpu,
-                preflights_gpu,
-            );
-            proving_ctx.extend(module_proving_ctx);
+    // TODO[jpw]: remove this, Circuit should not be stateful. INT-5366
+    pub(crate) fn clear(&self) {
+        self.exp_bits_len_air.records.lock().unwrap().clear();
+    }
+}
+
+#[cfg(feature = "cuda")]
+pub mod cuda_tracegen {
+    use cuda_backend_v2::{
+        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, stacked_pcs::StackedPcsDataGpu,
+        transport_matrix_h2d_col_major,
+    };
+
+    use super::*;
+    use crate::cuda::{
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    };
+
+    impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
+        pub fn commit_child_vk_gpu(
+            &self,
+            engine: &BabyBearPoseidon2GpuEngineV2,
+            child_vk: &MultiStarkVerifyingKeyV2,
+        ) -> (Digest, Arc<StackedPcsDataGpu<F, Digest>>) {
+            let (commit, data) = self.batch_constraint.commit_child_vk_gpu(engine, child_vk);
+            (commit, Arc::new(data))
         }
-        proving_ctx
+
+        pub fn generate_proving_ctxs_gpu<TS>(
+            &self,
+            child_vk: &MultiStarkVerifyingKeyV2,
+            child_vk_pcs_data: (Digest, Arc<StackedPcsDataGpu<F, Digest>>),
+            proofs: &[Proof],
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>>
+        where
+            TS: FiatShamirTranscript + TranscriptHistory + Default,
+        {
+            debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
+            let child_vk_gpu = VerifyingKeyGpu::new(&child_vk);
+            let proofs_gpu = proofs
+                .into_iter()
+                .map(|proof_cpu| ProofGpu::new(child_vk, &proof_cpu))
+                .collect::<Vec<_>>();
+            let preflights_gpu = proofs
+                .par_iter()
+                .map(|proof| {
+                    let sponge = TS::default();
+                    let preflight_cpu = self.run_preflight(sponge, proof);
+                    // NOTE: this uses one stream per thread for H2D transfer
+                    PreflightGpu::new(child_vk, proof, &preflight_cpu)
+                })
+                .collect::<Vec<_>>();
+            const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
+            let modules = vec![
+                &self.transcript as &dyn TraceGenModule<GlobalCtxGpu, GpuBackendV2>,
+                &self.proof_shape as &dyn TraceGenModule<_, _>,
+                &self.gkr as &dyn TraceGenModule<_, _>,
+                &self.batch_constraint as &dyn TraceGenModule<_, _>,
+                &self.stacking as &dyn TraceGenModule<_, _>,
+                &self.whir as &dyn TraceGenModule<_, _>,
+            ];
+            let mut ctxs_by_module = modules
+                .into_par_iter()
+                .map(|module| {
+                    module.generate_proving_ctxs(&child_vk_gpu, &proofs_gpu, &preflights_gpu)
+                })
+                .collect::<Vec<_>>();
+            ctxs_by_module[BATCH_CONSTRAINT_MOD_IDX][LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX]
+                .cached_mains = vec![child_vk_pcs_data];
+            let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
+            // TODO: move this to gpu
+            // Caution: this must be done after GKR and WHIR tracegen
+            let exp_bits_trace =
+                ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major());
+            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                transport_matrix_h2d_col_major(&exp_bits_trace).unwrap(),
+            ));
+            self.clear();
+
+            ctx_per_trace
+        }
     }
 }

@@ -8,9 +8,12 @@
 //! The GKR Air Module verifies the [`GkrProof`](stark_backend_v2::proof::GkrProof) struct and
 //! consists of four AIRs:
 //!
-//! 1. **GkrInputAir** - Handles initial setup, coordinates other AIRs, and sends final claims to batch constraint module
-//! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction (verifies [`verify_gkr`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr))
-//! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer (verifies [`verify_gkr_sumcheck`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
+//! 1. **GkrInputAir** - Handles initial setup, coordinates other AIRs, and sends final claims to
+//!    batch constraint module
+//! 2. **GkrLayerAir** - Manages layer-by-layer GKR reduction (verifies
+//!    [`verify_gkr`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr))
+//! 3. **GkrLayerSumcheckAir** - Executes sumcheck protocol for each layer (verifies
+//!    [`verify_gkr_sumcheck`](stark_backend_v2::verifier::fractional_sumcheck_gkr::verify_gkr_sumcheck))
 //! 4. **GkrXiSamplerAir** - Samples additional xi randomness challenges if required
 //!
 //! ## Architecture
@@ -58,7 +61,7 @@
 use core::iter::zip;
 use std::sync::Arc;
 
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*, prover::types::AirProofRawInput};
+use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra};
 use stark_backend_v2::{
@@ -67,6 +70,7 @@ use stark_backend_v2::{
     poly_common::{interpolate_cubic_at_0123, interpolate_linear_at_01},
     poseidon2::sponge::{FiatShamirTranscript, ReadOnlyTranscript, TranscriptHistory},
     proof::{GkrProof, Proof},
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 
 use crate::{
@@ -78,7 +82,10 @@ use crate::{
         xi_sampler::{GkrXiSamplerAir, GkrXiSamplerRecord},
     },
     primitives::exp_bits_len::ExpBitsLenAir,
-    system::{AirModule, BusIndexManager, BusInventory, GkrPreflight, Preflight},
+    system::{
+        AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
+        TraceGenModule,
+    },
 };
 
 // Internal bus definitions
@@ -121,7 +128,7 @@ pub struct GkrProofRecord {
 
 impl GkrModule {
     pub fn new(
-        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        mvk: &MultiStarkVerifyingKeyV2,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         exp_bits_len_air: Arc<ExpBitsLenAir>,
@@ -139,55 +146,11 @@ impl GkrModule {
             xi_sampler_bus: GkrXiSamplerBus::new(b.new_bus_idx()),
         }
     }
-}
 
-impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let gkr_input_air = GkrInputAir {
-            l_skip: self.l_skip,
-            logup_pow_bits: self.logup_pow_bits,
-            gkr_module_bus: self.bus_inventory.gkr_module_bus,
-            bc_module_bus: self.bus_inventory.bc_module_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
-            layer_input_bus: self.layer_input_bus,
-            layer_output_bus: self.layer_output_bus,
-            xi_sampler_bus: self.xi_sampler_bus,
-        };
-
-        let gkr_layer_air = GkrLayerAir {
-            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            layer_input_bus: self.layer_input_bus,
-            layer_output_bus: self.layer_output_bus,
-            sumcheck_input_bus: self.sumcheck_input_bus,
-            sumcheck_challenge_bus: self.sumcheck_challenge_bus,
-            sumcheck_output_bus: self.sumcheck_output_bus,
-        };
-
-        let gkr_sumcheck_air = GkrLayerSumcheckAir::new(
-            self.bus_inventory.transcript_bus,
-            self.bus_inventory.xi_randomness_bus,
-            self.sumcheck_input_bus,
-            self.sumcheck_output_bus,
-            self.sumcheck_challenge_bus,
-        );
-
-        let gkr_xi_sampler_air = GkrXiSamplerAir {
-            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            xi_sampler_bus: self.xi_sampler_bus,
-        };
-
-        vec![
-            Arc::new(gkr_input_air) as AirRef<_>,
-            Arc::new(gkr_layer_air) as AirRef<_>,
-            Arc::new(gkr_sumcheck_air) as AirRef<_>,
-            Arc::new(gkr_xi_sampler_air) as AirRef<_>,
-        ]
-    }
-
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
+    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
+    where
+        TS: FiatShamirTranscript + TranscriptHistory,
+    {
         let GkrProof {
             q0_claim,
             claims_per_layer,
@@ -294,12 +257,62 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
             xi,
         };
     }
+}
 
-    fn generate_proof_inputs(
+impl AirModule for GkrModule {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let gkr_input_air = GkrInputAir {
+            l_skip: self.l_skip,
+            logup_pow_bits: self.logup_pow_bits,
+            gkr_module_bus: self.bus_inventory.gkr_module_bus,
+            bc_module_bus: self.bus_inventory.bc_module_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
+            layer_input_bus: self.layer_input_bus,
+            layer_output_bus: self.layer_output_bus,
+            xi_sampler_bus: self.xi_sampler_bus,
+        };
+
+        let gkr_layer_air = GkrLayerAir {
+            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            layer_input_bus: self.layer_input_bus,
+            layer_output_bus: self.layer_output_bus,
+            sumcheck_input_bus: self.sumcheck_input_bus,
+            sumcheck_challenge_bus: self.sumcheck_challenge_bus,
+            sumcheck_output_bus: self.sumcheck_output_bus,
+        };
+
+        let gkr_sumcheck_air = GkrLayerSumcheckAir::new(
+            self.bus_inventory.transcript_bus,
+            self.bus_inventory.xi_randomness_bus,
+            self.sumcheck_input_bus,
+            self.sumcheck_output_bus,
+            self.sumcheck_challenge_bus,
+        );
+
+        let gkr_xi_sampler_air = GkrXiSamplerAir {
+            xi_randomness_bus: self.bus_inventory.xi_randomness_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            xi_sampler_bus: self.xi_sampler_bus,
+        };
+
+        vec![
+            Arc::new(gkr_input_air) as AirRef<_>,
+            Arc::new(gkr_layer_air) as AirRef<_>,
+            Arc::new(gkr_sumcheck_air) as AirRef<_>,
+            Arc::new(gkr_xi_sampler_air) as AirRef<_>,
+        ]
+    }
+}
+
+impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
+    fn generate_proving_ctxs(
         &self,
+        _child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-    ) -> Vec<AirProofRawInput<F>> {
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         debug_assert_eq!(proofs.len(), preflights.len());
 
         let per_proof_records: Vec<GkrProofRecord> = proofs
@@ -499,38 +512,59 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for GkrModule {
             q0_claims.push(q0_claim);
         }
 
-        vec![
+        // TODO: parallelize function calls
+        [
             // GkrInputAir proof input
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(input::generate_trace(input_records, &q0_claims))),
-                public_values: vec![],
-            },
+            input::generate_trace(input_records, &q0_claims),
             // GkrLayerAir proof input
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(layer::generate_trace(
-                    layer_records,
-                    &mus_records,
-                    &q0_claims,
-                ))),
-                public_values: vec![],
-            },
+            layer::generate_trace(layer_records, &mus_records, &q0_claims),
             // GkrLayerSumcheckAir proof input
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(
-                    sumcheck_records,
-                    &mus_records,
-                ))),
-                public_values: vec![],
-            },
+            sumcheck::generate_trace(sumcheck_records, &mus_records),
             // GkrXiSamplerAir proof input
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(xi_sampler::generate_trace(xi_sampler_records))),
-                public_values: vec![],
-            },
+            xi_sampler::generate_trace(xi_sampler_records),
         ]
+        .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+        .into_iter()
+        .collect()
+    }
+}
+
+#[cfg(feature = "cuda")]
+mod cuda_tracegen {
+    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use itertools::Itertools;
+
+    use super::*;
+    use crate::cuda::{
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    };
+
+    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for GkrModule {
+        fn generate_proving_ctxs(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            // default hybrid implementation:
+            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
+                self,
+                &child_vk.cpu,
+                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
+                &preflights
+                    .iter()
+                    .map(|preflight| preflight.cpu.clone())
+                    .collect_vec(),
+            );
+            ctxs_cpu
+                .into_iter()
+                .map(|ctx| {
+                    assert!(ctx.cached_mains.is_empty());
+                    AirProvingContextV2::simple_no_pis(
+                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
+                    )
+                })
+                .collect()
+        }
     }
 }
