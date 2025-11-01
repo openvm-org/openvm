@@ -431,22 +431,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir {
     }
 }
 
-/// Returns the pair (cached main trace, common main trace).
-pub(crate) fn generate_symbolic_expression_traces(
+/// Returns the common main trace.
+pub(crate) fn generate_symbolic_expr_common_trace(
     _vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
     preflights: &[Preflight],
     max_num_proofs: usize,
-) -> (RowMajorMatrix<F>, RowMajorMatrix<F>) {
-    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+) -> RowMajorMatrix<F> {
     let single_main_width = SingleMainSymbolicExpressionColumns::<F>::width();
     let main_width = single_main_width * max_num_proofs;
-
-    let mut cached_trace = vec![F::ZERO; cached_width];
-    {
-        let cols: &mut CachedSymbolicExpressionColumns<_> = cached_trace[..].borrow_mut();
-        cols.is_valid = F::ONE;
-    }
 
     let mut main_trace = vec![F::ZERO; main_width];
     for (preflight, chunk) in preflights
@@ -458,10 +451,24 @@ pub(crate) fn generate_symbolic_expression_traces(
         cols.is_existing_proof = F::ONE;
     }
 
-    (
-        RowMajorMatrix::new(cached_trace, cached_width),
-        RowMajorMatrix::new(main_trace, main_width),
-    )
+    RowMajorMatrix::new(main_trace, main_width)
+}
+
+/// Returns the cached trace
+pub(crate) fn generate_symbolic_expr_cached_trace(
+    _child_vk: &MultiStarkVerifyingKeyV2,
+) -> RowMajorMatrix<F> {
+    let cached_width = CachedSymbolicExpressionColumns::<F>::width();
+
+    let mut cached_trace = vec![F::ZERO; cached_width];
+    // TODO: fill in cached trace
+    {
+        let cols: &mut CachedSymbolicExpressionColumns<_> =
+            cached_trace[..cached_width].borrow_mut();
+        cols.is_valid = F::ONE;
+    }
+
+    RowMajorMatrix::new(cached_trace, cached_width)
 }
 
 pub(crate) fn generate_column_claim_trace(

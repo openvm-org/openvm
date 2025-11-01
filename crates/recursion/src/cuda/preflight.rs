@@ -13,6 +13,8 @@ use crate::{
  */
 #[derive(Debug)]
 pub struct PreflightGpu {
+    // TODO[TEMP]: cpu preflight for hybrid usage; remove this when no longer needed
+    pub cpu: Preflight,
     pub transcript: TranscriptLog,
     pub proof_shape: ProofShapePreflightGpu,
     pub gkr: GkrPreflightGpu,
@@ -65,6 +67,7 @@ pub struct WhirPreflightGpu {
 impl PreflightGpu {
     pub fn new(vk: &MultiStarkVerifyingKeyV2, proof: &Proof, preflight: &Preflight) -> Self {
         PreflightGpu {
+            cpu: preflight.clone(),
             transcript: Self::transcript(preflight),
             proof_shape: Self::proof_shape(vk, proof, preflight),
             gkr: Self::gkr(preflight),

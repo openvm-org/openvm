@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use itertools::{Itertools, izip};
-use openvm_stark_backend::{AirRef, prover::types::AirProofRawInput};
+use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, PrimeField32, TwoAdicField};
 use stark_backend_v2::{
@@ -10,13 +10,16 @@ use stark_backend_v2::{
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{Proof, WhirProof},
-    prover::poly::Mle,
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
 };
 
 use crate::{
     bus::MerkleVerifyBusMessage,
     primitives::exp_bits_len::ExpBitsLenAir,
-    system::{AirModule, BusIndexManager, BusInventory, Preflight, WhirPreflight},
+    system::{
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
+        WhirPreflight,
+    },
     whir::{
         bus::{
             FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus, VerifyQueryBus,
@@ -45,7 +48,7 @@ mod sumcheck;
 mod whir_round;
 
 pub struct WhirModule {
-    mvk: Arc<MultiStarkVerifyingKeyV2>,
+    params: SystemParams,
     bus_inventory: BusInventory,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 
@@ -67,7 +70,7 @@ pub struct WhirModule {
 
 impl WhirModule {
     pub fn new(
-        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        child_vk: &MultiStarkVerifyingKeyV2,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
         exp_bits_len_air: Arc<ExpBitsLenAir>,
@@ -84,7 +87,7 @@ impl WhirModule {
         let final_poly_query_eval_bus = FinalPolyQueryEvalBus::new(b.new_bus_idx());
         let final_poly_bus = WhirFinalPolyBus::new(b.new_bus_idx());
         Self {
-            mvk,
+            params: child_vk.inner.params,
             bus_inventory,
             exp_bits_len_air,
             sumcheck_bus,
@@ -100,84 +103,10 @@ impl WhirModule {
             final_poly_bus,
         }
     }
-}
-
-impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule {
-    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
-        let whir_round_air = WhirRoundAir {
-            whir_module_bus: self.bus_inventory.whir_module_bus,
-            commitments_bus: self.bus_inventory.commitments_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
-            sumcheck_bus: self.sumcheck_bus,
-            verify_queries_bus: self.verify_queries_bus,
-            final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
-            final_poly_query_eval_bus: self.final_poly_query_eval_bus,
-            query_bus: self.query_bus,
-            gamma_bus: self.gamma_bus,
-            k: self.mvk.inner.params.k_whir,
-            num_queries: self.mvk.inner.params.num_whir_queries,
-            final_poly_len: 1 << self.mvk.inner.params.log_final_poly_len,
-            pow_bits: self.mvk.inner.params.whir_pow_bits,
-            generator: F::GENERATOR,
-        };
-        let whir_sumcheck_air = SumcheckAir {
-            sumcheck_bus: self.sumcheck_bus,
-            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            alpha_bus: self.alpha_bus,
-            eq_alpha_u_bus: self.eq_alpha_u_bus,
-        };
-        let initial_round_opened_values_air = InitialOpenedValuesAir {
-            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
-            verify_query_bus: self.verify_query_bus,
-            folding_bus: self.folding_bus,
-            k: self.mvk.inner.params.k_whir,
-        };
-        let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
-            verify_query_bus: self.verify_query_bus,
-            folding_bus: self.folding_bus,
-            k: self.mvk.inner.params.k_whir,
-        };
-        let query_air = WhirQueryAir {
-            transcript_bus: self.bus_inventory.transcript_bus,
-            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
-            query_bus: self.query_bus,
-            verify_queries_bus: self.verify_queries_bus,
-            verify_query_bus: self.verify_query_bus,
-        };
-        let folding_air = WhirFoldingAir {
-            alpha_bus: self.alpha_bus,
-            folding_bus: self.folding_bus,
-            k: self.mvk.inner.params.k_whir,
-        };
-        let final_poly_mle_eval_air = FinalPoleMleEvalAir {
-            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
-            transcript_bus: self.bus_inventory.transcript_bus,
-            final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
-            eq_alpha_u_bus: self.eq_alpha_u_bus,
-            final_poly_bus: self.final_poly_bus,
-        };
-        let final_poly_query_eval_air = FinalPolyQueryEvalAir {
-            query_bus: self.query_bus,
-            alpha_bus: self.alpha_bus,
-            gamma_bus: self.gamma_bus,
-            final_poly_bus: self.final_poly_bus,
-            final_poly_query_eval_bus: self.final_poly_query_eval_bus,
-        };
-        vec![
-            Arc::new(whir_round_air),
-            Arc::new(whir_sumcheck_air),
-            Arc::new(initial_round_opened_values_air),
-            Arc::new(non_initial_round_opened_values_air),
-            Arc::new(query_air),
-            Arc::new(folding_air),
-            Arc::new(final_poly_mle_eval_air),
-            Arc::new(final_poly_query_eval_air),
-        ]
-    }
-
-    fn run_preflight(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS) {
+    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
+    where
+        TS: FiatShamirTranscript + TranscriptHistory,
+    {
         let WhirProof {
             whir_sumcheck_polys,
             codeword_commits,
@@ -196,8 +125,9 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
             k_whir,
             num_whir_queries,
             log_blowup,
+            whir_pow_bits,
             ..
-        } = self.mvk.inner.params;
+        } = self.params;
 
         let mut sumcheck_poly_iter = whir_sumcheck_polys.iter();
         let all_openings = proof
@@ -287,7 +217,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
             self.exp_bits_len_air.add_exp_bits_len(
                 F::GENERATOR,
                 pow_sample,
-                F::from_canonical_usize(self.mvk.inner.params.whir_pow_bits),
+                F::from_canonical_usize(whir_pow_bits),
                 F::ONE,
             );
 
@@ -384,7 +314,7 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
         let t = k_whir * num_whir_rounds;
         let u = preflight.stacking.sumcheck_rnd[0]
             .exp_powers_of_2()
-            .take(self.mvk.inner.params.l_skip)
+            .take(l_skip)
             .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
             .collect_vec();
         let final_poly_at_u = f.eval_at_point(&u[t..]);
@@ -411,70 +341,105 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for WhirModule 
         };
         preflight.merkle_verify_logs = merkle_verify_logs;
     }
+}
 
-    fn generate_proof_inputs(
+impl AirModule for WhirModule {
+    fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let whir_round_air = WhirRoundAir {
+            whir_module_bus: self.bus_inventory.whir_module_bus,
+            commitments_bus: self.bus_inventory.commitments_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
+            sumcheck_bus: self.sumcheck_bus,
+            verify_queries_bus: self.verify_queries_bus,
+            final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
+            final_poly_query_eval_bus: self.final_poly_query_eval_bus,
+            query_bus: self.query_bus,
+            gamma_bus: self.gamma_bus,
+            k: self.params.k_whir,
+            num_queries: self.params.num_whir_queries,
+            final_poly_len: 1 << self.params.log_final_poly_len,
+            pow_bits: self.params.whir_pow_bits,
+            generator: F::GENERATOR,
+        };
+        let whir_sumcheck_air = SumcheckAir {
+            sumcheck_bus: self.sumcheck_bus,
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            alpha_bus: self.alpha_bus,
+            eq_alpha_u_bus: self.eq_alpha_u_bus,
+        };
+        let initial_round_opened_values_air = InitialOpenedValuesAir {
+            stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
+            verify_query_bus: self.verify_query_bus,
+            folding_bus: self.folding_bus,
+            k: self.params.k_whir,
+        };
+        let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
+            verify_query_bus: self.verify_query_bus,
+            folding_bus: self.folding_bus,
+            k: self.params.k_whir,
+        };
+        let query_air = WhirQueryAir {
+            transcript_bus: self.bus_inventory.transcript_bus,
+            exp_bits_len_bus: self.bus_inventory.exp_bits_len_bus,
+            query_bus: self.query_bus,
+            verify_queries_bus: self.verify_queries_bus,
+            verify_query_bus: self.verify_query_bus,
+        };
+        let folding_air = WhirFoldingAir {
+            alpha_bus: self.alpha_bus,
+            folding_bus: self.folding_bus,
+            k: self.params.k_whir,
+        };
+        let final_poly_mle_eval_air = FinalPoleMleEvalAir {
+            whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
+            transcript_bus: self.bus_inventory.transcript_bus,
+            final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
+            eq_alpha_u_bus: self.eq_alpha_u_bus,
+            final_poly_bus: self.final_poly_bus,
+        };
+        let final_poly_query_eval_air = FinalPolyQueryEvalAir {
+            query_bus: self.query_bus,
+            alpha_bus: self.alpha_bus,
+            gamma_bus: self.gamma_bus,
+            final_poly_bus: self.final_poly_bus,
+            final_poly_query_eval_bus: self.final_poly_query_eval_bus,
+        };
+        vec![
+            Arc::new(whir_round_air),
+            Arc::new(whir_sumcheck_air),
+            Arc::new(initial_round_opened_values_air),
+            Arc::new(non_initial_round_opened_values_air),
+            Arc::new(query_air),
+            Arc::new(folding_air),
+            Arc::new(final_poly_mle_eval_air),
+            Arc::new(final_poly_query_eval_air),
+        ]
+    }
+}
+
+impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
+    fn generate_proving_ctxs(
         &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-    ) -> Vec<AirProofRawInput<F>> {
-        vec![
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(whir_round::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(sumcheck::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(initial_opened_values::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(non_initial_opened_values::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(query::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(folding::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(final_poly_mle_eval::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-            AirProofRawInput {
-                cached_mains: vec![],
-                common_main: Some(Arc::new(final_poly_query_eval::generate_trace(
-                    &self.mvk, proofs, preflights,
-                ))),
-                public_values: vec![],
-            },
-        ]
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        let traces = [
+            whir_round::generate_trace(child_vk, proofs, preflights),
+            sumcheck::generate_trace(child_vk, proofs, preflights),
+            initial_opened_values::generate_trace(child_vk, proofs, preflights),
+            non_initial_opened_values::generate_trace(child_vk, proofs, preflights),
+            query::generate_trace(child_vk, proofs, preflights),
+            folding::generate_trace(child_vk, proofs, preflights),
+            final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
+            final_poly_query_eval::generate_trace(child_vk, proofs, preflights),
+        ];
+        traces
+            .into_iter()
+            .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+            .collect()
     }
 }
 
@@ -541,3 +506,44 @@ fn binary_k_fold(
     }
     values[0]
 }
+
+#[cfg(feature = "cuda")]
+mod cuda_tracegen {
+    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use itertools::Itertools;
+
+    use super::*;
+    use crate::cuda::{
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    };
+
+    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for WhirModule {
+        fn generate_proving_ctxs(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            // default hybrid implementation:
+            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
+                self,
+                &child_vk.cpu,
+                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
+                &preflights
+                    .iter()
+                    .map(|preflight| preflight.cpu.clone())
+                    .collect_vec(),
+            );
+            ctxs_cpu
+                .into_iter()
+                .map(|ctx| {
+                    assert!(ctx.cached_mains.is_empty());
+                    AirProvingContextV2::simple_no_pis(
+                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
+                    )
+                })
+                .collect()
+        }
+    }
+}
+
