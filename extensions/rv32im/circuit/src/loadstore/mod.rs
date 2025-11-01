@@ -13,6 +13,8 @@ mod execution;
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
+#[cfg(feature = "aot")]
+mod aot;
 
 #[cfg(test)]
 mod tests;

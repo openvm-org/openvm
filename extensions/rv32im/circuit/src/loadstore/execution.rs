@@ -149,12 +149,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_CELLS> where
-    F: PrimeField32
-{
-}
-
 impl<F, A, const NUM_CELLS: usize> MeteredExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
