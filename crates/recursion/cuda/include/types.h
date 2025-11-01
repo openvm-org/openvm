@@ -8,19 +8,22 @@ const size_t DIGEST_SIZE = 8;
 typedef Fp Digest[DIGEST_SIZE];
 
 typedef struct {
-  size_t hypercube_dim;
-  bool is_present;
-  size_t num_cached;
-  size_t cached_idx;
+    size_t air_idx;
+    size_t hypercube_dim;
+    size_t cached_idx;
+    size_t starting_cidx;
+    size_t total_interactions;
 } TraceMetadata;
 
 typedef struct {
-  size_t air_idx;
-  size_t pv_idx;
-  Fp value;
+    size_t air_idx;
+    size_t air_num_pvs;
+    size_t pv_idx;
+    Fp value;
 } PublicValueData;
 
 typedef struct {
-  size_t num_interactions;
-  size_t has_preprocessed;
+    size_t num_cached;
+    size_t num_interactions_per_row;
+    bool has_preprocessed;
 } AirData;
