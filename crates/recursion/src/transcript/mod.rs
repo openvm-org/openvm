@@ -2,7 +2,7 @@ use core::borrow::BorrowMut;
 use std::sync::Arc;
 
 use openvm_poseidon2_air::{POSEIDON2_WIDTH, Poseidon2Config, Poseidon2SubChip};
-use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*, prover::types::AirProofRawInput};
+use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_air::BaseAir;
 use p3_baby_bear::Poseidon2BabyBear;
@@ -12,15 +12,13 @@ use p3_symmetric::Permutation;
 use stark_backend_v2::{
     F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::{
-        poseidon2_perm,
-        sponge::{FiatShamirTranscript, TranscriptHistory},
-    },
+    poseidon2::poseidon2_perm,
     proof::Proof,
+    prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
 };
 
 use crate::{
-    system::{AirModule, BusInventory, Preflight},
+    system::{AirModule, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule},
     transcript::{
         merkle_verify::{MerkleVerifyAir, MerkleVerifyCols},
         poseidon2::{CHUNK, Poseidon2Air, Poseidon2Cols},
@@ -36,7 +34,6 @@ pub mod transcript;
 const SBOX_REGISTERS: usize = 1;
 
 pub struct TranscriptModule {
-    mvk: Arc<MultiStarkVerifyingKeyV2>,
     pub bus_inventory: BusInventory,
 
     sub_chip: Poseidon2SubChip<F, SBOX_REGISTERS>,
@@ -44,10 +41,9 @@ pub struct TranscriptModule {
 }
 
 impl TranscriptModule {
-    pub fn new(mvk: Arc<MultiStarkVerifyingKeyV2>, bus_inventory: BusInventory) -> Self {
+    pub fn new(bus_inventory: BusInventory) -> Self {
         let sub_chip = Poseidon2SubChip::<F, 1>::new(Poseidon2Config::default().constants);
         Self {
-            mvk,
             bus_inventory,
             sub_chip,
             perm: poseidon2_perm().clone(),
@@ -55,7 +51,7 @@ impl TranscriptModule {
     }
 }
 
-impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptModule {
+impl AirModule for TranscriptModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let transcript_air = TranscriptAir {
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -76,14 +72,15 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
             Arc::new(merkle_verify_air),
         ]
     }
+}
 
-    fn run_preflight(&self, _proof: &Proof, _preflight: &mut Preflight, _ts: &mut TS) {}
-
-    fn generate_proof_inputs(
+impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
+    fn generate_proving_ctxs(
         &self,
+        _child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-    ) -> Vec<AirProofRawInput<F>> {
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         // TODO: need to "extract" the poseidon2 lookups from merkle verify
         let merkle_verify_trace = merkle_verify::generate_trace(proofs, preflights);
 
@@ -239,30 +236,53 @@ impl<TS: FiatShamirTranscript + TranscriptHistory> AirModule<TS> for TranscriptM
             });
 
         // Finally, make the RawInput structs
-        let transcript_input = AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                transcript_trace,
-                transcript_width,
-            ))),
-            public_values: vec![],
-        };
-        let poseidon2_input = AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                poseidon_trace,
-                poseidon2_width,
-            ))),
-            public_values: vec![],
-        };
-        let merkle_verify_input = AirProofRawInput {
-            cached_mains: vec![],
-            common_main: Some(Arc::new(RowMajorMatrix::new(
-                merkle_verify_trace,
-                MerkleVerifyCols::<F>::width(),
-            ))),
-            public_values: vec![],
-        };
-        vec![transcript_input, poseidon2_input, merkle_verify_input]
+        let transcript_trace = RowMajorMatrix::new(transcript_trace, transcript_width);
+        let poseidon2_trace = RowMajorMatrix::new(poseidon_trace, poseidon2_width);
+        let merkle_verify_trace =
+            RowMajorMatrix::new(merkle_verify_trace, MerkleVerifyCols::<F>::width());
+        [transcript_trace, poseidon2_trace, merkle_verify_trace]
+            .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
+            .into_iter()
+            .collect()
+    }
+}
+
+#[cfg(feature = "cuda")]
+mod cuda_tracegen {
+    use cuda_backend_v2::{GpuBackendV2, transport_matrix_h2d_col_major};
+    use itertools::Itertools;
+
+    use super::*;
+    use crate::cuda::{
+        GlobalCtxGpu, preflight::PreflightGpu, proof::ProofGpu, vk::VerifyingKeyGpu,
+    };
+
+    impl TraceGenModule<GlobalCtxGpu, GpuBackendV2> for TranscriptModule {
+        fn generate_proving_ctxs(
+            &self,
+            child_vk: &VerifyingKeyGpu,
+            proofs: &[ProofGpu],
+            preflights: &[PreflightGpu],
+        ) -> Vec<AirProvingContextV2<GpuBackendV2>> {
+            // default hybrid implementation:
+            let ctxs_cpu = TraceGenModule::<GlobalCtxCpu, CpuBackendV2>::generate_proving_ctxs(
+                self,
+                &child_vk.cpu,
+                &proofs.iter().map(|proof| proof.cpu.clone()).collect_vec(),
+                &preflights
+                    .iter()
+                    .map(|preflight| preflight.cpu.clone())
+                    .collect_vec(),
+            );
+            ctxs_cpu
+                .into_iter()
+                .map(|ctx| {
+                    assert!(ctx.cached_mains.is_empty());
+                    AirProvingContextV2::simple_no_pis(
+                        transport_matrix_h2d_col_major(&ctx.common_main).unwrap(),
+                    )
+                })
+                .collect()
+        }
     }
 }
