@@ -32,7 +32,10 @@ pub struct PublicValuesCols<F> {
     pub value: F,
 }
 
-pub(crate) fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> RowMajorMatrix<F> {
+pub(in crate::proof_shape) fn generate_trace(
+    proofs: &[Proof],
+    preflights: &[Preflight],
+) -> RowMajorMatrix<F> {
     let total_num_pvs: usize = proofs
         .iter()
         .map(|proof| {
