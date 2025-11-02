@@ -11,7 +11,6 @@ use stark_backend_v2::{
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice},
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
-    verifier::whir::merkle_verify,
 };
 
 use crate::{

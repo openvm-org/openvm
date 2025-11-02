@@ -14,6 +14,8 @@ use crate::{
 #[derive(Debug)]
 pub struct PreflightGpu {
     // TODO[TEMP]: cpu preflight for hybrid usage; remove this when no longer needed
+    // If you need something from `cpu` for actual cuda tracegen, move it to a direct field of
+    // PreflightGpu. Host and/or device types allowed.
     pub cpu: Preflight,
     pub transcript: TranscriptLog,
     pub proof_shape: ProofShapePreflightGpu,

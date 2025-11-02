@@ -58,13 +58,33 @@ pub trait GlobalTraceGenCtx {
 /// each proof.
 ///
 /// This function should be expected to be called in parallel, one logical thread per module.
-pub trait TraceGenModule<TC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Sync {
+pub trait TraceGenModule<GC: GlobalTraceGenCtx, PB: ProverBackendV2>: Send + Sync {
     fn generate_proving_ctxs(
         &self,
-        child_vk: &TC::ChildVerifyingKey,
-        proofs: &TC::MultiProof,
-        preflights: &TC::PreflightRecords,
+        child_vk: &GC::ChildVerifyingKey,
+        proofs: &GC::MultiProof,
+        preflights: &GC::PreflightRecords,
     ) -> Vec<AirProvingContextV2<PB>>;
+}
+
+/// Trait for internal use within this crate.
+/// This trait describes the trace generation for a single AIR within an AIR module.
+// NOTE: this trait should stay `pub(crate)` and not `pub` since it is for internal implementation
+// use only. The associated types should also stay private if possible.
+pub(crate) trait ModuleChip<GC: GlobalTraceGenCtx, PB: ProverBackendV2>:
+    Send + Sync
+{
+    type ModuleSpecificCtx;
+
+    /// Returns the common main trace for this AIR. This trait only provides the interface for
+    /// generating common main trace. Cached trace needs to be handled separately.
+    fn generate_trace(
+        &self,
+        child_vk: &GC::ChildVerifyingKey,
+        proofs: &GC::MultiProof,
+        preflights: &GC::PreflightRecords,
+        blob: &Self::ModuleSpecificCtx,
+    ) -> PB::Matrix;
 }
 
 pub struct GlobalCtxCpu;

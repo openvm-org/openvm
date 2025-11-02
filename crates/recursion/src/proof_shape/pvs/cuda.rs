@@ -1,15 +1,15 @@
+use cuda_backend_v2::F;
+use openvm_cuda_backend::base::DeviceMatrix;
+
 use crate::{
     cuda::{preflight::PreflightGpu, proof::ProofGpu},
     proof_shape::{cuda_abi::public_values_tracegen, pvs::PublicValuesCols},
 };
-use cuda_backend_v2::GpuBackendV2;
-use openvm_cuda_backend::base::DeviceMatrix;
-use stark_backend_v2::prover::AirProvingContextV2;
 
-pub(crate) fn generate_proving_ctx(
+pub(in crate::proof_shape) fn generate_trace(
     proofs_gpu: &[ProofGpu],
     preflights_gpu: &[PreflightGpu],
-) -> AirProvingContextV2<GpuBackendV2> {
+) -> DeviceMatrix<F> {
     debug_assert_eq!(proofs_gpu.len(), preflights_gpu.len());
 
     let num_pvs = proofs_gpu[0].proof_shape.public_values.len();
@@ -45,5 +45,5 @@ pub(crate) fn generate_proving_ctx(
         )
         .unwrap();
     }
-    AirProvingContextV2::simple_no_pis(trace)
+    trace
 }

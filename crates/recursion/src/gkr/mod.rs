@@ -61,6 +61,7 @@
 use core::iter::zip;
 use std::sync::Arc;
 
+use itertools::Itertools;
 use openvm_stark_backend::{AirRef, p3_maybe_rayon::prelude::*};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra};
@@ -83,8 +84,8 @@ use crate::{
     },
     primitives::exp_bits_len::ExpBitsLenAir,
     system::{
-        AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, Preflight,
-        TraceGenModule,
+        AirModule, BusIndexManager, BusInventory, GkrPreflight, GlobalCtxCpu, ModuleChip,
+        Preflight, TraceGenModule,
     },
 };
 
@@ -117,13 +118,13 @@ pub struct GkrModule {
     sumcheck_challenge_bus: GkrSumcheckChallengeBus,
 }
 
-pub struct GkrProofRecord {
-    input: GkrInputRecord,
-    layer: GkrLayerRecord,
-    sumcheck: GkrSumcheckRecord,
-    xi_sampler: GkrXiSamplerRecord,
-    mus: Vec<EF>,
-    q0_claim: EF,
+struct GkrBlobCpu {
+    input_records: Vec<GkrInputRecord>,
+    layer_records: Vec<GkrLayerRecord>,
+    sumcheck_records: Vec<GkrSumcheckRecord>,
+    xi_sampler_records: Vec<GkrXiSamplerRecord>,
+    mus_records: Vec<Vec<EF>>,
+    q0_claims: Vec<EF>,
 }
 
 impl GkrModule {
@@ -306,16 +307,18 @@ impl AirModule for GkrModule {
     }
 }
 
-impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
-    fn generate_proving_ctxs(
+impl GkrModule {
+    fn generate_blob(
         &self,
         _child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
-    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+    ) -> GkrBlobCpu {
         debug_assert_eq!(proofs.len(), preflights.len());
 
-        let per_proof_records: Vec<GkrProofRecord> = proofs
+        // NOTE: we only collect the zipped vec because rayon vs itertools has different treatment
+        // of multiunzip. This could be addressed with a macro similar to parizip!
+        let zipped_records: Vec<_> = proofs
             .par_iter()
             .zip(preflights.par_iter())
             .map(|(proof, preflight)| {
@@ -476,56 +479,86 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
                     GkrXiSamplerRecord::default()
                 };
 
-                GkrProofRecord {
-                    input: input_record,
-                    layer: layer_record,
-                    sumcheck: sumcheck_record,
-                    xi_sampler: xi_sampler_record,
+                (
+                    input_record,
+                    layer_record,
+                    sumcheck_record,
+                    xi_sampler_record,
                     mus,
-                    q0_claim: *q0_claim,
-                }
+                    *q0_claim,
+                )
             })
             .collect();
+        let (
+            input_records,
+            layer_records,
+            sumcheck_records,
+            xi_sampler_records,
+            mus_records,
+            q0_claims,
+        ): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
+            zipped_records.into_iter().multiunzip();
 
-        let mut input_records = Vec::with_capacity(per_proof_records.len());
-        let mut layer_records = Vec::with_capacity(per_proof_records.len());
-        let mut sumcheck_records = Vec::with_capacity(per_proof_records.len());
-        let mut xi_sampler_records = Vec::with_capacity(per_proof_records.len());
-        let mut mus_records = Vec::with_capacity(per_proof_records.len());
-        let mut q0_claims = Vec::with_capacity(per_proof_records.len());
-
-        for records in per_proof_records {
-            let GkrProofRecord {
-                input,
-                layer,
-                sumcheck,
-                xi_sampler,
-                mus,
-                q0_claim,
-            } = records;
-
-            input_records.push(input);
-            layer_records.push(layer);
-            sumcheck_records.push(sumcheck);
-            xi_sampler_records.push(xi_sampler);
-            mus_records.push(mus);
-            q0_claims.push(q0_claim);
+        GkrBlobCpu {
+            input_records,
+            layer_records,
+            sumcheck_records,
+            xi_sampler_records,
+            mus_records,
+            q0_claims,
         }
+    }
+}
 
-        // TODO: parallelize function calls
+impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for GkrModule {
+    fn generate_proving_ctxs(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        let blob = self.generate_blob(child_vk, proofs, preflights);
+
         [
-            // GkrInputAir proof input
-            input::generate_trace(input_records, &q0_claims),
-            // GkrLayerAir proof input
-            layer::generate_trace(layer_records, &mus_records, &q0_claims),
-            // GkrLayerSumcheckAir proof input
-            sumcheck::generate_trace(sumcheck_records, &mus_records),
-            // GkrXiSamplerAir proof input
-            xi_sampler::generate_trace(xi_sampler_records),
+            GkrModuleChip::Input,
+            GkrModuleChip::Layer,
+            GkrModuleChip::LayerSumcheck,
+            GkrModuleChip::XiSampler,
         ]
-        .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
-        .into_iter()
+        .par_iter()
+        .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+        .map(AirProvingContextV2::simple_no_pis)
         .collect()
+    }
+}
+
+// To reduce the number of structs and trait implementations, we collect them into a single enum
+// with enum dispatch.
+enum GkrModuleChip {
+    Input,
+    Layer,
+    LayerSumcheck,
+    XiSampler,
+}
+
+impl ModuleChip<GlobalCtxCpu, CpuBackendV2> for GkrModuleChip {
+    type ModuleSpecificCtx = GkrBlobCpu;
+
+    fn generate_trace(
+        &self,
+        _child_vk: &MultiStarkVerifyingKeyV2,
+        _proofs: &[Proof],
+        _preflights: &[Preflight],
+        blob: &GkrBlobCpu,
+    ) -> ColMajorMatrix<F> {
+        use GkrModuleChip::*;
+        let trace = match self {
+            Input => input::generate_trace(&blob.input_records, &blob.q0_claims),
+            Layer => layer::generate_trace(&blob.layer_records, &blob.mus_records, &blob.q0_claims),
+            LayerSumcheck => sumcheck::generate_trace(&blob.sumcheck_records, &blob.mus_records),
+            XiSampler => xi_sampler::generate_trace(&blob.xi_sampler_records),
+        };
+        ColMajorMatrix::from_row_major(&trace)
     }
 }
 
