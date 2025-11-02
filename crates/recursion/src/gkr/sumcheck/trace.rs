@@ -1,11 +1,11 @@
 use core::borrow::BorrowMut;
 
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{D_EF, EF, F, poly_common::interpolate_cubic_at_0123};
 
 use super::GkrLayerSumcheckCols;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 
 #[derive(Default, Debug, Clone)]
 pub struct GkrSumcheckRecord {
@@ -58,7 +58,7 @@ impl GkrSumcheckRecord {
 }
 
 pub fn generate_trace(
-    gkr_sumcheck_records: Vec<GkrSumcheckRecord>,
+    gkr_sumcheck_records: &[GkrSumcheckRecord],
     mus: &[Vec<EF>],
 ) -> RowMajorMatrix<F> {
     debug_assert_eq!(gkr_sumcheck_records.len(), mus.len());

@@ -6,7 +6,6 @@ edition.workspace = true
 description = "Recursion circuit for v2"
 
 [dependencies]
-itertools = { workspace = true }
 p3-maybe-rayon.workspace = true
 p3-air = { workspace = true }
 p3-baby-bear = { workspace = true }
@@ -20,8 +19,11 @@ openvm-stark-sdk = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
-tracing = { workspace = true }
-eyre = { workspace = true }
+
+itertools.workspace = true
+tracing.workspace = true
+eyre.workspace = true
+derive-new.workspace = true
 
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }

@@ -1,6 +1,4 @@
-use cuda_backend_v2::GpuBackendV2;
-use openvm_cuda_backend::base::DeviceMatrix;
-use stark_backend_v2::{F, prover::AirProvingContextV2};
+use openvm_cuda_backend::{base::DeviceMatrix, types::F};
 
 use crate::primitives::{cuda_abi::range_checker_tracegen, range::RangeCheckerCols};
 
@@ -26,10 +24,10 @@ impl<const NUM_BITS: usize> RangeCheckerGpuTraceGenerator<NUM_BITS> {
         self.trace.buffer().as_mut_ptr().wrapping_add(1 << NUM_BITS) as *mut u32
     }
 
-    pub fn generate_proving_ctx(&self) -> AirProvingContextV2<GpuBackendV2> {
+    pub fn generate_trace(self) -> DeviceMatrix<F> {
         unsafe {
             range_checker_tracegen(self.count_ptr(), self.trace.buffer(), NUM_BITS).unwrap();
         }
-        AirProvingContextV2::simple_no_pis(self.trace.clone())
+        self.trace
     }
 }

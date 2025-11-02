@@ -1,6 +1,5 @@
-use cuda_backend_v2::GpuBackendV2;
+use cuda_backend_v2::F;
 use openvm_cuda_backend::base::DeviceMatrix;
-use stark_backend_v2::{F, prover::AirProvingContextV2};
 
 use crate::primitives::{cuda_abi::pow_checker_tracegen, pow::PowerCheckerCols};
 
@@ -34,7 +33,7 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
         self.trace.buffer().as_mut_ptr().wrapping_add(3 * N) as *mut u32
     }
 
-    pub fn generate_proving_ctx(&self) -> AirProvingContextV2<GpuBackendV2> {
+    pub fn generate_trace(self) -> DeviceMatrix<F> {
         unsafe {
             pow_checker_tracegen(
                 self.pow_count_ptr(),
@@ -44,6 +43,6 @@ impl<const BASE: usize, const N: usize> PowerCheckerGpuTraceGenerator<BASE, N> {
             )
             .unwrap();
         }
-        AirProvingContextV2::simple_no_pis(self.trace.clone())
+        self.trace
     }
 }

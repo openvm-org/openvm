@@ -52,7 +52,7 @@ impl GkrLayerRecord {
 }
 
 pub fn generate_trace(
-    gkr_layer_records: Vec<GkrLayerRecord>,
+    gkr_layer_records: &[GkrLayerRecord],
     mus: &[Vec<EF>],
     q0_claims: &[EF],
 ) -> RowMajorMatrix<F> {
