@@ -97,253 +97,275 @@ pub struct ProofShapeVarColsMut<'a, F> {
     pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn generate_trace<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
-    vk: &MultiStarkVerifyingKeyV2,
-    proofs: &[Proof],
-    preflights: &[Preflight],
+#[derive(derive_new::new)]
+pub(in crate::proof_shape) struct ProofShapeChip<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     idx_encoder: Arc<Encoder>,
     min_cached_idx: usize,
     max_cached: usize,
     range_checker: Arc<RangeCheckerTraceGenerator<LIMB_BITS>>,
     pow_checker: Arc<PowerCheckerTraceGenerator<2, 32>>,
-) -> RowMajorMatrix<F> {
-    let num_airs = vk.inner.per_air.len();
-    let num_rows = (proofs.len() * (num_airs + 1)).next_power_of_two();
-    let cols_width = ProofShapeCols::<usize, NUM_LIMBS>::width();
-    let total_width = idx_encoder.width() + cols_width + max_cached * (DIGEST_SIZE + 1);
+}
 
-    debug_assert_eq!(proofs.len(), preflights.len());
+impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, LIMB_BITS> {
+    pub(in crate::proof_shape) fn generate_trace(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> RowMajorMatrix<F> {
+        let idx_encoder = &self.idx_encoder;
+        let min_cached_idx = self.min_cached_idx;
+        let max_cached = self.max_cached;
+        let range_checker = &self.range_checker;
+        let pow_checker = &self.pow_checker;
+        let num_airs = child_vk.inner.per_air.len();
+        let num_rows = (proofs.len() * (num_airs + 1)).next_power_of_two();
+        let cols_width = ProofShapeCols::<usize, NUM_LIMBS>::width();
+        let total_width =
+            self.idx_encoder.width() + cols_width + self.max_cached * (DIGEST_SIZE + 1);
 
-    let mut trace = vec![F::ZERO; num_rows * total_width];
-    let mut chunks = trace.chunks_exact_mut(total_width);
+        debug_assert_eq!(proofs.len(), preflights.len());
 
-    for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights.iter()).enumerate() {
-        let mut sorted_idx = 0usize;
-        let mut total_interactions = 0usize;
-        let mut cidx = 1usize;
+        let mut trace = vec![F::ZERO; num_rows * total_width];
+        let mut chunks = trace.chunks_exact_mut(total_width);
 
-        // Present AIRs
-        for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
-            let chunk = chunks.next().unwrap();
-            let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-            let log_height = vdata.hypercube_dim + vk.inner.params.l_skip;
-            let height = 1usize << log_height;
+        for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights.iter()).enumerate() {
+            let mut sorted_idx = 0usize;
+            let mut total_interactions = 0usize;
+            let mut cidx = 1usize;
 
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(sorted_idx == 0);
+            // Present AIRs
+            for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
+                let log_height = vdata.hypercube_dim + child_vk.inner.params.l_skip;
+                let height = 1usize << log_height;
 
-            cols.idx = F::from_canonical_usize(*idx);
-            cols.sorted_idx = F::from_canonical_usize(sorted_idx);
-            cols.log_height = F::from_canonical_usize(log_height);
-            sorted_idx += 1;
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(sorted_idx == 0);
 
-            cols.starting_cidx = F::from_canonical_usize(cidx);
-            let has_preprocessed = vk.inner.per_air[*idx].preprocessed_data.is_some();
-            cidx += has_preprocessed as usize;
+                cols.idx = F::from_canonical_usize(*idx);
+                cols.sorted_idx = F::from_canonical_usize(sorted_idx);
+                cols.log_height = F::from_canonical_usize(log_height);
+                sorted_idx += 1;
 
-            // TODO[stephen]: these multiplicities might not be one
-            cols.part_common_main_mult = F::ONE;
-            cols.part_preprocessed_mult = F::from_bool(has_preprocessed);
+                cols.starting_cidx = F::from_canonical_usize(cidx);
+                let has_preprocessed = child_vk.inner.per_air[*idx].preprocessed_data.is_some();
+                cidx += has_preprocessed as usize;
 
-            cols.is_present = F::ONE;
-            cols.height = F::from_canonical_usize(height);
+                // TODO[stephen]: these multiplicities might not be one
+                cols.part_common_main_mult = F::ONE;
+                cols.part_preprocessed_mult = F::from_bool(has_preprocessed);
 
-            let num_interactions = vk.inner.per_air[*idx].num_interactions() * height;
-            let height_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(height);
-            let num_interactions_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(num_interactions);
-            cols.height_limbs = height_limbs.map(F::from_canonical_usize);
-            cols.num_interactions_limbs = num_interactions_limbs.map(F::from_canonical_usize);
-            cols.total_interactions_limbs =
-                decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
-            total_interactions += num_interactions;
+                cols.is_present = F::ONE;
+                cols.height = F::from_canonical_usize(height);
 
-            cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                let num_interactions = child_vk.inner.per_air[*idx].num_interactions() * height;
+                let height_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(height);
+                let num_interactions_limbs =
+                    decompose_usize::<NUM_LIMBS, LIMB_BITS>(num_interactions);
+                cols.height_limbs = height_limbs.map(F::from_canonical_usize);
+                cols.num_interactions_limbs = num_interactions_limbs.map(F::from_canonical_usize);
+                cols.total_interactions_limbs =
+                    decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
+                total_interactions += num_interactions;
 
-            let vcols: &mut ProofShapeVarColsMut<'_, F> =
-                &mut borrow_var_cols_mut(&mut chunk[cols_width..], idx_encoder.width(), max_cached);
+                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
 
-            for (i, flag) in idx_encoder
-                .get_flag_pt(*idx)
-                .iter()
-                .map(|x| F::from_canonical_u32(*x))
-                .enumerate()
-            {
-                vcols.idx_flags[i] = flag;
-            }
-
-            for (i, commit) in vdata.cached_commitments.iter().enumerate() {
-                // TODO[stephen]: this multiplicities might not be one
-                vcols.part_cached_mult[i] = F::ONE;
-                vcols.cached_commits[i] = *commit;
-                cidx += 1;
-            }
-
-            if *idx == min_cached_idx {
-                vcols.cached_commits[max_cached - 1] = proof.common_main_commit;
-            }
-
-            let next_total_interactions =
-                decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
-            for i in 0..NUM_LIMBS {
-                range_checker.add_count(height_limbs[i]);
-                range_checker.add_count(next_total_interactions[i]);
-            }
-
-            let (nonzero_idx, height_limb) = height_limbs
-                .iter()
-                .copied()
-                .enumerate()
-                .find(|&(_, limb)| limb != 0)
-                .unwrap();
-
-            for limb in num_interactions_limbs
-                .iter()
-                .take(NUM_LIMBS - 1)
-                .skip(nonzero_idx)
-            {
-                range_checker.add_count((height_limb * limb) >> LIMB_BITS);
-            }
-            range_checker.add_count_mult(0, nonzero_idx as u32);
-
-            if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
-                pow_checker.add_range(
-                    vdata.hypercube_dim
-                        - preflight.proof_shape.sorted_trace_vdata[sorted_idx]
-                            .1
-                            .hypercube_dim,
+                let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
+                    &mut chunk[cols_width..],
+                    idx_encoder.width(),
+                    max_cached,
                 );
-            } else if sorted_idx < num_airs {
-                pow_checker.add_range(log_height);
-            }
-            pow_checker.add_pow(log_height);
-        }
 
-        let total_interactions_f = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
-        let total_interactions_usize = decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
-
-        // Non-present AIRs
-        for idx in (0..num_airs).filter(|idx| proof.trace_vdata[*idx].is_none()) {
-            let chunk = chunks.next().unwrap();
-            let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
-            cols.is_valid = F::ONE;
-            cols.is_first = F::from_bool(sorted_idx == 0);
-
-            cols.idx = F::from_canonical_usize(idx);
-            cols.sorted_idx = F::from_canonical_usize(sorted_idx);
-            sorted_idx += 1;
-
-            cols.starting_cidx = F::from_canonical_usize(cidx);
-
-            cols.total_interactions_limbs = total_interactions_f;
-            cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-
-            let vcols: &mut ProofShapeVarColsMut<'_, F> =
-                &mut borrow_var_cols_mut(&mut chunk[cols_width..], idx_encoder.width(), max_cached);
-
-            for (i, flag) in idx_encoder
-                .get_flag_pt(idx)
-                .iter()
-                .map(|x| F::from_canonical_u32(*x))
-                .enumerate()
-            {
-                vcols.idx_flags[i] = flag;
-            }
-
-            if idx == min_cached_idx {
-                vcols.cached_commits[max_cached - 1] = proof.common_main_commit;
-            }
-
-            range_checker.add_count_mult(0, (2 * NUM_LIMBS - 1) as u32);
-            for limb in total_interactions_usize {
-                range_checker.add_count(limb);
-            }
-
-            if sorted_idx < num_airs {
-                pow_checker.add_range(0);
-            }
-        }
-
-        debug_assert_eq!(num_airs, sorted_idx);
-
-        // Summary row
-        {
-            let chunk = chunks.next().unwrap();
-            let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-
-            cols.proof_idx = F::from_canonical_usize(proof_idx);
-            cols.is_last = F::ONE;
-
-            let (nonzero_idx, has_interactions) = (0..NUM_LIMBS)
-                .rev()
-                .find(|&i| total_interactions_f[i] != F::ZERO)
-                .map(|idx| (idx, true))
-                .unwrap_or((0, false));
-            let msb_limb = total_interactions_f[nonzero_idx];
-            let msb_limb_zero_bits = if has_interactions {
-                let msb_limb_num_bits = u32::BITS - msb_limb.as_canonical_u32().leading_zeros();
-                LIMB_BITS - msb_limb_num_bits as usize
-            } else {
-                0
-            };
-
-            // non_zero_marker
-            cols.height_limbs = from_fn(|i| {
-                if i == nonzero_idx && has_interactions {
-                    F::ONE
-                } else {
-                    F::ZERO
+                for (i, flag) in idx_encoder
+                    .get_flag_pt(*idx)
+                    .iter()
+                    .map(|x| F::from_canonical_u32(*x))
+                    .enumerate()
+                {
+                    vcols.idx_flags[i] = flag;
                 }
-            });
-            // limb_to_range_check
-            cols.height = msb_limb;
-            // msb_limb_zero_bits_exp
-            cols.log_height = F::from_canonical_usize(1 << msb_limb_zero_bits);
 
-            let max_interactions = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(F::ORDER_U32 as usize);
-            let diff_idx = (0..NUM_LIMBS)
-                .rev()
-                .find(|&i| total_interactions_f[i] != max_interactions[i])
-                .unwrap_or(0);
+                for (i, commit) in vdata.cached_commitments.iter().enumerate() {
+                    // TODO[stephen]: this multiplicities might not be one
+                    vcols.part_cached_mult[i] = F::ONE;
+                    vcols.cached_commits[i] = *commit;
+                    cidx += 1;
+                }
 
-            // diff_marker
-            cols.num_interactions_limbs = from_fn(|i| if i == diff_idx { F::ONE } else { F::ZERO });
+                if *idx == min_cached_idx {
+                    vcols.cached_commits[max_cached - 1] = proof.common_main_commit;
+                }
 
-            cols.total_interactions_limbs = total_interactions_f;
-            cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-            cols.is_n_max_greater =
-                F::from_bool(preflight.proof_shape.n_max > preflight.proof_shape.n_logup);
+                let next_total_interactions =
+                    decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
+                for i in 0..NUM_LIMBS {
+                    range_checker.add_count(height_limbs[i]);
+                    range_checker.add_count(next_total_interactions[i]);
+                }
 
-            // n_logup
-            cols.starting_cidx = F::from_canonical_usize(preflight.proof_shape.n_logup);
+                let (nonzero_idx, height_limb) = height_limbs
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .find(|&(_, limb)| limb != 0)
+                    .unwrap();
 
-            range_checker
-                .add_count(msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits));
-            range_checker.add_count(
-                (max_interactions[diff_idx] - total_interactions_f[diff_idx]).as_canonical_u32()
-                    as usize
-                    - 1,
-            );
+                for limb in num_interactions_limbs
+                    .iter()
+                    .take(NUM_LIMBS - 1)
+                    .skip(nonzero_idx)
+                {
+                    range_checker.add_count((height_limb * limb) >> LIMB_BITS);
+                }
+                range_checker.add_count_mult(0, nonzero_idx as u32);
 
-            pow_checker.add_pow(msb_limb_zero_bits);
-            pow_checker.add_range(
-                preflight
-                    .proof_shape
-                    .n_max
-                    .abs_diff(preflight.proof_shape.n_logup),
-            );
+                if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
+                    pow_checker.add_range(
+                        vdata.hypercube_dim
+                            - preflight.proof_shape.sorted_trace_vdata[sorted_idx]
+                                .1
+                                .hypercube_dim,
+                    );
+                } else if sorted_idx < num_airs {
+                    pow_checker.add_range(log_height);
+                }
+                pow_checker.add_pow(log_height);
+            }
+
+            let total_interactions_f = decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
+            let total_interactions_usize =
+                decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
+
+            // Non-present AIRs
+            for idx in (0..num_airs).filter(|idx| proof.trace_vdata[*idx].is_none()) {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
+
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.is_valid = F::ONE;
+                cols.is_first = F::from_bool(sorted_idx == 0);
+
+                cols.idx = F::from_canonical_usize(idx);
+                cols.sorted_idx = F::from_canonical_usize(sorted_idx);
+                sorted_idx += 1;
+
+                cols.starting_cidx = F::from_canonical_usize(cidx);
+
+                cols.total_interactions_limbs = total_interactions_f;
+                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+
+                let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
+                    &mut chunk[cols_width..],
+                    idx_encoder.width(),
+                    max_cached,
+                );
+
+                for (i, flag) in idx_encoder
+                    .get_flag_pt(idx)
+                    .iter()
+                    .map(|x| F::from_canonical_u32(*x))
+                    .enumerate()
+                {
+                    vcols.idx_flags[i] = flag;
+                }
+
+                if idx == min_cached_idx {
+                    vcols.cached_commits[max_cached - 1] = proof.common_main_commit;
+                }
+
+                range_checker.add_count_mult(0, (2 * NUM_LIMBS - 1) as u32);
+                for limb in total_interactions_usize {
+                    range_checker.add_count(limb);
+                }
+
+                if sorted_idx < num_airs {
+                    pow_checker.add_range(0);
+                }
+            }
+
+            debug_assert_eq!(num_airs, sorted_idx);
+
+            // Summary row
+            {
+                let chunk = chunks.next().unwrap();
+                let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
+
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
+                cols.is_last = F::ONE;
+
+                let (nonzero_idx, has_interactions) = (0..NUM_LIMBS)
+                    .rev()
+                    .find(|&i| total_interactions_f[i] != F::ZERO)
+                    .map(|idx| (idx, true))
+                    .unwrap_or((0, false));
+                let msb_limb = total_interactions_f[nonzero_idx];
+                let msb_limb_zero_bits = if has_interactions {
+                    let msb_limb_num_bits = u32::BITS - msb_limb.as_canonical_u32().leading_zeros();
+                    LIMB_BITS - msb_limb_num_bits as usize
+                } else {
+                    0
+                };
+
+                // non_zero_marker
+                cols.height_limbs = from_fn(|i| {
+                    if i == nonzero_idx && has_interactions {
+                        F::ONE
+                    } else {
+                        F::ZERO
+                    }
+                });
+                // limb_to_range_check
+                cols.height = msb_limb;
+                // msb_limb_zero_bits_exp
+                cols.log_height = F::from_canonical_usize(1 << msb_limb_zero_bits);
+
+                let max_interactions =
+                    decompose_f::<F, NUM_LIMBS, LIMB_BITS>(F::ORDER_U32 as usize);
+                let diff_idx = (0..NUM_LIMBS)
+                    .rev()
+                    .find(|&i| total_interactions_f[i] != max_interactions[i])
+                    .unwrap_or(0);
+
+                // diff_marker
+                cols.num_interactions_limbs =
+                    from_fn(|i| if i == diff_idx { F::ONE } else { F::ZERO });
+
+                cols.total_interactions_limbs = total_interactions_f;
+                cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.is_n_max_greater =
+                    F::from_bool(preflight.proof_shape.n_max > preflight.proof_shape.n_logup);
+
+                // n_logup
+                cols.starting_cidx = F::from_canonical_usize(preflight.proof_shape.n_logup);
+
+                range_checker
+                    .add_count(msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits));
+                range_checker.add_count(
+                    (max_interactions[diff_idx] - total_interactions_f[diff_idx]).as_canonical_u32()
+                        as usize
+                        - 1,
+                );
+
+                pow_checker.add_pow(msb_limb_zero_bits);
+                pow_checker.add_range(
+                    preflight
+                        .proof_shape
+                        .n_max
+                        .abs_diff(preflight.proof_shape.n_logup),
+                );
+            }
         }
-    }
 
-    for chunk in chunks {
-        let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-        cols.proof_idx = F::from_canonical_usize(proofs.len());
-    }
+        for chunk in chunks {
+            let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(proofs.len());
+        }
 
-    RowMajorMatrix::new(trace, total_width)
+        RowMajorMatrix::new(trace, total_width)
+    }
 }
 
 pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {

@@ -12,6 +12,8 @@ use crate::cuda::{to_device_or_nullptr, types::PublicValueData};
 #[derive(Debug)]
 pub struct ProofGpu {
     // TODO[TEMP]: cpu proof for hybrid usage; remove this when no longer needed
+    // If you need something from `cpu` for actual cuda tracegen, move it to a direct field of
+    // ProofGpu. Host and/or device types allowed.
     pub cpu: Proof,
     pub proof_shape: ProofShapeProofGpu,
     pub gkr: GkrProofGpu,
