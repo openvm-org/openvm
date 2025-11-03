@@ -1,7 +1,8 @@
 use std::{
+    collections::HashMap,
     fs, io,
     path::Path,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use divan::Bencher;
@@ -16,7 +17,9 @@ use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
+        execution_mode::{ExecutionCtx, MeteredCostCtx},
+        instructions::exe::VmExe,
+        interpreter::InterpretedInstance,
         ContinuationVmProof, *,
     },
     derive::VmConfig,
@@ -85,6 +88,14 @@ const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
+#[cfg(feature = "aot")]
+static AOT_INSTANCE_CACHE: OnceLock<
+    Mutex<HashMap<String, Arc<AotInstance<'static, BabyBear, ExecutionCtx>>>>,
+> = OnceLock::new();
+// Cachce for AOT instances, that is only initialized once, across all threads
+// Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads can share the same instance
+// Mutex is used to protect the cache from concurrent access
+// HashMap is used to store the instances, keyed by the program name
 
 type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
 
@@ -258,17 +269,60 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=10)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
-    bencher
-        .with_inputs(|| {
-            let exe = load_program_executable(program).expect("Failed to load program executable");
-            let interpreter = executor().instance(&exe).unwrap();
-            (interpreter, vec![])
-        })
-        .bench_values(|(interpreter, input)| {
-            interpreter
-                .execute(input, None)
-                .expect("Failed to execute program in interpreted mode");
-        });
+    #[cfg(feature = "aot")]
+    {
+        bencher
+            .with_inputs(|| {
+                let interpreter = cached_aot_instance(program);
+                (interpreter, vec![])
+            })
+            .bench_values(|(interpreter, input)| {
+                interpreter
+                    .execute(input, None)
+                    .expect("Failed to execute program in AOT mode");
+            });
+    }
+
+    #[cfg(not(feature = "aot"))]
+    {
+        bencher
+            .with_inputs(|| {
+                let exe =
+                    load_program_executable(program).expect("Failed to load program executable");
+                let interpreter = executor().instance(&exe).unwrap();
+                (interpreter, vec![])
+            })
+            .bench_values(|(interpreter, input)| {
+                interpreter
+                    .execute(input, None)
+                    .expect("Failed to execute program in interpreted mode");
+            });
+    }
+}
+
+#[cfg(feature = "aot")]
+fn cached_aot_instance(
+    program: &str,
+) -> Arc<AotInstance<'static, BabyBear, ExecutionCtx>> {
+    let cache = AOT_INSTANCE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(instance) = cache.lock().unwrap().get(program).cloned() {
+        return instance;
+    }
+
+    let exe =
+        load_program_executable(program).expect("Failed to load program executable for AOT cache");
+    let instance = executor()
+        .instance(&exe)
+        .unwrap_or_else(|err| panic!("Failed to create AOT instance for {program}: {err}"));
+    let instance = Arc::new(instance);
+
+    let cache = AOT_INSTANCE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut guard = cache.lock().unwrap();
+    if let Some(existing) = guard.get(program) {
+        return existing.clone();
+    }
+    guard.insert(program.to_string(), instance.clone());
+    instance
 }
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
