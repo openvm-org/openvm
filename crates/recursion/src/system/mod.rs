@@ -23,8 +23,8 @@ use crate::{
     bus::{
         AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
         CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
-        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, PublicValuesBus, StackingIndicesBus,
-        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, StackingIndicesBus, StackingModuleBus,
+        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::exp_bits_len::ExpBitsLenAir,
@@ -157,7 +157,7 @@ pub struct Preflight {
     pub stacking: StackingPreflight,
     pub whir: WhirPreflight,
     // Merkle bus message + actual commitment
-    pub merkle_verify_logs: Vec<(MerkleVerifyBusMessage<F>, [F; DIGEST_SIZE])>,
+    pub merkle_verify_logs: Vec<MerkleVerifyLog>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -222,6 +222,16 @@ pub struct WhirPreflight {
     pub fold_records: Vec<FoldRecord>,
     pub initial_round_coset_vals: Vec<Vec<EF>>,
     pub final_poly_at_u: EF,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct MerkleVerifyLog {
+    pub leaf_hash: [F; DIGEST_SIZE],
+    pub merkle_idx: usize,
+    pub depth: usize,
+    pub query_idx: usize,
+    pub commit_major: usize,
+    pub commit_minor: usize,
 }
 
 impl BusInventory {
