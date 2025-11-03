@@ -1,8 +1,9 @@
 use std::{
+    cell::RefCell,
     collections::HashMap,
     fs, io,
     path::Path,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, OnceLock},
 };
 
 use divan::Bencher;
@@ -89,9 +90,10 @@ static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 #[cfg(feature = "aot")]
-static AOT_INSTANCE_CACHE: OnceLock<
-    Mutex<HashMap<String, Arc<AotInstance<'static, BabyBear, ExecutionCtx>>>>,
-> = OnceLock::new();
+thread_local! {
+    static AOT_INSTANCE_CACHE: RefCell<HashMap<String, Arc<AotInstance<'static, BabyBear, ExecutionCtx>>>> =
+        RefCell::new(HashMap::new());
+}
 // Cachce for AOT instances, that is only initialized once, across all threads
 // Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads can share the same instance
 // Mutex is used to protect the cache from concurrent access
@@ -301,28 +303,25 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
 }
 
 #[cfg(feature = "aot")]
-fn cached_aot_instance(
-    program: &str,
-) -> Arc<AotInstance<'static, BabyBear, ExecutionCtx>> {
-    let cache = AOT_INSTANCE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    if let Some(instance) = cache.lock().unwrap().get(program).cloned() {
-        return instance;
-    }
+fn cached_aot_instance(program: &str) -> Arc<AotInstance<'static, BabyBear, ExecutionCtx>> {
+    AOT_INSTANCE_CACHE.with(|cache| {
+        if let Some(instance) = cache.borrow().get(program).cloned() {
+            return instance;
+        }
 
-    let exe =
-        load_program_executable(program).expect("Failed to load program executable for AOT cache");
-    let instance = executor()
-        .instance(&exe)
-        .unwrap_or_else(|err| panic!("Failed to create AOT instance for {program}: {err}"));
-    let instance = Arc::new(instance);
+        let exe = load_program_executable(program)
+            .expect("Failed to load program executable for AOT cache");
+        let instance = executor()
+            .instance(&exe)
+            .unwrap_or_else(|err| panic!("Failed to create AOT instance for {program}: {err}"));
+        let instance = Arc::new(instance);
 
-    let cache = AOT_INSTANCE_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = cache.lock().unwrap();
-    if let Some(existing) = guard.get(program) {
-        return existing.clone();
-    }
-    guard.insert(program.to_string(), instance.clone());
-    instance
+        let mut guard = cache.borrow_mut();
+        let entry = guard
+            .entry(program.to_string())
+            .or_insert_with(|| instance.clone());
+        entry.clone()
+    })
 }
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
