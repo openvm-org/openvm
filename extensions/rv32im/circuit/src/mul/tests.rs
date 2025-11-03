@@ -395,9 +395,10 @@ fn test_aot_mul_randomized_pairs() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value = rng.gen_range(0..(1 << 11));
-        instructions.push(add_immediate(offset, value));
-        expected.insert(offset, value);
+        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
+        instructions.push(add_immediate(offset, imm_field));
+        expected.insert(offset, value_i32 as u32);
     }
 
     for (i, &rd_offset) in offsets.iter().enumerate() {
