@@ -16,6 +16,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 use crate::MultiplicationExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -121,37 +123,20 @@ where
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
             c_i24 as i16
         };
-        let map_reg = |reg: i16| -> (i16, u8) {
-            let index = reg / 4;
-            (index / 2, (index % 2) as u8)
-        };
         let a = to_i16(inst.a);
         let b = to_i16(inst.b);
         let c = to_i16(inst.c);
 
-        let (xmm_a, lane_a) = map_reg(a);
-        let (xmm_b, lane_b) = map_reg(b);
-        let (xmm_c, lane_c) = map_reg(c);
+        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
 
         let mut asm_str = String::new();
 
-        if lane_b == 0 {
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B_W, xmm_b);
-        } else {
-            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_B_W, xmm_b, lane_b);
-        }
-
-        if lane_c == 0 {
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_A_W, xmm_c);
-        } else {
-            asm_str += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_c, lane_c);
-        }
-
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+        asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_A_W);
         asm_str += &format!("   imul {}, {}\n", REG_A_W, REG_B_W);
-        asm_str += &format!(
-            "   vpinsrd xmm{}, xmm{}, {REG_A_W}, {}\n",
-            xmm_a, xmm_a, lane_a
-        );
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         asm_str += &format!("   add {}, 4\n", REG_PC);
         asm_str += &format!("   add {}, 1\n", REG_INSTRET);
 

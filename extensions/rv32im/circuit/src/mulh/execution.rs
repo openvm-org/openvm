@@ -16,6 +16,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 use crate::MulHExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -37,18 +39,6 @@ const REG_INSTRET: &str = "r14";
 const REG_A_W: &str = "eax";
 #[cfg(feature = "aot")]
 const REG_B_W: &str = "ecx";
-
-#[cfg(feature = "aot")]
-#[inline(always)]
-fn map_reg(reg: i16) -> (i16, u8) {
-    debug_assert_eq!(
-        reg % 4,
-        0,
-        "register operands must align to 4-byte boundary"
-    );
-    let index = reg / 4;
-    (index / 2, (index % 2) as u8)
-}
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
@@ -140,25 +130,16 @@ where
         let b = to_i16(inst.b);
         let c = to_i16(inst.c);
 
-        let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
+        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
 
-        let (xmm_dst, lane_dst) = map_reg(a);
-        let (xmm_rs1, lane_rs1) = map_reg(b);
-        let (xmm_rs2, lane_rs2) = map_reg(c);
+        let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
 
-        if lane_rs1 == 0 {
-            asm += &format!("   vmovd {}, xmm{}\n", REG_A_W, xmm_rs1);
-        } else {
-            asm += &format!("   vpextrd {}, xmm{}, {}\n", REG_A_W, xmm_rs1, lane_rs1);
-        }
-
-        if lane_rs2 == 0 {
-            asm += &format!("   vmovd {}, xmm{}\n", REG_B_W, xmm_rs2);
-        } else {
-            asm += &format!("   vpextrd {}, xmm{}, {}\n", REG_B_W, xmm_rs2, lane_rs2);
-        }
+        asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+        asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
 
         match opcode {
             MulHOpcode::MULH => {
@@ -176,10 +157,7 @@ where
         }
 
         asm += "   mov eax, edx\n";
-        asm += &format!(
-            "   vpinsrd xmm{}, xmm{}, {REG_A_W}, {}\n",
-            xmm_dst, xmm_dst, lane_dst
-        );
+        asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         asm += &format!("   add {}, 4\n", REG_PC);
         asm += &format!("   add {}, 1\n", REG_INSTRET);
 

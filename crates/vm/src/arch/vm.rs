@@ -311,14 +311,7 @@ where
     ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
         Self::metered_aot_instance(&self, exe, executor_idx_to_air_idx)
     }
-    #[cfg(feature = "aot")]
-    pub fn metered_interp_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<F, MeteredCtx>, StaticProgramError> {
-        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
-    }
+
     // Crates an AOT instance for metered execution of the given `exe`.
     #[cfg(feature = "aot")]
     pub fn metered_aot_instance(

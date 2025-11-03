@@ -42,7 +42,6 @@ openvm-toolchain-tests.workspace = true
 
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-instructions.workspace = true
 
 rand = { workspace = true }
 serde.workspace = true

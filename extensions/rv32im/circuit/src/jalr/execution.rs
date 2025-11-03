@@ -11,6 +11,8 @@ use openvm_instructions::{
     riscv::RV32_REGISTER_AS,
 };
 #[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+#[cfg(feature = "aot")]
 use openvm_instructions::{LocalOpcode, VmOpcode};
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::Rv32JalrOpcode;
@@ -126,25 +128,13 @@ where
         };
         let a = to_i16(inst.a);
         let b = to_i16(inst.b);
-        debug_assert_eq!(a % 4, 0);
-        debug_assert_eq!(b % 4, 0);
-
+        if a % 4 != 0 || b % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
         let write_rd = !inst.f.is_zero();
 
-        let map_reg = |reg: i16| -> (i16, bool) {
-            let chunk = reg / 4;
-            let is_low = chunk % 2 == 0;
-            let xmm = if is_low { reg / 8 } else { (chunk - 1) / 2 };
-            (xmm, is_low)
-        };
-
-        let (rs1_xmm, rs1_low) = map_reg(b);
-        if rs1_low {
-            asm_str += &format!("   vmovd {}, xmm{}\n", REG_B_W, rs1_xmm);
-        } else {
-            asm_str += &format!("   vpextrd {}, xmm{}, 1\n", REG_B_W, rs1_xmm);
-        }
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
 
         asm_str += &format!("   add {}, {}\n", REG_B_W, imm_extended);
         asm_str += &format!("   and {}, -2\n", REG_B_W); // clear bit 0 per RISC-V jalr
@@ -153,12 +143,7 @@ where
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
             asm_str += &format!("   mov {}, {}\n", REG_A_W, next_pc);
-            let (rd_xmm, rd_low) = map_reg(a);
-            if rd_low {
-                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 0\n", rd_xmm, rd_xmm);
-            } else {
-                asm_str += &format!("   vpinsrd xmm{}, xmm{}, {REG_A_W}, 1\n", rd_xmm, rd_xmm);
-            }
+            asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         }
 
         asm_str += &format!("   add {}, 1\n", REG_INSTRET);
