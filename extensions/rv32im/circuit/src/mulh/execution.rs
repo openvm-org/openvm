@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -14,6 +16,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 use crate::MulHExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -23,6 +27,20 @@ struct MulHPreCompute {
     b: u8,
     c: u8,
 }
+
+// Callee saved registers (shared with MUL AOT)
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+
+// Caller saved registers
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "ecx";
+#[cfg(feature = "aot")]
+const REG_TMP_W: &str = "r8d";
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
@@ -97,6 +115,58 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        inst.opcode == MulHOpcode::MULH.global_opcode()
+            || inst.opcode == MulHOpcode::MULHSU.global_opcode()
+            || inst.opcode == MulHOpcode::MULHU.global_opcode()
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        let c = to_i16(inst.c);
+
+        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
+
+        let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
+
+        let mut asm = String::new();
+
+        asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+        asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
+
+        match opcode {
+            MulHOpcode::MULH => {
+                asm += "   imul ecx\n";
+                asm += "   mov eax, edx\n";
+            }
+            MulHOpcode::MULHSU => {
+                asm += &format!("   mov {REG_TMP_W}, {REG_A_W}\n");
+                asm += "   imul ecx\n";
+                asm += "   mov eax, edx\n";
+                asm += "   mov edx, ecx\n";
+                asm += "   sar edx, 31\n";
+                asm += &format!("   and edx, {REG_TMP_W}\n");
+                asm += "   add eax, edx\n";
+            }
+            MulHOpcode::MULHU => {
+                asm += "   mul ecx\n";
+                asm += "   mov eax, edx\n";
+            }
+        }
+        asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm += &format!("   add {}, 4\n", REG_PC);
+        asm += &format!("   add {}, 1\n", REG_INSTRET);
+        Ok(asm)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

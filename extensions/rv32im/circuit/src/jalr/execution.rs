@@ -10,6 +10,12 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+#[cfg(feature = "aot")]
+use openvm_instructions::{LocalOpcode, VmOpcode};
+#[cfg(feature = "aot")]
+use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
@@ -54,6 +60,19 @@ macro_rules! dispatch {
     };
 }
 
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "ecx";
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_PC_W: &str = "r13d";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+#[cfg(feature = "aot")]
+const REG_A: &str = "rcx"; // used when building jump address
+
 impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
 where
     F: PrimeField32,
@@ -90,8 +109,51 @@ where
         dispatch!(execute_e1_handler, enabled)
     }
 }
+
 #[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A> where F: PrimeField32 {}
+impl<F, A> AotExecutor<F> for Rv32JalrExecutor<A>
+where
+    F: PrimeField32,
+{
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        inst.opcode == Rv32JalrOpcode::JALR.global_opcode()
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+        let mut asm_str = String::new();
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        if a % 4 != 0 || b % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
+        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
+        let write_rd = !inst.f.is_zero();
+
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+
+        asm_str += &format!("   add {}, {}\n", REG_B_W, imm_extended);
+        asm_str += &format!("   and {}, -2\n", REG_B_W); // clear bit 0 per RISC-V jalr
+        asm_str += &format!("   mov {}, {}\n", REG_PC_W, REG_B_W); // zero-extend into r13
+
+        if write_rd {
+            let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
+            asm_str += &format!("   mov {}, {}\n", REG_A_W, next_pc);
+            asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        }
+
+        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
+        asm_str += "   lea rdx, [rip + map_pc_base]\n";
+        asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
+        asm_str += "   add rcx, rdx\n";
+        asm_str += "   jmp rcx\n";
+        Ok(asm_str)
+    }
+}
 
 impl<F, A> MeteredExecutor<F> for Rv32JalrExecutor<A>
 where

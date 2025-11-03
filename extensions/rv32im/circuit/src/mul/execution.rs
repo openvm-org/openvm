@@ -5,6 +5,8 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -14,6 +16,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 use crate::MultiplicationExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -47,6 +51,22 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
         Ok(())
     }
 }
+
+// Callee saved registers
+#[cfg(feature = "aot")]
+const REG_PC: &str = "r13";
+#[cfg(feature = "aot")]
+const REG_INSTRET: &str = "r14";
+
+// Caller saved registers
+#[cfg(feature = "aot")]
+const REG_A: &str = "rax";
+#[cfg(feature = "aot")]
+const REG_A_W: &str = "eax";
+#[cfg(feature = "aot")]
+const REG_B: &str = "rcx";
+#[cfg(feature = "aot")]
+const REG_B_W: &str = "ecx";
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -93,6 +113,35 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
+    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        inst.opcode == MulOpcode::MUL.global_opcode()
+    }
+
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+        let to_i16 = |c: F| -> i16 {
+            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
+            let c_i24 = ((c_u24 << 8) as i32) >> 8;
+            c_i24 as i16
+        };
+        let a = to_i16(inst.a);
+        let b = to_i16(inst.b);
+        let c = to_i16(inst.c);
+
+        if a % 4 != 0 || b % 4 != 0 || c % 4 != 0 {
+            return Err(AotError::InvalidInstruction);
+        }
+
+        let mut asm_str = String::new();
+
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+        asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_A_W);
+        asm_str += &format!("   imul {}, {}\n", REG_A_W, REG_B_W);
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm_str += &format!("   add {}, 4\n", REG_PC);
+        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
+
+        Ok(asm_str)
+    }
 }
 
 impl<F, A, const LIMB_BITS: usize> MeteredExecutor<F>

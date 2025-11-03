@@ -51,7 +51,7 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32,
+    pc_start: u32
 }
 
 type AsmRunFn = unsafe extern "C" fn(
