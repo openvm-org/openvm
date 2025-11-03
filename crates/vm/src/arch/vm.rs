@@ -605,7 +605,7 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
 
-        let instret_end = num_insns.map(|ni| state.instret().saturating_add(ni));
+        let instret_left = num_insns.map(|ni| state.instret().saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
         let main_widths = self
             .pk
@@ -616,7 +616,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_end);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_left);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();

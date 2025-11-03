@@ -259,7 +259,7 @@ unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     instret: &mut u64,
     pc: &mut u32,
-    _instret_end: u64,
+    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalPreCompute<F> = pre_compute.borrow();
@@ -288,7 +288,7 @@ unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
     instret: &mut u64,
     pc: &mut u32,
-    _instret_end: u64,
+    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &RangeCheckPreCompute = pre_compute.borrow();

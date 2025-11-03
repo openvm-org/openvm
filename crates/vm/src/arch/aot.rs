@@ -51,7 +51,7 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32
+    pc_start: u32,
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -59,7 +59,7 @@ type AsmRunFn = unsafe extern "C" fn(
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
     from_state_instret: u64,
-    instret_end: u64,
+    instret_left: u64,
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -597,7 +597,7 @@ where
         let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
-        let instret_end = ctx.instret_end;
+        let instret_left = ctx.instret_left;
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
@@ -617,7 +617,7 @@ where
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
-                instret_end,
+                instret_left,
             );
         }
 

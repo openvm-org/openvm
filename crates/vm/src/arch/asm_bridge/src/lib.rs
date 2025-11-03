@@ -13,7 +13,7 @@ extern "C" {
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
         from_state_instret: u64,              // rcx = from_state.instret
-        instret_end: u64,
+        instret_left: u64,
     );
 }
 
@@ -31,14 +31,14 @@ pub unsafe extern "C" fn asm_run(
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
     from_state_instret: u64,
-    instret_end: u64,
+    instret_left: u64,
 ) {
     asm_run_internal(
         vm_exec_state_ptr,
         pre_compute_insns_ptr,
         from_state_pc,
         from_state_instret,
-        instret_end,
+        instret_left,
     );
 }
 
@@ -92,8 +92,8 @@ pub extern "C" fn extern_handler(
 
     let ctx = &vm_exec_state_ref.ctx;
     // `arg` is a runtime constant that we want to keep in register
-    // - For pure execution it is `instret_end`
-    let arg = ctx.instret_end;
+    // - For pure execution it is `instret_left`
+    let arg = ctx.instret_left;
 
     unsafe {
         (pre_compute_insns.handler)(
@@ -124,9 +124,9 @@ pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
-    let instret_end = vm_exec_state_ref.ctx.instret_end;
+    let instret_left = vm_exec_state_ref.ctx.instret_left;
 
-    if instret >= instret_end {
+    if instret >= instret_left {
         1 // should suspend is `true`
     } else {
         0 // should suspend is `false`

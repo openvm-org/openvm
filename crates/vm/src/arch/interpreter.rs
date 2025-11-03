@@ -361,7 +361,7 @@ where
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
         let instret = from_state.instret();
-        let instret_end = if let Some(n) = num_insns {
+        let instret_left = if let Some(n) = num_insns {
             let end = instret
                 .checked_add(n)
                 .ok_or(ExecutionError::InstretOverflow {
@@ -372,17 +372,17 @@ where
         } else {
             None
         };
-        let ctx = ExecutionCtx::new(instret_end);
+        let ctx = ExecutionCtx::new(instret_left);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         let pc = exec_state.pc();
-        let instret_end = exec_state.ctx.instret_end;
+        let instret_left = exec_state.ctx.instret_left;
         run!(
             "execute_e1",
             self,
             instret,
             pc,
-            instret_end,
+            instret_left,
             exec_state,
             ExecutionCtx
         );
@@ -390,7 +390,7 @@ where
         println!("instret: {}", exec_state.vm_state.instret());
         println!("pc: {}", exec_state.vm_state.pc());
         println!("interpreter exit code {:?}", exec_state.exit_code);
-        println!("instret_end {:?}", instret_end);
+        println!("instret_left {:?}", instret_left);
         println!("num_insns {:?}", num_insns);
 
         if num_insns.is_some() {

@@ -3,6 +3,8 @@ use std::{
     mem::size_of,
 };
 
+#[cfg(feature = "aot")]
+use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
@@ -10,8 +12,6 @@ use openvm_instructions::{
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
-#[cfg(feature = "aot")]
-use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 #[cfg(feature = "aot")]
 use openvm_instructions::{LocalOpcode, VmOpcode};
 #[cfg(feature = "aot")]
@@ -226,7 +226,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED
     pre_compute: &[u8],
     instret: &mut u64,
     pc: &mut u32,
-    _instret_end: u64,
+    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalrPreCompute = pre_compute.borrow();

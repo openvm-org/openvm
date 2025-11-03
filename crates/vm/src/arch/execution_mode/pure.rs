@@ -5,13 +5,13 @@ use crate::{
 
 #[repr(C)]
 pub struct ExecutionCtx {
-    pub instret_end: u64,
+    pub instret_left: u64,
 }
 
 impl ExecutionCtx {
-    pub fn new(instret_end: Option<u64>) -> Self {
+    pub fn new(instret_left: Option<u64>) -> Self {
         ExecutionCtx {
-            instret_end: if let Some(end) = instret_end {
+            instret_left: if let Some(end) = instret_left {
                 end
             } else {
                 u64::MAX
@@ -26,11 +26,12 @@ impl ExecutionCtxTrait for ExecutionCtx {
 
     #[inline(always)]
     fn should_suspend<F>(
-        instret: u64,
+        _instret: u64,
         _pc: u32,
-        instret_end: u64,
-        _exec_state: &mut VmExecState<F, GuestMemory, Self>,
+        _instret_left: u64,
+        exec_state: &mut VmExecState<F, GuestMemory, Self>,
     ) -> bool {
-        instret >= instret_end
+        exec_state.ctx.instret_left -= 1;
+        exec_state.ctx.instret_left == 0
     }
 }

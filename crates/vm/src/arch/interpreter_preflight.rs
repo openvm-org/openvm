@@ -135,8 +135,8 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
             }
             if state
                 .ctx
-                .instret_end
-                .is_some_and(|instret_end| state.instret() >= instret_end)
+                .instret_left
+                .is_some_and(|instret_left| state.instret() >= instret_left)
             {
                 // should suspend
                 break;
