@@ -14,11 +14,10 @@ use stark_backend_v2::{
 };
 
 use crate::{
-    bus::MerkleVerifyBusMessage,
     primitives::exp_bits_len::ExpBitsLenAir,
     system::{
-        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, Preflight, TraceGenModule,
-        WhirPreflight,
+        AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, Preflight,
+        TraceGenModule, WhirPreflight,
     },
     whir::{
         bus::{
@@ -278,17 +277,14 @@ impl WhirModule {
                         .flat_map(|ef| ef.as_base_slice())
                         .copied()
                         .collect_vec();
-                    merkle_verify_logs.push((
-                        MerkleVerifyBusMessage {
-                            leaf_hash: poseidon2_hash_slice(&leaf_preimage),
-                            merkle_idx: index as usize,
-                            query_idx,
-                            depth: proof.whir_proof.codeword_merkle_proofs[i - 1][query_idx].len(),
-                            commit_major: i,
-                            commit_minor: 0,
-                        },
-                        codeword_commits[i - 1],
-                    ));
+                    merkle_verify_logs.push(MerkleVerifyLog {
+                        leaf_hash: poseidon2_hash_slice(&leaf_preimage),
+                        merkle_idx: index as usize,
+                        query_idx,
+                        depth: proof.whir_proof.codeword_merkle_proofs[i - 1][query_idx].len(),
+                        commit_major: i,
+                        commit_minor: 0,
+                    });
                     binary_k_fold(
                         opened_rows,
                         &alphas[alphas.len() - k_whir..],
