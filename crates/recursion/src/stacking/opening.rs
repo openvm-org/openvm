@@ -48,12 +48,15 @@ pub struct OpeningClaimsCols<F> {
     pub is_last: F,
 
     // Received from batch constraints module
-    pub idx: F,
     pub sort_idx: F,
     pub part_idx: F,
     pub col_idx: F,
     pub col_claim: [F; D_EF],
     pub rot_claim: [F; D_EF],
+
+    // Used to constrain the order of received messages
+    pub is_main: F,
+    pub is_transition_main: F,
 
     // Received from proof shape (n + l_skip, 2^{n + l_skip}, 2^{- (n + l_skip)})
     pub log_height: F,
@@ -132,6 +135,19 @@ impl OpeningClaimsTraceGenerator {
             let mut stacking_claim_coefficient = EF::ZERO;
             let mut s_0 = EF::ZERO;
 
+            let last_main_idx = claims
+                .iter()
+                .enumerate()
+                .skip(1)
+                .find_map(|(i, claim)| {
+                    if claim.part_idx != F::ZERO {
+                        Some(i - 1)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(num_rows - 1);
+
             for (i, (claim, slice, (eq, k_rot, eq_bits), chunk)) in
                 izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
             {
@@ -154,6 +170,9 @@ impl OpeningClaimsTraceGenerator {
                 cols.col_idx = col_idx;
                 cols.col_claim = col_claim;
                 cols.rot_claim = rot_claim;
+
+                cols.is_main = F::from_bool(part_idx == F::ZERO);
+                cols.is_transition_main = F::from_bool(i + 1 != num_rows && i != last_main_idx);
 
                 cols.log_height = F::from_canonical_usize(slice.n + vk.inner.params.l_skip);
                 cols.height = F::from_canonical_usize(1 << (slice.n + vk.inner.params.l_skip));
@@ -294,6 +313,55 @@ where
             .assert_zero(next.proof_idx);
 
         /*
+         * Constrain the sortedness of each ColumnClaimsMessage. Main claims (i.e part_idx = 0)
+         * should be first and sorted by sort_idx and then col_idx. The remaining claims should
+         * be sorted by sort_idx, then part_idx, and finally col_idx.
+         */
+        builder.assert_bool(local.is_main);
+        builder.when(not(local.is_valid)).assert_zero(local.is_main);
+        builder.when(local.is_main).assert_zero(local.part_idx);
+
+        builder.assert_bool(local.is_transition_main);
+        builder
+            .when(local.is_transition_main)
+            .assert_eq(local.is_main, next.is_main);
+        builder
+            .when(local.is_transition_main)
+            .assert_one(and(local.is_valid, next.is_valid));
+        builder
+            .when(local.is_transition_main)
+            .assert_zero(local.is_last);
+
+        builder
+            .when(and(not(local.is_main), next.is_main))
+            .assert_one(local.is_last);
+
+        let mut when_last_main = builder.when(and(local.is_main, not(next.is_main)));
+        when_last_main.assert_zero((next.part_idx - AB::F::ONE) * not(local.is_last));
+        when_last_main.assert_zero(next.col_idx * not(local.is_last));
+
+        let mut when_transition_main = builder.when(local.is_transition_main);
+        when_transition_main.assert_bool(next.sort_idx - local.sort_idx);
+        when_transition_main
+            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
+            .assert_bool(next.part_idx - local.part_idx);
+        when_transition_main
+            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
+            .when_ne(local.part_idx + AB::F::ONE, next.part_idx)
+            .assert_one(next.col_idx - local.col_idx);
+        when_transition_main
+            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
+            .when_ne(local.part_idx, next.part_idx)
+            .assert_zero(next.col_idx);
+        when_transition_main
+            .when(not(local.is_main))
+            .when_ne(local.sort_idx, next.sort_idx)
+            .assert_one(next.part_idx);
+        when_transition_main
+            .when_ne(local.sort_idx, next.sort_idx)
+            .assert_zero(next.col_idx);
+
+        /*
          * Compute col_claim[0] + lambda * rot_claim + ... (i.e. RLC of column/rotation claims)
          * and sent it to UnivariateRoundAir, which will constrain that the RLC is equal to the
          * sum of the proof's s_0 polynomial evaluated at each z in D.
@@ -310,12 +378,6 @@ where
             },
             local.is_valid,
         );
-
-        // TODO: constrain properly
-        // builder.when(local.is_first).assert_zero(local.idx);
-        // builder
-        //     .when(not(local.is_last))
-        //     .assert_one(next.idx - local.idx);
 
         assert_eq_array(
             &mut builder.when(not(local.is_last)),
