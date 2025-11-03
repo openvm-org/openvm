@@ -336,11 +336,10 @@ impl AirShapeProperty {
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct MerkleVerifyBusMessage<T> {
     pub leaf_hash: [T; DIGEST_SIZE],
-    pub merkle_idx: usize,
-    pub query_idx: usize,
-    pub depth: usize,
-    pub commit_major: usize,
-    pub commit_minor: usize,
+    pub merkle_idx: T,
+    pub depth: T,
+    pub commit_major: T,
+    pub commit_minor: T,
 }
 
 define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage);

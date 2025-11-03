@@ -121,7 +121,7 @@ pub fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> Vec<F> {
             preflight
                 .merkle_verify_logs
                 .iter()
-                .map(|(msg, _)| msg.depth + 1)
+                .map(|log| log.depth + 1)
                 .collect_vec()
         })
         .collect_vec();
@@ -167,26 +167,26 @@ pub fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> Vec<F> {
         cols.is_valid = F::ONE;
         cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.merkle_proof_idx = F::from_canonical_usize(merkle_proof_idx);
-        cols.commit_major = F::from_canonical_usize(log.0.commit_major);
-        cols.commit_minor = F::from_canonical_usize(log.0.commit_minor);
-        cols.depth = F::from_canonical_usize(log.0.depth);
-        if i == log.0.depth {
+        cols.commit_major = F::from_canonical_usize(log.commit_major);
+        cols.commit_minor = F::from_canonical_usize(log.commit_minor);
+        cols.depth = F::from_canonical_usize(log.depth);
+        if i == log.depth {
             cols.is_last_merkle = F::ONE;
         }
         if i == 0 {
             cols.is_first_merkle = F::ONE;
-            cur_hash = log.0.leaf_hash;
-            cur_idx = log.0.merkle_idx;
+            cur_hash = log.leaf_hash;
+            cur_idx = log.merkle_idx;
         }
         cols.cur_hash = cur_hash;
         cols.idx = F::from_canonical_usize(cur_idx);
         cols.idx_parity = F::from_canonical_usize(cur_idx % 2);
-        if i < log.0.depth {
+        if i < log.depth {
             cols.proof_or_commit =
-                proof.whir_proof.codeword_merkle_proofs[log.0.commit_major - 1][log.0.query_idx][i];
+                proof.whir_proof.codeword_merkle_proofs[log.commit_major - 1][log.query_idx][i];
         } else {
             // last row, it's the commit
-            cols.proof_or_commit = log.1;
+            cols.proof_or_commit = proof.whir_proof.codeword_commits[log.commit_major - 1];
         }
 
         cur_hash = if cur_idx % 2 == 0 {
