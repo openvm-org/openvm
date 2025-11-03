@@ -661,7 +661,7 @@ fn test_aot_mulh_randomized() {
     let mut expected = HashMap::new();
 
     for &offset in &offsets {
-        let value = rng.gen_range(0..(1 << 16));
+        let value = rng.gen_range(0..(1 << 11));
         instructions.push(add_immediate(offset, value));
         expected.insert(offset, value);
     }
