@@ -621,6 +621,8 @@ where
             );
         }
 
+        println!("[aot profiling] instret_end {}", vm_exec_state.vm_state.instret());
+
         if num_insns.is_some() {
             check_exit_code(vm_exec_state.exit_code)?;
         } else {
