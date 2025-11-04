@@ -1,6 +1,9 @@
 use itertools::Itertools;
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use stark_backend_v2::keygen::types::{MultiStarkVerifyingKeyV2, SystemParams};
+use stark_backend_v2::{
+    Digest,
+    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
+};
 
 use crate::cuda::types::AirData;
 
@@ -17,6 +20,7 @@ pub struct VerifyingKeyGpu {
     pub cpu: MultiStarkVerifyingKeyV2,
     pub per_air: DeviceBuffer<AirData>,
     pub system_params: SystemParams,
+    pub pre_hash: Digest,
 }
 
 impl VerifyingKeyGpu {
@@ -37,6 +41,7 @@ impl VerifyingKeyGpu {
             cpu: vk.clone(),
             per_air,
             system_params: vk.inner.params,
+            pre_hash: vk.pre_hash,
         }
     }
 }

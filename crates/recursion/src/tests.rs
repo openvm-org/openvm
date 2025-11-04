@@ -123,7 +123,7 @@ fn test_preflight_single_fib_sponge() {
 
     let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.into_log());
     let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
-    let preflight = circuit.run_preflight(preflight_sponge, &proof);
+    let preflight = circuit.run_preflight(preflight_sponge, &vk, &proof);
     assert_eq!(preflight.transcript.len(), prover_sponge_len);
 }
 
@@ -167,7 +167,7 @@ fn test_preflight_interactions() {
 
     let preflight_sponge = DuplexSpongeValidator::new(prover_sponge.into_log());
     let circuit = VerifierSubCircuit::<2>::new(Arc::new(vk.clone()));
-    let preflight = circuit.run_preflight(preflight_sponge, &proof);
+    let preflight = circuit.run_preflight(preflight_sponge, &vk, &proof);
     assert_eq!(preflight.transcript.len(), prover_sponge_len);
 }
 
