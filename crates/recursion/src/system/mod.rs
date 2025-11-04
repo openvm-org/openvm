@@ -35,6 +35,7 @@ use crate::{
 };
 
 mod dummy;
+pub(crate) mod frame;
 
 // TODO[jpw]: make this generic in <SC: StarkGenericConfig>
 pub trait AirModule {
@@ -295,8 +296,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let bus_inventory = BusInventory::new(&mut b);
         let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
 
+        let child_mvk_frame = child_mvk.as_ref().into();
         let transcript = TranscriptModule::new(bus_inventory.clone());
-        let proof_shape = ProofShapeModule::new(child_mvk.clone(), &mut b, bus_inventory.clone());
+        let proof_shape = ProofShapeModule::new(&child_mvk_frame, &mut b, bus_inventory.clone());
         let gkr = GkrModule::new(
             &child_mvk,
             &mut b,
@@ -337,14 +339,19 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     }
 
     /// Runs preflight for a single proof.
-    pub fn run_preflight<TS>(&self, mut sponge: TS, proof: &Proof) -> Preflight
+    pub fn run_preflight<TS>(
+        &self,
+        mut sponge: TS,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+    ) -> Preflight
     where
         TS: FiatShamirTranscript + TranscriptHistory,
     {
         let mut preflight = Preflight::default();
         // NOTE: it is not required that we group preflight into modules
         self.proof_shape
-            .run_preflight(proof, &mut preflight, &mut sponge);
+            .run_preflight(child_vk, proof, &mut preflight, &mut sponge);
         self.gkr.run_preflight(proof, &mut preflight, &mut sponge);
         self.batch_constraint
             .run_preflight(proof, &mut preflight, &mut sponge);
@@ -383,7 +390,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .par_iter()
             .map(|proof| {
                 let sponge = TS::default();
-                self.run_preflight(sponge, proof)
+                self.run_preflight(sponge, child_vk, proof)
             })
             .collect::<Vec<_>>();
 
@@ -450,16 +457,16 @@ pub mod cuda_tracegen {
             TS: FiatShamirTranscript + TranscriptHistory + Default,
         {
             debug_assert!(proofs.len() <= MAX_NUM_PROOFS);
-            let child_vk_gpu = VerifyingKeyGpu::new(&child_vk);
+            let child_vk_gpu = VerifyingKeyGpu::new(child_vk);
             let proofs_gpu = proofs
-                .into_iter()
-                .map(|proof_cpu| ProofGpu::new(child_vk, &proof_cpu))
+                .iter()
+                .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu))
                 .collect::<Vec<_>>();
             let preflights_gpu = proofs
                 .par_iter()
                 .map(|proof| {
                     let sponge = TS::default();
-                    let preflight_cpu = self.run_preflight(sponge, proof);
+                    let preflight_cpu = self.run_preflight(sponge, child_vk, proof);
                     // NOTE: this uses one stream per thread for H2D transfer
                     PreflightGpu::new(child_vk, proof, &preflight_cpu)
                 })
