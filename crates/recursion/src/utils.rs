@@ -1,7 +1,7 @@
 use std::ops::Index;
 
 use p3_air::AirBuilder;
-use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
+use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
 use stark_backend_v2::D_EF;
 
 // TODO(ayush): move somewhere else
@@ -81,6 +81,14 @@ where
     [x0 - y.into(), x1, x2, x3]
 }
 
+pub fn scalar_subtract_ext_field<FA>(x: impl Into<FA>, y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+{
+    let [y0, y1, y2, y3] = y.map(Into::into);
+    [x.into() - y0, -y1, -y2, -y3]
+}
+
 pub fn ext_field_multiply_scalar<FA>(x: [impl Into<FA>; D_EF], y: impl Into<FA>) -> [FA; D_EF]
 where
     FA: FieldAlgebra,
@@ -88,6 +96,21 @@ where
     let [x0, x1, x2, x3] = x.map(Into::into);
     let y = y.into();
     [x0 * y.clone(), x1 * y.clone(), x2 * y.clone(), x3 * y]
+}
+
+pub fn eq_1<FA>(x: [impl Into<FA>; D_EF], y: [impl Into<FA>; D_EF]) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+    FA::F: BinomiallyExtendable<D_EF>,
+{
+    let x = x.map(Into::into);
+    let y = y.map(Into::into);
+
+    let xy = ext_field_multiply::<FA>(x.clone(), y.clone());
+    let two_xy = ext_field_multiply_scalar::<FA>(xy, FA::TWO);
+    let x_plus_y = ext_field_add::<FA>(x, y);
+    let one_minus_x_plus_y = scalar_subtract_ext_field::<FA>(FA::ONE, x_plus_y);
+    ext_field_add(one_minus_x_plus_y, two_xy)
 }
 
 // TODO(ayush): move to a custom air builder
@@ -185,4 +208,36 @@ impl<T> Index<usize> for MultiProofVecVec<T> {
         debug_assert!(index < self.num_proofs());
         &self.data[self.bounds[index]..self.bounds[index + 1]]
     }
+}
+
+pub fn interpolate_quadratic<FA>(
+    pre_claim: [impl Into<FA>; D_EF],
+    ev1: [impl Into<FA>; D_EF],
+    ev2: [impl Into<FA>; D_EF],
+    alpha: [impl Into<FA>; D_EF],
+) -> [FA; D_EF]
+where
+    FA: FieldAlgebra,
+    FA::F: BinomiallyExtendable<D_EF>,
+{
+    let pre_claim = pre_claim.map(Into::into);
+    let ev1 = ev1.map(Into::into);
+    let ev2 = ev2.map(Into::into);
+    let alpha = alpha.map(Into::into);
+
+    let ev0 = ext_field_subtract::<FA>(pre_claim.clone(), ev1.clone());
+    let s1 = ext_field_subtract::<FA>(ev1.clone(), ev0.clone());
+    let s2 = ext_field_subtract::<FA>(ev2.clone(), ev1.clone());
+    let p = ext_field_multiply::<FA>(
+        ext_field_subtract::<FA>(s2, s1.clone()),
+        base_to_ext::<FA>(FA::from_f(FA::F::TWO.inverse())),
+    );
+    let q = ext_field_subtract::<FA>(s1, p.clone());
+    ext_field_add::<FA>(
+        ev0,
+        ext_field_multiply::<FA>(
+            alpha.clone(),
+            ext_field_add::<FA>(q, ext_field_multiply::<FA>(p, alpha)),
+        ),
+    )
 }

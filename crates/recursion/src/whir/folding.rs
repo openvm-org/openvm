@@ -1,17 +1,19 @@
 use core::borrow::{Borrow, BorrowMut};
 
+use openvm_circuit_primitives::utils::assert_array_eq;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     system::Preflight,
+    utils::{base_to_ext, ext_field_multiply, ext_field_subtract},
     whir::{
         FoldRecord,
         bus::{WhirAlphaBus, WhirAlphaMessage, WhirFoldingBus, WhirFoldingBusMessage},
@@ -28,7 +30,6 @@ struct WhirFoldingCols<T> {
     is_root: T,
     coset_shift: T,
     coset_idx: T,
-    is_coset_idx_zero: T,
     /// Distance from the leaf layer in the folding tree.
     height: T,
     twiddle: T,
@@ -56,12 +57,44 @@ impl BaseAir<F> for WhirFoldingAir {
     }
 }
 
-impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirFoldingAir {
+impl<AB: AirBuilder<F = F> + InteractionBuilder> Air<AB> for WhirFoldingAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
 
         let local = main.row_slice(0);
         let local: &WhirFoldingCols<AB::Var> = (*local).borrow();
+
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_root);
+        builder.when(local.is_root).assert_one(local.is_valid);
+        builder.when(local.is_root).assert_one(local.twiddle);
+        builder.when(local.is_root).assert_zero(local.coset_idx);
+        builder
+            .when(local.is_root)
+            .assert_eq(local.height, AB::F::from_canonical_usize(self.k));
+        builder
+            .when(local.is_root)
+            .assert_eq(local.z_final, local.coset_shift * local.coset_shift);
+        assert_array_eq(&mut builder.when(local.is_root), local.value, local.y_final);
+
+        let x = local.twiddle * local.coset_shift;
+
+        let term = ext_field_multiply::<AB::Expr>(
+            ext_field_subtract::<AB::Expr>(local.alpha, base_to_ext::<AB::Expr>(x.clone())),
+            ext_field_subtract::<AB::Expr>(local.left_value, local.right_value),
+        );
+        // value = left_value + term / (2x)
+        assert_array_eq(
+            builder,
+            ext_field_multiply::<AB::Expr>(
+                ext_field_subtract::<AB::Expr>(local.value, local.left_value),
+                base_to_ext::<AB::Expr>(x * AB::Expr::TWO),
+            ),
+            term,
+        );
 
         self.alpha_bus.lookup_key(
             builder,
@@ -169,10 +202,9 @@ pub(crate) fn generate_trace(
         cols.is_valid = F::ONE;
         cols.proof_idx = F::from_canonical_usize(proof_idx);
         cols.is_root = F::from_bool(coset_size == 1);
-        cols.alpha = preflight.whir.alphas[whir_round * k_whir + height - 1]
-            .as_base_slice()
-            .try_into()
-            .unwrap();
+        cols.alpha.copy_from_slice(
+            preflight.whir.alphas[whir_round * k_whir + height - 1].as_base_slice(),
+        );
         cols.height = F::from_canonical_usize(height);
         cols.whir_round = F::from_canonical_usize(whir_round);
         cols.query_idx = F::from_canonical_usize(query_idx);
@@ -184,10 +216,8 @@ pub(crate) fn generate_trace(
         cols.coset_shift = coset_shift;
         cols.coset_size = F::from_canonical_usize(coset_size);
         cols.z_final = preflight.whir.zjs[whir_round][query_idx];
-        cols.y_final = preflight.whir.yjs[whir_round][query_idx]
-            .as_base_slice()
-            .try_into()
-            .unwrap();
+        cols.y_final
+            .copy_from_slice(preflight.whir.yjs[whir_round][query_idx].as_base_slice());
     }
 
     RowMajorMatrix::new(trace, width)

@@ -45,7 +45,8 @@ impl<T, const DEPTH_MINUS_ONE: usize> NestedForLoopIoCols<T, DEPTH_MINUS_ONE> {
 pub struct NestedForLoopAuxCols<T, const DEPTH_MINUS_TWO: usize> {
     /// Array of flags indicating parent loop transitions (excludes outermost loop).
     /// For DEPTH=3 (i,j,k loops): contains only j_is_transition.
-    /// The outermost loop's transitions are handled by `when_transition()` and have no stored column.
+    /// The outermost loop's transitions are handled by `when_transition()` and have no stored
+    /// column.
     pub is_transition: [T; DEPTH_MINUS_TWO],
 }
 
@@ -122,7 +123,8 @@ impl<AB: AirBuilder, const DEPTH_MINUS_ONE: usize, const DEPTH_MINUS_TWO: usize>
                 let parent_is_transition: AB::Expr =
                     Self::local_is_transition(next_io.is_enabled.clone(), parent_next_is_first);
 
-                // Constrain is_transition[parent_level] to equal the calculated parent_is_transition
+                // Constrain is_transition[parent_level] to equal the calculated
+                // parent_is_transition
                 builder.assert_eq(
                     local_aux.is_transition[parent_level].clone(),
                     parent_is_transition.clone(),

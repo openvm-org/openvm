@@ -1,14 +1,9 @@
 // Utilities for dummy tracegen
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
-use stark_backend_v2::{
-    EF, F, keygen::types::MultiStarkVerifyingKeyV2, poly_common::Squarable, proof::Proof,
-};
+use stark_backend_v2::{EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use crate::{
-    bus::{
-        CommitmentsBusMessage, ConstraintSumcheckRandomness, WhirModuleMessage,
-        WhirOpeningPointMessage,
-    },
+    bus::{CommitmentsBusMessage, ConstraintSumcheckRandomness, WhirModuleMessage},
     system::Preflight,
 };
 
@@ -86,22 +81,5 @@ impl Preflight {
             }
         }
         messages
-    }
-
-    pub(crate) fn whir_opening_point_messages(
-        &self,
-        l_skip: usize,
-    ) -> Vec<WhirOpeningPointMessage<F>> {
-        let rnd = &self.stacking.sumcheck_rnd;
-        rnd[0]
-            .exp_powers_of_2()
-            .take(l_skip)
-            .chain(rnd[1..].iter().copied())
-            .enumerate()
-            .map(|(i, value)| WhirOpeningPointMessage {
-                idx: F::from_canonical_usize(i),
-                value: value.as_base_slice().try_into().unwrap(),
-            })
-            .collect()
     }
 }

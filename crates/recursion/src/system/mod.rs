@@ -213,7 +213,6 @@ pub struct WhirPreflight {
     pub gammas: Vec<EF>,
     pub pow_samples: Vec<F>,
     pub queries: Vec<F>,
-    pub query_indices: Vec<u32>,
     pub tidx_per_round: Vec<usize>,
     pub query_tidx_per_round: Vec<usize>,
     pub initial_claim_per_round: Vec<EF>,
@@ -221,7 +220,6 @@ pub struct WhirPreflight {
     pub pre_query_claims: Vec<EF>,
     pub eq_partials: Vec<EF>,
     pub fold_records: Vec<FoldRecord>,
-    pub initial_round_coset_vals: Vec<Vec<EF>>,
     pub final_poly_at_u: EF,
 }
 
@@ -421,7 +419,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
     // TODO[jpw]: remove this, Circuit should not be stateful. INT-5366
     pub(crate) fn clear(&self) {
-        self.exp_bits_len_air.records.lock().unwrap().clear();
+        self.exp_bits_len_air.requests.lock().unwrap().clear();
     }
 }
 
