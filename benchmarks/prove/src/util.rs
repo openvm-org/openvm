@@ -66,7 +66,7 @@ pub struct BenchmarkCli {
     #[arg(long, alias = "max_segment_length")]
     pub max_segment_length: Option<u32>,
 
-    /// Max cells per chip in segment for continuations
+    /// Total cells used in all chips in segment for continuations
     #[arg(long)]
     pub segment_max_cells: Option<usize>,
 

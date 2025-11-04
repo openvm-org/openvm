@@ -7,7 +7,7 @@ mkdir -p ~/.openvm/$HALO2_DIR
 mkdir -p ~/.openvm/$HALO2_DIR/interfaces
 mkdir -p ~/.openvm/params
 
-BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v1.4.0"
+BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v1.4.1"
 
 for file in "agg_stark.pk" "agg_stark.vk" "agg_halo2.pk" "root.asm"; do
     URL="$BASE_URL/$file"

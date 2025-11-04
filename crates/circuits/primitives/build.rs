@@ -1,4 +1,7 @@
 #[cfg(feature = "cuda")]
+use std::{env, path::PathBuf};
+
+#[cfg(feature = "cuda")]
 use openvm_cuda_builder::{cuda_available, CudaBuilder};
 
 fn main() {
@@ -17,5 +20,11 @@ fn main() {
 
         builder.emit_link_directives();
         builder.build();
+
+        // Export include dir for downstream crates:
+        let include_path = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+            .join("cuda")
+            .join("include");
+        println!("cargo:include={}", include_path.display()); // -> DEP_CIRCUIT_PRIMITIVES_CUDA_INCLUDE
     }
 }

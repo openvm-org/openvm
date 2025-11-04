@@ -69,4 +69,4 @@ jobs:
       - name: Run async concurrency test
         working-directory: benchmarks/prove
         run: |
-          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=14 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000
+          CUDA_OPT_LEVEL=3 MAX_CONCURRENCY=5 cargo run --bin async_regex --features cuda,async -- --max-segment-length $((1<<20)) --segment-max-cells 150000000
