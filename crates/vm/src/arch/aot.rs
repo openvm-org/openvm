@@ -316,9 +316,8 @@ where
             asm_str += &format!("asm_execute_pc_{}:\n", pc);
 
             // Check if we should suspend or not
-
             asm_str += "    cmp r14, r12\n";
-            asm_str += "    jae asm_run_end\n";
+            asm_str += &format!("    jae asm_run_end_{}\n", pc);
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
@@ -327,7 +326,7 @@ where
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
-                asm_str += "    mov rdx, r13\n";
+                asm_str += &format!("    mov rdx, {}\n", pc);
                 asm_str += "    mov rcx, r14\n";
                 asm_str += "    call extern_handler\n";
                 asm_str += "    add r14, 1\n"; // increment the instret
@@ -338,8 +337,7 @@ where
                 asm_str += &Self::pop_address_space_start();
                 // read the memory from the memory location of the RV32 registers in `GuestMemory`
                 // registers, to the appropriate XMM registers
-                asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should
-                                                   // terminate)
+                asm_str += &format!("   je asm_run_end_{}\n", pc);
                 asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
                 asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
                 asm_str += "    add rcx, rdx\n"; // add the base address and the offset
@@ -383,18 +381,18 @@ where
             }
         }
 
-        // asm_run_end part
-        asm_str += "asm_run_end:\n";
-        asm_str += "    sub r13, 1\n";
-        asm_str += "    mov rdi, rbx\n";
-        asm_str += "    mov rsi, rbp\n";
-        asm_str += "    mov rdx, r13\n";
-        asm_str += "    mov rcx, r14\n";
-        asm_str += "    call set_instret_and_pc\n";
-        asm_str += "    xor rax, rax\n";
-        asm_str += &Self::pop_external_registers();
-        asm_str += "    ret\n";
-        asm_str += "\n";
+        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            asm_str += &format!("asm_run_end_{}:\n", pc);
+            asm_str += "    mov rdi, rbx\n";
+            asm_str += "    mov rsi, rbp\n";
+            asm_str += &format!("    mov rdx, {}\n", pc);
+            asm_str += "    mov rcx, r14\n";
+            asm_str += "    call set_instret_and_pc\n";
+            asm_str += "    xor rax, rax\n";
+            asm_str += &Self::pop_external_registers();
+            asm_str += "    ret\n";
+            asm_str += "\n";
+        }
 
         // map_pc_base part
         asm_str += ".section .rodata\n";

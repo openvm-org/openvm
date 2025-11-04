@@ -231,7 +231,8 @@ pub trait AotExecutor<F> {
 
         asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                          // registers, to the appropriate XMM registers
-        asm_str += "    je asm_run_end\n"; // jump to end, if the return value is 1 (indicates that the program should terminate)
+        asm_str += &format!("   je asm_run_end_{}\n", pc);
+        
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
         asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
         asm_str += "    add rcx, rdx\n"; // add the base address and the offset
