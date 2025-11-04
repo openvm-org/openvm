@@ -612,6 +612,10 @@ where
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
+            #[cfg(target_arch = "x86_64")]
+            let start_cycles = core::arch::x86_64::_rdtsc();
+            let start_time = std::time::Instant::now();
+
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
@@ -619,9 +623,25 @@ where
                 from_state_instret,
                 instret_end,
             );
-        }
 
-        println!("[aot profiling] instret_end {}", vm_exec_state.vm_state.instret());
+            #[cfg(target_arch = "x86_64")]
+            let end_cycles = core::arch::x86_64::_rdtsc();
+            let duration = start_time.elapsed();
+
+            let instructions_executed = vm_exec_state.vm_state.instret() - from_state_instret;
+            
+            #[cfg(target_arch = "x86_64")]
+            {
+                let cycles = end_cycles - start_cycles;
+                let ipc = instructions_executed as f64 / cycles as f64;
+                let ips = instructions_executed as f64 / duration.as_secs_f64();
+                println!("[aot profiling] instructions: {}", instructions_executed);
+                println!("[aot profiling] cycles: {}", cycles);
+                println!("[aot profiling] IPC: {:.3}", ipc);
+                println!("[aot profiling] IPS: {:.2e}", ips);
+                println!("[aot profiling] duration: {:?}", duration);
+            }
+        }        
 
         if num_insns.is_some() {
             check_exit_code(vm_exec_state.exit_code)?;
