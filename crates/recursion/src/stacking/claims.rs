@@ -204,6 +204,8 @@ pub struct StackingClaimsAir {
     pub stacking_tidx_bus: StackingModuleTidxBus,
     pub claim_coefficients_bus: ClaimCoefficientsBus,
     pub sumcheck_claims_bus: SumcheckClaimsBus,
+
+    pub stacking_index_mult: usize,
 }
 
 impl BaseAirWithPublicValues<F> for StackingClaimsAir {}
@@ -279,7 +281,7 @@ where
                 commit_idx: local.commit_idx,
                 col_idx: local.stacked_col_idx,
             },
-            local.is_valid,
+            local.is_valid * AB::Expr::from_canonical_usize(self.stacking_index_mult),
         );
 
         /*

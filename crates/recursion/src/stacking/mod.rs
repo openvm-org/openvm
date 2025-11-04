@@ -51,6 +51,7 @@ pub struct StackingModule {
 
     l_skip: usize,
     n_stack: usize,
+    stacking_index_mult: usize,
 }
 
 impl StackingModule {
@@ -71,6 +72,8 @@ impl StackingModule {
             eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
             l_skip: child_vk.inner.params.l_skip,
             n_stack: child_vk.inner.params.n_stack,
+            stacking_index_mult: child_vk.inner.params.num_whir_queries
+                << child_vk.inner.params.k_whir,
         }
     }
 
@@ -170,6 +173,7 @@ impl AirModule for StackingModule {
             stacking_tidx_bus: self.stacking_tidx_bus,
             claim_coefficients_bus: self.claim_coefficients_bus,
             sumcheck_claims_bus: self.sumcheck_claims_bus,
+            stacking_index_mult: self.stacking_index_mult,
         };
         let eq_base_air = EqBaseAir {
             constraint_randomness_bus: self.bus_inventory.constraint_randomness_bus,
