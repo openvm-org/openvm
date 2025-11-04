@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
     engine::StarkFriEngine,
 };
 use p3_field::FieldAlgebra;
-use p3_matrix::dense::RowMajorMatrix;
+use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, F,
     keygen::types::MultiStarkVerifyingKeyV2,
@@ -79,6 +79,31 @@ fn debug(
             public_values: ctx.public_values.clone(),
         })
         .collect_vec();
+
+    for (air, ctx) in airs.iter().zip(ctxs.iter()) {
+        if air.name() == "Eq3bAir" {
+            let mut matrices = ctx
+                .cached_mains
+                .iter()
+                .map(|(_, data)| transpose(data.layout.mat_view(0, data.matrix.as_view())))
+                .collect_vec();
+            matrices.push(transpose(ctx.common_main.as_view()));
+
+            for (m_idx, matrix) in matrices.iter().enumerate() {
+                let matrix = matrix.as_ref();
+                let rows_to_print = matrix.height().min(8);
+                let width = crate::batch_constraint::eq_airs::eq_ns::EqNsColumns::<F>::width();
+                println!(
+                    "Eq3bAir trace preview (matrix #{m_idx}, {} rows, width {})",
+                    rows_to_print, width
+                );
+                for row_idx in 0..rows_to_print {
+                    let row = matrix.row_slice(row_idx);
+                    println!("row {row_idx}: {:?}", &*row);
+                }
+            }
+        }
+    }
     engine.debug(airs, pk, &inputs);
 }
 
