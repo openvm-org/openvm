@@ -191,30 +191,27 @@ unsafe fn execute_e12_impl<
     const ENABLED: bool,
 >(
     pre_compute: &JalLuiPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let JalLuiPreCompute { a, signed_imm } = *pre_compute;
-
+    let mut pc = exec_state.pc();
     let rd = if IS_JAL {
-        let rd_data = (*pc + DEFAULT_PC_STEP).to_le_bytes();
-        let next_pc = *pc as i32 + signed_imm;
+        let rd_data = (pc + DEFAULT_PC_STEP).to_le_bytes();
+        let next_pc = pc as i32 + signed_imm;
         debug_assert!(next_pc >= 0);
-        *pc = next_pc as u32;
+        pc = next_pc as u32;
         rd_data
     } else {
         let imm = signed_imm as u32;
         let rd = imm << 12;
-        *pc += DEFAULT_PC_STEP;
+        pc += DEFAULT_PC_STEP;
         rd.to_le_bytes()
     };
 
     if ENABLED {
         exec_state.vm_write(RV32_REGISTER_AS, a as u32, &rd);
     }
-
-    *instret += 1;
+    exec_state.set_pc(pc);
 }
 
 #[create_handler]
@@ -226,13 +223,10 @@ unsafe fn execute_e1_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalLuiPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -244,14 +238,11 @@ unsafe fn execute_e2_impl<
     const ENABLED: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalLuiPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(&pre_compute.data, exec_state);
 }

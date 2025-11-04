@@ -313,7 +313,8 @@ impl SegmentationCtx {
 
     /// Try segment if there is at least one instruction
     #[inline(always)]
-    pub fn create_final_segment(&mut self, instret: u64, trace_heights: &[u32]) {
+    pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
+        let instret = self.instret + self.segment_check_insns - self.instrets_until_check;
         let instret_start = self
             .segments
             .last()

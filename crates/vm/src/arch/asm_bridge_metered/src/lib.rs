@@ -57,14 +57,12 @@ pub extern "C" fn metered_set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
-    final_instret: u64,                    // rcx = final_instret
+    _final_instret: u64,                   // rcx = final_instret
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref
-        .vm_state
-        .set_instret_and_pc(final_instret, final_pc);
+    vm_exec_state_ref.vm_state.set_pc(final_pc);
 }
 
 #[no_mangle]
@@ -74,9 +72,6 @@ pub extern "C" fn metered_extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    let mut instret: Box<u64> = Box::new(cur_instret); // placeholder to call the handler function
-    let mut pc: Box<u32> = Box::new(cur_pc);
-
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
@@ -88,24 +83,15 @@ pub extern "C" fn metered_extern_handler(
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
 
     let ctx = &vm_exec_state_ref.ctx;
-    // `arg` is a runtime constant that we want to keep in register
-    // - For metered execution it is `segment_check_insns`
-    let arg = ctx.segmentation_ctx.segment_check_insns;
 
     unsafe {
-        (pre_compute_insns.handler)(
-            pre_compute_insns.pre_compute,
-            &mut instret,
-            &mut pc,
-            arg,
-            vm_exec_state_ref,
-        );
+        (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
     };
 
     match vm_exec_state_ref.exit_code {
         Ok(None) => {
             // execution continues
-            *pc
+            vm_exec_state_ref.vm_state.pc()
         }
         _ => {
             // special indicator that we must terminate

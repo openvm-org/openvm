@@ -25,13 +25,12 @@ impl ExecutionCtxTrait for ExecutionCtx {
     fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
 
     #[inline(always)]
-    fn should_suspend<F>(
-        _instret: u64,
-        _pc: u32,
-        _instret_left: u64,
-        exec_state: &mut VmExecState<F, GuestMemory, Self>,
-    ) -> bool {
-        exec_state.ctx.instret_left -= 1;
-        exec_state.ctx.instret_left == 0
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        if exec_state.ctx.instret_left == 0 {
+            true
+        } else {
+            exec_state.ctx.instret_left -= 1;
+            false
+        }
     }
 }

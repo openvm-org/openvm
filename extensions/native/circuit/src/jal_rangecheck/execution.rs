@@ -211,23 +211,22 @@ where
 #[inline(always)]
 unsafe fn execute_jal_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &JalPreCompute<F>,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     exec_state.vm_write(AS::Native as u32, pre_compute.a, &[pre_compute.return_pc]);
     // TODO(ayush): better way to do this
-    *pc = (F::from_canonical_u32(*pc) + pre_compute.b).as_canonical_u32();
-    *instret += 1;
+
+    let mut pc = exec_state.pc();
+    pc = (F::from_canonical_u32(pc) + pre_compute.b).as_canonical_u32();
+    exec_state.set_pc(pc);
 }
 
 #[inline(always)]
 unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &RangeCheckPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     let [a_val]: [F; 1] = exec_state.host_read(AS::Native as u32, pre_compute.a);
 
     exec_state.vm_write(AS::Native as u32, pre_compute.a, &[a_val]);
@@ -241,14 +240,13 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         // The range of `b`,`c` had already been checked in `pre_compute_e1`.
         if !(x < (1 << b) && y < (1 << c)) {
             let err = ExecutionError::Fail {
-                pc: *pc,
+                pc,
                 msg: "NativeRangeCheck",
             };
             return Err(err);
         }
     }
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -257,56 +255,44 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[inline(always)]
 unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &JalPreCompute<F> = pre_compute.borrow();
-    execute_jal_e12_impl(pre_compute, instret, pc, exec_state);
+    execute_jal_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalPreCompute<F>> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_jal_e12_impl(&pre_compute.data, instret, pc, exec_state);
+    execute_jal_e12_impl(&pre_compute.data, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_left: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &RangeCheckPreCompute = pre_compute.borrow();
-    execute_range_check_e12_impl(pre_compute, instret, pc, exec_state)
+    execute_range_check_e12_impl(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<RangeCheckPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_range_check_e12_impl(&pre_compute.data, instret, pc, exec_state)
+    execute_range_check_e12_impl(&pre_compute.data, exec_state)
 }

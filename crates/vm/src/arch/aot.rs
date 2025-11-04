@@ -822,7 +822,6 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
@@ -842,7 +841,7 @@ where
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
-                from_state_instret,
+                0,
                 0, /* TODO: this is a placeholder because in the pure case asm_run needs to take
                     * in 5 args. Fix later */
             );

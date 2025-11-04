@@ -197,12 +197,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(
-        _instret: u64,
-        _pc: u32,
-        _segment_check_insns: u64,
-        exec_state: &mut VmExecState<F, GuestMemory, Self>,
-    ) -> bool {
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
@@ -210,7 +205,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 
     #[inline(always)]
-    fn on_terminate<F>(instret: u64, _pc: u32, exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
         exec_state
             .ctx
             .memory_ctx
@@ -218,7 +213,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .segmentation_ctx
-            .create_final_segment(instret, &exec_state.ctx.trace_heights);
+            .create_final_segment(&exec_state.ctx.trace_heights);
     }
 }
 

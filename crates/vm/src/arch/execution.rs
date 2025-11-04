@@ -103,21 +103,12 @@ pub enum AotError {
     Other(String),
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
+/// Function pointer for interpreter execution with function signature `(pre_compute,
 /// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_left`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
-pub type ExecuteFunc<F, CTX> = unsafe fn(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    arg: u64,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-);
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -125,18 +116,9 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
-/// - `pc`, `instret`, `instret_left` are passed as separate arguments for efficiency
-///
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_left`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
-    instret: u64,
-    pc: u32,
-    arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 

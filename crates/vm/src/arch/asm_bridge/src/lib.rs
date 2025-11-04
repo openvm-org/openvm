@@ -52,14 +52,12 @@ pub extern "C" fn set_instret_and_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
-    final_instret: u64,                    // rcx = final_instret
+    _final_instret: u64,                   // rcx = final_instret
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref
-        .vm_state
-        .set_instret_and_pc(final_instret, final_pc);
+    vm_exec_state_ref.vm_state.set_pc(final_pc);
 }
 
 /// extern handler for the pure execution mode
@@ -74,11 +72,6 @@ pub extern "C" fn extern_handler(
     cur_pc: u32,
     cur_instret: u64,
 ) -> u32 {
-    // this is boxed for safety so that when `execute_e12_impl` runs when called by the handler
-    // it would be able to dereference instret and pc correctly
-    let mut instret: Box<u64> = Box::new(cur_instret);
-    let mut pc: Box<u32> = Box::new(cur_pc);
-
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
@@ -90,45 +83,33 @@ pub extern "C" fn extern_handler(
 
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
 
-    let ctx = &vm_exec_state_ref.ctx;
-    // `arg` is a runtime constant that we want to keep in register
-    // - For pure execution it is `instret_left`
-    let arg = ctx.instret_left;
-
     unsafe {
-        (pre_compute_insns.handler)(
-            pre_compute_insns.pre_compute,
-            &mut instret,
-            &mut pc,
-            arg,
-            vm_exec_state_ref,
-        );
+        (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
     };
 
+    let pc = vm_exec_state_ref.vm_state.pc();
     match vm_exec_state_ref.exit_code {
-        Ok(None) => {
-            // execution continues
-            *pc
-        }
+        Ok(None) => pc,
         _ => {
             // special indicator that we must terminate
             // this won't collide with actual pc value because pc values are always multiple of 4
-            (*pc) + 1
+            pc + 1
         }
     }
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+pub extern "C" fn should_suspend(_instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
     let instret_left = vm_exec_state_ref.ctx.instret_left;
 
-    if instret >= instret_left {
+    if instret_left == 0 {
         1 // should suspend is `true`
     } else {
+        vm_exec_state_ref.ctx.instret_left -= 1;
         0 // should suspend is `false`
     }
 }

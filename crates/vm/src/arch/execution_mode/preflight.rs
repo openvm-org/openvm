@@ -2,7 +2,7 @@ use crate::arch::Arena;
 
 pub struct PreflightCtx<RA> {
     pub arenas: Vec<RA>,
-    pub instret_left: Option<u64>,
+    pub instret_left: u64,
 }
 
 impl<RA: Arena> PreflightCtx<RA> {
@@ -18,7 +18,7 @@ impl<RA: Arena> PreflightCtx<RA> {
 
         Self {
             arenas,
-            instret_left,
+            instret_left: instret_left.unwrap_or(u64::MAX),
         }
     }
 }

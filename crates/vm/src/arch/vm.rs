@@ -605,7 +605,6 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
 
-        let instret_left = num_insns.map(|ni| state.instret().saturating_add(ni));
         // TODO[jpw]: figure out how to compute RA specific main_widths
         let main_widths = self
             .pk
@@ -616,7 +615,7 @@ where
         let capacities = zip_eq(trace_heights, main_widths)
             .map(|(&h, w)| (h as usize, w))
             .collect::<Vec<_>>();
-        let ctx = PreflightCtx::new_with_capacity(&capacities, instret_left);
+        let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let system_config: &SystemConfig = self.config().as_ref();
         let adapter_offset = system_config.access_adapter_air_id_offset();
@@ -626,7 +625,6 @@ where
         let access_adapter_arena_size_bound = records::arena_size_bound(
             &trace_heights[adapter_offset..adapter_offset + num_adapters],
         );
-        let instret = state.instret();
         let pc = state.pc();
         let memory = TracingMemory::from_image(
             state.memory,
@@ -635,7 +633,6 @@ where
         );
         let from_state = ExecutionState::new(pc, memory.timestamp());
         let vm_state = VmState::new(
-            instret,
             pc,
             memory,
             state.streams,
@@ -655,7 +652,6 @@ where
         #[cfg(feature = "perf-metrics")]
         crate::metrics::end_segment_metrics(&mut exec_state);
 
-        let instret = exec_state.vm_state.instret();
         let pc = exec_state.vm_state.pc();
         let memory = exec_state.vm_state.memory;
         let to_state = ExecutionState::new(pc, memory.timestamp());
@@ -677,7 +673,6 @@ where
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
-            instret,
             pc,
             memory.data,
             exec_state.vm_state.streams,
@@ -1138,11 +1133,10 @@ where
             // We need a separate span so the metric label includes "segment" from _segment_span
             let _prove_span = info_span!("total_proof").entered();
             let Segment {
-                instret_start,
                 num_insns,
                 trace_heights,
+                ..
             } = segment;
-            assert_eq!(state.as_ref().unwrap().instret(), instret_start);
             let from_state = Option::take(&mut state).unwrap();
             vm.transport_init_memory_to_device(&from_state.memory);
             let PreflightExecutionOutput {
@@ -1204,7 +1198,6 @@ where
         let final_memory = final_memory.ok_or(ExecutionError::DidNotTerminate)?;
         // Put back state to avoid re-allocation
         self.state = Some(VmState::new_with_defaults(
-            0,
             exe.pc_start,
             final_memory,
             vec![],

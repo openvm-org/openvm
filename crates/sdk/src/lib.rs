@@ -408,10 +408,11 @@ where
             .metered_cost_interpreter(&exe)
             .map_err(VirtualMachineError::from)?;
 
-        let (cost, final_state) = interpreter
+        let (ctx, final_state) = interpreter
             .execute_metered_cost(inputs, ctx)
             .map_err(VirtualMachineError::from)?;
-        let instret = final_state.instret();
+        let instret = ctx.instret;
+        let cost = ctx.cost;
 
         let public_values = extract_public_values(
             self.executor.config.as_ref().num_public_values,
