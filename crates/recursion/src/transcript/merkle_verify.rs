@@ -156,10 +156,6 @@ pub fn generate_trace(proofs: &[Proof], preflights: &[Preflight]) -> Vec<F> {
         } else {
             idx_in_proof - num_rows_cum_sums_within_proof[proof_idx][merkle_proof_idx - 1]
         };
-        println!(
-            "working proof idx: {}, merkle proof idx: {}, i: {}",
-            proof_idx, merkle_proof_idx, i
-        );
 
         let log = &preflight.merkle_verify_logs[merkle_proof_idx];
 
