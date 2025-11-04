@@ -69,15 +69,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[
-    "fibonacci_recursive",
     "fibonacci_iterative",
-    "quicksort",
-    "bubblesort",
-    "revm_snailtracer",
-    "keccak256",
-    "sha256",
-    "revm_transfer",
-    "pairing",
 ];
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
@@ -256,7 +248,7 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
-#[divan::bench(args = APP_PROGRAMS, sample_count=10)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=1)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -271,6 +263,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         });
 }
 
+/*
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
@@ -501,3 +494,4 @@ fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str
                 .expect("Failed to execute preflight");
         });
 }
+*/

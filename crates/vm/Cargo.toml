@@ -50,6 +50,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 memmap2.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 libc.workspace = true
+perfcnt = "0.8"
 
 [dev-dependencies]
 test-log.workspace = true

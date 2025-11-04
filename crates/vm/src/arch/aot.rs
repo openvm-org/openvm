@@ -1,10 +1,13 @@
 #![cfg(feature = "aot")]
-use std::{ffi::c_void, fs, process::Command};
+use std::{ffi::c_void, fs, process::Command, time::Instant};
 
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
+
+use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux as Builder};
+use perfcnt::AbstractPerfCounter; // start/stop/read
 
 use crate::{
     arch::{
@@ -612,12 +615,51 @@ where
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
+            let start_time = Instant::now();
+
+            // Prepare counters (user space only, current process/thread)
+            let mut cache_misses = Builder::from_hardware_event(HardwareEventType::CacheMisses)
+                .exclude_kernel()
+                .finish()
+                .expect("perf counter (cache_misses)");
+
+            let mut cache_refs = Builder::from_hardware_event(HardwareEventType::CacheReferences)
+                .exclude_kernel()
+                .finish()
+                .expect("perf counter (cache_refs)");
+
+            // Count ONLY inside asm_run
+            cache_misses.reset().ok();
+            cache_refs.reset().ok();
+            cache_misses.start().ok();
+            cache_refs.start().ok();
+
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 from_state_instret,
                 instret_end,
+            );
+
+            cache_misses.stop().ok();
+            cache_refs.stop().ok();
+
+            let misses: u64 = cache_misses.read().unwrap_or(0);
+            let refs: u64 = cache_refs.read().unwrap_or(0);
+            let miss_rate: f64 = if refs > 0 {
+                (misses as f64) / (refs as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            let elapsed = start_time.elapsed();
+            let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+            let instructions_executed = vm_exec_state.vm_state.instret() - from_state_instret;
+
+            println!(
+                "[AOT] execution_time_ms={:.3} instructions_executed={} cache_misses={} cache_refs={} miss_rate={:.2}%",
+                elapsed_ms, instructions_executed, misses, refs, miss_rate
             );
         }
 
