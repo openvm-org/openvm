@@ -29,6 +29,7 @@ struct ProofShapeTracegenInputs {
     size_t l_skip;
     size_t max_cached;
     size_t min_cached_idx;
+    Digest pre_hash;
     uint32_t *range_checker_8_ptr;
     uint32_t *range_checker_5_ptr;
     uint32_t *pow_checker_ptr;
@@ -221,6 +222,7 @@ __device__ __forceinline__ void fill_summary_row(
     size_t part_cached_mult_idx,
     size_t n_max,
     size_t n_logup,
+    Digest &pre_hash,
     RangeChecker &range_checker,
     PowerChecker<32> &pow_checker
 ) {
@@ -295,6 +297,10 @@ __device__ __forceinline__ void fill_summary_row(
     range_checker.add_count(max_interaction_decomp[diff_idx] - interaction_decomp[diff_idx] - 1);
     pow_checker.add_pow_count(msb_limb_zero_bits);
     pow_checker.add_range_count(n_max > n_logup ? n_max - n_logup : n_logup - n_max);
+
+    row.write_array(
+        part_cached_mult_idx + MAX_CACHED + DIGEST_SIZE * (MAX_CACHED - 1), DIGEST_SIZE, pre_hash
+    );
 }
 
 template <size_t NUM_PROOFS, size_t MAX_CACHED>
@@ -335,6 +341,7 @@ __global__ void proof_shape_tracegen(
                 part_cached_mult_idx,
                 proof_data.n_max,
                 proof_data.n_logup,
+                inputs.pre_hash,
                 range_checker,
                 pow_checker
             );
