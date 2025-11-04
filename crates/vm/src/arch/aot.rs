@@ -378,6 +378,7 @@ where
                     &Self::pop_internal_registers(),
                     &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
                     &instruction,
+                    pc
                 );
             }
         }

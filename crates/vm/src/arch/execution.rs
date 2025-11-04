@@ -186,11 +186,11 @@ pub trait AotExecutor<F> {
 
     Postcondition: rax = return value of AOT's extern_handler
     */
-    fn call_extern_handler(&self) -> String {
+    fn call_extern_handler(&self, pc: u32) -> String {
         let mut asm_str = String::new();
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, rbp\n";
-        asm_str += "    mov rdx, r13\n";
+        asm_str += &format!("   mov rdx, {}\n", pc);
         asm_str += "    mov rcx, r14\n";
         asm_str += "    call extern_handler\n";
         asm_str
@@ -217,11 +217,12 @@ pub trait AotExecutor<F> {
         pop_internal_registers_str: &str,
         rv32_regs_to_xmm_str: &str,
         _inst: &Instruction<F>,
+        pc: u32
     ) -> String {
         let mut asm_str = String::new();
 
         asm_str += push_internal_registers_str;
-        asm_str += &self.call_extern_handler();
+        asm_str += &self.call_extern_handler(pc);
         asm_str += "    add r14, 1\n"; // increment the instret
         asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
         asm_str += "    AND rax, 1\n"; // check if the return value is 1
