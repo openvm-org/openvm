@@ -668,8 +668,8 @@ where
             let llc_missr= if llcr> 0 { (llcm as f64 / llcr as f64) * 100.0 } else { 0.0 };
 
             println!(
-                "[AOT] ipc={:.3} br_miss%={:.2} llc_miss%={:.2}",
-                ipc, br_missr, llc_missr
+                "[AOT] ins={} ipc={:.3} br_miss%={:.2} llc_miss%={:.2}",
+                ins, ipc, br_missr, llc_missr
             );
         }
 
