@@ -1,15 +1,21 @@
+use core::{cmp, iter::zip};
 use std::sync::Arc;
 
 use itertools::{Itertools, izip};
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField};
+use p3_maybe_rayon::prelude::*;
+use p3_symmetric::Permutation;
 use stark_backend_v2::{
     EF, F,
     keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poly_common::{Squarable, interpolate_quadratic_at_012},
-    poseidon2::sponge::{
-        FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice, poseidon2_tree_compress,
+    poseidon2::{
+        CHUNK, WIDTH, poseidon2_perm,
+        sponge::{
+            FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice, poseidon2_tree_compress,
+        },
     },
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
@@ -23,14 +29,14 @@ use crate::{
     },
     whir::{
         bus::{
-            FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus, VerifyQueryBus,
-            WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus, WhirGammaBus,
-            WhirQueryBus, WhirSumcheckBus,
+            FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
+            VerifyQueryBus, WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus,
+            WhirGammaBus, WhirQueryBus, WhirSumcheckBus,
         },
         final_poly_mle_eval::FinalPoleMleEvalAir,
         final_poly_query_eval::FinalPolyQueryEvalAir,
         folding::WhirFoldingAir,
-        initial_opened_values::InitialOpenedValuesAir,
+        initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
         non_initial_opened_values::NonInitialOpenedValuesAir,
         query::WhirQueryAir,
         sumcheck::SumcheckAir,
@@ -68,6 +74,7 @@ pub struct WhirModule {
     query_bus: WhirQueryBus,
     eq_alpha_u_bus: WhirEqAlphaUBus,
     final_poly_bus: WhirFinalPolyBus,
+    final_poly_folding_bus: FinalPolyFoldingBus,
 }
 
 impl WhirModule {
@@ -88,6 +95,7 @@ impl WhirModule {
         let final_poly_mle_eval_bus = FinalPolyMleEvalBus::new(b.new_bus_idx());
         let final_poly_query_eval_bus = FinalPolyQueryEvalBus::new(b.new_bus_idx());
         let final_poly_bus = WhirFinalPolyBus::new(b.new_bus_idx());
+        let final_poly_folding_bus = FinalPolyFoldingBus::new(b.new_bus_idx());
         Self {
             params: child_vk.inner.params,
             bus_inventory,
@@ -103,12 +111,18 @@ impl WhirModule {
             query_bus,
             eq_alpha_u_bus,
             final_poly_bus,
+            final_poly_folding_bus,
         }
     }
-    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
-    where
-        TS: FiatShamirTranscript + TranscriptHistory,
-    {
+}
+
+impl WhirModule {
+    pub fn run_preflight<TS: FiatShamirTranscript + TranscriptHistory>(
+        &self,
+        proof: &Proof,
+        preflight: &mut Preflight,
+        ts: &mut TS,
+    ) {
         let WhirProof {
             whir_sumcheck_polys,
             codeword_commits,
@@ -145,13 +159,18 @@ impl WhirModule {
             .zip(mu.powers())
             .fold(EF::ZERO, |acc, (&opening, mu_pow)| acc + mu_pow * opening);
 
+        let u = preflight.stacking.sumcheck_rnd[0]
+            .exp_powers_of_2()
+            .take(l_skip)
+            .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
+            .collect_vec();
+
         let num_whir_rounds = whir_pow_witnesses.len();
         let mut gammas = vec![];
         let mut z0s = vec![];
         let mut alphas = vec![];
         let mut pow_samples = vec![];
         let mut queries = vec![];
-        let mut query_indices = vec![];
         let mut tidx_per_round = vec![];
         let mut query_tidx_per_round = vec![];
         let mut initial_claim_per_round = vec![];
@@ -163,7 +182,6 @@ impl WhirModule {
         let mut eq_partials = vec![];
         let mut eq_partial = EF::ONE;
         let mut fold_records = vec![];
-        let mut initial_round_coset_vals = vec![];
         let mut merkle_verify_logs = vec![];
 
         let mut log_rs_domain_size = l_skip + n_stack + log_blowup;
@@ -184,8 +202,8 @@ impl WhirModule {
                 let alpha = ts.sample_ext();
                 alphas.push(alpha);
 
-                let u = preflight.stacking.sumcheck_rnd[i * k_whir + j];
-                eq_partial *= EF::ONE - alpha - u + alpha * u.double();
+                let uj = u[i * k_whir + j];
+                eq_partial *= EF::ONE - alpha - uj + alpha * uj.double();
                 eq_partials.push(eq_partial);
 
                 claim = interpolate_quadratic_at_012(&[ev0, ev1, ev2], alpha);
@@ -205,25 +223,16 @@ impl WhirModule {
             let pow_sample = ts.sample();
             pow_samples.push(pow_sample);
 
-            self.exp_bits_len_air.add_exp_bits_len(
-                F::GENERATOR,
-                pow_sample,
-                F::from_canonical_usize(whir_pow_bits),
-                F::ONE,
-            );
+            self.exp_bits_len_air
+                .add_exp_bits_len(F::GENERATOR, pow_sample, whir_pow_bits);
 
             query_tidx_per_round.push(ts.len());
             let mut round_queries = vec![];
-            let mut round_query_indices = vec![];
             for _ in 0..num_whir_queries {
                 let sample = ts.sample();
-                let bit_len = (log_rs_domain_size - k_whir) as u32;
-                let idx = sample.as_canonical_u32() & ((1u32 << bit_len) - 1);
                 round_queries.push(sample);
-                round_query_indices.push(idx);
             }
             queries.extend(&round_queries);
-            query_indices.extend(&round_query_indices);
             let gamma = ts.sample_ext();
             gammas.push(gamma);
 
@@ -238,16 +247,13 @@ impl WhirModule {
 
             pre_query_claims.push(claim);
             let omega = F::two_adic_generator(log_rs_domain_size);
-            for (query_idx, index) in round_query_indices.into_iter().enumerate() {
+            for (query_idx, sample) in round_queries.into_iter().enumerate() {
+                let index = sample.as_canonical_u32() & ((1 << (log_rs_domain_size - k_whir)) - 1);
                 let zj_root = omega.exp_u64(index as u64);
-                let zj = zj_root.exp_power_of_2(k_whir);
+                self.exp_bits_len_air
+                    .add_exp_bits_len(omega, sample, log_rs_domain_size - k_whir);
 
-                self.exp_bits_len_air.add_exp_bits_len(
-                    F::two_adic_generator(log_rs_domain_size - k_whir),
-                    round_queries[query_idx],
-                    F::from_canonical_usize(log_rs_domain_size - k_whir),
-                    zj_root,
-                );
+                let zj = zj_root.exp_power_of_2(k_whir);
 
                 let yj = if i == 0 {
                     let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
@@ -263,7 +269,6 @@ impl WhirModule {
                             }
                         }
                     }
-                    initial_round_coset_vals.push(codeword_vals.clone());
                     binary_k_fold(
                         codeword_vals,
                         &alphas[alphas.len() - k_whir..],
@@ -317,11 +322,6 @@ impl WhirModule {
 
         let f = Mle::from_coeffs(final_poly.clone());
         let t = k_whir * num_whir_rounds;
-        let u = preflight.stacking.sumcheck_rnd[0]
-            .exp_powers_of_2()
-            .take(l_skip)
-            .chain(preflight.stacking.sumcheck_rnd[1..].iter().copied())
-            .collect_vec();
         let final_poly_at_u = f.eval_at_point(&u[t..]);
 
         preflight.whir = WhirPreflight {
@@ -333,7 +333,6 @@ impl WhirModule {
             gammas,
             pow_samples,
             queries,
-            query_indices,
             tidx_per_round,
             query_tidx_per_round,
             initial_claim_per_round,
@@ -341,15 +340,20 @@ impl WhirModule {
             post_sumcheck_claims,
             eq_partials,
             fold_records,
-            initial_round_coset_vals,
             final_poly_at_u,
         };
         preflight.merkle_verify_logs = merkle_verify_logs;
     }
 }
 
+struct WhirBlobCpu {
+    initial_opened_values_records: Vec<InitialOpenedValueRecord>,
+}
+
 impl AirModule for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
+        let params = self.params;
+
         let whir_round_air = WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
@@ -361,10 +365,11 @@ impl AirModule for WhirModule {
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
             query_bus: self.query_bus,
             gamma_bus: self.gamma_bus,
-            k: self.params.k_whir,
-            num_queries: self.params.num_whir_queries,
-            final_poly_len: 1 << self.params.log_final_poly_len,
-            pow_bits: self.params.whir_pow_bits,
+            k: params.k_whir,
+            num_queries: params.num_whir_queries,
+            num_rounds: params.num_whir_rounds(),
+            final_poly_len: 1 << params.log_final_poly_len,
+            pow_bits: params.whir_pow_bits,
             generator: F::GENERATOR,
         };
         let whir_sumcheck_air = SumcheckAir {
@@ -373,17 +378,21 @@ impl AirModule for WhirModule {
             transcript_bus: self.bus_inventory.transcript_bus,
             alpha_bus: self.alpha_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
+            k: params.k_whir,
         };
         let initial_round_opened_values_air = InitialOpenedValuesAir {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            k: self.params.k_whir,
+            k: params.k_whir,
         };
         let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            k: self.params.k_whir,
+            _poseidon_bus: self.bus_inventory.poseidon2_bus,
+            _merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
+            k: params.k_whir,
+            _initial_log_domain_size: params.n_stack + params.l_skip + params.log_blowup,
         };
         let query_air = WhirQueryAir {
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -391,11 +400,14 @@ impl AirModule for WhirModule {
             query_bus: self.query_bus,
             verify_queries_bus: self.verify_queries_bus,
             verify_query_bus: self.verify_query_bus,
+            num_queries: params.num_whir_queries,
+            k: params.k_whir,
+            initial_log_domain_size: params.n_stack + params.l_skip + params.log_blowup,
         };
         let folding_air = WhirFoldingAir {
             alpha_bus: self.alpha_bus,
             folding_bus: self.folding_bus,
-            k: self.params.k_whir,
+            k: params.k_whir,
         };
         let final_poly_mle_eval_air = FinalPoleMleEvalAir {
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
@@ -403,6 +415,11 @@ impl AirModule for WhirModule {
             final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
             eq_alpha_u_bus: self.eq_alpha_u_bus,
             final_poly_bus: self.final_poly_bus,
+            folding_bus: self.final_poly_folding_bus,
+            num_vars: params.log_final_poly_len,
+            point_idx_start: params.n_stack + params.l_skip - params.log_final_poly_len,
+            num_whir_rounds: params.num_whir_rounds(),
+            num_whir_queries: params.num_whir_queries,
         };
         let final_poly_query_eval_air = FinalPolyQueryEvalAir {
             query_bus: self.query_bus,
@@ -410,17 +427,118 @@ impl AirModule for WhirModule {
             gamma_bus: self.gamma_bus,
             final_poly_bus: self.final_poly_bus,
             final_poly_query_eval_bus: self.final_poly_query_eval_bus,
+            num_whir_rounds: params.num_whir_rounds(),
+            k_whir: params.k_whir,
+            log_final_poly_len: params.log_final_poly_len,
         };
         vec![
             Arc::new(whir_round_air),
             Arc::new(whir_sumcheck_air),
+            Arc::new(query_air),
             Arc::new(initial_round_opened_values_air),
             Arc::new(non_initial_round_opened_values_air),
-            Arc::new(query_air),
             Arc::new(folding_air),
             Arc::new(final_poly_mle_eval_air),
             Arc::new(final_poly_query_eval_air),
         ]
+    }
+}
+
+impl WhirModule {
+    fn generate_blob(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> WhirBlobCpu {
+        // TODO: Move more stuff here. (Out of preflight and redundant logic in generate_trace
+        // functions.)
+        let SystemParams {
+            l_skip: _,
+            n_stack: _,
+            k_whir,
+            num_whir_queries,
+            log_final_poly_len: _,
+            whir_pow_bits: _,
+            ..
+        } = child_vk.inner.params;
+        let perm = poseidon2_perm();
+
+        let mut initial_opened_values_records = vec![];
+        let mut initial_opened_values_rows_per_proof = vec![0; proofs.len()];
+
+        for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
+            let mu = preflight.stacking.stacking_batching_challenge;
+            let num_commits = proof.whir_proof.initial_round_opened_rows.len();
+
+            let stacking_width: usize = proof
+                .stacking_proof
+                .stacking_openings
+                .iter()
+                .map(|opening| opening.len())
+                .sum();
+            let mu_pows = mu.powers().take(stacking_width).collect_vec();
+
+            for query_idx in 0..num_whir_queries {
+                let commit_widths: Vec<usize> = (0..num_commits)
+                    .map(|c| {
+                        let opened_rows = &proof.whir_proof.initial_round_opened_rows[c][query_idx];
+                        opened_rows.len() >> k_whir
+                    })
+                    .collect();
+
+                let mut codeword_vals = EF::zero_vec(1 << k_whir);
+                for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
+                    let mut base = 0;
+                    for (commit_idx, opened_rows_per_query) in proof
+                        .whir_proof
+                        .initial_round_opened_rows
+                        .iter()
+                        .enumerate()
+                    {
+                        let opened_rows = &opened_rows_per_query[query_idx];
+
+                        let width = commit_widths[commit_idx];
+                        let num_chunks = width.div_ceil(CHUNK);
+                        initial_opened_values_rows_per_proof[proof_idx] += num_chunks;
+
+                        let mut state = [F::ZERO; WIDTH];
+                        for chunk_idx in 0..num_chunks {
+                            let chunk_start = chunk_idx * CHUNK;
+                            let chunk_len = cmp::min(CHUNK, width - chunk_start);
+
+                            let opened_chunk =
+                                &opened_rows[coset_idx][chunk_start..chunk_start + chunk_len];
+
+                            state[..chunk_len].copy_from_slice(opened_chunk);
+                            let pre_state = state;
+                            perm.permute_mut(&mut state);
+
+                            initial_opened_values_records.push(InitialOpenedValueRecord {
+                                proof_idx,
+                                query_idx,
+                                commit_idx,
+                                chunk_idx,
+                                chunk_len,
+                                coset_idx,
+                                mu_pow: mu_pows[base + chunk_start],
+                                codeword_slice_val_acc: *codeword_val,
+                                pre_state,
+                                post_state: state,
+                            });
+
+                            for (offset, &val) in opened_chunk.iter().enumerate() {
+                                *codeword_val += mu_pows[base + chunk_idx + offset] * val;
+                            }
+                        }
+                        base += width;
+                    }
+                }
+            }
+        }
+        WhirBlobCpu {
+            initial_opened_values_records,
+        }
     }
 }
 
@@ -431,20 +549,22 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for WhirModule {
         proofs: &[Proof],
         preflights: &[Preflight],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
-        let traces = [
-            whir_round::generate_trace(child_vk, proofs, preflights),
-            sumcheck::generate_trace(child_vk, proofs, preflights),
-            initial_opened_values::generate_trace(child_vk, proofs, preflights),
-            non_initial_opened_values::generate_trace(child_vk, proofs, preflights),
-            query::generate_trace(child_vk, proofs, preflights),
-            folding::generate_trace(child_vk, proofs, preflights),
-            final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
-            final_poly_query_eval::generate_trace(child_vk, proofs, preflights),
-        ];
-        traces
-            .into_iter()
-            .map(|trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace)))
-            .collect()
+        let blob = self.generate_blob(child_vk, proofs, preflights);
+
+        [
+            WhirModuleChip::WhirRound,
+            WhirModuleChip::Sumcheck,
+            WhirModuleChip::Query,
+            WhirModuleChip::InitialOpenedValues,
+            WhirModuleChip::NonInitialOpenedValues,
+            WhirModuleChip::Folding,
+            WhirModuleChip::FinalPolyMleEval,
+            WhirModuleChip::FinalPolyQueryEval,
+        ]
+        .par_iter()
+        .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
+        .map(AirProvingContextV2::simple_no_pis)
+        .collect()
     }
 }
 
@@ -510,6 +630,49 @@ fn binary_k_fold(
         }
     }
     values[0]
+}
+
+enum WhirModuleChip {
+    WhirRound,
+    Sumcheck,
+    Query,
+    InitialOpenedValues,
+    NonInitialOpenedValues,
+    Folding,
+    FinalPolyQueryEval,
+    FinalPolyMleEval,
+}
+
+impl WhirModuleChip {
+    fn generate_trace(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+        blob: &WhirBlobCpu,
+    ) -> ColMajorMatrix<F> {
+        use WhirModuleChip::*;
+        let trace = match self {
+            WhirRound => whir_round::generate_trace(child_vk, proofs, preflights),
+            Sumcheck => sumcheck::generate_trace(child_vk, proofs, preflights),
+            Query => query::generate_trace(child_vk, proofs, preflights),
+            InitialOpenedValues => initial_opened_values::generate_trace(
+                child_vk.inner.params,
+                proofs,
+                preflights,
+                &blob.initial_opened_values_records,
+            ),
+            NonInitialOpenedValues => {
+                non_initial_opened_values::generate_trace(child_vk, proofs, preflights)
+            }
+            Folding => folding::generate_trace(child_vk, proofs, preflights),
+            FinalPolyMleEval => final_poly_mle_eval::generate_trace(child_vk, proofs, preflights),
+            FinalPolyQueryEval => {
+                final_poly_query_eval::generate_trace(child_vk, proofs, preflights)
+            }
+        };
+        ColMajorMatrix::from_row_major(&trace)
+    }
 }
 
 #[cfg(feature = "cuda")]

@@ -162,12 +162,8 @@ impl GkrModule {
         ts.observe(*logup_pow_witness);
         let logup_pow_sample = ts.sample();
 
-        self.exp_bits_len_air.add_exp_bits_len(
-            F::GENERATOR,
-            logup_pow_sample,
-            F::from_canonical_usize(self.logup_pow_bits),
-            F::ONE,
-        );
+        self.exp_bits_len_air
+            .add_exp_bits_len(F::GENERATOR, logup_pow_sample, self.logup_pow_bits);
 
         let _alpha_logup = ts.sample_ext();
         let _beta_logup = ts.sample_ext();

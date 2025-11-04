@@ -28,6 +28,7 @@ use crate::{
 
 pub mod merkle_verify;
 pub mod poseidon2;
+#[allow(clippy::module_inception)]
 pub mod transcript;
 
 // TODO: I think 1 is enough for now for our max constraint degree?

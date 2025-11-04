@@ -48,6 +48,7 @@ define_typed_per_proof_permutation_bus!(VerifyQueriesBus, VerifyQueriesBusMessag
 pub struct VerifyQueryBusMessage<T> {
     pub whir_round: T,
     pub query_idx: T,
+    pub merkle_idx_bit_src: T,
     pub zi_root: T,
     pub zi: T,
     pub yi: [T; D_EF],
@@ -95,11 +96,23 @@ define_typed_per_proof_permutation_bus!(WhirFoldingBus, WhirFoldingBusMessage);
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct FinalPolyMleEvalMessage<T> {
     pub tidx: T,
-    pub last_whir_round: T,
+    pub num_whir_rounds: T,
     pub value: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(FinalPolyMleEvalBus, FinalPolyMleEvalMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct FinalPolyFoldingMessage<T> {
+    pub proof_idx: T,
+    pub depth: T,
+    pub node_idx: T,
+    pub num_nodes_in_layer: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(FinalPolyFoldingBus, FinalPolyFoldingMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
