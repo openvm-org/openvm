@@ -8,7 +8,9 @@ use stark_backend_v2::{
     EF, F,
     keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poly_common::{Squarable, interpolate_quadratic_at_012},
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice},
+    poseidon2::sponge::{
+        FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice, poseidon2_tree_compress,
+    },
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
 };
@@ -37,6 +39,7 @@ use crate::{
 };
 
 mod bus;
+
 mod final_poly_mle_eval;
 mod final_poly_query_eval;
 mod folding;
@@ -112,7 +115,7 @@ impl WhirModule {
             ood_values,
             initial_round_opened_rows: _,
             initial_round_merkle_proofs: _,
-            codeword_opened_rows: _,
+            codeword_opened_values: _,
             codeword_merkle_proofs: _,
             whir_pow_witnesses,
             final_poly,
@@ -251,12 +254,12 @@ impl WhirModule {
                     let mut mu_pow_iter = mu_pows.iter();
                     for opened_rows_per_query in &proof.whir_proof.initial_round_opened_rows {
                         let opened_rows = &opened_rows_per_query[query_idx];
-                        let width = opened_rows.len() / (1 << k_whir);
+                        let width = opened_rows[0].len();
 
                         for c in 0..width {
                             let mu_pow = mu_pow_iter.next().unwrap(); // ok; mu_pows has total_width length
                             for j in 0..(1 << k_whir) {
-                                codeword_vals[j] += *mu_pow * opened_rows[j * width + c];
+                                codeword_vals[j] += *mu_pow * opened_rows[j][c];
                             }
                         }
                     }
@@ -270,15 +273,15 @@ impl WhirModule {
                         &mut fold_records,
                     )
                 } else {
-                    let opened_rows =
-                        proof.whir_proof.codeword_opened_rows[i - 1][query_idx].clone();
-                    let leaf_preimage = opened_rows
+                    let opened_values =
+                        proof.whir_proof.codeword_opened_values[i - 1][query_idx].clone();
+                    let leaf_hashes = opened_values
                         .iter()
-                        .flat_map(|ef| ef.as_base_slice())
-                        .copied()
+                        .map(|opened_value| poseidon2_hash_slice(opened_value.as_base_slice()))
                         .collect_vec();
+                    let query_digest = poseidon2_tree_compress(leaf_hashes);
                     merkle_verify_logs.push(MerkleVerifyLog {
-                        leaf_hash: poseidon2_hash_slice(&leaf_preimage),
+                        leaf_hash: query_digest,
                         merkle_idx: index as usize,
                         query_idx,
                         depth: proof.whir_proof.codeword_merkle_proofs[i - 1][query_idx].len(),
@@ -286,7 +289,7 @@ impl WhirModule {
                         commit_minor: 0,
                     });
                     binary_k_fold(
-                        opened_rows,
+                        opened_values,
                         &alphas[alphas.len() - k_whir..],
                         zj_root,
                         i,

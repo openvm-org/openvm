@@ -125,7 +125,7 @@ pub(crate) fn generate_trace(
         cols.omega = omega_k.exp_u64(coset_idx as u64);
         cols.is_first_row_for_query = F::from_bool(coset_idx == 0);
         cols.zi_root = preflight.whir.zj_roots[whir_round][query_idx];
-        cols.opened_value = proof.whir_proof.codeword_opened_rows[whir_round - 1][query_idx]
+        cols.opened_value = proof.whir_proof.codeword_opened_values[whir_round - 1][query_idx]
             [coset_idx]
             .as_base_slice()
             .try_into()
