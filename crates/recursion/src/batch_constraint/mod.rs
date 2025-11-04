@@ -4,6 +4,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use openvm_stark_backend::{AirRef, keygen::types::TraceWidth};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+use p3_field::{Field, TwoAdicField};
 use p3_matrix::Matrix;
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, Digest, F, StarkEngineV2,
@@ -19,14 +20,14 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{
         bus::{
-            Eq3bBus, EqMleBus, EqSharpUniBus, EqZeroNBus, ExpressionClaimBus,
-            InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
+            BatchConstraintConductorBus, Eq3bBus, EqMleBus, EqSharpUniBus, EqZeroNBus,
+            ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
         },
-        eq_airs::{Eq3bAir, EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir},
+        eq_airs::{Eq3bAir, EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
         expr_eval::{
             ColumnClaimAir, ExpressionClaimAir, InteractionsFoldingAir, SymbolicExpressionAir,
         },
-        fractions_folder::FractionFolderAir,
+        fractions_folder::FractionsFolderAir,
         sumcheck::{MultilinearSumcheckAir, UnivariateSumcheckAir},
     },
     bus::{
@@ -46,7 +47,7 @@ pub mod fractions_folder;
 pub mod sumcheck;
 
 /// AIR index within the BatchConstraintModule
-pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 8;
+pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 9;
 
 pub struct BatchConstraintModule {
     transcript_bus: TranscriptBus,
@@ -58,6 +59,7 @@ pub struct BatchConstraintModule {
     air_shape_bus: AirShapeBus,
     air_part_shape_bus: AirPartShapeBus,
 
+    batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
 
     zero_n_bus: EqZeroNBus,
@@ -100,6 +102,7 @@ impl BatchConstraintModule {
             column_opening_bus: bus_inventory.column_claims_bus,
             air_shape_bus: bus_inventory.air_shape_bus,
             air_part_shape_bus: bus_inventory.air_part_shape_bus,
+            batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
             eq_mle_bus: EqMleBus::new(b.new_bus_idx()),
@@ -205,7 +208,7 @@ impl AirModule for BatchConstraintModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let l_skip = self.l_skip;
 
-        let fraction_folder_air = FractionFolderAir {
+        let fraction_folder_air = FractionsFolderAir {
             transcript_bus: self.transcript_bus,
             sumcheck_bus: self.sumcheck_bus,
             gkr_claim_bus: self.gkr_claim_bus,
@@ -216,35 +219,48 @@ impl AirModule for BatchConstraintModule {
             claim_bus: self.sumcheck_bus,
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
+            batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
         };
         let sumcheck_lin_air = MultilinearSumcheckAir {
             claim_bus: self.sumcheck_bus,
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
+            batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
         };
         let eq_ns_air = EqNsAir {
             zero_n_bus: self.zero_n_bus,
-            r_bus: self.constraint_sumcheck_randomness_bus,
+            xi_bus: self.xi_randomness_bus,
+            r_xi_bus: self.batch_constraint_conductor_bus,
+            l_skip,
         };
         let eq_mle_air = EqMleAir {
-            xi_bus: self.xi_randomness_bus,
             transcript_bus: self.transcript_bus,
             eq_mle_bus: self.eq_mle_bus,
+            batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             l_skip,
         };
         let eq_sharp_uni_air = EqSharpUniAir {
             xi_bus: self.xi_randomness_bus,
             eq_bus: self.eq_sharp_uni_bus,
+            batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             l_skip,
+            canonical_inverse_generator: F::two_adic_generator(l_skip).inverse(),
         };
         let eq_sharp_uni_receiver_air = EqSharpUniReceiverAir {
-            r_bus: self.constraint_sumcheck_randomness_bus,
+            r_bus: self.batch_constraint_conductor_bus,
             eq_bus: self.eq_sharp_uni_bus,
+            zero_n_bus: self.zero_n_bus,
+            l_skip,
+        };
+        let eq_uni_air = EqUniAir {
+            r_xi_bus: self.batch_constraint_conductor_bus,
+            zero_n_bus: self.zero_n_bus,
+            l_skip,
         };
         let eq_3b_air = Eq3bAir {
-            air_shape_bus: self.air_shape_bus,
             eq_mle_bus: self.eq_mle_bus,
             eq_3b_bus: self.eq_3b_bus,
+            l_skip,
         };
         let symbolic_expression_air = SymbolicExpressionAir {
             expr_bus: self.symbolic_expression_bus,
@@ -277,6 +293,7 @@ impl AirModule for BatchConstraintModule {
             Arc::new(eq_mle_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_receiver_air) as AirRef<_>,
+            Arc::new(eq_uni_air) as AirRef<_>,
             Arc::new(eq_3b_air) as AirRef<_>,
             Arc::new(symbolic_expression_air) as AirRef<_>,
             Arc::new(column_claim_air) as AirRef<_>,
@@ -306,25 +323,29 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             |trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace));
         // NOTE: this leaves cached = vec![]. The cached trace must be set **after**.
         let symbolic_expr_ctx = transpose(common);
+        let (uni_trace, uni_receiver_trace) =
+            eq_airs::generate_eq_sharp_uni_traces(child_vk, proofs, preflights);
+        let mle_blob = eq_airs::generate_eq_mle_blob(child_vk, preflights);
         vec![
             transpose(fractions_folder::generate_trace(
                 child_vk, proofs, preflights,
             )),
-            transpose(sumcheck::generate_univariate_trace(
+            transpose(sumcheck::univariate::generate_trace(
                 child_vk, proofs, preflights,
             )),
-            transpose(sumcheck::generate_multilinear_trace(
+            transpose(sumcheck::multilinear::generate_trace(
                 child_vk, proofs, preflights,
             )),
             transpose(eq_airs::generate_eq_ns_trace(child_vk, proofs, preflights)),
-            transpose(eq_airs::generate_eq_mle_trace(child_vk, proofs, preflights)),
-            transpose(eq_airs::generate_eq_sharp_uni_trace(
-                child_vk, proofs, preflights,
+            transpose(eq_airs::generate_eq_mle_trace(
+                child_vk, &mle_blob, preflights,
             )),
-            transpose(eq_airs::generate_eq_sharp_uni_receiver_trace(
-                child_vk, proofs, preflights,
+            transpose(uni_trace),
+            transpose(uni_receiver_trace),
+            transpose(eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights)),
+            transpose(eq_airs::generate_eq_3b_trace(
+                child_vk, &mle_blob, preflights,
             )),
-            transpose(eq_airs::generate_eq_3b_trace(child_vk, proofs, preflights)),
             symbolic_expr_ctx,
             transpose(expr_eval::generate_column_claim_trace(
                 child_vk, proofs, preflights,
