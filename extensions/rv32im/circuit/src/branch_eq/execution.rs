@@ -153,8 +153,7 @@ where
             }
         }
         asm_str += &format!("{}:\n", not_jump_label);
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-
+    
         Ok(asm_str)
     }
 

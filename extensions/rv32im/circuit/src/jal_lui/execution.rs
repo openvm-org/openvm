@@ -126,10 +126,9 @@ where
         if is_jal {
             let next_pc = pc as i32 + signed_imm;
             debug_assert!(next_pc >= 0);
-            asm_str += &format!("   mov r13, {}\n", next_pc);
             asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
         } else {
-            asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
+            
         };
 
         Ok(asm_str)

@@ -190,7 +190,6 @@ where
         asm_str += &format!("   movzx {}, cl\n", REG_A_W); // zero-extend to 32-bit
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
         asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         // let it fall to the next instruction
         Ok(asm_str)

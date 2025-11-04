@@ -137,7 +137,6 @@ where
         asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_A_W);
         asm_str += &format!("   imul {}, {}\n", REG_A_W, REG_B_W);
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, 4\n", REG_PC);
         asm_str += &format!("   add {}, 1\n", REG_INSTRET);
 
         Ok(asm_str)

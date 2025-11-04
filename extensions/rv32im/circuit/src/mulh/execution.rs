@@ -163,7 +163,6 @@ where
             }
         }
         asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm += &format!("   add {}, 4\n", REG_PC);
         asm += &format!("   add {}, 1\n", REG_INSTRET);
         Ok(asm)
     }
