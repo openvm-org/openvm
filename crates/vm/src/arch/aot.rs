@@ -1,17 +1,10 @@
 #![cfg(feature = "aot")]
-use std::{
-    ffi::c_void,
-    fs, io,
-    path::{Path, PathBuf},
-    process::Command,
-    time::SystemTime,
-};
+use std::{ffi::c_void, fs, process::Command};
 
-use hex::encode;
 use libloading::Library;
 use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
-use sha2::{Digest, Sha256};
+use rand::Rng;
 
 use crate::{
     arch::{
@@ -42,79 +35,6 @@ const REG_EXEC_STATE_PTR: &str = "rbx";
 const REG_INSNS_PTR: &str = "rbp";
 const REG_PC: &str = "r13";
 const REG_INSTRET: &str = "r14";
-const ASM_CACHE_PREFIX: &str = "asm_x86_run";
-const ASM_CACHE_VERSION: &str = "v1";
-const ASM_CACHE_MAX_ENTRIES: usize = 32;
-const ASM_CACHE_MAX_TOTAL_SIZE: u64 = 512 * 1024 * 1024; // 512 MiB
-
-fn cached_asm_name(asm_source: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(ASM_CACHE_VERSION.as_bytes());
-    hasher.update(asm_source.as_bytes());
-    let digest = hasher.finalize();
-    let suffix = encode(&digest[..8]);
-    format!("{ASM_CACHE_PREFIX}_{ASM_CACHE_VERSION}_{suffix}")
-}
-
-struct CacheEntry {
-    path: PathBuf,
-    size: u64,
-    modified: SystemTime,
-}
-
-fn dir_size(path: &Path) -> io::Result<u64> {
-    let mut total = 0;
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
-            total += dir_size(&entry.path())?;
-        } else {
-            total += metadata.len();
-        }
-    }
-    Ok(total)
-}
-
-fn prune_cache(cache_root: &Path, keep: &Path, keep_size: u64) {
-    let Ok(entries) = fs::read_dir(cache_root) else {
-        return;
-    };
-
-    let mut total_size = keep_size;
-    let mut cache_entries = Vec::new();
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path == keep || !path.is_dir() {
-            continue;
-        }
-
-        let size = dir_size(&path).unwrap_or(0);
-        total_size = total_size.saturating_add(size);
-        let modified = entry
-            .metadata()
-            .and_then(|m| m.modified())
-            .unwrap_or(SystemTime::UNIX_EPOCH);
-
-        cache_entries.push(CacheEntry {
-            path,
-            size,
-            modified,
-        });
-    }
-
-    cache_entries.sort_by_key(|entry| entry.modified);
-    while total_size > ASM_CACHE_MAX_TOTAL_SIZE || cache_entries.len() + 1 > ASM_CACHE_MAX_ENTRIES {
-        if cache_entries.is_empty() {
-            break;
-        }
-        let entry = cache_entries.remove(0);
-        if fs::remove_dir_all(&entry.path).is_ok() {
-            total_size = total_size.saturating_sub(entry.size);
-        }
-    }
-}
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
@@ -131,7 +51,7 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32,
+    pc_start: u32
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -498,9 +418,9 @@ where
     where
         E: Executor<F>,
     {
-        let asm_source = Self::create_asm(exe, inventory)?;
-        let asm_name = cached_asm_name(&asm_source);
-        Self::new_from_source(inventory, exe, asm_name, asm_source)
+        let _default_name = String::from("asm_x86_run");
+        let random_name = format!("asm_x86_run_{}", rand::thread_rng().gen_range(0..1000000));
+        Self::new_with_asm_name(inventory, exe, &random_name)
     }
 
     /// Creates a new instance for pure execution
@@ -509,19 +429,6 @@ where
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         asm_name: &String, // name of the asm file we write into
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: Executor<F>,
-    {
-        let asm_source = Self::create_asm(exe, inventory)?;
-        Self::new_from_source(inventory, exe, asm_name.clone(), asm_source)
-    }
-
-    fn new_from_source<E>(
-        inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
-        asm_name: String,
-        asm_source: String,
     ) -> Result<Self, StaticProgramError>
     where
         E: Executor<F>,
@@ -539,82 +446,89 @@ where
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
-        let cache_root = root_dir.join("target").join("aot");
-        let target_dir = cache_root.join(&asm_name);
-        let lib_path = target_dir.join("release").join("libasm_bridge.so");
+        let asm_source = Self::create_asm(&exe, &inventory)?;
+        fs::write(
+            format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name),
+            asm_source,
+        )
+        .expect("Failed to write generated assembly");
 
-        if !lib_path.exists() {
-            let asm_name_str = asm_name.as_str();
-            fs::create_dir_all(target_dir.parent().unwrap())
-                .expect("Failed to create AOT cache directory");
-            fs::create_dir_all(&target_dir).expect("Failed to create AOT target directory");
+        // ar rcs libasm_runtime.a asm_run.o
+        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime
 
-            let asm_file_path = format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name_str);
-            fs::write(&asm_file_path, &asm_source).expect("Failed to write generated assembly");
+        // run the below command from the `src_asm_bridge_dir` directory
+        // as src/asm_run.s -o asm_run.o
+        let status = Command::new("as")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                &format!("src/{}.s", asm_name),
+                "-o",
+                &format!("{}.o", asm_name),
+            ])
+            .status()
+            .expect("Failed to assemble the file into an object file");
 
-            let status = Command::new("as")
-                .current_dir(&src_asm_bridge_dir)
-                .args([
-                    &format!("src/{}.s", asm_name_str),
-                    "-o",
-                    &format!("{}.o", asm_name_str),
-                ])
-                .status()
-                .expect("Failed to assemble the file into an object file");
+        assert!(
+            status.success(),
+            "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
+            status.code()
+        );
 
-            assert!(
-                status.success(),
-                "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
-                status.code()
-            );
+        let status = Command::new("ar")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                "rcs",
+                &format!("lib{}.a", asm_name),
+                &format!("{}.o", asm_name),
+            ])
+            .status()
+            .expect("Create a static library");
 
-            let status = Command::new("ar")
-                .current_dir(&src_asm_bridge_dir)
-                .args([
-                    "rcs",
-                    &format!("lib{}.a", asm_name_str),
-                    &format!("{}.o", asm_name_str),
-                ])
-                .status()
-                .expect("Create a static library");
+        assert!(
+            status.success(),
+            "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
+            status.code()
+        );
 
-            assert!(
-                status.success(),
-                "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
-                status.code()
-            );
+        // library goes to `workspace_dir/target/{asm_name}/release/libasm_bridge.so`
 
-            let target_dir_arg = format!("--target-dir={}", target_dir.to_str().unwrap());
-            let status = Command::new("cargo")
-                .current_dir(&src_asm_bridge_dir)
-                .args([
-                    "rustc",
-                    "--release",
-                    &target_dir_arg,
-                    "--",
-                    "-L",
-                    src_asm_bridge_dir_str,
-                    "-l",
-                    &format!("static={}", asm_name_str),
-                ])
-                .status()
-                .expect("Creating the dynamic library");
+        let status = Command::new("cargo")
+            .current_dir(&src_asm_bridge_dir)
+            .args([
+                "rustc",
+                "--release",
+                &format!(
+                    "--target-dir={}/target/{}",
+                    root_dir.to_str().unwrap(),
+                    asm_name
+                ),
+                "--",
+                "-L",
+                src_asm_bridge_dir_str,
+                "-l",
+                &format!("static={}", asm_name),
+            ])
+            .status()
+            .expect("Creating the dynamic library");
 
-            assert!(
-                status.success(),
-                "Cargo build failed with exit code: {:?}",
-                status.code()
-            );
+        assert!(
+            status.success(),
+            "Cargo build failed with exit code: {:?}",
+            status.code()
+        );
 
-            fs::remove_file(asm_file_path).ok();
-            fs::remove_file(format!("{}/{}.o", src_asm_bridge_dir_str, asm_name_str)).ok();
-            fs::remove_file(format!("{}/lib{}.a", src_asm_bridge_dir_str, asm_name_str)).ok();
-        }
+        let lib_path = root_dir
+            .join("target")
+            .join(asm_name)
+            .join("release")
+            .join("libasm_bridge.so");
 
         let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-
-        let keep_size = dir_size(&target_dir).unwrap_or(0);
-        prune_cache(&cache_root, &target_dir, keep_size);
+        // Cleanup artifacts after library is loaded into memory
+        let _ = fs::remove_file(format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_file(format!("{}/{}.o", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_file(format!("{}/lib{}.a", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_dir_all(root_dir.join("target").join(asm_name));
 
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);

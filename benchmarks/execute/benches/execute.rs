@@ -273,13 +273,11 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
 fn benchmark_execute(bencher: Bencher, program: &str) {
     #[cfg(feature = "aot")]
     {
+        let program_name = program.to_string();
         bencher
-            .with_inputs(|| {
-                let interpreter = cached_aot_instance(program);
-                (interpreter, vec![])
-            })
-            .bench_values(|(interpreter, input)| {
-                interpreter
+            .with_inputs(|| Vec::<Vec<BabyBear>>::new())
+            .bench_values(|input| {
+                cached_aot_instance(&program_name)
                     .execute(input, None)
                     .expect("Failed to execute program in AOT mode");
             });
