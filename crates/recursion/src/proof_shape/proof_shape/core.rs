@@ -31,9 +31,12 @@ use crate::{
         pow::PowerCheckerTraceGenerator,
         range::RangeCheckerTraceGenerator,
     },
-    proof_shape::bus::{
-        NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
-        ProofShapePermutationMessage,
+    proof_shape::{
+        AirMetadata,
+        bus::{
+            NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
+            ProofShapePermutationMessage,
+        },
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -356,6 +359,14 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                         .n_max
                         .abs_diff(preflight.proof_shape.n_logup),
                 );
+
+                // We store the pre-hash of the child vk in the summary row
+                let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
+                    &mut chunk[cols_width..],
+                    idx_encoder.width(),
+                    max_cached,
+                );
+                vcols.cached_commits[max_cached - 1] = child_vk.pre_hash;
             }
         }
 
@@ -369,10 +380,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 }
 
 pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
-    // Inputs
-    pub vk: Arc<MultiStarkVerifyingKeyV2>,
-
     // Parameters derived from vk
+    pub per_air: Vec<AirMetadata>,
+    pub l_skip: usize,
     pub min_cached_idx: usize,
     pub max_cached: usize,
 
@@ -533,7 +543,7 @@ where
         let mut num_pvs = AB::Expr::ZERO;
         let mut has_pvs = AB::Expr::ZERO;
 
-        for (i, avk) in self.vk.inner.per_air.iter().enumerate() {
+        for (i, air_data) in self.per_air.iter().enumerate() {
             // We keep a running tally of how many transcript reads there should be up to any
             // given point, and use that to constrain initial_tidx
             let is_current_air = self.idx_encoder.get_flag_expr::<AB>(i, localv.idx_flags);
@@ -544,27 +554,27 @@ where
             tidx += is_current_air.clone() * AB::F::from_canonical_usize(tidx_offset);
 
             main_common_width +=
-                is_current_air.clone() * AB::F::from_canonical_usize(avk.params.width.common_main);
+                is_current_air.clone() * AB::F::from_canonical_usize(air_data.main_width);
 
-            if avk.params.num_public_values != 0 {
+            if air_data.num_public_values != 0 {
                 has_pvs += is_current_air.clone();
             }
             num_pvs +=
-                is_current_air.clone() * AB::F::from_canonical_usize(avk.params.num_public_values);
+                is_current_air.clone() * AB::F::from_canonical_usize(air_data.num_public_values);
 
             // Select number of interactions for use later in the AIR and constrain that the
             // num_interactions_per_row limb decomposition is correct.
             num_interactions +=
-                is_current_air.clone() * AB::F::from_canonical_usize(avk.num_interactions());
+                is_current_air.clone() * AB::F::from_canonical_usize(air_data.num_interactions);
 
-            for (i, &limb) in decompose_f::<AB::F, NUM_LIMBS, LIMB_BITS>(avk.num_interactions())
+            for (i, &limb) in decompose_f::<AB::F, NUM_LIMBS, LIMB_BITS>(air_data.num_interactions)
                 .iter()
                 .enumerate()
             {
                 num_interactions_per_row[i] += is_current_air.clone() * limb;
             }
 
-            if avk.is_required {
+            if air_data.is_required {
                 is_required += is_current_air.clone();
                 when_current.assert_one(local.is_present);
             } else {
@@ -576,17 +586,15 @@ where
                 when_current.assert_zero(localv.part_cached_mult[self.max_cached - 1]);
             }
 
-            if let Some(preprocessed) = &avk.preprocessed_data {
+            if let Some(preprocessed) = &air_data.preprocessed_data {
                 when_current.assert_eq(
                     local.log_height,
-                    AB::Expr::from_canonical_usize(
-                        preprocessed.hypercube_dim + self.vk.inner.params.l_skip,
-                    ),
+                    AB::Expr::from_canonical_usize(preprocessed.hypercube_dim + self.l_skip),
                 );
                 has_preprocessed += is_current_air.clone();
 
                 preprocessed_stacked_width += is_current_air.clone()
-                    * AB::F::from_canonical_usize(avk.params.width.preprocessed.unwrap());
+                    * AB::F::from_canonical_usize(air_data.preprocessed_width.unwrap());
                 preprocessed_commit = from_fn(|i| {
                     is_current_air.clone()
                         * AB::F::from_canonical_u32(preprocessed.commit[i].as_canonical_u32())
@@ -597,21 +605,20 @@ where
                 tidx_offset += 1;
             }
 
-            for (cached_idx, width) in avk.params.width.cached_mains.iter().enumerate() {
+            for (cached_idx, width) in air_data.cached_widths.iter().enumerate() {
                 cached_present[cached_idx] += is_current_air.clone();
                 cached_widths[cached_idx] +=
                     is_current_air.clone() * AB::Expr::from_canonical_usize(*width);
                 tidx_offset += DIGEST_SIZE;
             }
 
-            tidx_offset += avk.params.num_public_values;
+            tidx_offset += air_data.num_public_values;
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // TRANSCRIPT OBSERVATIONS
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let hypercube_dim =
-            local.log_height.into() - AB::F::from_canonical_usize(self.vk.inner.params.l_skip);
+        let hypercube_dim = local.log_height.into() - AB::F::from_canonical_usize(self.l_skip);
 
         self.transcript_bus.receive(
             builder,
@@ -676,10 +683,10 @@ where
                 local.proof_idx,
                 TranscriptBusMessage {
                     tidx: AB::Expr::from_canonical_usize(didx),
-                    value: AB::Expr::from_canonical_u32(self.vk.pre_hash[didx].as_canonical_u32()),
+                    value: localv.cached_commits[self.max_cached - 1][didx].into(),
                     is_sample: AB::Expr::ZERO,
                 },
-                local.is_first,
+                local.is_last,
             );
 
             self.transcript_bus.receive(
@@ -986,11 +993,11 @@ where
         builder.when(local.is_last).assert_zero(local.is_valid);
         builder.when(next.is_last).assert_one(local.is_valid);
         builder
-            .when(local.sorted_idx - AB::F::from_canonical_usize(self.vk.inner.per_air.len() - 1))
+            .when(local.sorted_idx - AB::F::from_canonical_usize(self.per_air.len() - 1))
             .assert_zero(next.is_last);
-        builder.when(next.is_last).assert_zero(
-            local.sorted_idx - AB::F::from_canonical_usize(self.vk.inner.per_air.len() - 1),
-        );
+        builder
+            .when(next.is_last)
+            .assert_zero(local.sorted_idx - AB::F::from_canonical_usize(self.per_air.len() - 1));
 
         // Constrain that n_logup is correct, i.e. that there are CELLS_LIMBS * LIMB_BITS - n_logup
         // leading zeroes in total_interactions_limbs. Because we only do this on the is_last row,
@@ -1028,8 +1035,7 @@ where
         builder
             .when(local.is_last)
             .assert_eq(limb_to_range_check, expected_limb_to_range_check);
-        msb_limb_zero_bits -=
-            n_logup + prefix * AB::F::from_canonical_usize(self.vk.inner.params.l_skip);
+        msb_limb_zero_bits -= n_logup + prefix * AB::F::from_canonical_usize(self.l_skip);
 
         self.pow_bus.lookup_key(
             builder,

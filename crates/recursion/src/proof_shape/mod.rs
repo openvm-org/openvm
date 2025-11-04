@@ -1,15 +1,15 @@
 use core::cmp::Reverse;
 use std::sync::Arc;
 
-use itertools::izip;
+use itertools::{Itertools, izip};
 use openvm_circuit_primitives::encoder::Encoder;
 use openvm_stark_backend::AirRef;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_field::FieldAlgebra;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    F,
-    keygen::types::MultiStarkVerifyingKeyV2,
+    Digest, F,
+    keygen::types::{MultiStarkVerifyingKeyV2, VerifierSinglePreprocessedData},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
@@ -28,25 +28,38 @@ use crate::{
     },
     system::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, ModuleChip, Preflight,
-        ProofShapePreflight, TraceGenModule,
+        ProofShapePreflight, TraceGenModule, frame::MultiStarkVkeyFrame,
     },
 };
 
 pub mod bus;
+#[allow(clippy::module_inception)]
 pub mod proof_shape;
 pub mod pvs;
 
 #[cfg(feature = "cuda")]
 mod cuda_abi;
 
-pub struct ProofShapeModule {
-    // TODO[jpw]: remove and only store relevant parts to allow recursion
-    mvk: Arc<MultiStarkVerifyingKeyV2>,
-    bus_inventory: BusInventory,
+#[derive(Clone)]
+pub struct AirMetadata {
+    is_required: bool,
+    num_public_values: usize,
+    num_interactions: usize,
+    main_width: usize,
+    cached_widths: Vec<usize>,
+    preprocessed_width: Option<usize>,
+    preprocessed_data: Option<VerifierSinglePreprocessedData<Digest>>,
+}
 
+pub struct ProofShapeModule {
+    // Verifying key fields
+    per_air: Vec<AirMetadata>,
+    l_skip: usize,
+
+    // Buses (inventory for external, others are internal)
+    bus_inventory: BusInventory,
     range_bus: RangeCheckerBus,
     pow_bus: PowerCheckerBus,
-
     permutation_bus: ProofShapePermutationBus,
     num_pvs_bus: NumPublicValuesBus,
 
@@ -58,14 +71,13 @@ pub struct ProofShapeModule {
 
 impl ProofShapeModule {
     pub fn new(
-        mvk: Arc<MultiStarkVerifyingKeyV2>,
+        mvk: &MultiStarkVkeyFrame,
         b: &mut BusIndexManager,
         bus_inventory: BusInventory,
     ) -> Self {
-        let idx_encoder = Arc::new(Encoder::new(mvk.inner.per_air.len(), 2, true));
+        let idx_encoder = Arc::new(Encoder::new(mvk.per_air.len(), 2, true));
 
         let (min_cached_idx, min_cached) = mvk
-            .inner
             .per_air
             .iter()
             .enumerate()
@@ -73,7 +85,6 @@ impl ProofShapeModule {
             .map(|(idx, avk)| (idx, avk.params.width.cached_mains.len()))
             .unwrap();
         let mut max_cached = mvk
-            .inner
             .per_air
             .iter()
             .map(|avk| avk.params.width.cached_mains.len())
@@ -83,8 +94,23 @@ impl ProofShapeModule {
             max_cached += 1;
         }
 
+        let per_air = mvk
+            .per_air
+            .iter()
+            .map(|avk| AirMetadata {
+                is_required: avk.is_required,
+                num_public_values: avk.params.num_public_values,
+                num_interactions: avk.num_interactions,
+                main_width: avk.params.width.common_main,
+                cached_widths: avk.params.width.cached_mains.clone(),
+                preprocessed_width: avk.params.width.preprocessed,
+                preprocessed_data: avk.preprocessed_data.clone(),
+            })
+            .collect_vec();
+
         Self {
-            mvk,
+            per_air,
+            l_skip: mvk.params.l_skip,
             bus_inventory,
             range_bus: RangeCheckerBus::new(b.new_bus_idx()),
             pow_bus: PowerCheckerBus::new(b.new_bus_idx()),
@@ -96,19 +122,25 @@ impl ProofShapeModule {
         }
     }
 
-    pub fn run_preflight<TS>(&self, proof: &Proof, preflight: &mut Preflight, ts: &mut TS)
-    where
+    pub fn run_preflight<TS>(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proof: &Proof,
+        preflight: &mut Preflight,
+        ts: &mut TS,
+    ) where
         TS: FiatShamirTranscript + TranscriptHistory,
     {
-        ts.observe_commit(self.mvk.pre_hash);
+        ts.observe_commit(child_vk.pre_hash);
         ts.observe_commit(proof.common_main_commit);
-
-        let vk = &self.mvk.inner;
 
         let mut pvs_tidx = vec![];
 
-        for (trace_vdata, avk, pvs) in izip!(&proof.trace_vdata, &vk.per_air, &proof.public_values)
-        {
+        for (trace_vdata, avk, pvs) in izip!(
+            &proof.trace_vdata,
+            &child_vk.inner.per_air,
+            &proof.public_values
+        ) {
             let is_air_present = trace_vdata.is_some();
 
             if !avk.is_required {
@@ -120,10 +152,7 @@ impl ProofShapeModule {
                 } else {
                     ts.observe(F::from_canonical_usize(trace_vdata.hypercube_dim));
                 }
-                debug_assert_eq!(
-                    avk.params.width.cached_mains.len(),
-                    trace_vdata.cached_commitments.len()
-                );
+                debug_assert_eq!(avk.num_cached_mains(), trace_vdata.cached_commitments.len());
                 if !pvs.is_empty() {
                     pvs_tidx.push(ts.len());
                 }
@@ -153,8 +182,7 @@ impl ProofShapeModule {
             .max()
             .unwrap();
         let num_layers = proof.gkr_proof.claims_per_layer.len();
-        let l_skip = vk.params.l_skip;
-        let n_logup = num_layers.saturating_sub(l_skip);
+        let n_logup = num_layers.saturating_sub(child_vk.inner.params.l_skip);
 
         preflight.proof_shape = ProofShapePreflight {
             sorted_trace_vdata,
@@ -162,7 +190,7 @@ impl ProofShapeModule {
             post_tidx: ts.len(),
             n_max,
             n_logup,
-            l_skip,
+            l_skip: child_vk.inner.params.l_skip,
         };
     }
 }
@@ -170,7 +198,8 @@ impl ProofShapeModule {
 impl AirModule for ProofShapeModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let proof_shape_air = ProofShapeAir::<4, 8> {
-            vk: self.mvk.clone(),
+            per_air: self.per_air.clone(),
+            l_skip: self.l_skip,
             min_cached_idx: self.min_cached_idx,
             max_cached: self.max_cached,
             idx_encoder: self.idx_encoder.clone(),
