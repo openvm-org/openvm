@@ -615,24 +615,29 @@ where
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
-            let start_time = Instant::now();
+            // Build helpers
+            fn hw(event: HardwareEventType, exclude_kernel: bool) -> perfcnt::linux::PerfCounter {
+                let mut b = Builder::from_hardware_event(event);
+                if exclude_kernel {
+                    b.exclude_kernel();
+                }
+                b.finish().expect("perf counter")
+            }
 
-            // Prepare counters (user space only, current process/thread)
-            let mut cache_misses = Builder::from_hardware_event(HardwareEventType::CacheMisses)
-                .exclude_kernel()
-                .finish()
-                .expect("perf counter (cache_misses)");
+            let mut cycles      = hw(HardwareEventType::CPUCycles, true);
+            let mut insts       = hw(HardwareEventType::Instructions, true);
+            let mut br          = hw(HardwareEventType::BranchInstructions, true);
+            let mut br_miss     = hw(HardwareEventType::BranchMisses, true);
+            let mut llc_ref     = hw(HardwareEventType::CacheReferences, true);
+            let mut llc_miss    = hw(HardwareEventType::CacheMisses, true);
 
-            let mut cache_refs = Builder::from_hardware_event(HardwareEventType::CacheReferences)
-                .exclude_kernel()
-                .finish()
-                .expect("perf counter (cache_refs)");
-
-            // Count ONLY inside asm_run
-            cache_misses.reset().ok();
-            cache_refs.reset().ok();
-            cache_misses.start().ok();
-            cache_refs.start().ok();
+            // Start all
+            for c in [
+                &mut cycles, &mut insts, &mut br, &mut br_miss,
+                &mut llc_ref, &mut llc_miss
+            ] {
+                let _ = c.reset(); let _ = c.start();
+            }
 
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
@@ -642,24 +647,29 @@ where
                 instret_end,
             );
 
-            cache_misses.stop().ok();
-            cache_refs.stop().ok();
+            for c in [
+                &mut cycles, &mut insts, &mut br, &mut br_miss,
+                &mut llc_ref, &mut llc_miss
+            ] {
+                let _ = c.stop();
+            }
 
-            let misses: u64 = cache_misses.read().unwrap_or(0);
-            let refs: u64 = cache_refs.read().unwrap_or(0);
-            let miss_rate: f64 = if refs > 0 {
-                (misses as f64) / (refs as f64) * 100.0
-            } else {
-                0.0
-            };
+            let (cyc, ins, brs, brm, llcr, llcm) = (
+                cycles.read().unwrap_or(0),
+                insts.read().unwrap_or(0),
+                br.read().unwrap_or(0),
+                br_miss.read().unwrap_or(0),
+                llc_ref.read().unwrap_or(0),
+                llc_miss.read().unwrap_or(0),
+            );
 
-            let elapsed = start_time.elapsed();
-            let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
-            let instructions_executed = vm_exec_state.vm_state.instret() - from_state_instret;
+            let ipc      = if cyc > 0 { ins as f64 / cyc as f64 } else { 0.0 };
+            let br_missr = if brs > 0 { (brm as f64 / brs as f64) * 100.0 } else { 0.0 };
+            let llc_missr= if llcr> 0 { (llcm as f64 / llcr as f64) * 100.0 } else { 0.0 };
 
             println!(
-                "[AOT] execution_time_ms={:.3} instructions_executed={} cache_misses={} cache_refs={} miss_rate={:.2}%",
-                elapsed_ms, instructions_executed, misses, refs, miss_rate
+                "[AOT] ipc={:.3} br_miss%={:.2} llc_miss%={:.2}",
+                ipc, br_missr, llc_missr
             );
         }
 
