@@ -174,6 +174,7 @@ pub struct ColumnClaimCols<T> {
     sort_idx: T,
     part_idx: T,
     col_idx: T,
+    hypercube_dim: T,
     has_preprocessed: T,
 
     tidx: T,
@@ -263,6 +264,17 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ColumnClaimAir {
                 sort_idx: local.sort_idx.into(),
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: local.air_idx.into(),
+            },
+            last_row_of_this_air.clone(),
+        );
+        // hypercube dim
+        self.air_shape_bus.receive(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::HypercubeDim.to_field(),
+                value: local.hypercube_dim.into(),
             },
             last_row_of_this_air.clone(),
         );
@@ -487,6 +499,7 @@ pub(crate) fn generate_column_claim_trace(
         air_idx: usize,
         sort_idx: usize,
         part_idx: usize,
+        hypercube_dim: usize,
         has_preprocessed: bool,
         col_idx: usize,
         col_claim: [F; D_EF],
@@ -521,9 +534,10 @@ pub(crate) fn generate_column_claim_trace(
         debug_assert!(height > 0);
 
         let initial_len = rows.len();
-        for (sort_idx, &(air_id, _)) in preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
+        for (sort_idx, (air_id, vdata)) in
+            preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
         {
-            let air_vk = &vk.inner.per_air[air_id];
+            let air_vk = &vk.inner.per_air[*air_id];
             let widths = &air_vk.params.width;
             let has_preprocessed = widths.preprocessed.is_some();
 
@@ -539,9 +553,10 @@ pub(crate) fn generate_column_claim_trace(
                     is_last: false,
                     proof_idx: pidx,
                     tidx: main_tidx[sort_idx] + col * 2 * D_EF,
-                    air_idx: air_id,
+                    air_idx: *air_id,
                     sort_idx,
                     part_idx: 0,
+                    hypercube_dim: vdata.hypercube_dim,
                     has_preprocessed,
                     col_idx: col,
                     col_claim: col_claim_arr,
@@ -568,9 +583,10 @@ pub(crate) fn generate_column_claim_trace(
                         is_last: false,
                         proof_idx: pidx,
                         tidx: cur_tidx,
-                        air_idx: air_id,
+                        air_idx: *air_id,
                         sort_idx,
                         part_idx: part + 1,
+                        hypercube_dim: vdata.hypercube_dim,
                         has_preprocessed,
                         col_idx: col,
                         col_claim: col_claim_arr,
@@ -600,6 +616,7 @@ pub(crate) fn generate_column_claim_trace(
             cols.air_idx = F::from_canonical_usize(row.air_idx);
             cols.sort_idx = F::from_canonical_usize(row.sort_idx);
             cols.part_idx = F::from_canonical_usize(row.part_idx);
+            cols.hypercube_dim = F::from_canonical_usize(row.hypercube_dim);
             cols.has_preprocessed = F::from_bool(row.has_preprocessed);
             cols.col_idx = F::from_canonical_usize(row.col_idx);
             cols.col_claim.copy_from_slice(&row.col_claim);

@@ -1,3 +1,5 @@
+use std::ops::Index;
+
 use p3_air::AirBuilder;
 use p3_field::{FieldAlgebra, extension::BinomiallyExtendable};
 use stark_backend_v2::D_EF;
@@ -120,5 +122,67 @@ pub fn assert_eq_array<AB, const N: usize>(
 {
     for (a, e) in actual.into_iter().zip(expected.into_iter()) {
         builder.assert_eq(a, e);
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct MultiProofVecVec<T> {
+    data: Vec<T>,
+    bounds: Vec<usize>,
+}
+
+impl<T> MultiProofVecVec<T> {
+    pub(crate) fn new() -> Self {
+        Self {
+            data: Vec::new(),
+            bounds: vec![0],
+        }
+    }
+
+    pub(crate) fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+            bounds: vec![0],
+        }
+    }
+
+    pub(crate) fn push(&mut self, x: T) {
+        self.data.push(x);
+    }
+
+    pub(crate) fn extend_from_slice(&mut self, slice: &[T])
+    where
+        T: Clone,
+    {
+        self.data.extend_from_slice(slice);
+    }
+
+    pub(crate) fn extend(&mut self, iter: impl IntoIterator<Item = T>) {
+        self.data.extend(iter);
+    }
+
+    pub(crate) fn end_proof(&mut self) {
+        self.bounds.push(self.data.len());
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub(crate) fn num_proofs(&self) -> usize {
+        self.bounds.len() - 1
+    }
+
+    pub(crate) fn data(&self) -> &[T] {
+        &self.data
+    }
+}
+
+impl<T> Index<usize> for MultiProofVecVec<T> {
+    type Output = [T];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        debug_assert!(index < self.num_proofs());
+        &self.data[self.bounds[index]..self.bounds[index + 1]]
     }
 }
