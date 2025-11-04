@@ -1,7 +1,7 @@
 use core::hint::black_box;
 use openvm::io::reveal_u32;
 
-const N: u32 = 900_000;
+const N: u32 = 1_000_000_000;
 
 pub fn main() {
     let mut a: u32 = 0;
