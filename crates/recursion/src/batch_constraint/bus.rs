@@ -1,14 +1,27 @@
+use p3_field::FieldAlgebra;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::define_typed_per_proof_permutation_bus;
 
+#[repr(u8)]
+#[derive(Debug, Copy, Clone)]
+pub(super) enum BatchConstraintInnerMessageType {
+    R,
+    Xi,
+}
+
+impl BatchConstraintInnerMessageType {
+    pub fn to_field<T: FieldAlgebra>(self) -> T {
+        T::from_canonical_u8(self as u8)
+    }
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintConductorMessage<T> {
-    // 0 means xi randomness
-    pub stage: T,
-    pub tidx: T,
+    pub msg_type: T,
+    pub idx: T,
     pub value: [T; D_EF],
 }
 
