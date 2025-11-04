@@ -44,7 +44,8 @@ pub struct SegmentationCtx {
     pub(crate) widths: Vec<usize>,
     interactions: Vec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
-    pub instret_last_segment_check: u64,
+    pub instret: u64,
+    pub instrets_until_check: u64,
     #[getset(set_with = "pub")]
     pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
@@ -70,8 +71,9 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits,
+            instret: 0,
+            instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
         }
@@ -92,8 +94,9 @@ impl SegmentationCtx {
             widths,
             interactions,
             segmentation_limits: SegmentationLimits::default(),
+            instret: 0,
+            instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            instret_last_segment_check: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
         }
@@ -239,8 +242,6 @@ impl SegmentationCtx {
         } else {
             self.update_checkpoint(instret, trace_heights);
         }
-
-        self.instret_last_segment_check = instret;
         should_seg
     }
 

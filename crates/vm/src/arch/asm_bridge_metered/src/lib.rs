@@ -116,16 +116,10 @@ pub extern "C" fn metered_extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+pub extern "C" fn should_suspend(_instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
-    let segment_check_insns = exec_state_ref.ctx.segmentation_ctx.segment_check_insns;
-
-    if exec_state_ref
-        .ctx
-        .check_and_segment(instret, segment_check_insns)
-        && *exec_state_ref.ctx.suspend_on_segment()
-    {
+    if exec_state_ref.ctx.check_and_segment() && *exec_state_ref.ctx.suspend_on_segment() {
         1
     } else {
         0
