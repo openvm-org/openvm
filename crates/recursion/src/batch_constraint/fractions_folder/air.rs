@@ -22,9 +22,9 @@ use crate::{
 #[repr(C)]
 pub struct FractionsFolderCols<T> {
     pub is_valid: T,
+    pub proof_idx: T,
     pub is_first: T,
 
-    pub proof_idx: T,
     pub air_idx: T,
 
     // TODO(ayush): probably don't need all 3
@@ -92,7 +92,7 @@ where
                     }
                     .map_into(),
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols::default(),
             ),
         );
 
@@ -214,7 +214,7 @@ where
             local.proof_idx,
             SumcheckClaimMessage {
                 round: AB::Expr::ZERO,
-                value: local.cur_hash.map(|x| x.into()),
+                value: local.cur_hash.map(Into::into),
             },
             local.is_valid * is_last.clone(),
         );
@@ -227,8 +227,8 @@ where
                 tidx: local.gkr_post_tidx.into(),
                 n_global: local.n_global.into(),
                 gkr_input_layer_claim: [
-                    local.cur_p_sum.map(|x| x.into()),
-                    local.cur_q_sum.map(|x| x.into()),
+                    local.cur_p_sum.map(Into::into),
+                    local.cur_q_sum.map(Into::into),
                 ],
             },
             local.is_valid * is_last,
