@@ -67,6 +67,7 @@ pub struct ProofShapeModule {
     idx_encoder: Arc<Encoder>,
     min_cached_idx: usize,
     max_cached: usize,
+    commit_mult: usize,
 }
 
 impl ProofShapeModule {
@@ -119,6 +120,7 @@ impl ProofShapeModule {
             idx_encoder,
             min_cached_idx,
             max_cached,
+            commit_mult: mvk.params.num_whir_queries,
         }
     }
 
@@ -202,6 +204,7 @@ impl AirModule for ProofShapeModule {
             l_skip: self.l_skip,
             min_cached_idx: self.min_cached_idx,
             max_cached: self.max_cached,
+            commit_mult: self.commit_mult,
             idx_encoder: self.idx_encoder.clone(),
             range_bus: self.range_bus,
             pow_bus: self.pow_bus,
