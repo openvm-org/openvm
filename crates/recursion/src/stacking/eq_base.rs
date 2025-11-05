@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, assert_array_eq, not},
+    utils::{and, assert_array_eq, not, or},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -15,7 +15,12 @@ use p3_field::{
     extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    D_EF, EF, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    poly_common::{Squarable, eval_eq_uni, eval_rot_kernel_prism},
+    proof::Proof,
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -24,12 +29,16 @@ use crate::{
         WhirOpeningPointMessage,
     },
     stacking::bus::{
-        EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqRandValuesLookupBus,
+        EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqNegBaseRandBus,
+        EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, EqRandValuesLookupBus,
         EqRandValuesLookupMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar, ext_field_subtract},
+    utils::{
+        assert_one_ext, ext_field_add, ext_field_add_scalar, ext_field_multiply,
+        ext_field_multiply_scalar, ext_field_subtract,
+    },
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -44,7 +53,7 @@ pub struct EqBaseCols<F> {
     pub is_first: F,
     pub is_last: F,
 
-    // Row index for the given proof
+    // Row index for the given proof, in {0, 1, ..., l_skip}
     pub row_idx: F,
 
     // Value of u^{2^row}, r^{2^row}, and (r * omega)^{2^row}
@@ -60,6 +69,20 @@ pub struct EqBaseCols<F> {
 
     // Lookup multiplicity for eq_0(u, r) and k_rot_0(u, r)
     pub mult: F,
+
+    // Value of u^{2^{l_skip + n}}, where we set n = -row_idx
+    pub u_pow_rev: [F; D_EF],
+
+    // Values of eq_n(u, r) and k_rot_n(u, r) for each negative n
+    pub eq_neg: [F; D_EF],
+    pub k_rot_neg: [F; D_EF],
+
+    // Value of in_n(u) for n in {-1, -2, ..., -l_skip}, i.e. the running product of
+    // each (u_pow_rev + 1)
+    pub in_prod: [F; D_EF],
+
+    // Lookup multiplicity for eq_n(u, r) and k_rot_n(u, r)
+    pub mult_neg: F,
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -118,6 +141,13 @@ impl EqBaseTraceGenerator {
             let mut prod_u_1 = u + F::ONE;
             let mut prod_r_omega_1 = r_omega + F::ONE;
 
+            let mut in_prod = EF::ONE;
+
+            let u_pows = u
+                .exp_powers_of_2()
+                .take(vk.inner.params.l_skip + 1)
+                .collect_vec();
+
             for (row_idx, chunk) in trace.chunks_mut(width).take(num_rows).enumerate() {
                 let cols: &mut EqBaseCols<F> = chunk.borrow_mut();
                 let is_last = row_idx + 1 == num_rows;
@@ -143,6 +173,30 @@ impl EqBaseTraceGenerator {
                 if is_last {
                     cols.mult = F::from_canonical_usize(mult);
                 }
+
+                let l_skip = vk.inner.params.l_skip - row_idx;
+                let u_pow_rev = u_pows[l_skip];
+
+                if row_idx != 0 {
+                    in_prod *= u_pow_rev + F::ONE;
+                    cols.eq_neg.copy_from_slice(
+                        (eval_eq_uni(l_skip, preflight.stacking.sumcheck_rnd[0], r)
+                            * F::from_canonical_usize(1 << l_skip))
+                        .as_base_slice(),
+                    );
+                    cols.k_rot_neg.copy_from_slice(
+                        (eval_rot_kernel_prism(
+                            l_skip,
+                            &[preflight.stacking.sumcheck_rnd[0]],
+                            &[r],
+                        ) * F::from_canonical_usize(1 << l_skip))
+                        .as_base_slice(),
+                    );
+                    // TODO: negative multiplicities
+                }
+
+                cols.u_pow_rev.copy_from_slice(u_pow_rev.as_base_slice());
+                cols.in_prod.copy_from_slice(in_prod.as_base_slice());
 
                 u *= u;
                 r *= r;
@@ -192,6 +246,8 @@ pub struct EqBaseAir {
     pub eq_base_bus: EqBaseBus,
     pub eq_rand_values_bus: EqRandValuesLookupBus,
     pub eq_kernel_lookup_bus: EqKernelLookupBus,
+    pub eq_neg_base_rand_bus: EqNegBaseRandBus,
+    pub eq_neg_result_bus: EqNegResultBus,
 
     // Other fields
     pub l_skip: usize,
@@ -248,6 +304,7 @@ where
         builder
             .when(and(not(local.is_valid), local.is_last))
             .assert_zero(next.proof_idx);
+        builder.assert_zero(local.is_first * local.is_last);
 
         /*
          * Constrain value of row_idx and send u^{2^row} to WhirOpeningPointBus when
@@ -274,7 +331,8 @@ where
         );
 
         /*
-         * Receive the values of u_0 and r_0 from the AIRs that sample them.
+         * Receive the values of u_0 and r_0 from the AIRs that sample them. Send u_0
+         * and r_0^2 to EqNegAir.
          */
         self.constraint_randomness_bus.receive(
             builder,
@@ -291,7 +349,20 @@ where
             local.proof_idx,
             EqRandValuesLookupMessage {
                 idx: AB::Expr::ZERO,
+                u: ext_field_add(
+                    ext_field_multiply_scalar(local.u_pow, local.is_first),
+                    ext_field_multiply_scalar(local.u_pow_rev, local.is_last),
+                ),
+            },
+            and(local.is_valid, local.is_first + local.is_last),
+        );
+
+        self.eq_neg_base_rand_bus.send(
+            builder,
+            local.proof_idx,
+            EqNegBaseRandMessage {
                 u: local.u_pow.map(Into::into),
+                r_squared: ext_field_multiply(local.r_pow, local.r_pow),
             },
             local.is_first,
         );
@@ -433,6 +504,68 @@ where
                 eq_u_r_prod: ext_field_multiply(eq_u_1, eq_r_omega_1),
             },
             and(next.is_last, next.is_valid),
+        );
+
+        /*
+         * Compute eq_n(u, r), k_rot_n(u, r), and in_n(u), which are used to
+         * provide the eq and k_rot lookups for n < 0.
+         */
+        self.eq_neg_result_bus.receive(
+            builder,
+            local.proof_idx,
+            EqNegResultMessage {
+                n: AB::Expr::ZERO - local.row_idx,
+                eq: local.eq_neg.map(Into::into),
+                k_rot: local.k_rot_neg.map(Into::into),
+            },
+            and(
+                local.is_valid,
+                not::<AB::Expr>(or(local.is_first, local.is_last)),
+            ),
+        );
+
+        assert_one_ext(
+            &mut builder.when(and(local.is_valid, local.is_last)),
+            local.eq_neg,
+        );
+
+        assert_one_ext(
+            &mut builder.when(and(local.is_valid, local.is_last)),
+            local.k_rot_neg,
+        );
+
+        assert_array_eq(
+            &mut builder.when(not(local.is_last)),
+            ext_field_multiply(next.u_pow_rev, next.u_pow_rev),
+            local.u_pow_rev,
+        );
+
+        assert_one_ext(&mut builder.when(local.is_first), local.in_prod);
+
+        assert_array_eq(
+            &mut builder.when(not(local.is_last)),
+            ext_field_multiply(
+                local.in_prod,
+                ext_field_add_scalar(next.u_pow_rev, AB::F::ONE),
+            ),
+            next.in_prod,
+        );
+
+        builder
+            .when(not(local.is_valid))
+            .assert_zero(local.mult_neg);
+        builder.when(local.is_first).assert_zero(local.mult_neg);
+
+        let in_n = ext_field_multiply_scalar::<AB::Expr>(local.in_prod, omega_pow_inv);
+        self.eq_kernel_lookup_bus.send(
+            builder,
+            local.proof_idx,
+            EqKernelLookupMessage {
+                n: AB::Expr::ZERO - local.row_idx,
+                eq: ext_field_multiply(in_n.clone(), local.eq_neg),
+                k_rot: ext_field_multiply(in_n, local.k_rot_neg),
+            },
+            local.mult_neg,
         );
     }
 }
