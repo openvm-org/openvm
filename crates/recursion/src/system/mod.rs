@@ -10,7 +10,10 @@ use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, Digest, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
+    poseidon2::{
+        WIDTH,
+        sponge::{FiatShamirTranscript, TranscriptHistory, TranscriptLog},
+    },
     proof::{Proof, TraceVData},
     prover::{
         AirProvingContextV2, ColMajorMatrix, CpuBackendV2, ProverBackendV2,
@@ -159,6 +162,7 @@ pub struct Preflight {
     pub whir: WhirPreflight,
     // Merkle bus message + actual commitment
     pub merkle_verify_logs: Vec<MerkleVerifyLog>,
+    pub poseidon_inputs: Vec<[F; WIDTH]>,
 }
 
 #[derive(Clone, Debug, Default)]

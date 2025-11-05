@@ -13,7 +13,7 @@ use stark_backend_v2::{
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::{
         CHUNK, WIDTH, poseidon2_perm,
-        sponge::{FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice},
+        sponge::{FiatShamirTranscript, TranscriptHistory},
     },
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
@@ -25,6 +25,7 @@ use crate::{
         AirModule, BusIndexManager, BusInventory, GlobalCtxCpu, MerkleVerifyLog, Preflight,
         TraceGenModule, WhirPreflight,
     },
+    utils::poseidon2_hash_slice_with_records,
     whir::{
         bus::{
             FinalPolyFoldingBus, FinalPolyMleEvalBus, FinalPolyQueryEvalBus, VerifyQueriesBus,
@@ -272,10 +273,17 @@ impl WhirModule {
                             }
                         }
 
-                        let leaf_hashes = opened_rows
+                        let leaf_hashes_and_records = opened_rows
                             .iter()
-                            .map(|opened_row| poseidon2_hash_slice(opened_row))
+                            .map(|opened_row| poseidon2_hash_slice_with_records(opened_row))
                             .collect_vec();
+
+                        let mut leaf_hashes = vec![];
+                        for (leaf_hash, input_states) in leaf_hashes_and_records {
+                            leaf_hashes.push(leaf_hash);
+                            preflight.poseidon_inputs.extend(input_states);
+                        }
+
                         merkle_verify_logs.push(MerkleVerifyLog {
                             leaf_hashes,
                             merkle_idx: sample.as_canonical_u32() as usize,
@@ -296,10 +304,17 @@ impl WhirModule {
                 } else {
                     let opened_values =
                         proof.whir_proof.codeword_opened_values[i - 1][query_idx].clone();
-                    let leaf_hashes = opened_values
+                    let leaf_hashes_and_records = opened_values
                         .iter()
-                        .map(|opened_value| poseidon2_hash_slice(opened_value.as_base_slice()))
+                        .map(|opened_value| {
+                            poseidon2_hash_slice_with_records(opened_value.as_base_slice())
+                        })
                         .collect_vec();
+                    let mut leaf_hashes = vec![];
+                    for (leaf_hash, input_states) in leaf_hashes_and_records {
+                        leaf_hashes.push(leaf_hash);
+                        preflight.poseidon_inputs.extend(input_states);
+                    }
                     merkle_verify_logs.push(MerkleVerifyLog {
                         leaf_hashes,
                         merkle_idx: sample.as_canonical_u32() as usize,
@@ -400,7 +415,7 @@ impl AirModule for WhirModule {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            _poseidon_bus: self.bus_inventory.poseidon2_bus,
+            poseidon_bus: self.bus_inventory.poseidon2_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir,
             initial_log_domain_size,
@@ -408,7 +423,7 @@ impl AirModule for WhirModule {
         let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
-            _poseidon_bus: self.bus_inventory.poseidon2_bus,
+            poseidon_bus: self.bus_inventory.poseidon2_bus,
             merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir,
             initial_log_domain_size,
