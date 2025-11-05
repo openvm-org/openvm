@@ -1,56 +1,59 @@
 use std::borrow::Borrow;
 
+use openvm_circuit_primitives::{
+    SubAir,
+    is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
+    utils::not,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::FieldAlgebra;
+use p3_field::{FieldAlgebra, TwoAdicField, extension::BinomiallyExtendable};
 use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    batch_constraint::{
-        BatchConstraintConductorBus,
-        bus::{
-            BatchConstraintConductorMessage, BatchConstraintInnerMessageType, SumcheckClaimBus,
-            SumcheckClaimMessage,
-        },
+    batch_constraint::bus::{
+        BatchConstraintConductorBus, BatchConstraintConductorMessage,
+        BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
-    bus::{
-        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus,
-        TranscriptBusMessage,
-    },
+    bus::{ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus},
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
-#[derive(AlignedBorrow, Clone, Copy)]
+#[derive(AlignedBorrow, Clone, Copy, Debug)]
 #[repr(C)]
 pub struct UnivariateSumcheckCols<T> {
     pub is_valid: T,
     pub is_first: T,
-    pub is_last: T,
-    pub proof_idx: T,
 
-    pub idx: T,
-    pub idx_mod_domsize: T,
-    pub idx_divisible_by_domsize: T,
-    pub aux_inv_idx: T,
+    pub proof_idx: T,
+    pub coeff_idx: T,
+
+    // TODO(ayush): there must be a better way to do this
+    /// Powers of generator of order 2^{l_skip} to get periodic selector columns
+    pub omega_skip_power: T,
+    pub is_omega_skip_power_equal_to_one: T,
+    pub is_omega_skip_power_equal_to_one_aux: IsEqualAuxCols<T>,
+
     pub coeff: [T; D_EF],
     pub sum_at_roots: [T; D_EF],
 
-    // TODO: reuse all above as a subair?
-    pub coeff_tidx: T, // TODO: coeff_tidx - idx should be a constant, probably derivable from tidx
-    pub tidx: T,
     pub r: [T; D_EF],
     pub value_at_r: [T; D_EF],
+
+    pub tidx: T,
 }
 
 pub struct UnivariateSumcheckAir {
+    /// The univariate domain size is `2^{l_skip}`
+    pub l_skip: usize,
     /// The degree of the univariate polynomial
     pub univariate_deg: usize,
-    /// The univariate domain size, aka `2^{l_skip}`
-    pub domain_size: usize,
 
     pub claim_bus: SumcheckClaimBus,
     pub transcript_bus: TranscriptBus,
@@ -67,112 +70,188 @@ impl<F> BaseAir<F> for UnivariateSumcheckAir {
     }
 }
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateSumcheckAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateSumcheckAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF> + TwoAdicField,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
         let local: &UnivariateSumcheckCols<AB::Var> = (*local).borrow();
-        let _next: &UnivariateSumcheckCols<AB::Var> = (*next).borrow();
+        let next: &UnivariateSumcheckCols<AB::Var> = (*next).borrow();
 
-        /*
-        // `is_valid` is 0/1 and switches only from 1 to 0
-        builder
-            .when_transition()
-            .assert_bool(local.is_valid - next.is_valid);
-        builder.assert_bool(local.is_valid);
+        ///////////////////////////////////////////////////////////////////////
+        // Loop Constraints
+        ///////////////////////////////////////////////////////////////////////
 
-        // while `is_valid`, the indices increase and start with 0
-        builder
-            .when_transition()
-            .when(next.is_valid)
-            .assert_one(next.idx - local.idx);
-        builder.when_first_row().assert_zero(local.idx);
+        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        LoopSubAir {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx],
+                        is_first: [local.is_first],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx],
+                        is_first: [next.is_first],
+                    }
+                    .map_into(),
+                ),
+                NestedForLoopAuxCols { is_transition: [] },
+            ),
+        );
 
-        // moreover, `is_valid` is only 1 on the first `univariate_deg + 1` rows, which all exist:
-        // - If it ever goes 1 -> 0, it happens on `idx = univariate_deg`
-        builder.when(local.is_valid * not(next.is_valid)).assert_eq(
-            local.idx,
+        let is_last = LoopSubAir::local_is_last(next.is_valid, next.is_first);
+        let is_transition = AB::Expr::ONE - is_last.clone();
+
+        // Coeff index starts at univariate degree
+        builder.when(local.is_first).assert_eq(
+            local.coeff_idx,
             AB::Expr::from_canonical_usize(self.univariate_deg),
         );
-        // - If it's all ones, then the last row index is this
-        builder.when_last_row().when(local.is_valid).assert_eq(
-            local.idx,
-            AB::Expr::from_canonical_usize(self.univariate_deg),
+        // Coeff index decrements by 1
+        builder
+            .when(is_transition.clone())
+            .assert_eq(next.coeff_idx, local.coeff_idx - AB::Expr::ONE);
+        // Coeff index ends at zero
+        builder.when(is_last.clone()).assert_zero(local.coeff_idx);
+
+        ///////////////////////////////////////////////////////////////////////
+        // Powers of omega constraints
+        ///////////////////////////////////////////////////////////////////////
+
+        // TODO(ayush): cache
+        let omega_skip = AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::two_adic_generator(
+            self.l_skip,
+        ));
+
+        // TODO(ayush): see if i can somehow reuse ExpBitsLenAir
+        // Omega power ends at 1
+        builder
+            .when(local.is_valid * is_last.clone())
+            .assert_one(local.omega_skip_power);
+        // Powers of omega are calculated properly
+        builder
+            .when(is_transition.clone())
+            .assert_eq(local.omega_skip_power, next.omega_skip_power * omega_skip);
+
+        IsEqSubAir.eval(
+            builder,
+            (
+                IsEqualIo::new(
+                    local.omega_skip_power.into(),
+                    AB::Expr::ONE,
+                    local.is_omega_skip_power_equal_to_one.into(),
+                    local.is_valid.into(),
+                ),
+                local.is_omega_skip_power_equal_to_one_aux.inv,
+            ),
         );
-        // - We forbid it to be all zeroes
-        builder.when_first_row().assert_one(local.is_valid);
 
-        // `idx_mod_domsize` starts with 0,
-        builder.when_first_row().assert_zero(local.idx_mod_domsize);
-        // each time either increases by 1 or drop to 0,
-        builder
-            .when(next.idx_mod_domsize)
-            .assert_one(next.idx_mod_domsize - local.idx_mod_domsize);
-        // and `idx_divisible_by_domsize` is the indicator of it being 0.
-        builder.assert_bool(local.idx_divisible_by_domsize);
-        builder
-            .when(local.idx_divisible_by_domsize)
-            .assert_zero(local.idx_mod_domsize);
-        builder
-            .when(next.is_valid)
-            .when(not(next.idx_divisible_by_domsize))
-            .assert_one(next.idx_mod_domsize - local.idx_mod_domsize);
+        ///////////////////////////////////////////////////////////////////////
+        // Sum over Roots Constraints
+        ///////////////////////////////////////////////////////////////////////
 
-        // More specifically, it is zero iff (is valid and) the index was going to be divisibly by `domain_size`
-        builder
-            .when_transition()
-            .when(next.idx_divisible_by_domsize)
-            .assert_eq(
-                local.idx_mod_domsize + AB::Expr::ONE,
-                AB::Expr::from_canonical_usize(self.domain_size),
-            );
-        builder
-            .when(local.is_valid)
-            .assert_one(local.aux_inv_idx * local.idx_mod_domsize);
+        let domain_size = AB::Expr::from_canonical_usize(1 << self.l_skip);
 
-        // `sum_at_roots` needs to change this way:
-        builder.when_transition().assert_eq(
+        // Initialize sum over roots
+        assert_eq_array(
+            &mut builder.when(local.is_first),
             local.sum_at_roots,
-            next.sum_at_roots + local.idx_divisible_by_domsize * local.coeff,
+            ext_field_multiply_scalar(local.coeff, domain_size.clone()),
         );
-        // and it must _always_ equal coeff on the last row -- this holds
-        // even when not `is_valid`
+        // Add c * 2^{l_skip} at every 2^{l_skip} coefficient
+        assert_eq_array(
+            &mut builder
+                .when(is_transition.clone())
+                .when(next.is_omega_skip_power_equal_to_one),
+            next.sum_at_roots,
+            ext_field_add(
+                local.sum_at_roots,
+                ext_field_multiply_scalar(next.coeff, domain_size.clone()),
+            ),
+        );
+        // Keep the sum over roots unchanged for other values
+        assert_eq_array(
+            &mut builder
+                .when(is_transition.clone())
+                .when(not(next.is_omega_skip_power_equal_to_one)),
+            next.sum_at_roots,
+            local.sum_at_roots,
+        );
+
+        ///////////////////////////////////////////////////////////////////////
+        // Horner evaluation at r
+        ///////////////////////////////////////////////////////////////////////
+
+        assert_eq_array(&mut builder.when(is_transition.clone()), local.r, next.r);
+
+        // Initialize evaluation
+        // e = c
+        assert_eq_array(
+            &mut builder.when(local.is_first),
+            local.value_at_r,
+            local.coeff,
+        );
+        // e' = c + r * e
+        assert_eq_array(
+            &mut builder.when(is_transition.clone()),
+            next.value_at_r,
+            ext_field_add(next.coeff, ext_field_multiply(next.r, local.value_at_r)),
+        );
+
+        ///////////////////////////////////////////////////////////////////////
+        // Transition index
+        ///////////////////////////////////////////////////////////////////////
+
         builder
-            .when_last_row()
-            .assert_eq(local.sum_at_roots, local.coeff);
-        */
+            .when(is_transition.clone())
+            .assert_eq(next.tidx, local.tidx - AB::Expr::from_canonical_usize(D_EF));
+
+        ///////////////////////////////////////////////////////////////////////
+        // Interactions
+        ///////////////////////////////////////////////////////////////////////
+
+        // Sample r
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.r,
+            local.is_valid * local.is_first,
+        );
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx,
+            local.coeff,
+            local.is_valid,
+        );
 
         self.claim_bus.receive(
             builder,
             local.proof_idx,
             SumcheckClaimMessage {
                 round: AB::Expr::ZERO,
-                value: local.value_at_r.map(|x| x.into()),
+                value: local.sum_at_roots.map(|x| x.into()),
             },
-            local.is_first,
+            local.is_valid * is_last.clone(),
         );
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.tidx + AB::Expr::from_canonical_usize(i),
-                    value: local.r[i].into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_first,
-            );
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.coeff_tidx + AB::Expr::from_canonical_usize(i),
-                    value: local.coeff[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid,
-            );
-        }
+        // TODO(ayush): add back
+        // self.claim_bus.receive(
+        //     builder,
+        //     local.proof_idx,
+        //     SumcheckClaimMessage {
+        //         round: AB::Expr::ZERO,
+        //         value: local.value_at_r.map(|x| x.into()),
+        //     },
+        //     local.is_valid * is_last,
+        // );
         self.randomness_bus.send(
             builder,
             local.proof_idx,
@@ -180,8 +259,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for UnivariateSumcheckAir {
                 idx: AB::Expr::ZERO,
                 challenge: local.r.map(|x| x.into()),
             },
-            local.is_first,
+            local.is_valid * local.is_first,
         );
+
         self.batch_constraint_conductor_bus.send(
             builder,
             local.proof_idx,

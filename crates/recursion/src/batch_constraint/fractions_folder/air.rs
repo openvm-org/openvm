@@ -13,11 +13,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     batch_constraint::bus::{SumcheckClaimBus, SumcheckClaimMessage},
-    bus::{
-        BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus, TranscriptBusMessage,
-    },
+    bus::{BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{assert_eq_array, ext_field_add, ext_field_multiply},
+    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_subtract},
 };
 
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -29,9 +27,12 @@ pub struct FractionsFolderCols<T> {
     pub proof_idx: T,
     pub air_idx: T,
 
+    // TODO(ayush): probably don't need all 3
+    pub tidx: T,
     pub tidx_alpha_beta: T,
     pub gkr_post_tidx: T, // TODO: this number of tids is really annoying
-    pub tidx: T,
+
+    // TODO(ayush): do i need this col?
     pub n_global: T,
 
     pub sum_claim_p: [T; D_EF],
@@ -95,8 +96,8 @@ where
             ),
         );
 
-        let is_last_air = LoopSubAir::local_is_last(next.is_valid, next.is_first);
-        let is_transition = AB::Expr::ONE - is_last_air.clone();
+        let is_last = LoopSubAir::local_is_last(next.is_valid, next.is_first);
+        let is_transition = AB::Expr::ONE - is_last.clone();
 
         // TODO(ayush): do i need to constrain that air_idx starts at a particular value?
         // builder
@@ -108,19 +109,19 @@ where
             .when(local.is_valid * is_transition.clone())
             .assert_eq(next.air_idx, local.air_idx - AB::Expr::ONE);
 
-        builder.when(is_last_air.clone()).assert_zero(local.air_idx);
+        builder.when(is_last.clone()).assert_zero(local.air_idx);
 
         ///////////////////////////////////////////////////////////////////////
         // Transition Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        let is_transition = AB::Expr::ONE - is_last_air.clone();
+        let is_transition = AB::Expr::ONE - is_last.clone();
 
         assert_array_eq(&mut builder.when(is_transition.clone()), local.mu, next.mu);
 
         builder.when(is_transition.clone()).assert_eq(
             next.tidx,
-            local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            local.tidx - AB::Expr::from_canonical_usize(2 * D_EF),
         );
 
         ///////////////////////////////////////////////////////////////////////
@@ -177,58 +178,45 @@ where
         // Interactions
         ///////////////////////////////////////////////////////////////////////
 
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx,
-                    value: local.sum_claim_p[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid,
-            );
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(D_EF + i) + local.tidx,
-                    value: local.sum_claim_q[i].into(),
-                    is_sample: AB::Expr::ZERO,
-                },
-                local.is_valid,
-            );
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(2 * D_EF + i) + local.tidx,
-                    value: local.mu[i].into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_valid * is_last_air.clone(),
-            );
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx_alpha_beta,
-                    value: local.cur_q_sum[i] - local.sum_claim_q[i],
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_first,
-            );
-        }
+        // Sample mu
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            local.mu,
+            local.is_valid * local.is_first,
+        );
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx,
+            local.sum_claim_q,
+            local.is_valid,
+        );
+        self.transcript_bus.observe_ext(
+            builder,
+            local.proof_idx,
+            local.tidx - AB::Expr::from_canonical_usize(D_EF),
+            local.sum_claim_p,
+            local.is_valid,
+        );
+        // Sample alpha
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.tidx_alpha_beta,
+            ext_field_subtract(local.cur_q_sum, local.sum_claim_q),
+            local.is_valid * local.is_first,
+        );
+
         self.sumcheck_bus.send(
             builder,
             local.proof_idx,
             SumcheckClaimMessage {
                 round: AB::Expr::ZERO,
-                // TODO(ayush): add back
-                // value: local.cur_hash.map(|x| x.into()),
-                value: [AB::Expr::ZERO; D_EF],
+                value: local.cur_hash.map(|x| x.into()),
             },
-            local.is_first,
+            local.is_valid * is_last.clone(),
         );
 
         self.gkr_claim_bus.receive(
@@ -243,7 +231,7 @@ where
                     local.cur_q_sum.map(|x| x.into()),
                 ],
             },
-            local.is_valid * is_last_air.clone(),
+            local.is_valid * is_last,
         );
     }
 }
