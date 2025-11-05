@@ -319,7 +319,7 @@ where
                 idx: AB::Expr::ZERO,
                 u: local.u_0.map(Into::into),
             },
-            and(local.is_last, local.is_valid),
+            and(local.is_last, local.is_valid) * AB::F::TWO,
         );
 
         /*
