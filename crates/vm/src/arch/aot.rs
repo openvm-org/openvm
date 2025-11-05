@@ -817,10 +817,26 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let from_state_pc = from_state.pc();
+        let vm_exec_state = VmExecState::new(from_state, ctx);
+        let vm_exec_state = self.execute_metered_until_suspend(vm_exec_state)?;
+        // handle execution error
+        match vm_exec_state.exit_code {
+            Ok(_) => Ok((
+                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.vm_state,
+            )),
+            Err(e) => Err(e),
+        }
+    }
 
+    // TODO: implement execute_metered_until_suspend for AOT if needed
+    pub fn execute_metered_until_suspend(
+        &self,
+        vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        let from_state_pc = vm_exec_state.vm_state.pc();
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
-            Box::new(VmExecState::new(from_state, ctx));
+            Box::new(vm_exec_state);
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
@@ -840,16 +856,6 @@ where
                     * in 5 args. Fix later */
             );
         }
-
-        // handle execution error
-        match vm_exec_state.exit_code {
-            Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
-                vm_exec_state.vm_state,
-            )),
-            Err(e) => Err(e),
-        }
+        Ok(*vm_exec_state)
     }
-
-    // TODO: implement execute_metered_until_suspend for AOT if needed
 }
