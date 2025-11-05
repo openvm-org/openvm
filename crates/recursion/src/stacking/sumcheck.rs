@@ -6,7 +6,7 @@ use std::{
 use itertools::{Itertools, izip};
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, not},
+    utils::{and, assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -42,8 +42,8 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        assert_eq_array, assert_zeros, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
+        assert_zeros, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        ext_field_one_minus, ext_field_subtract,
     },
 };
 
@@ -382,7 +382,7 @@ where
         );
         let q = ext_field_subtract::<AB::Expr>(s1, p.clone());
 
-        assert_eq_array(
+        assert_array_eq(
             builder,
             ext_field_add(
                 ext_field_multiply(
@@ -394,7 +394,7 @@ where
             local.s_eval_at_u,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             local.s_eval_at_u,
             ext_field_add(next.s_eval_at_0, next.s_eval_at_1),
@@ -427,19 +427,19 @@ where
             local.is_first,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             local.eq_prism_base,
             next.eq_prism_base,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             local.eq_cube_base,
             next.eq_cube_base,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             local.rot_cube_base,
             next.rot_cube_base,
@@ -450,7 +450,7 @@ where
         let next_u_not_r = ext_field_multiply(next.u_round, ext_field_one_minus(next.r_round));
         let next_r_not_u = ext_field_multiply(next.r_round, ext_field_one_minus(next.u_round));
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_one_minus::<AB::Expr>(ext_field_add::<AB::Expr>(
                 local_u_not_r.clone(),
@@ -459,7 +459,7 @@ where
             local.eq_cube,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(
                 local.eq_cube,
@@ -471,25 +471,25 @@ where
             next.eq_cube,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.r_not_u_prod,
             local_r_not_u,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.r_not_u_prod, next_r_not_u.clone()),
             next.r_not_u_prod,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.rot_cube_minus_prod,
             local_u_not_r,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_add::<AB::Expr>(
                 ext_field_multiply(

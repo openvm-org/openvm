@@ -136,18 +136,6 @@ where
     }
 }
 
-pub fn assert_eq_array<AB, const N: usize>(
-    builder: &mut AB,
-    actual: [impl Into<AB::Expr>; N],
-    expected: [impl Into<AB::Expr>; N],
-) where
-    AB: AirBuilder,
-{
-    for (a, e) in actual.into_iter().zip(expected.into_iter()) {
-        builder.assert_eq(a, e);
-    }
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct MultiProofVecVec<T> {
     data: Vec<T>,

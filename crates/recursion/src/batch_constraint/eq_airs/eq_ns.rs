@@ -1,7 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{SubAir, utils::not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{assert_array_eq, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -31,7 +34,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        assert_eq_array, base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
+        base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
         ext_field_one_minus, ext_field_subtract,
     },
 };
@@ -144,12 +147,12 @@ where
             .when(not(local.is_valid))
             .assert_zero(local.n_less_than_n_logup);
         // ========================= r consistency ==============================
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_valid * next.is_first),
             local.r_product,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(next.is_first)),
             local.r_product,
             ext_field_multiply(next.r_product, local.r_n),
@@ -162,12 +165,12 @@ where
                 AB::Expr::TWO,
             ),
         ));
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(next.is_first)),
             next.eq,
             ext_field_multiply(local.eq, mult.clone()),
         );
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(next.is_first)),
             next.eq_sharp,
             ext_field_multiply(local.eq_sharp, mult.clone()),

@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{
     any_rap_arc_vec,
     config::{
-        FriParameters, baby_bear_poseidon2::BabyBearPoseidon2Config,
-        baby_bear_poseidon2::BabyBearPoseidon2Engine,
+        FriParameters,
+        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
     },
     engine::StarkFriEngine,
 };

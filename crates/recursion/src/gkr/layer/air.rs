@@ -22,7 +22,7 @@ use crate::{
         },
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{assert_eq_array, assert_zeros, ext_field_add, ext_field_multiply, ext_field_subtract},
+    utils::{assert_zeros, ext_field_add, ext_field_multiply, ext_field_subtract},
 };
 
 #[repr(C)]
@@ -158,7 +158,7 @@ where
         );
 
         // Root consistency check: verify q_cross = q0_claim
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first_layer),
             q_cross_term.clone(),
             local.sumcheck_claim_in,
@@ -184,7 +184,7 @@ where
         ///////////////////////////////////////////////////////////////////////
 
         // Next layer claim is RLC of previous layer numer_claim and denom_claim
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_layer.clone())),
             next.sumcheck_claim_in,
             ext_field_add::<AB::Expr>(

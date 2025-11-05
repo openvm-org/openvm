@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -19,8 +19,8 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
-        assert_eq_array, assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply,
-        ext_field_one_minus, ext_field_subtract,
+        assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply, ext_field_one_minus,
+        ext_field_subtract,
     },
 };
 
@@ -169,10 +169,10 @@ where
         // Eq update: incrementally compute eq *= (xi * ri + (1-xi) * (1-ri))
         let eq_out: [AB::Expr; D_EF] =
             update_eq(local.eq_in, local.prev_challenge, local.challenge);
-        assert_eq_array(&mut builder.when(local.is_enabled), local.eq_out, eq_out);
+        assert_array_eq(&mut builder.when(local.is_enabled), local.eq_out, eq_out);
 
         // Eq propagation
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
             local.eq_out,
             next.eq_in,
@@ -184,14 +184,14 @@ where
         // Cubic interpolation: compute claim_out from polynomial evals at 0,1,2,3
         let claim_out: [AB::Expr; D_EF] =
             interpolate_cubic_at_0123(ev0, local.ev1, local.ev2, local.ev3, local.challenge);
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_enabled),
             local.claim_out,
             claim_out,
         );
 
         // Claim propagation
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_enabled * (AB::Expr::ONE - is_last_round.clone())),
             local.claim_out,
             next.claim_in,
