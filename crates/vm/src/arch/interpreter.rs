@@ -32,6 +32,9 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+use perfcnt::linux::{HardwareEventType, PerfCounterBuilderLinux as Builder};
+use perfcnt::AbstractPerfCounter; // start/stop/read
+
 /// VM pure executor(E1/E2 executor) which doesn't consider trace generation.
 /// Note: This executor doesn't hold any VM state and can be used for multiple execution.
 ///
@@ -377,6 +380,30 @@ where
 
         let pc = exec_state.pc();
         let instret_end = exec_state.ctx.instret_end;
+
+        fn hw(event: HardwareEventType, exclude_kernel: bool) -> perfcnt::linux::PerfCounter {
+            let mut b = Builder::from_hardware_event(event);
+            if exclude_kernel {
+                b.exclude_kernel();
+            }
+            b.finish().expect("perf counter")
+        }
+
+        let mut cycles      = hw(HardwareEventType::CPUCycles, true);
+        let mut insts       = hw(HardwareEventType::Instructions, true);
+        let mut br          = hw(HardwareEventType::BranchInstructions, true);
+        let mut br_miss     = hw(HardwareEventType::BranchMisses, true);
+        let mut llc_ref     = hw(HardwareEventType::CacheReferences, true);
+        let mut llc_miss    = hw(HardwareEventType::CacheMisses, true);
+
+        // Start all
+        for c in [
+            &mut cycles, &mut insts, &mut br, &mut br_miss,
+            &mut llc_ref, &mut llc_miss
+        ] {
+            let _ = c.reset(); let _ = c.start();
+        }
+
         run!(
             "execute_e1",
             self,
@@ -385,6 +412,31 @@ where
             instret_end,
             exec_state,
             ExecutionCtx
+        );
+
+        for c in [
+            &mut cycles, &mut insts, &mut br, &mut br_miss,
+            &mut llc_ref, &mut llc_miss
+        ] {
+            let _ = c.stop();
+        }
+
+        let (cyc, ins, brs, brm, llcr, llcm) = (
+            cycles.read().unwrap_or(0),
+            insts.read().unwrap_or(0),
+            br.read().unwrap_or(0),
+            br_miss.read().unwrap_or(0),
+            llc_ref.read().unwrap_or(0),
+            llc_miss.read().unwrap_or(0),
+        );
+
+        let ipc      = if cyc > 0 { ins as f64 / cyc as f64 } else { 0.0 };
+        let br_missr = if brs > 0 { (brm as f64 / brs as f64) * 100.0 } else { 0.0 };
+        let llc_missr= if llcr> 0 { (llcm as f64 / llcr as f64) * 100.0 } else { 0.0 };
+
+        println!(
+            "[TCO] ins={} ipc={:.3} br_miss%={:.2} llc_miss%={:.2}",
+            ins, ipc, br_missr, llc_missr
         );
 
         println!("instret: {}", exec_state.vm_state.instret());
