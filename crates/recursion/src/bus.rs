@@ -145,7 +145,7 @@ pub struct GkrModuleMessage<T> {
     pub tidx: T,
     pub n_logup: T,
     pub n_max: T,
-    pub n_global: T,
+    pub is_n_max_greater: T,
 }
 
 define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
@@ -156,7 +156,6 @@ pub struct BatchConstraintModuleMessage<T> {
     pub tidx_alpha_beta: T,
     // TODO(ayush): can this be derived?
     pub tidx: T,
-    pub n_global: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
 }
 
