@@ -11,7 +11,6 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 rbx = vm_exec_state
 rbp = pre_compute_insns
 r13 = from_state_pc
-r14 = from_state_instret
 */
 
 extern "C" {
@@ -19,7 +18,6 @@ extern "C" {
         vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
-        from_state_instret: u64,              // rcx = from_state.instret
     );
 }
 
@@ -36,14 +34,8 @@ pub unsafe extern "C" fn asm_run(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
-    from_state_instret: u64,
 ) {
-    asm_run_internal(
-        vm_exec_state_ptr,
-        pre_compute_insns_ptr,
-        from_state_pc,
-        from_state_instret,
-    );
+    asm_run_internal(vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc);
 }
 
 type F = BabyBear;
@@ -53,11 +45,10 @@ type Ctx = MeteredCtx;
 // to update the vm state's pc and instret
 // works for metered execution
 #[no_mangle]
-pub extern "C" fn metered_set_instret_and_pc(
+pub extern "C" fn metered_set_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
-    _final_instret: u64,                   // rcx = final_instret
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =
@@ -70,10 +61,10 @@ pub extern "C" fn metered_extern_handler(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
-    cur_instret: u64,
 ) -> u32 {
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
     let pre_compute_insns_base_ptr =
@@ -81,8 +72,6 @@ pub extern "C" fn metered_extern_handler(
     let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
 
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
-
-    let ctx = &vm_exec_state_ref.ctx;
 
     unsafe {
         (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
@@ -102,7 +91,8 @@ pub extern "C" fn metered_extern_handler(
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(_instret: u64, _pc: u32, exec_state_ptr: *mut c_void) -> u32 {
+pub extern "C" fn should_suspend(exec_state_ptr: *mut c_void) -> u32 {
+    // TODO: this is inconsistent with the Rust implementation. Fix it later.
     let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
 
     if exec_state_ref.ctx.check_and_segment() && *exec_state_ref.ctx.suspend_on_segment() {

@@ -110,8 +110,6 @@ where
         let mut asm_str = String::new();
         let a_reg = a / 4;
 
-        // instret += 1
-        asm_str += "   add r14, 1\n";
         let rd = if is_jal {
             pc + DEFAULT_PC_STEP
         } else {

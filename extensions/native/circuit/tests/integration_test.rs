@@ -809,7 +809,6 @@ fn test_vm_pure_execution_non_continuation_aot() {
         .execute(vec![], None)
         .expect("Failed to execute");
 
-    assert_eq!(aot_vm_state.instret(), interp_vm_state.instret());
     assert_eq!(aot_vm_state.pc(), interp_vm_state.pc());
 }
 

@@ -116,8 +116,6 @@ where
 
         // pc += DEFAULT_PC_STEP
         asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-        // instret += 1
-        asm_str += &format!("   add r14, 1\n");
 
         Ok(asm_str)
     }

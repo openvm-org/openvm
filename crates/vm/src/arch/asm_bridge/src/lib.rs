@@ -12,7 +12,6 @@ extern "C" {
         vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
-        from_state_instret: u64,              // rcx = from_state.instret
         instret_left: u64,
     );
 }
@@ -30,14 +29,12 @@ pub unsafe extern "C" fn asm_run(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
-    from_state_instret: u64,
     instret_left: u64,
 ) {
     asm_run_internal(
         vm_exec_state_ptr,
         pre_compute_insns_ptr,
         from_state_pc,
-        from_state_instret,
         instret_left,
     );
 }
@@ -48,11 +45,10 @@ type Ctx = ExecutionCtx;
 /// At the end of the assembly execution, store the instret and pc from the x86 registers
 /// to the vm state's pc and instret for the pure execution mode
 #[no_mangle]
-pub extern "C" fn set_instret_and_pc(
+pub extern "C" fn set_pc(
     vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
-    _final_instret: u64,                   // rcx = final_instret
 ) {
     // reference to vm_exec_state
     let vm_exec_state_ref =
@@ -70,11 +66,11 @@ pub extern "C" fn extern_handler(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
-    cur_instret: u64,
 ) -> u32 {
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
     let pre_compute_insns_base_ptr =

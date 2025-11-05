@@ -198,6 +198,8 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
 
     #[inline(always)]
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        // ATTENTION: Please make sure to update the corresponding logic in the
+        // `asm_bridge` crate and `aot.rs`` when you change this function.
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.

@@ -69,8 +69,6 @@ const REG_PC: &str = "r13";
 #[cfg(feature = "aot")]
 const REG_PC_W: &str = "r13d";
 #[cfg(feature = "aot")]
-const REG_INSTRET: &str = "r14";
-#[cfg(feature = "aot")]
 const REG_A: &str = "rcx"; // used when building jump address
 
 impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
@@ -146,7 +144,6 @@ where
             asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         }
 
-        asm_str += &format!("   add {}, 1\n", REG_INSTRET);
         asm_str += "   lea rdx, [rip + map_pc_base]\n";
         asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
         asm_str += "   add rcx, rdx\n";

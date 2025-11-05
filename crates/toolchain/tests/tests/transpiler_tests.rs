@@ -80,7 +80,7 @@ fn test_rv32im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let executor = VmExecutor::new(config.clone())?;
 
     let interpreter = executor.instance(&exe)?;
-    let interp_state = interpreter.execute(vec![], None)?;
+    let _interp_state = interpreter.execute(vec![], None)?;
 
     Ok(())
 }

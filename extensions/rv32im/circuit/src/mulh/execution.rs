@@ -31,8 +31,6 @@ struct MulHPreCompute {
 // Callee saved registers (shared with MUL AOT)
 #[cfg(feature = "aot")]
 const REG_PC: &str = "r13";
-#[cfg(feature = "aot")]
-const REG_INSTRET: &str = "r14";
 
 // Caller saved registers
 #[cfg(feature = "aot")]
@@ -164,7 +162,6 @@ where
         }
         asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         asm += &format!("   add {}, 4\n", REG_PC);
-        asm += &format!("   add {}, 1\n", REG_INSTRET);
         Ok(asm)
     }
 }

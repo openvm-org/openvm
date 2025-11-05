@@ -26,6 +26,8 @@ impl ExecutionCtxTrait for ExecutionCtx {
 
     #[inline(always)]
     fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        // ATTENTION: Please make sure to update the corresponding logic in the
+        // `asm_bridge` crate and `aot.rs`` when you change this function.
         if exec_state.ctx.instret_left == 0 {
             true
         } else {
