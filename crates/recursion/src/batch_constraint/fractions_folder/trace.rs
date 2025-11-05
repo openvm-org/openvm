@@ -85,14 +85,5 @@ pub(crate) fn generate_trace(
         cur_height += height;
     }
 
-    // TODO(ayush): remove
-    trace[cur_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
-        });
-
     RowMajorMatrix::new(trace, width)
 }
