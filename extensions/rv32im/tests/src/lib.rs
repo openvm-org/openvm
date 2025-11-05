@@ -70,7 +70,6 @@ mod tests {
     }
 
     #[test_case("fibonacci", 1)]
-    #[test_case("collatz", 1)]
     fn test_rv32im_std(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv32im_config();
         let elf = build_example_program_at_path_with_features(

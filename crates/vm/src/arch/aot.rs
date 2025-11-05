@@ -172,6 +172,8 @@ where
     fn rv32_regs_to_xmm() -> String {
         let mut asm_str = String::new();
 
+        let mut asm_str = String::new();
+
         for r in 0..16 {
             asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
@@ -195,12 +197,20 @@ where
 
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
+        for i in 0..32{
+            let xmm_reg = i / 2;
+            let lane = i % 2;
+            if RV32_OVERRIDE_GPRS[i].is_some(){
+                let override_reg = RV32_OVERRIDE_GPRS[i].unwrap();
+                asm_str += &format!("   pinsrd xmm{}, {}, {}\n", xmm_reg, override_reg, lane)
+            }
+        }
 
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
         }
-
+        
         asm_str
     }
 
@@ -336,7 +346,7 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-
+            asm_str+= &Self::rv32_regs_to_xmm();
             if executor.is_aot_supported(&instruction) {
                 let segment =
                     executor
@@ -366,6 +376,7 @@ where
                     pc,
                 );
             }
+            asm_str+= &Self::xmm_to_rv32_regs();
         }
 
         // asm_run_end part
