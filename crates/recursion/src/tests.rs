@@ -362,13 +362,7 @@ fn test_recursion_circuit_two_cached() {
     let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
         &vk,
         vk_commit_data,
-        &[
-            proof.clone(),
-            proof.clone(),
-            proof.clone(),
-            proof.clone(),
-            proof,
-        ],
+        &[proof.clone(), proof],
     );
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
