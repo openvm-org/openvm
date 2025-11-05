@@ -1,9 +1,9 @@
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs, io,
     path::Path,
-    sync::{Arc, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use divan::Bencher;
@@ -89,6 +89,7 @@ const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
+static SUCCESSFUL_EXECUTIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 #[cfg(feature = "aot")]
 thread_local! {
     static AOT_INSTANCE_CACHE: RefCell<HashMap<String, Arc<AotInstance<'static, BabyBear, ExecutionCtx>>>> =
@@ -100,6 +101,35 @@ thread_local! {
 // HashMap is used to store the instances, keyed by the program name
 
 type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
+
+fn report_program_success(mode: &str, program: &str) {
+    let successes = SUCCESSFUL_EXECUTIONS.get_or_init(|| Mutex::new(HashSet::new()));
+    let mut successes = successes
+        .lock()
+        .expect("Failed to access successful execution log");
+    let key = format!("{mode}:{program}");
+    if successes.insert(key) {
+        println!("Successfully executed {mode} for program `{program}`");
+    }
+}
+
+fn expect_execution<T, E>(
+    result: std::result::Result<T, E>,
+    mode: &str,
+    program: &str,
+    context: &str,
+) -> T
+where
+    E: std::fmt::Debug,
+{
+    match result {
+        Ok(value) => {
+            report_program_success(mode, program);
+            value
+        }
+        Err(err) => panic!("{context}: {:?}", err),
+    }
+}
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
@@ -277,9 +307,12 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
         bencher
             .with_inputs(|| Vec::<Vec<BabyBear>>::new())
             .bench_values(|input| {
-                cached_aot_instance(&program_name)
-                    .execute(input, None)
-                    .expect("Failed to execute program in AOT mode");
+                expect_execution(
+                    cached_aot_instance(&program_name).execute(input, None),
+                    "AOT benchmark",
+                    program,
+                    "Failed to execute program in AOT mode",
+                );
             });
     }
 
@@ -293,9 +326,12 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
                 (interpreter, vec![])
             })
             .bench_values(|(interpreter, input)| {
-                interpreter
-                    .execute(input, None)
-                    .expect("Failed to execute program in interpreted mode");
+                expect_execution(
+                    interpreter.execute(input, None),
+                    "interpreted benchmark",
+                    program,
+                    "Failed to execute program in interpreted mode",
+                );
             });
     }
 }
@@ -341,9 +377,12 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
             (interpreter, vec![], ctx.clone())
         })
         .bench_values(|(interpreter, input, ctx)| {
-            interpreter
-                .execute_metered(input, ctx)
-                .expect("Failed to execute program");
+            expect_execution(
+                interpreter.execute_metered(input, ctx),
+                "metered benchmark",
+                program,
+                "Failed to execute program",
+            );
         });
 }
 
@@ -359,9 +398,12 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
             (interpreter, vec![], ctx.clone())
         })
         .bench_values(|(interpreter, input, ctx)| {
-            interpreter
-                .execute_metered_cost(input, ctx)
-                .expect("Failed to execute program with metered cost");
+            expect_execution(
+                interpreter.execute_metered_cost(input, ctx),
+                "metered cost benchmark",
+                program,
+                "Failed to execute program with metered cost",
+            );
         });
 }
 
@@ -447,9 +489,12 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
             (vm, interpreter, input_stream)
         })
         .bench_values(|(_vm, interpreter, input_stream)| {
-            interpreter
-                .execute(input_stream, None)
-                .expect("Failed to execute program in interpreted mode");
+            expect_execution(
+                interpreter.execute(input_stream, None),
+                "leaf verifier benchmark",
+                program,
+                "Failed to execute program in interpreted mode",
+            );
         });
 }
 
@@ -470,9 +515,12 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
             (vm, interpreter, input_stream, ctx)
         })
         .bench_values(|(_vm, interpreter, input_stream, ctx)| {
-            interpreter
-                .execute_metered(input_stream, ctx)
-                .expect("Failed to execute program");
+            expect_execution(
+                interpreter.execute_metered(input_stream, ctx),
+                "leaf verifier metered benchmark",
+                program,
+                "Failed to execute program",
+            );
         });
 }
 
@@ -488,9 +536,12 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
             (vm, state, interpreter)
         })
         .bench_values(|(vm, state, mut interpreter)| {
-            let _out = vm
-                .execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
-                .expect("Failed to execute preflight");
+            let _out = expect_execution(
+                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                "leaf verifier preflight benchmark",
+                program,
+                "Failed to execute preflight",
+            );
         });
 }
 
@@ -506,9 +557,12 @@ fn benchmark_internal_verifier_execute(bencher: Bencher, program: &str) {
             (vm, interpreter, input_stream)
         })
         .bench_values(|(_vm, interpreter, input_stream)| {
-            interpreter
-                .execute(input_stream, None)
-                .expect("Failed to execute program in interpreted mode");
+            expect_execution(
+                interpreter.execute(input_stream, None),
+                "internal verifier benchmark",
+                program,
+                "Failed to execute program in interpreted mode",
+            );
         });
 }
 
@@ -529,9 +583,12 @@ fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) 
             (vm, interpreter, input_stream, ctx)
         })
         .bench_values(|(_vm, interpreter, input_stream, ctx)| {
-            interpreter
-                .execute_metered(input_stream, ctx)
-                .expect("Failed to execute program");
+            expect_execution(
+                interpreter.execute_metered(input_stream, ctx),
+                "internal verifier metered benchmark",
+                program,
+                "Failed to execute program",
+            );
         });
 }
 
@@ -547,8 +604,11 @@ fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str
             (vm, state, interpreter)
         })
         .bench_values(|(vm, state, mut interpreter)| {
-            let _out = vm
-                .execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS)
-                .expect("Failed to execute preflight");
+            let _out = expect_execution(
+                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                "internal verifier preflight benchmark",
+                program,
+                "Failed to execute preflight",
+            );
         });
 }
