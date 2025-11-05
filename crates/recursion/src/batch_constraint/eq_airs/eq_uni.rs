@@ -1,6 +1,9 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{SubAir, utils::not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{assert_array_eq, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -18,7 +21,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_one_minus},
+    utils::{ext_field_add, ext_field_multiply, ext_field_one_minus},
 };
 
 #[derive(AlignedBorrow, Clone, Copy)]
@@ -143,12 +146,12 @@ where
 
         // ======================== Values recalculation ==========================
         let mut when_transition = builder.when(is_transition);
-        assert_eq_array(
+        assert_array_eq(
             &mut when_transition,
             next.x.map(Into::into),
             ext_field_multiply::<AB::Expr>(local.x, local.x),
         );
-        assert_eq_array(
+        assert_array_eq(
             &mut when_transition,
             next.y.map(Into::into),
             ext_field_multiply::<AB::Expr>(local.y, local.y),
@@ -161,7 +164,7 @@ where
             ext_field_multiply::<AB::Expr>(x_plus_y, local.res),
             ext_field_multiply::<AB::Expr>(one_minus_x, one_minus_y),
         );
-        assert_eq_array(
+        assert_array_eq(
             &mut when_transition,
             next.res.map(Into::into),
             next_res_expected,

@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::izip;
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, not},
+    utils::{and, assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -32,7 +32,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{assert_eq_array, assert_one_ext, ext_field_add, ext_field_multiply},
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -379,13 +379,13 @@ where
             local.is_valid,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             local.lambda,
             next.lambda,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(
                 ext_field_multiply(local.lambda, local.lambda),
@@ -396,7 +396,7 @@ where
 
         assert_one_ext(&mut builder.when(local.is_first), local.lambda_pow);
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_add::<AB::Expr>(
                 local.col_claim,
@@ -405,7 +405,7 @@ where
             local.s_0,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_add(
                 local.s_0,
@@ -475,13 +475,13 @@ where
                 AB::F::from_canonical_usize(1 << self.n_stack),
             );
 
-        assert_eq_array(
+        assert_array_eq(
             builder,
             ext_field_multiply(local.lambda_pow, local.eq_bits),
             local.lambda_pow_eq_bits,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_multiply(
                 local.lambda_pow_eq_bits,
@@ -490,7 +490,7 @@ where
             local.stacking_claim_coefficient,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_last_for_claim),
             ext_field_multiply(
                 next.lambda_pow_eq_bits,
@@ -499,7 +499,7 @@ where
             next.stacking_claim_coefficient,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not::<AB::Expr>(local.is_last_for_claim)),
             ext_field_add(
                 local.stacking_claim_coefficient,

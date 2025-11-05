@@ -1,8 +1,6 @@
 use core::borrow::Borrow;
 use std::sync::Arc;
 
-use crate::bus::Poseidon2Bus;
-use crate::bus::Poseidon2BusMessage;
 use openvm_poseidon2_air::{
     BABY_BEAR_POSEIDON2_HALF_FULL_ROUNDS, Poseidon2SubAir, Poseidon2SubCols,
 };
@@ -15,6 +13,8 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::Field;
 use p3_matrix::Matrix;
 use stark_recursion_circuit_derive::AlignedBorrow;
+
+use crate::bus::{Poseidon2Bus, Poseidon2BusMessage};
 
 pub const CHUNK: usize = 8;
 pub use openvm_poseidon2_air::POSEIDON2_WIDTH;

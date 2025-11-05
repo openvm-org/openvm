@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::{Itertools, izip};
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, not},
+    utils::{and, assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -31,7 +31,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{assert_eq_array, assert_one_ext, ext_field_add, ext_field_multiply},
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -300,13 +300,13 @@ where
             local.is_valid,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_multiply(local.stacking_claim, local.claim_coefficient),
             local.final_s_eval,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_add(
                 ext_field_multiply(next.stacking_claim, next.claim_coefficient),
@@ -370,20 +370,20 @@ where
          * Compute the RLC of the stacking claims and send it to the WHIR module.
          */
         assert_one_ext(&mut builder.when(local.is_first), local.mu_pow);
-        assert_eq_array(&mut builder.when(not(local.is_last)), local.mu, next.mu);
-        assert_eq_array(
+        assert_array_eq(&mut builder.when(not(local.is_last)), local.mu, next.mu);
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.mu, local.mu_pow),
             next.mu_pow,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.stacking_claim,
             local.whir_claim,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_add(
                 ext_field_multiply(next.stacking_claim, next.mu_pow),
