@@ -83,6 +83,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         if !config.continuation_enabled {
             // force single segment
             ctx.segmentation_ctx.segment_check_insns = u64::MAX;
+            ctx.segmentation_ctx.instrets_until_check = u64::MAX;
         }
 
         // Add merkle height contributions for all registers
