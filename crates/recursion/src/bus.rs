@@ -335,12 +335,21 @@ impl AirShapeProperty {
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct MerkleVerifyBusMessage<T> {
-    pub leaf_hash: [T; DIGEST_SIZE],
-    pub merkle_idx: usize,
-    pub query_idx: usize,
-    pub depth: usize,
-    pub commit_major: usize,
-    pub commit_minor: usize,
+    /// The idx of the merkle proof in the proof, might have additional bits (so not 0 at the root)
+    /// It will be the same for all the rows in the hashing leaves part.
+    pub merkle_idx: T,
+    /// The total depth of the merkle proof including the leaves part, equal to merkle_proof.len() + 1 + k
+    pub total_depth: T,
+    /// The height of this value, [0, k) are for the hashing leaves part, [k, total_depth) are for the merkle proof part.
+    pub height: T,
+    /// For the leaves, it will be 0 ~ 2^k - 1, for the next intermediate values, it will be 0 ~ 2^{k-1} - 1
+    /// 0 for merkle proof part.
+    pub leaf_sub_idx: T,
+    /// Either the leaf hash, or the intermediate hash, or the sibling hash
+    pub value: [T; DIGEST_SIZE],
+
+    pub commit_major: T,
+    pub commit_minor: T,
 }
 
 define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage);

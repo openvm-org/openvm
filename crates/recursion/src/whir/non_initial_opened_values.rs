@@ -1,4 +1,5 @@
 use core::borrow::{Borrow, BorrowMut};
+use std::array::from_fn;
 
 use openvm_circuit_primitives::SubAir;
 use openvm_stark_backend::{
@@ -19,7 +20,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{MerkleVerifyBus, Poseidon2Bus},
+    bus::{MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::assert_eq_array,
@@ -57,9 +58,9 @@ pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
     pub _poseidon_bus: Poseidon2Bus,
-    pub _merkle_verify_bus: MerkleVerifyBus,
+    pub merkle_verify_bus: MerkleVerifyBus,
     pub k: usize,
-    pub _initial_log_domain_size: usize,
+    pub initial_log_domain_size: usize,
 }
 
 impl BaseAirWithPublicValues<F> for NonInitialOpenedValuesAir {}
@@ -204,20 +205,22 @@ where
         //     local.is_enabled,
         // );
 
-        // let is_last_in_query = local.is_enabled - local.next_is_same_query;
-        // self.merkle_verify_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     MerkleVerifyBusMessage {
-        //         leaf_hash: array::from_fn(|i| next.post_state[i].into()),
-        //         merkle_idx: local.merkle_idx_bit_src,
-        //         depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size - self.k)
-        //             - local.whir_round,
-        //         commit_major: local.whir_round.into(),
-        //         commit_minor: AB::Expr::ZERO,
-        //     },
-        //     is_last_in_query,
-        // );
+        self.merkle_verify_bus.send(
+            builder,
+            local.proof_idx,
+            MerkleVerifyBusMessage {
+                value: from_fn(|i| local.value_hash[i].into()),
+                merkle_idx: local.merkle_idx_bit_src.into(),
+                // There are two parts: hashing leaves (depth k) and merkle proof
+                total_depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size + 1)
+                    - local.whir_round,
+                height: AB::Expr::ZERO,
+                leaf_sub_idx: local.coset_idx.into(),
+                commit_major: local.whir_round.into(),
+                commit_minor: AB::Expr::ZERO,
+            },
+            local.is_enabled,
+        );
     }
 }
 
