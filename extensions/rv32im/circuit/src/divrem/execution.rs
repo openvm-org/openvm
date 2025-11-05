@@ -107,7 +107,7 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
         use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
 
         let &Instruction {
@@ -128,32 +128,91 @@ where
         asm_str += &rv32_register_to_gpr(c_reg as u8, "ecx");
         asm_str += "   mov edx, 0\n";
 
+        let label_prefix = format!(
+            ".asm_divrem_{}_{}",
+            pc,
+            match local_opcode {
+                DivRemOpcode::DIV => "div",
+                DivRemOpcode::DIVU => "divu",
+                DivRemOpcode::REM => "rem",
+                DivRemOpcode::REMU => "remu",
+            }
+        );
+        let done_label = format!("{}__done", label_prefix);
+
+        let zero_label = format!("{}__divisor_zero", label_prefix);
+        let overflow_label = format!("{}__overflow", label_prefix);
+        let normal_label = format!("{}__normal", label_prefix);
+        let normal_label = format!("{}__normal", label_prefix);
         match local_opcode {
             DivRemOpcode::DIV => {
+                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += "   cmp eax, 0x80000000\n";
+                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += "   cmp ecx, -1\n";
+                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += &format!("   jmp {}\n", overflow_label);
+
+                asm_str += &format!("{}:\n", normal_label);
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   idiv ecx\n";
+                asm_str += "   mov edx, eax\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", zero_label);
+                asm_str += "   mov edx, -1\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", overflow_label);
                 asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::DIVU => {
+                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   je {}\n", zero_label);
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   div ecx\n";
-
-                // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   mov edx, eax\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", zero_label);
+                asm_str += "   mov edx, -1\n";
             }
             DivRemOpcode::REM => {
+
+                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += "   cmp eax, 0x80000000\n";
+                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += "   cmp ecx, -1\n";
+                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += "   mov edx, 0\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", normal_label);
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   idiv ecx\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", zero_label);
+                asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::REMU => {
+                asm_str += "   test ecx, ecx\n";
+                asm_str += &format!("   je {}\n", zero_label);
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   div ecx\n";
+                asm_str += &format!("   jmp {}\n", done_label);
+
+                asm_str += &format!("{}:\n", zero_label);
+                asm_str += "   mov edx, eax\n";
             }
         }
+        asm_str += &format!("{}:\n", done_label);
         asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
 
         // pc += DEFAULT_PC_STEP
