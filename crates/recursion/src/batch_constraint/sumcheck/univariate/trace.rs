@@ -4,7 +4,6 @@ use std::borrow::BorrowMut;
 use openvm_circuit_primitives::{TraceSubRowGenerator, is_equal::IsEqSubAir};
 use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use p3_matrix::dense::RowMajorMatrix;
-use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 use super::UnivariateSumcheckCols;
@@ -97,15 +96,6 @@ pub(crate) fn generate_trace(
 
         cur_height += height;
     }
-
-    // TODO(ayush): remove
-    trace[cur_height * width..]
-        .par_chunks_mut(width)
-        .enumerate()
-        .for_each(|(i, chunk)| {
-            let cols: &mut UnivariateSumcheckCols<F> = chunk.borrow_mut();
-            cols.proof_idx = F::from_canonical_usize(proofs.len() + i);
-        });
 
     RowMajorMatrix::new(trace, width)
 }

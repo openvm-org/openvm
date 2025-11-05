@@ -222,6 +222,7 @@ impl AirModule for BatchConstraintModule {
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
         };
         let sumcheck_lin_air = MultilinearSumcheckAir {
+            max_constraint_degree: self.max_constraint_degree,
             claim_bus: self.sumcheck_bus,
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
