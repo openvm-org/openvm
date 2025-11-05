@@ -1,7 +1,7 @@
 use core::borrow::{Borrow, BorrowMut};
 use std::array::from_fn;
 
-use openvm_circuit_primitives::SubAir;
+use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -23,7 +23,6 @@ use crate::{
     bus::{MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::assert_eq_array,
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
 };
 
@@ -165,7 +164,7 @@ where
             .when(local.is_same_query)
             .assert_eq(next.twiddle, local.twiddle * omega_k);
 
-        assert_eq_array(&mut builder.when(local.is_same_query), local.yi, next.yi);
+        assert_array_eq(&mut builder.when(local.is_same_query), local.yi, next.yi);
         builder
             .when(local.is_same_query)
             .assert_eq(local.zi, next.zi);
