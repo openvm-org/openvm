@@ -68,24 +68,24 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for MultilinearSumcheckAir {
         // ...
 
         for i in 0..D_EF {
-            self.claim_bus.receive(
-                builder,
-                local.proof_idx,
-                SumcheckClaimMessage {
-                    round: local.round.into(),
-                    value: local.eval_at_i.map(|x| x.into()),
-                },
-                local.is_first.into(),
-            );
-            self.claim_bus.send(
-                builder,
-                local.proof_idx,
-                SumcheckClaimMessage {
-                    round: local.round.into() + AB::Expr::ONE,
-                    value: local.cur_sum.map(|x| x.into()),
-                },
-                local.is_first.into(),
-            );
+            // self.claim_bus.receive(
+            //     builder,
+            //     local.proof_idx,
+            //     SumcheckClaimMessage {
+            //         round: local.round.into(),
+            //         value: local.eval_at_i.map(|x| x.into()),
+            //     },
+            //     local.is_first.into(),
+            // );
+            // self.claim_bus.send(
+            //     builder,
+            //     local.proof_idx,
+            //     SumcheckClaimMessage {
+            //         round: local.round.into() + AB::Expr::ONE,
+            //         value: local.cur_sum.map(|x| x.into()),
+            //     },
+            //     local.is_first.into(),
+            // );
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,

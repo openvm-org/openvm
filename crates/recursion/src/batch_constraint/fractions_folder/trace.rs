@@ -43,18 +43,22 @@ pub(crate) fn generate_trace(
         rows.par_chunks_exact_mut(width)
             .enumerate()
             .for_each(|(i, chunk)| {
+                let air_idx = height - 1 - i;
+
                 let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
                 cols.is_valid = F::ONE;
                 cols.is_first = F::from_bool(i == 0);
                 cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.air_idx = F::from_canonical_usize(height - 1 - i);
+                cols.air_idx = F::from_canonical_usize(air_idx);
                 cols.n_global = F::from_canonical_usize(n_global);
                 cols.tidx_alpha_beta = F::from_canonical_usize(tidx_alpha_beta);
-                cols.sum_claim_p.copy_from_slice(npa[i].as_base_slice());
-                cols.sum_claim_q.copy_from_slice(dpa[i].as_base_slice());
+                cols.sum_claim_p
+                    .copy_from_slice(npa[air_idx].as_base_slice());
+                cols.sum_claim_q
+                    .copy_from_slice(dpa[air_idx].as_base_slice());
                 cols.gkr_post_tidx = F::from_canonical_usize(gkr_post_tidx);
                 cols.mu.copy_from_slice(mu_slice);
-                cols.tidx = F::from_canonical_usize(gkr_post_tidx + (1 + 2 * i) * D_EF);
+                cols.tidx = F::from_canonical_usize(mu_tidx - D_EF - i * 2 * D_EF);
             });
 
         let mut cur_p_sum = [F::ZERO; D_EF];
@@ -64,6 +68,8 @@ pub(crate) fn generate_trace(
         let mu = EF::from_base_slice(mu_slice);
         let mut cur_hash = EF::ZERO;
         for (i, chunk) in rows.chunks_exact_mut(width).enumerate() {
+            let air_idx = height - 1 - i;
+
             let cols: &mut FractionsFolderCols<F> = chunk.borrow_mut();
             for j in 0..D_EF {
                 cur_p_sum[j] += cols.sum_claim_p[j];
@@ -72,12 +78,14 @@ pub(crate) fn generate_trace(
             cols.cur_p_sum.copy_from_slice(&cur_p_sum);
             cols.cur_q_sum.copy_from_slice(&cur_q_sum);
 
-            cur_hash = npa[i] + mu * (dpa[i] + mu * cur_hash);
+            cur_hash = npa[air_idx] + mu * (dpa[air_idx] + mu * cur_hash);
             cols.cur_hash = cur_hash.as_base_slice().try_into().unwrap();
         }
 
         cur_height += height;
     }
+
+    // TODO(ayush): remove
     trace[cur_height * width..]
         .par_chunks_mut(width)
         .enumerate()
