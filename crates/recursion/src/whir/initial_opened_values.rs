@@ -29,7 +29,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
+    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
 };
 
@@ -161,7 +161,7 @@ where
         let mut chunk_len = AB::Expr::ZERO;
         let mut codeword_value_slice_acc = local.codeword_value_acc.map(Into::into);
 
-        assert_eq_array(&mut builder.when(local.is_same_proof), local.mu, next.mu);
+        assert_array_eq(&mut builder.when(local.is_same_proof), local.mu, next.mu);
         assert_array_eq(
             &mut builder.when(local.is_first_in_coset),
             local.mu_pows[0],
@@ -196,7 +196,7 @@ where
                     local.mu_pows[i],
                 );
             } else {
-                assert_eq_array(
+                assert_array_eq(
                     &mut builder.when(local.is_same_coset_idx),
                     next.mu_pows[0],
                     ext_field_multiply(local.mu, local.mu_pows[CHUNK - 1]),

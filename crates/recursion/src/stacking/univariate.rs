@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::{Itertools, izip};
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, not},
+    utils::{and, assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -25,10 +25,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{
-        assert_eq_array, assert_one_ext, ext_field_add, ext_field_multiply,
-        ext_field_multiply_scalar,
-    },
+    utils::{assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -248,13 +245,13 @@ where
             .when(local.coeff_is_d)
             .assert_eq(local.coeff_idx, AB::F::from_canonical_usize(d_card));
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_multiply_scalar(local.coeff, AB::F::from_canonical_usize(d_card)),
             local.s_0_sum_over_d,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(next.coeff_is_d),
             ext_field_add(
                 local.s_0_sum_over_d,
@@ -278,21 +275,21 @@ where
          * it'll be used to constrain the correctness of s_1(0).
          */
         assert_one_ext(&mut builder.when(local.is_first), local.u_0_pow);
-        assert_eq_array(&mut builder.when(not(local.is_last)), local.u_0, next.u_0);
+        assert_array_eq(&mut builder.when(not(local.is_last)), local.u_0, next.u_0);
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.u_0, local.u_0_pow),
             next.u_0_pow,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             ext_field_multiply(local.coeff, local.u_0_pow),
             local.poly_rand_eval,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_add(
                 local.poly_rand_eval,

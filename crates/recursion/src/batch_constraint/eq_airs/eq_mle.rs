@@ -1,7 +1,10 @@
 use std::borrow::{Borrow, BorrowMut};
 
 use itertools::Itertools;
-use openvm_circuit_primitives::{SubAir, utils::not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{assert_array_eq, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -23,9 +26,7 @@ use crate::{
     bus::TranscriptBus,
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{
-        MultiProofVecVec, assert_eq_array, base_to_ext, ext_field_multiply, ext_field_one_minus,
-    },
+    utils::{MultiProofVecVec, base_to_ext, ext_field_multiply, ext_field_one_minus},
 };
 
 #[derive(AlignedBorrow, Clone, Copy)]
@@ -166,7 +167,7 @@ where
 
         // =========================== Xi and product consistency =============================
         // Boundary conditions
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_valid * local.is_first),
             local.eq,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),

@@ -3,7 +3,7 @@ use std::borrow::Borrow;
 use openvm_circuit_primitives::{
     SubAir,
     is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
-    utils::not,
+    utils::{assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -22,7 +22,7 @@ use crate::{
     },
     bus::{ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
+    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -160,13 +160,13 @@ where
         let domain_size = AB::Expr::from_canonical_usize(1 << self.l_skip);
 
         // Initialize sum over roots
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.sum_at_roots,
             ext_field_multiply_scalar(local.coeff, domain_size.clone()),
         );
         // Add c * 2^{l_skip} at every 2^{l_skip} coefficient
-        assert_eq_array(
+        assert_array_eq(
             &mut builder
                 .when(is_transition.clone())
                 .when(next.is_omega_skip_power_equal_to_one),
@@ -177,7 +177,7 @@ where
             ),
         );
         // Keep the sum over roots unchanged for other values
-        assert_eq_array(
+        assert_array_eq(
             &mut builder
                 .when(is_transition.clone())
                 .when(not(next.is_omega_skip_power_equal_to_one)),
@@ -189,17 +189,17 @@ where
         // Horner evaluation at r
         ///////////////////////////////////////////////////////////////////////
 
-        assert_eq_array(&mut builder.when(is_transition.clone()), local.r, next.r);
+        assert_array_eq(&mut builder.when(is_transition.clone()), local.r, next.r);
 
         // Initialize evaluation
         // e = c
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.value_at_r,
             local.coeff,
         );
         // e' = c + r * e
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(is_transition.clone()),
             next.value_at_r,
             ext_field_add(next.coeff, ext_field_multiply(next.r, local.value_at_r)),

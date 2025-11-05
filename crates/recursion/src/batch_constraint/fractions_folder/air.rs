@@ -15,7 +15,7 @@ use crate::{
     batch_constraint::bus::{SumcheckClaimBus, SumcheckClaimMessage},
     bus::{BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
-    utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_subtract},
+    utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
 };
 
 #[derive(AlignedBorrow, Clone, Copy, Debug)]
@@ -148,7 +148,7 @@ where
 
         // Initialize hash
         // h = p + mu * q
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.cur_hash,
             ext_field_add(
@@ -159,7 +159,7 @@ where
 
         // Update hash
         // h' = p + mu * (q + mu * h)
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(is_transition.clone()),
             next.cur_hash,
             ext_field_add(

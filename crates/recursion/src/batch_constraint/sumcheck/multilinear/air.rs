@@ -13,7 +13,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     batch_constraint::bus::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
-        BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
+        BatchConstraintInnerMessageType, SumcheckClaimBus,
     },
     bus::{
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus,

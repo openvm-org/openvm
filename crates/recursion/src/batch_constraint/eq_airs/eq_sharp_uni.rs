@@ -1,6 +1,9 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{SubAir, utils::not};
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{assert_array_eq, not},
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -26,7 +29,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        MultiProofVecVec, assert_eq_array, base_to_ext, ext_field_add, ext_field_multiply,
+        MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_one_minus, ext_field_subtract,
     },
 };
@@ -192,7 +195,7 @@ where
 
         // =========================== Xi and product consistency =============================
         // Boundary conditions
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_valid * local.is_first),
             local.product_before,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
@@ -352,8 +355,8 @@ where
             .when(not(next.is_first))
             .assert_one(next.idx - local.idx);
         // ============================= EF values consistency ==========================
-        assert_eq_array(&mut builder.when(not(next.is_first)), next.r, local.r);
-        assert_eq_array(
+        assert_array_eq(&mut builder.when(not(next.is_first)), next.r, local.r);
+        assert_array_eq(
             &mut builder.when(not(next.is_first)),
             local.cur_sum,
             ext_field_add(local.coeff, ext_field_multiply(local.r, next.cur_sum)),

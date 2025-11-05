@@ -3,7 +3,7 @@ use std::borrow::{Borrow, BorrowMut};
 use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{and, not},
+    utils::{and, assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -29,10 +29,7 @@ use crate::{
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{
-        assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
-        ext_field_subtract,
-    },
+    utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar, ext_field_subtract},
 };
 
 ///////////////////////////////////////////////////////////////////////////
@@ -303,25 +300,25 @@ where
          * Constrain the running product of (u^{2^i} + r^{2^i}) from i to row, which is
          * used to compute eq_0(u, r).
          */
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_u_r,
             ext_field_multiply(local.u_pow, ext_field_add(local.u_pow, local.r_pow)),
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.u_pow, local.u_pow),
             next.u_pow,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.r_pow, local.r_pow),
             next.r_pow,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.prod_u_r, ext_field_add(next.u_pow, next.r_pow)),
             next.prod_u_r,
@@ -332,25 +329,25 @@ where
          */
         let omega = AB::F::two_adic_generator(self.l_skip);
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_u_r_omega,
             ext_field_multiply(local.u_pow, ext_field_add(local.u_pow, local.r_omega_pow)),
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.r_omega_pow,
             ext_field_multiply_scalar(local.r_pow, omega),
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.r_omega_pow, local.r_omega_pow),
             next.r_omega_pow,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(
                 local.prod_u_r_omega,
@@ -365,25 +362,25 @@ where
          */
         let ef_one = [AB::F::ONE, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO];
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_u_1,
             ext_field_add(local.u_pow, ef_one),
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(local.is_first),
             local.prod_r_omega_1,
             ext_field_add(local.r_omega_pow, ef_one),
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(local.prod_u_1, ext_field_add(next.u_pow, ef_one)),
             next.prod_u_1,
         );
 
-        assert_eq_array(
+        assert_array_eq(
             &mut builder.when(not(local.is_last)),
             ext_field_multiply(
                 local.prod_r_omega_1,
