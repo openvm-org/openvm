@@ -23,8 +23,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         AirHeightsBus, AirHeightsBusMessage, AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus,
-        AirShapeBusMessage, AirShapeProperty, CommitmentsBus, GkrModuleBus, GkrModuleMessage,
-        TranscriptBus, TranscriptBusMessage,
+        AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage, GkrModuleBus,
+        GkrModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -385,6 +385,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub l_skip: usize,
     pub min_cached_idx: usize,
     pub max_cached: usize,
+    pub commit_mult: usize,
 
     // Primitives
     pub idx_encoder: Arc<Encoder>,
@@ -836,29 +837,33 @@ where
             .when(and(local.is_first, local.is_valid))
             .assert_one(cidx.clone());
 
-        // self.commitments_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     CommitmentsBusMessage {
-        //         major_idx: AB::Expr::ZERO,
-        //         minor_idx: cidx.clone(),
-        //         commitment: preprocessed_commit,
-        //     },
-        //     has_preprocessed.clone() * local.is_valid,
-        // );
+        self.commitments_bus.send(
+            builder,
+            local.proof_idx,
+            CommitmentsBusMessage {
+                major_idx: AB::Expr::ZERO,
+                minor_idx: cidx.clone(),
+                commitment: preprocessed_commit,
+            },
+            has_preprocessed.clone()
+                * local.is_valid
+                * AB::Expr::from_canonical_usize(self.commit_mult),
+        );
 
         cidx += has_preprocessed.clone();
         (0..self.max_cached).for_each(|cached_idx| {
-            // self.commitments_bus.send(
-            //     builder,
-            //     local.proof_idx,
-            //     CommitmentsBusMessage {
-            //         major_idx: AB::Expr::ZERO,
-            //         minor_idx: cidx.clone(),
-            //         commitment: localv.cached_commits[cached_idx].map(Into::into),
-            //     },
-            //     cached_present[cached_idx].clone() * local.is_valid,
-            // );
+            self.commitments_bus.send(
+                builder,
+                local.proof_idx,
+                CommitmentsBusMessage {
+                    major_idx: AB::Expr::ZERO,
+                    minor_idx: cidx.clone(),
+                    commitment: localv.cached_commits[cached_idx].map(Into::into),
+                },
+                cached_present[cached_idx].clone()
+                    * local.is_valid
+                    * AB::Expr::from_canonical_usize(self.commit_mult),
+            );
             cidx += cached_present[cached_idx].clone();
         });
 
@@ -866,16 +871,18 @@ where
             .when(and(local.is_valid, not(next.is_last)))
             .assert_eq(cidx, next.starting_cidx);
 
-        // self.commitments_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     CommitmentsBusMessage {
-        //         major_idx: AB::Expr::ZERO,
-        //         minor_idx: AB::Expr::ZERO,
-        //         commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),
-        //     },
-        //     is_min_cached.clone() * local.is_valid,
-        // );
+        self.commitments_bus.send(
+            builder,
+            local.proof_idx,
+            CommitmentsBusMessage {
+                major_idx: AB::Expr::ZERO,
+                minor_idx: AB::Expr::ZERO,
+                commitment: localv.cached_commits[self.max_cached - 1].map(Into::into),
+            },
+            is_min_cached.clone()
+                * local.is_valid
+                * AB::Expr::from_canonical_usize(self.commit_mult),
+        );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // NUM PUBLIC VALUES
