@@ -96,6 +96,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         let mut transcript_valid_rows = 0;
         // First pass, calculate number of rows for transcript
         for preflight in preflights.iter() {
+            poseidon2_inputs.extend_from_slice(&preflight.poseidon_inputs);
             let mut cur_is_sample = false; // should always start with observe?
             let mut count = 0;
             let mut num_valid_rows: usize = 0;
