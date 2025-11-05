@@ -2,7 +2,11 @@ use std::ops::Index;
 
 use p3_air::AirBuilder;
 use p3_field::{Field, FieldAlgebra, extension::BinomiallyExtendable};
-use stark_backend_v2::D_EF;
+use p3_symmetric::Permutation;
+use stark_backend_v2::{
+    D_EF, F,
+    poseidon2::{CHUNK, WIDTH, poseidon2_perm},
+};
 
 // TODO(ayush): move somewhere else
 pub const MAX_CONSTRAINT_DEGREE: usize = 4;
@@ -228,4 +232,25 @@ where
             ext_field_add::<FA>(q, ext_field_multiply::<FA>(p, alpha)),
         ),
     )
+}
+
+pub fn poseidon2_hash_slice_with_records(vals: &[F]) -> ([F; CHUNK], Vec<[F; WIDTH]>) {
+    let mut permuted_states = Vec::with_capacity(vals.len().div_ceil(CHUNK));
+    let perm = poseidon2_perm();
+    let mut state = [F::ZERO; WIDTH];
+    let mut i = 0;
+    for &val in vals {
+        state[i] = val;
+        i += 1;
+        if i == CHUNK {
+            permuted_states.push(state);
+            perm.permute_mut(&mut state);
+            i = 0;
+        }
+    }
+    if i != 0 {
+        permuted_states.push(state);
+        perm.permute_mut(&mut state);
+    }
+    (state[..CHUNK].try_into().unwrap(), permuted_states)
 }

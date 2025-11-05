@@ -24,8 +24,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, StackingIndexMessage,
-        StackingIndicesBus,
+        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, Poseidon2BusMessage,
+        StackingIndexMessage, StackingIndicesBus,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -70,7 +70,7 @@ pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
-    pub _poseidon_bus: Poseidon2Bus,
+    pub poseidon_bus: Poseidon2Bus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub initial_log_domain_size: usize,
     pub k: usize,
@@ -255,14 +255,14 @@ where
             next.codeword_value_acc,
         );
 
-        // self.poseidon_bus.lookup_key(
-        //     builder,
-        //     Poseidon2BusMessage {
-        //         input: local.pre_state,
-        //         output: local.post_state,
-        //     },
-        //     local.is_enabled,
-        // );
+        self.poseidon_bus.lookup_key(
+            builder,
+            Poseidon2BusMessage {
+                input: local.pre_state,
+                output: local.post_state,
+            },
+            is_enabled,
+        );
 
         let is_last_in_commit = is_enabled - local.is_same_commit;
         self.merkle_verify_bus.send(

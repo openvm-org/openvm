@@ -20,7 +20,7 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus},
+    bus::{MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, Poseidon2BusMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     whir::bus::{VerifyQueryBus, VerifyQueryBusMessage, WhirFoldingBus, WhirFoldingBusMessage},
@@ -56,7 +56,7 @@ struct NonInitialOpenedValuesCols<T> {
 pub struct NonInitialOpenedValuesAir {
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
-    pub _poseidon_bus: Poseidon2Bus,
+    pub poseidon_bus: Poseidon2Bus,
     pub merkle_verify_bus: MerkleVerifyBus,
     pub k: usize,
     pub initial_log_domain_size: usize,
@@ -190,19 +190,21 @@ where
             local.is_enabled,
         );
 
-        // let pre_state: [AB::Expr; WIDTH] = array::from_fn(|i| if i < D_EF {
-        //     local.value[i].into()
-        // } else {
-        //     AB::Expr::ZERO
-        // });
-        // self.poseidon_bus.lookup_key(
-        //     builder,
-        //     Poseidon2BusMessage {
-        //         input: pre_state,
-        //         output: local.post_state.map(Into::into),
-        //     },
-        //     local.is_enabled,
-        // );
+        let pre_state: [AB::Expr; WIDTH] = from_fn(|i| {
+            if i < D_EF {
+                local.value[i].into()
+            } else {
+                AB::Expr::ZERO
+            }
+        });
+        self.poseidon_bus.lookup_key(
+            builder,
+            Poseidon2BusMessage {
+                input: pre_state,
+                output: local.value_hash.map(Into::into),
+            },
+            local.is_enabled,
+        );
 
         self.merkle_verify_bus.send(
             builder,
