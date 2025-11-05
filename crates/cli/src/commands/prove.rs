@@ -1,10 +1,15 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use eyre::Result;
-use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_circuit::arch::{
+    execution_mode::metered::segment_ctx::{
+        SegmentationLimits, DEFAULT_MAX_CELLS, DEFAULT_MAX_TRACE_HEIGHT_BITS,
+    },
+    instructions::exe::VmExe,
+};
 use openvm_sdk::{
-    config::{AggregationTreeConfig, SdkVmConfig},
+    config::{AggregationTreeConfig, AppConfig, SdkVmConfig},
     fs::{encode_to_file, read_object_from_file, write_to_file_json},
     keygen::AppProvingKey,
     types::VersionedVmStarkProof,
@@ -52,6 +57,9 @@ enum ProveSubCommand {
 
         #[command(flatten)]
         cargo_args: RunCargoArgs,
+
+        #[command(flatten)]
+        segmentation_args: SegmentationArgs,
     },
     Stark {
         #[arg(
@@ -75,6 +83,9 @@ enum ProveSubCommand {
 
         #[command(flatten)]
         cargo_args: RunCargoArgs,
+
+        #[command(flatten)]
+        segmentation_args: SegmentationArgs,
 
         #[command(flatten)]
         agg_tree_config: AggregationTreeConfig,
@@ -104,8 +115,32 @@ enum ProveSubCommand {
         cargo_args: RunCargoArgs,
 
         #[command(flatten)]
+        segmentation_args: SegmentationArgs,
+
+        #[command(flatten)]
         agg_tree_config: AggregationTreeConfig,
     },
+}
+
+#[derive(Clone, Copy, Parser)]
+pub struct SegmentationArgs {
+    /// Trace height threshold, in bits, across all chips for triggering segmentation for
+    /// continuations in the app proof. These thresholds are not exceeded except when they are too
+    /// small.
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_TRACE_HEIGHT_BITS,
+        help_heading = "OpenVM Options"
+    )]
+    pub segment_max_height_bits: u8,
+    /// Total cells used across all chips for triggering segmentation for continuations in the app
+    /// proof. These thresholds are not exceeded except when they are too small.
+    #[arg(
+        long,
+        default_value_t = DEFAULT_MAX_CELLS,
+        help_heading = "OpenVM Options"
+    )]
+    pub segment_max_cells: usize,
 }
 
 impl ProveCmd {
@@ -116,9 +151,11 @@ impl ProveCmd {
                 proof,
                 run_args,
                 cargo_args,
+                segmentation_args,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
-                let sdk = Sdk::new(app_pk.app_config())?.with_app_pk(app_pk);
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
+                let sdk = Sdk::new(app_config)?.with_app_pk(app_pk);
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let app_proof = sdk
@@ -141,15 +178,17 @@ impl ProveCmd {
                 proof,
                 run_args,
                 cargo_args,
+                segmentation_args,
                 agg_tree_config,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 let agg_pk = read_object_from_file(default_agg_stark_pk_path()).map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let sdk = Sdk::new(app_pk.app_config())?
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
+                let sdk = Sdk::new(app_config)?
                     .with_agg_tree_config(*agg_tree_config)
                     .with_app_pk(app_pk)
                     .with_agg_pk(agg_pk);
@@ -178,16 +217,18 @@ impl ProveCmd {
                 proof,
                 run_args,
                 cargo_args,
+                segmentation_args,
                 agg_tree_config,
             } => {
-                let app_pk = load_app_pk(app_pk, cargo_args)?;
+                let mut app_pk = load_app_pk(app_pk, cargo_args)?;
                 let (exe, target_name) = load_or_build_exe(run_args, cargo_args)?;
 
                 println!("Generating EVM proof, this may take a lot of compute and memory...");
                 let (agg_pk, halo2_pk) = read_default_agg_and_halo2_pk().map_err(|e| {
                     eyre::eyre!("Failed to read aggregation proving key: {}\nPlease run 'cargo openvm setup' first", e)
                 })?;
-                let sdk = Sdk::new(app_pk.app_config())?
+                let app_config = get_app_config(&mut app_pk, segmentation_args);
+                let sdk = Sdk::new(app_config)?
                     .with_agg_tree_config(*agg_tree_config)
                     .with_app_pk(app_pk)
                     .with_agg_pk(agg_pk)
@@ -252,4 +293,31 @@ pub(crate) fn load_or_build_exe(
         app_exe,
         exe_path.file_stem().unwrap().to_string_lossy().into_owned(),
     ))
+}
+
+/// Should only be called when `app_pk` has only a single reference internally.
+/// Mutates the `SystemConfig` within `app_pk` and then returns the updated `AppConfig`.
+fn get_app_config(
+    app_pk: &mut AppProvingKey<SdkVmConfig>,
+    segmentation_args: &SegmentationArgs,
+) -> AppConfig<SdkVmConfig> {
+    Arc::get_mut(&mut app_pk.app_vm_pk)
+        .unwrap()
+        .vm_config
+        .system
+        .config
+        .set_segmentation_limits((*segmentation_args).into());
+    app_pk.app_config()
+}
+
+impl From<SegmentationArgs> for SegmentationLimits {
+    fn from(args: SegmentationArgs) -> Self {
+        SegmentationLimits {
+            max_trace_height: 1u32
+                .checked_shl(args.segment_max_height_bits as u32)
+                .expect("segment_max_height_bits too large"),
+            max_cells: args.segment_max_cells,
+            ..Default::default()
+        }
+    }
 }
