@@ -32,9 +32,6 @@ pub struct FractionsFolderCols<T> {
     pub tidx_alpha_beta: T,
     pub gkr_post_tidx: T, // TODO: this number of tids is really annoying
 
-    // TODO(ayush): do i need this col?
-    pub n_global: T,
-
     pub sum_claim_p: [T; D_EF],
     pub sum_claim_q: [T; D_EF],
     pub cur_p_sum: [T; D_EF],
@@ -225,7 +222,6 @@ where
             BatchConstraintModuleMessage {
                 tidx_alpha_beta: local.tidx_alpha_beta.into(),
                 tidx: local.gkr_post_tidx.into(),
-                n_global: local.n_global.into(),
                 gkr_input_layer_claim: [
                     local.cur_p_sum.map(Into::into),
                     local.cur_q_sum.map(Into::into),
