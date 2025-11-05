@@ -106,6 +106,13 @@ jobs:
       - name: Install codspeed
         run: cargo binstall --no-confirm --force cargo-codspeed
 
+      - name: Create codspeed-post-bench symlink
+        run: |
+          # codspeed-post-bench is just a sym-link
+          which codspeed-post-bench || echo "codspeed-post-bench not found"
+          sudo ln -sf ~/.cargo/bin/cargo-codspeed /usr/local/bin/codspeed-post-bench
+          ls -la /usr/local/bin/codspeed-post-bench
+
       - name: Build benchmarks
         working-directory: benchmarks/execute
         run: cargo $TOOLCHAIN codspeed build --features aot
