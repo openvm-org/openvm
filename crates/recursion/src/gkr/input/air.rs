@@ -2,8 +2,8 @@ use core::borrow::Borrow;
 
 use openvm_circuit_primitives::{
     SubAir,
-    is_equal::{IsEqSubAir, IsEqualAuxCols, IsEqualIo},
     is_zero::{IsZeroAuxCols, IsZeroIo, IsZeroSubAir},
+    utils::or,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -37,13 +37,14 @@ pub struct GkrInputCols<T> {
 
     pub n_logup: T,
     pub n_max: T,
-    pub n_global: T,
 
+    // TODO(ayush): n_logup can be 0 if total_interaction_wt is 0 or 1
+    // in the case of 1, the verifier does seem to call verify_gkr
+    // check if this case is properly handled in the air
     pub is_n_logup_zero: T,
     pub is_n_logup_zero_aux: IsZeroAuxCols<T>,
 
-    pub is_n_logup_equal_to_n_global: T,
-    pub is_n_logup_equal_to_n_global_aux: IsEqualAuxCols<T>,
+    pub is_n_max_greater_than_n_logup: T,
 
     /// Transcript index
     pub tidx: T,
@@ -129,19 +130,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
                 local.is_n_logup_zero_aux.inv,
             ),
         );
-        // 2. is_n_logup_equal_to_n_global = (n_logup == n_global)
-        IsEqSubAir.eval(
-            builder,
-            (
-                IsEqualIo::new(
-                    local.n_logup.into(),
-                    local.n_global.into(),
-                    local.is_n_logup_equal_to_n_global.into(),
-                    local.is_enabled.into(),
-                ),
-                local.is_n_logup_equal_to_n_global_aux.inv,
-            ),
-        );
 
         ///////////////////////////////////////////////////////////////////////
         // Module Interactions
@@ -150,7 +138,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
         let has_interactions = AB::Expr::ONE - local.is_n_logup_zero;
         let num_layers = local.n_logup + AB::Expr::from_canonical_usize(self.l_skip);
 
-        let needs_challenges = AB::Expr::ONE - local.is_n_logup_equal_to_n_global;
+        let needs_challenges = or(local.is_n_max_greater_than_n_logup, local.is_n_logup_zero);
         let num_challenges = local.n_max + AB::Expr::from_canonical_usize(self.l_skip)
             - has_interactions.clone() * num_layers.clone();
 
@@ -227,10 +215,10 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
             builder,
             local.proof_idx,
             GkrModuleMessage {
-                tidx: local.tidx.into(),
-                n_logup: local.n_logup.into(),
-                n_max: local.n_max.into(),
-                n_global: local.n_global.into(),
+                tidx: local.tidx,
+                n_logup: local.n_logup,
+                n_max: local.n_max,
+                is_n_max_greater: local.is_n_max_greater_than_n_logup,
             },
             local.is_enabled,
         );
@@ -276,7 +264,6 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for GkrInputAir {
                 // Skip grinding nonce observation and grinding challenge sampling
                 tidx_alpha_beta: local.tidx.into() + AB::Expr::TWO,
                 tidx: tidx_end,
-                n_global: local.n_global.into(),
                 gkr_input_layer_claim: local.input_layer_claim.map(|claim| claim.map(Into::into)),
             },
             local.is_enabled,

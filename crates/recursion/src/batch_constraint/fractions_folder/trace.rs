@@ -37,7 +37,6 @@ pub(crate) fn generate_trace(
         let mu_slice = &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF];
         let tidx_alpha_beta = preflight.proof_shape.post_tidx + 2;
         let gkr_post_tidx = preflight.gkr.post_tidx;
-        let n_global = preflight.proof_shape.n_global();
 
         let rows = &mut trace[cur_height * width..(cur_height + height) * width];
         rows.par_chunks_exact_mut(width)
@@ -50,7 +49,6 @@ pub(crate) fn generate_trace(
                 cols.is_first = F::from_bool(i == 0);
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.air_idx = F::from_canonical_usize(air_idx);
-                cols.n_global = F::from_canonical_usize(n_global);
                 cols.tidx_alpha_beta = F::from_canonical_usize(tidx_alpha_beta);
                 cols.sum_claim_p
                     .copy_from_slice(npa[air_idx].as_base_slice());
