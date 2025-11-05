@@ -1,4 +1,7 @@
-use core::borrow::{Borrow, BorrowMut};
+use core::{
+    array,
+    borrow::{Borrow, BorrowMut},
+};
 
 use openvm_circuit_primitives::{SubAir, utils::assert_array_eq};
 use openvm_stark_backend::{
@@ -20,7 +23,10 @@ use stark_backend_v2::{
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    bus::{StackingIndexMessage, StackingIndicesBus},
+    bus::{
+        MerkleVerifyBus, MerkleVerifyBusMessage, Poseidon2Bus, StackingIndexMessage,
+        StackingIndicesBus,
+    },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{assert_eq_array, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
@@ -64,6 +70,9 @@ pub struct InitialOpenedValuesAir {
     pub stacking_indices_bus: StackingIndicesBus,
     pub verify_query_bus: VerifyQueryBus,
     pub folding_bus: WhirFoldingBus,
+    pub _poseidon_bus: Poseidon2Bus,
+    pub merkle_verify_bus: MerkleVerifyBus,
+    pub initial_log_domain_size: usize,
     pub k: usize,
 }
 
@@ -255,19 +264,21 @@ where
         //     local.is_enabled,
         // );
 
-        // let is_last_in_commit = local.is_enabled - local.is_same_commit;
-        // self.merkle_verify_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     MerkleVerifyBusMessage {
-        //         leaf_hash: array::from_fn(|i| next.post_state[i].into()),
-        //         merkle_idx: local.merkle_idx_bit_src,
-        //         depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size - self.k),
-        //         commit_major: AB::Expr::ZERO,
-        //         commit_minor: local.commit_idx.into(),
-        //     },
-        //     is_last_in_commit,
-        // );
+        let is_last_in_commit = is_enabled - local.is_same_commit;
+        self.merkle_verify_bus.send(
+            builder,
+            local.proof_idx,
+            MerkleVerifyBusMessage {
+                merkle_idx: local.merkle_idx_bit_src.into(),
+                total_depth: AB::Expr::from_canonical_usize(self.initial_log_domain_size + 1),
+                height: AB::Expr::ZERO,
+                leaf_sub_idx: local.coset_idx.into(),
+                value: array::from_fn(|i| local.post_state[i].into()),
+                commit_major: AB::Expr::ZERO,
+                commit_minor: local.commit_idx.into(),
+            },
+            is_last_in_commit,
+        );
 
         builder
             .when(local.is_first_in_proof)

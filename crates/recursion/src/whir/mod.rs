@@ -13,9 +13,7 @@ use stark_backend_v2::{
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::{
         CHUNK, WIDTH, poseidon2_perm,
-        sponge::{
-            FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice, poseidon2_tree_compress,
-        },
+        sponge::{FiatShamirTranscript, TranscriptHistory, poseidon2_hash_slice},
     },
     proof::{Proof, WhirProof},
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2, poly::Mle},
@@ -258,7 +256,12 @@ impl WhirModule {
                 let yj = if i == 0 {
                     let mut codeword_vals = vec![EF::ZERO; 1 << k_whir];
                     let mut mu_pow_iter = mu_pows.iter();
-                    for opened_rows_per_query in &proof.whir_proof.initial_round_opened_rows {
+                    for (commit_idx, opened_rows_per_query) in proof
+                        .whir_proof
+                        .initial_round_opened_rows
+                        .iter()
+                        .enumerate()
+                    {
                         let opened_rows = &opened_rows_per_query[query_idx];
                         let width = opened_rows[0].len();
 
@@ -268,6 +271,19 @@ impl WhirModule {
                                 codeword_vals[j] += *mu_pow * opened_rows[j][c];
                             }
                         }
+
+                        let leaf_hashes = opened_rows
+                            .iter()
+                            .map(|opened_row| poseidon2_hash_slice(opened_row))
+                            .collect_vec();
+                        merkle_verify_logs.push(MerkleVerifyLog {
+                            leaf_hashes,
+                            merkle_idx: sample.as_canonical_u32() as usize,
+                            query_idx,
+                            depth: log_rs_domain_size - k_whir,
+                            commit_major: 0,
+                            commit_minor: commit_idx,
+                        });
                     }
                     binary_k_fold(
                         codeword_vals,
@@ -284,12 +300,11 @@ impl WhirModule {
                         .iter()
                         .map(|opened_value| poseidon2_hash_slice(opened_value.as_base_slice()))
                         .collect_vec();
-                    let query_digest = poseidon2_tree_compress(leaf_hashes);
                     merkle_verify_logs.push(MerkleVerifyLog {
-                        leaf_hash: query_digest,
-                        merkle_idx: index as usize,
+                        leaf_hashes,
+                        merkle_idx: sample.as_canonical_u32() as usize,
                         query_idx,
-                        depth: proof.whir_proof.codeword_merkle_proofs[i - 1][query_idx].len(),
+                        depth: log_rs_domain_size - k_whir,
                         commit_major: i,
                         commit_minor: 0,
                     });
@@ -353,6 +368,7 @@ struct WhirBlobCpu {
 impl AirModule for WhirModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let params = self.params;
+        let initial_log_domain_size = params.n_stack + params.l_skip + params.log_blowup;
 
         let whir_round_air = WhirRoundAir {
             whir_module_bus: self.bus_inventory.whir_module_bus,
@@ -384,15 +400,18 @@ impl AirModule for WhirModule {
             stacking_indices_bus: self.bus_inventory.stacking_indices_bus,
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
+            _poseidon_bus: self.bus_inventory.poseidon2_bus,
+            merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir,
+            initial_log_domain_size,
         };
         let non_initial_round_opened_values_air = NonInitialOpenedValuesAir {
             verify_query_bus: self.verify_query_bus,
             folding_bus: self.folding_bus,
             _poseidon_bus: self.bus_inventory.poseidon2_bus,
-            _merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
+            merkle_verify_bus: self.bus_inventory.merkle_verify_bus,
             k: params.k_whir,
-            _initial_log_domain_size: params.n_stack + params.l_skip + params.log_blowup,
+            initial_log_domain_size,
         };
         let query_air = WhirQueryAir {
             transcript_bus: self.bus_inventory.transcript_bus,
@@ -402,7 +421,7 @@ impl AirModule for WhirModule {
             verify_query_bus: self.verify_query_bus,
             num_queries: params.num_whir_queries,
             k: params.k_whir,
-            initial_log_domain_size: params.n_stack + params.l_skip + params.log_blowup,
+            initial_log_domain_size,
         };
         let folding_air = WhirFoldingAir {
             alpha_bus: self.alpha_bus,

@@ -11,7 +11,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
     F,
-    keygen::types::MultiStarkVerifyingKeyV2,
+    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poseidon2::poseidon2_perm,
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
@@ -36,16 +36,18 @@ const SBOX_REGISTERS: usize = 1;
 
 pub struct TranscriptModule {
     pub bus_inventory: BusInventory,
+    params: SystemParams,
 
     sub_chip: Poseidon2SubChip<F, SBOX_REGISTERS>,
     perm: Poseidon2BabyBear<POSEIDON2_WIDTH>,
 }
 
 impl TranscriptModule {
-    pub fn new(bus_inventory: BusInventory) -> Self {
+    pub fn new(bus_inventory: BusInventory, params: SystemParams) -> Self {
         let sub_chip = Poseidon2SubChip::<F, 1>::new(Poseidon2Config::default().constants);
         Self {
             bus_inventory,
+            params,
             sub_chip,
             perm: poseidon2_perm().clone(),
         }
@@ -78,12 +80,13 @@ impl AirModule for TranscriptModule {
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
     fn generate_proving_ctxs(
         &self,
-        _child_vk: &MultiStarkVerifyingKeyV2,
+        child_vk: &MultiStarkVerifyingKeyV2,
         proofs: &[Proof],
         preflights: &[Preflight],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
         // TODO: need to "extract" the poseidon2 lookups from merkle verify
-        let merkle_verify_trace = merkle_verify::generate_trace(proofs, preflights);
+        let (merkle_verify_trace, mut poseidon2_inputs) =
+            merkle_verify::generate_trace(child_vk, proofs, preflights, self.params.k_whir);
 
         let transcript_width = TranscriptCols::<F>::width();
         let inner_width = self.sub_chip.air.width();
@@ -135,9 +138,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
         }
         let transcript_num_rows = transcript_valid_rows.next_power_of_two();
         let mut transcript_trace = vec![F::ZERO; transcript_num_rows * transcript_width];
-        // TODO: need to also add poseidon2 lookups from merkle verify
-        let mut poseidon_inputs = Vec::with_capacity(transcript_valid_rows);
-        let mut poseidon_flags = Vec::with_capacity(transcript_valid_rows);
 
         let mut skip = 0;
         // Second pass, fill in the transcript trace.
@@ -211,8 +211,7 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
                 prev_poseidon_state = cols.prev_state;
                 if permuted {
                     self.perm.permute_mut(&mut prev_poseidon_state);
-                    poseidon_inputs.push(cols.prev_state);
-                    poseidon_flags.push(F::ONE);
+                    poseidon2_inputs.push(cols.prev_state);
                 }
                 cols.post_state = prev_poseidon_state;
             }
@@ -220,20 +219,24 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for TranscriptModule {
             assert_eq!(tidx, preflight.transcript.len());
         }
 
-        // TODO: add poseidon2 lookups from merkle verify
-        poseidon_inputs.resize(transcript_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
-        poseidon_flags.resize(transcript_num_rows, F::ZERO);
-        let inner_trace = self.sub_chip.generate_trace(poseidon_inputs);
-
-        let mut poseidon_trace = F::zero_vec(transcript_num_rows * poseidon2_width);
+        // Poseidon2 trace: from both transcript and merkle verify
+        let poseidon2_valid_rows = poseidon2_inputs.len();
+        let poseidon2_num_rows = poseidon2_valid_rows.next_power_of_two();
+        poseidon2_inputs.resize(poseidon2_num_rows, [F::ZERO; POSEIDON2_WIDTH]);
+        let inner_trace = self.sub_chip.generate_trace(poseidon2_inputs);
+        let mut poseidon_trace = F::zero_vec(poseidon2_num_rows * poseidon2_width);
         poseidon_trace
             .par_chunks_mut(poseidon2_width)
             .zip(inner_trace.values.par_chunks(inner_width))
-            .zip(poseidon_flags)
-            .for_each(|((row, inner_row), mult)| {
+            .enumerate()
+            .for_each(|(i, (row, inner_row))| {
                 row[..inner_width].copy_from_slice(inner_row);
                 let cols: &mut Poseidon2Cols<F, SBOX_REGISTERS> = row.borrow_mut();
-                cols.mult = mult;
+                cols.mult = if i < poseidon2_valid_rows {
+                    F::ONE
+                } else {
+                    F::ZERO
+                };
             });
 
         // Finally, make the RawInput structs
