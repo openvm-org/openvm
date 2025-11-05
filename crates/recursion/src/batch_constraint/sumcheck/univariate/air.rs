@@ -29,12 +29,13 @@ use crate::{
 #[repr(C)]
 pub struct UnivariateSumcheckCols<T> {
     pub is_valid: T,
+    pub proof_idx: T,
     pub is_first: T,
 
-    pub proof_idx: T,
     pub coeff_idx: T,
 
     // TODO(ayush): there must be a better way to do this
+    // can these be preprocessed cols?
     /// Powers of generator of order 2^{l_skip} to get periodic selector columns
     pub omega_skip_power: T,
     pub is_omega_skip_power_equal_to_one: T,
@@ -102,7 +103,7 @@ where
                     }
                     .map_into(),
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols::default(),
             ),
         );
 
@@ -189,7 +190,7 @@ where
         // Horner evaluation at r
         ///////////////////////////////////////////////////////////////////////
 
-        assert_array_eq(&mut builder.when(is_transition.clone()), local.r, next.r);
+        assert_array_eq(&mut builder.when(is_transition.clone()), next.r, local.r);
 
         // Initialize evaluation
         // e = c
@@ -238,26 +239,25 @@ where
             local.proof_idx,
             SumcheckClaimMessage {
                 round: AB::Expr::ZERO,
-                value: local.sum_at_roots.map(|x| x.into()),
+                value: local.sum_at_roots.map(Into::into),
             },
             local.is_valid * is_last.clone(),
         );
-        // TODO(ayush): add back
-        // self.claim_bus.receive(
-        //     builder,
-        //     local.proof_idx,
-        //     SumcheckClaimMessage {
-        //         round: AB::Expr::ZERO,
-        //         value: local.value_at_r.map(|x| x.into()),
-        //     },
-        //     local.is_valid * is_last,
-        // );
+        self.claim_bus.send(
+            builder,
+            local.proof_idx,
+            SumcheckClaimMessage {
+                round: AB::Expr::ZERO,
+                value: local.value_at_r.map(Into::into),
+            },
+            local.is_valid * is_last,
+        );
         self.randomness_bus.send(
             builder,
             local.proof_idx,
             ConstraintSumcheckRandomness {
                 idx: AB::Expr::ZERO,
-                challenge: local.r.map(|x| x.into()),
+                challenge: local.r.map(Into::into),
             },
             local.is_valid * local.is_first,
         );
@@ -268,7 +268,7 @@ where
             BatchConstraintConductorMessage {
                 msg_type: BatchConstraintInnerMessageType::R.to_field(),
                 idx: AB::Expr::ZERO,
-                value: local.r.map(|x| x.into()),
+                value: local.r.map(Into::into),
             },
             local.is_first * AB::Expr::TWO,
         );
