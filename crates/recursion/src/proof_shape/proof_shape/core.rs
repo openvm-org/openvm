@@ -1088,8 +1088,7 @@ where
                 tidx: AB::Expr::from_canonical_usize(tidx_offset),
                 n_logup: n_logup.into(),
                 n_max: local.n_max.into(),
-                n_global: local.is_n_max_greater * local.n_max
-                    + not(local.is_n_max_greater) * n_logup,
+                is_n_max_greater: local.is_n_max_greater.into(),
             },
             local.is_last,
         );
