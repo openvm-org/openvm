@@ -1,8 +1,6 @@
 use core::borrow::BorrowMut;
 
-use openvm_circuit_primitives::{
-    TraceSubRowGenerator, is_equal::IsEqSubAir, is_zero::IsZeroSubAir,
-};
+use openvm_circuit_primitives::{TraceSubRowGenerator, is_zero::IsZeroSubAir};
 use openvm_stark_backend::p3_maybe_rayon::prelude::*;
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
 use p3_matrix::dense::RowMajorMatrix;
@@ -52,18 +50,11 @@ pub fn generate_trace(gkr_input_records: &[GkrInputRecord], q0_claims: &[EF]) ->
 
             cols.n_logup = F::from_canonical_usize(record.n_logup);
             cols.n_max = F::from_canonical_usize(record.n_max);
-            cols.n_global = F::from_canonical_usize(std::cmp::max(record.n_logup, record.n_max));
+            cols.is_n_max_greater_than_n_logup = F::from_bool(record.n_max > record.n_logup);
 
             IsZeroSubAir.generate_subrow(
                 cols.n_logup,
                 (&mut cols.is_n_logup_zero_aux.inv, &mut cols.is_n_logup_zero),
-            );
-            IsEqSubAir.generate_subrow(
-                (cols.n_logup, cols.n_global),
-                (
-                    &mut cols.is_n_logup_equal_to_n_global_aux.inv,
-                    &mut cols.is_n_logup_equal_to_n_global,
-                ),
             );
 
             cols.logup_pow_witness = record.logup_pow_witness;
