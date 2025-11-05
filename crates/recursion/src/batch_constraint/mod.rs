@@ -214,8 +214,8 @@ impl AirModule for BatchConstraintModule {
             gkr_claim_bus: self.gkr_claim_bus,
         };
         let sumcheck_uni_air = UnivariateSumcheckAir {
-            univariate_deg: (self.max_constraint_degree + 1) * ((1 << l_skip) - 1) + 1,
-            domain_size: 1 << l_skip,
+            l_skip,
+            univariate_deg: (self.max_constraint_degree + 1) * ((1 << l_skip) - 1),
             claim_bus: self.sumcheck_bus,
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
