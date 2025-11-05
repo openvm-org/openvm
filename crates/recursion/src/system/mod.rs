@@ -225,7 +225,7 @@ pub struct WhirPreflight {
 
 #[derive(Clone, Debug, Default)]
 pub struct MerkleVerifyLog {
-    pub leaf_hash: [F; DIGEST_SIZE],
+    pub leaf_hashes: Vec<[F; DIGEST_SIZE]>,
     pub merkle_idx: usize,
     pub depth: usize,
     pub query_idx: usize,
@@ -294,8 +294,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let bus_inventory = BusInventory::new(&mut b);
         let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
 
+        let transcript = TranscriptModule::new(bus_inventory.clone(), child_mvk.inner.params);
         let child_mvk_frame = child_mvk.as_ref().into();
-        let transcript = TranscriptModule::new(bus_inventory.clone());
         let proof_shape = ProofShapeModule::new(&child_mvk_frame, &mut b, bus_inventory.clone());
         let gkr = GkrModule::new(
             &child_mvk,
