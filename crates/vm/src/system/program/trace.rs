@@ -10,19 +10,18 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{Com, PcsProverData, StarkGenericConfig, Val},
-    p3_commit::Pcs,
     p3_field::{Field, FieldAlgebra, PrimeField32},
-    p3_matrix::{dense::RowMajorMatrix, Matrix},
+    p3_matrix::dense::RowMajorMatrix,
     p3_maybe_rayon::prelude::*,
-    prover::types::AirProvingContext,
+    prover::MatrixDimensions,
 };
 use serde::{Deserialize, Serialize};
 use stark_backend_v2::{
     prover::{
-        stacked_pcs::StackedPcsData, CommittedTraceDataV2 as CommittedTraceData,
-        CpuBackendV2 as CpuBackend,
+        stacked_pcs::StackedPcsData, AirProvingContextV2 as AirProvingContext, ColMajorMatrix,
+        CommittedTraceDataV2 as CommittedTraceData, CpuBackendV2 as CpuBackend, TraceCommitterV2,
     },
-    ChipV2 as Chip,
+    ChipV2 as Chip, StarkEngineV2 as StarkEngine,
 };
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
@@ -54,19 +53,20 @@ pub struct VmCommittedExe<SC: StarkGenericConfig> {
     pub prover_data: Arc<StackedPcsData<stark_backend_v2::F, stark_backend_v2::Digest>>,
 }
 
-impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
+type SC = stark_backend_v2::SC;
+impl VmCommittedExe<SC> {
     /// Creates [VmCommittedExe] from [VmExe] by using `pcs` to commit to the
     /// program code as a _cached trace_ matrix.
-    pub fn commit(exe: VmExe<Val<SC>>, pcs: &SC::Pcs) -> Self {
+    pub fn commit<E: StarkEngine<PB = CpuBackend>>(exe: VmExe<Val<SC>>, e: &E) -> Self {
         let trace = generate_cached_trace(&exe.program);
-        let domain = pcs.natural_domain_for_degree(trace.height());
-
-        let (program_commitment, data) = pcs.commit(vec![(domain, trace.clone())]);
+        let (commit, prover_data) = e
+            .device()
+            .commit(&[&ColMajorMatrix::from_row_major(&trace)]);
         Self {
             exe: Arc::new(exe),
-            program_commitment,
+            program_commitment: commit.into(),
             trace: Arc::new(trace),
-            prover_data: Arc::new(data),
+            prover_data: Arc::new(prover_data),
         }
     }
     pub fn get_program_commit(&self) -> Com<SC> {
@@ -74,7 +74,11 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
     }
 
     pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend> {
-        (self.prover_data.commit(), self.prover_data.clone())
+        CommittedTraceData {
+            commitment: self.prover_data.commit(),
+            data: self.prover_data.clone(),
+            height: self.trace.height(),
+        }
     }
 
     /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
@@ -115,25 +119,24 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
     }
 }
 
-type SC = stark_backend_v2::SC;
-impl<RA> Chip<RA, CpuBackend> for ProgramChip<SC> {
+impl Chip<(), CpuBackend> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend> {
+    fn generate_proving_ctx(&self, _: ()) -> AirProvingContext<CpuBackend> {
         let cached = self
             .cached
             .clone()
             .expect("cached program trace must be loaded");
-        assert!(self.filtered_exec_frequencies.len() <= cached.trace.height());
-        let mut freqs = Val::<SC>::zero_vec(cached.trace.height());
+        assert!(self.filtered_exec_frequencies.len() <= cached.height);
+        let mut freqs = Val::<SC>::zero_vec(cached.height);
         freqs
             .par_iter_mut()
             .zip(self.filtered_exec_frequencies.par_iter())
             .for_each(|(f, x)| *f = Val::<SC>::from_canonical_u32(*x));
-        let common_trace = RowMajorMatrix::new_col(freqs);
+        let common_trace = ColMajorMatrix::new(freqs, 1);
         AirProvingContext {
             cached_mains: vec![cached],
-            common_main: Some(Arc::new(common_trace)),
+            common_main: common_trace,
             public_values: vec![],
         }
     }

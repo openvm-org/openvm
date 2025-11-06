@@ -13,22 +13,15 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    prover::hal::MatrixDimensions,
     AirRef, Chip as ChipV1,
 };
 use rustc_hash::FxHashMap;
 use stark_backend_v2::{
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
     prover::{
         AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
-        CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+        CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice, ProverBackendV2 as ProverBackend,
     },
-    AnyChip, StarkEngineV2 as StarkEngine,
+    StarkEngineV2 as StarkEngine,
 };
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
@@ -460,7 +453,7 @@ where
             chip.inner.set_public_values(public_values);
         }
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
-        let program_ctx = self.program_chip.generate_proving_ctx(());
+        let program_ctx = stark_backend_v2::ChipV2::generate_proving_ctx(&self.program_chip, ());
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());
@@ -474,11 +467,15 @@ where
             .memory_controller
             .generate_proving_ctx(access_adapter_records, touched_memory);
 
-        [program_ctx, connector_ctx]
+        [program_ctx]
             .into_iter()
-            .chain(pv_ctx)
-            .chain(memory_ctxs)
-            .map(AirProvingContext::from_v1_no_cached)
+            .chain(
+                [connector_ctx]
+                    .into_iter()
+                    .chain(pv_ctx)
+                    .chain(memory_ctxs)
+                    .map(AirProvingContext::from_v1_no_cached),
+            )
             .collect()
     }
 
@@ -620,8 +617,7 @@ where
                 .cached
                 .as_ref()
                 .expect("program not loaded")
-                .trace
-                .height()
+                .height
         );
         assert_eq!(heights[CONNECTOR_AIR_ID], 2);
         let mut memory_start_idx = PUBLIC_VALUES_AIR_ID;
