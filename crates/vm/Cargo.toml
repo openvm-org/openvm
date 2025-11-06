@@ -21,6 +21,8 @@ openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
+stark-backend-v2 = { workspace = true }
+cuda-backend-v2 = { workspace = true, optional = true }
 
 itertools.workspace = true
 tracing.workspace = true
@@ -62,6 +64,7 @@ openvm-rv32im-transpiler.workspace = true
 default = ["parallel", "jemalloc"]
 parallel = [
     "openvm-stark-backend/parallel",
+    "stark-backend-v2/parallel",
     "dashmap/rayon",
     "openvm-stark-sdk?/parallel",
 ]
@@ -93,6 +96,7 @@ cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "dep:openvm-cuda-builder",
+    "dep:cuda-backend-v2",
 ]
 touchemall = [
     "cuda",
