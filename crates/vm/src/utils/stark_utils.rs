@@ -103,7 +103,6 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
-    let metered_ctx = vm.build_metered_ctx(&exe);
     /*
     Assertions for Pure Execution AOT
     */

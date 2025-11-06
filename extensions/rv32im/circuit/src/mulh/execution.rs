@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -17,7 +15,7 @@ use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(feature = "aot")]
-use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+use crate::common::*;
 use crate::MulHExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]

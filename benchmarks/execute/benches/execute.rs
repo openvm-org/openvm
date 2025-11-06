@@ -1,6 +1,5 @@
 use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs, io,
     path::Path,
     sync::{Arc, Mutex, OnceLock},
@@ -18,9 +17,7 @@ use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 use openvm_circuit::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCostCtx},
-        instructions::exe::VmExe,
-        interpreter::InterpretedInstance,
+        execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
         ContinuationVmProof, *,
     },
     derive::VmConfig,

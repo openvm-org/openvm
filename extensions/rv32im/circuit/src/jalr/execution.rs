@@ -4,16 +4,16 @@ use std::{
 };
 
 #[cfg(feature = "aot")]
-use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+use crate::common::*;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
+#[cfg(feature = "aot")]
+use openvm_instructions::LocalOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::{DEFAULT_PC_STEP, PC_BITS},
     riscv::RV32_REGISTER_AS,
 };
-#[cfg(feature = "aot")]
-use openvm_instructions::{LocalOpcode, VmOpcode};
 #[cfg(feature = "aot")]
 use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -59,17 +59,6 @@ macro_rules! dispatch {
         }
     };
 }
-
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "ecx";
-#[cfg(feature = "aot")]
-const REG_PC: &str = "r13";
-#[cfg(feature = "aot")]
-const REG_PC_W: &str = "r13d";
-#[cfg(feature = "aot")]
-const REG_A: &str = "rcx"; // used when building jump address
 
 impl<F, A> InterpreterExecutor<F> for Rv32JalrExecutor<A>
 where

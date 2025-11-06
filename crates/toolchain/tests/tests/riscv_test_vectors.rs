@@ -1,14 +1,11 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
-use openvm_circuit::arch::VmState;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-use openvm_circuit::system::memory::online::GuestMemory;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
-use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
@@ -46,6 +43,9 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 
                 #[cfg(feature = "aot")]
                 {
+                    use openvm_circuit::arch::VmState;
+                    use openvm_circuit::system::memory::online::GuestMemory;
+                    use openvm_stark_backend::config::Val;
                     let naive_interpreter = executor.interpreter_instance(&exe)?;
                     let naive_state = naive_interpreter.execute(vec![], None)?;
                     let assert_vm_state_eq =

@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -143,7 +141,6 @@ where
         let zero_label = format!("{}__divisor_zero", label_prefix);
         let overflow_label = format!("{}__overflow", label_prefix);
         let normal_label = format!("{}__normal", label_prefix);
-        let normal_label = format!("{}__normal", label_prefix);
         match local_opcode {
             DivRemOpcode::DIV => {
                 asm_str += "   test ecx, ecx\n";
@@ -181,7 +178,6 @@ where
                 asm_str += "   mov edx, -1\n";
             }
             DivRemOpcode::REM => {
-
                 asm_str += "   test ecx, ecx\n";
                 asm_str += &format!("   je {}\n", zero_label);
                 asm_str += "   cmp eax, 0x80000000\n";

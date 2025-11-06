@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -17,7 +15,7 @@ use openvm_rv32im_transpiler::MulOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(feature = "aot")]
-use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+use crate::common::*;
 use crate::MultiplicationExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -51,20 +49,6 @@ impl<A, const LIMB_BITS: usize> MultiplicationExecutor<A, { RV32_REGISTER_NUM_LI
         Ok(())
     }
 }
-
-// Callee saved registers
-#[cfg(feature = "aot")]
-const REG_PC: &str = "r13";
-
-// Caller saved registers
-#[cfg(feature = "aot")]
-const REG_A: &str = "rax";
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_B: &str = "rcx";
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "ecx";
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for MultiplicationExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>

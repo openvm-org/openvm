@@ -12,11 +12,13 @@ pub struct BasicMemory {
 }
 
 impl BasicMemory {
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn as_ptr(&self) -> *const u8 {
         self.ptr.as_ptr()
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr.as_ptr()

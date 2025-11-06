@@ -21,20 +21,6 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-const REG_A: &str = "rcx";
-const REG_A_W: &str = "ecx";
-
-const REG_B: &str = "rax";
-const REG_B_W: &str = "eax";
-
-const REG_C: &str = "r10";
-const REG_C_W: &str = "r10d";
-
-const REG_AUX: &str = "r11";
-const REG_EXEC_STATE_PTR: &str = "rbx";
-const REG_INSNS_PTR: &str = "rbp";
-const REG_PC: &str = "r13";
-
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
 /// Rust toolchain
@@ -91,11 +77,13 @@ where
         asm_str
     }
 
+    #[allow(dead_code)]
     fn debug_cur_string(str: &String) {
         println!("DEBUG");
         println!("{}", str);
     }
 
+    #[allow(dead_code)]
     fn push_xmm_regs() -> String {
         let mut asm_str = String::new();
         asm_str += "    sub rsp, 16*16";
@@ -118,6 +106,8 @@ where
 
         asm_str
     }
+
+    #[allow(dead_code)]
     fn pop_xmm_regs() -> String {
         let mut asm_str = String::new();
         asm_str += "    movaps xmm0, [rsp + 0*16]\n";
