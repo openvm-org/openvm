@@ -20,8 +20,8 @@ use crate::{
     },
     bus::{
         AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
-        ColumnClaimsBus, ColumnClaimsMessage, StackingModuleBus, StackingModuleMessage,
-        TranscriptBus, TranscriptBusMessage,
+        ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus, HyperdimBusMessage, StackingModuleBus,
+        StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     system::Preflight,
 };
@@ -175,6 +175,7 @@ pub struct ColumnClaimCols<T> {
     part_idx: T,
     col_idx: T,
     hypercube_dim: T,
+    hypercube_is_neg: T,
     has_preprocessed: T,
 
     tidx: T,
@@ -187,6 +188,7 @@ pub struct ColumnClaimAir {
     pub column_claims_bus: ColumnClaimsBus,
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
+    pub hyperdim_bus: HyperdimBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ColumnClaimAir {}
@@ -268,13 +270,14 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ColumnClaimAir {
             last_row_of_this_air.clone(),
         );
         // hypercube dim
-        self.air_shape_bus.receive(
+        self.hyperdim_bus.receive(
             builder,
             local.proof_idx,
-            AirShapeBusMessage {
+            HyperdimBusMessage {
                 sort_idx: local.sort_idx.into(),
-                property_idx: AirShapeProperty::HypercubeDim.to_field(),
-                value: local.hypercube_dim.into(),
+                n_abs: local.hypercube_dim
+                    * (AB::Expr::ONE - local.hypercube_is_neg * AB::Expr::TWO),
+                n_sign_bit: local.hypercube_is_neg.into(),
             },
             last_row_of_this_air.clone(),
         );
@@ -499,7 +502,7 @@ pub(crate) fn generate_column_claim_trace(
         air_idx: usize,
         sort_idx: usize,
         part_idx: usize,
-        hypercube_dim: usize,
+        hypercube_dim: isize,
         has_preprocessed: bool,
         col_idx: usize,
         col_claim: [F; D_EF],
@@ -540,6 +543,7 @@ pub(crate) fn generate_column_claim_trace(
             let air_vk = &vk.inner.per_air[*air_id];
             let widths = &air_vk.params.width;
             let has_preprocessed = widths.preprocessed.is_some();
+            let l_skip = vk.inner.params.l_skip;
 
             for col in 0..widths.common_main {
                 let (col_claim, rot_claim) =
@@ -556,7 +560,7 @@ pub(crate) fn generate_column_claim_trace(
                     air_idx: *air_id,
                     sort_idx,
                     part_idx: 0,
-                    hypercube_dim: vdata.hypercube_dim,
+                    hypercube_dim: vdata.log_height as isize - l_skip as isize,
                     has_preprocessed,
                     col_idx: col,
                     col_claim: col_claim_arr,
@@ -586,7 +590,7 @@ pub(crate) fn generate_column_claim_trace(
                         air_idx: *air_id,
                         sort_idx,
                         part_idx: part + 1,
-                        hypercube_dim: vdata.hypercube_dim,
+                        hypercube_dim: vdata.log_height as isize - l_skip as isize,
                         has_preprocessed,
                         col_idx: col,
                         col_claim: col_claim_arr,
@@ -608,6 +612,7 @@ pub(crate) fn generate_column_claim_trace(
         .zip(rows.into_par_iter())
         .for_each(|(chunk, row)| {
             let cols: &mut ColumnClaimCols<_> = chunk.borrow_mut();
+            let neg_hypercube = row.hypercube_dim < 0;
             cols.is_valid = F::ONE;
             cols.is_first = F::from_bool(row.is_first);
             cols.is_last = F::from_bool(row.is_last);
@@ -616,7 +621,12 @@ pub(crate) fn generate_column_claim_trace(
             cols.air_idx = F::from_canonical_usize(row.air_idx);
             cols.sort_idx = F::from_canonical_usize(row.sort_idx);
             cols.part_idx = F::from_canonical_usize(row.part_idx);
-            cols.hypercube_dim = F::from_canonical_usize(row.hypercube_dim);
+            cols.hypercube_dim = if neg_hypercube {
+                -F::from_canonical_usize(row.hypercube_dim.unsigned_abs())
+            } else {
+                F::from_canonical_usize(row.hypercube_dim as usize)
+            };
+            cols.hypercube_is_neg = F::from_bool(neg_hypercube);
             cols.has_preprocessed = F::from_bool(row.has_preprocessed);
             cols.col_idx = F::from_canonical_usize(row.col_idx);
             cols.col_claim.copy_from_slice(&row.col_claim);

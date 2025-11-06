@@ -102,8 +102,9 @@ impl EqBitsTraceGenerator {
              * a tree structure + internal interactions.
              */
             for slice in stacked_slices {
-                let b_value = slice.row_idx >> (slice.n + vk.inner.params.l_skip);
-                let total_num_bits = vk.inner.params.n_stack - slice.n;
+                let n_lift = slice.n.max(0) as usize;
+                let b_value = slice.row_idx >> (n_lift + vk.inner.params.l_skip);
+                let total_num_bits = vk.inner.params.n_stack - n_lift;
 
                 if total_num_bits == 0 {
                     base_external_mult += 1;
