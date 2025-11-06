@@ -91,6 +91,7 @@ impl PreflightGpu {
         let mut sorted_cached_commits: Vec<Digest> = vec![];
         let mut cidx = 1;
         let mut total_interactions = 0;
+        let l_skip = vk.inner.params.l_skip;
 
         let sorted_trace_vdata = preflight
             .proof_shape
@@ -99,14 +100,14 @@ impl PreflightGpu {
             .map(|(air_idx, vdata)| {
                 let metadata = TraceMetadata {
                     air_idx: *air_idx,
-                    hypercube_dim: vdata.hypercube_dim,
+                    log_height: vdata.log_height.try_into().unwrap(),
                     cached_idx: sorted_cached_commits.len(),
                     starting_cidx: cidx,
                     total_interactions,
                 };
                 cidx += vdata.cached_commitments.len()
                     + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;
-                total_interactions += (1 << (vdata.hypercube_dim + vk.inner.params.l_skip))
+                total_interactions += (1 << vdata.log_height.max(l_skip))
                     * vk.inner.per_air[*air_idx].num_interactions();
                 sorted_cached_commits.extend_from_slice(&vdata.cached_commitments);
                 metadata

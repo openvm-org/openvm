@@ -11,21 +11,24 @@ use openvm_stark_sdk::{
     config::{
         FriParameters,
         baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
+        setup_tracing_with_log_level,
     },
     engine::StarkFriEngine,
 };
 use p3_field::FieldAlgebra;
-use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
+    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
     poseidon2::sponge::{DuplexSponge, DuplexSpongeRecorder, TranscriptHistory},
-    prover::{AirProvingContextV2, ColMajorMatrixView, CpuBackendV2, MatrixView},
+    prover::{AirProvingContextV2, CpuBackendV2, MatrixView, StridedColMajorMatrixView},
     test_utils::{
         CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11,
-        PreprocessedFibFixture, TestFixture, test_engine_small, test_system_params_small,
+        PreprocessedFibFixture, TestFixture, default_test_params_small, test_system_params_small,
     },
 };
+use test_case::{test_case, test_matrix};
+use tracing::Level;
 
 use crate::system::VerifierSubCircuit;
 
@@ -55,8 +58,8 @@ fn debug(
     for (air_idx, air) in airs.iter().enumerate() {
         tracing::debug!(%air_idx, air_name = %air.name());
     }
-    let transpose = |mat: ColMajorMatrixView<F>| {
-        let mut values = F::zero_vec(mat.values.len());
+    let transpose = |mat: StridedColMajorMatrixView<F>| {
+        let mut values = F::zero_vec(mat.height() * mat.width());
         let width = mat.width();
         let height = mat.height();
         for r in 0..height {
@@ -73,45 +76,32 @@ fn debug(
             cached_mains: ctx
                 .cached_mains
                 .iter()
-                .map(|(_, d)| transpose(d.layout.mat_view(0, d.matrix.as_view())))
+                .map(|(_, d)| transpose(d.layout.mat_view(0, &d.matrix)))
                 .collect_vec(),
-            common_main: Some(transpose(ctx.common_main.as_view())),
+            common_main: Some(transpose(ctx.common_main.as_view().into())),
             public_values: ctx.public_values.clone(),
         })
         .collect_vec();
 
-    for (air, ctx) in airs.iter().zip(ctxs.iter()) {
-        if air.name() == "Eq3bAir" {
-            let mut matrices = ctx
-                .cached_mains
-                .iter()
-                .map(|(_, data)| transpose(data.layout.mat_view(0, data.matrix.as_view())))
-                .collect_vec();
-            matrices.push(transpose(ctx.common_main.as_view()));
-
-            for (m_idx, matrix) in matrices.iter().enumerate() {
-                let matrix = matrix.as_ref();
-                let rows_to_print = matrix.height().min(8);
-                let width = crate::batch_constraint::eq_airs::eq_ns::EqNsColumns::<F>::width();
-                println!(
-                    "Eq3bAir trace preview (matrix #{m_idx}, {} rows, width {})",
-                    rows_to_print, width
-                );
-                for row_idx in 0..rows_to_print {
-                    let row = matrix.row_slice(row_idx);
-                    println!("row {row_idx}: {:?}", &*row);
-                }
-            }
-        }
-    }
     engine.debug(airs, pk, &inputs);
 }
 
-#[test]
-fn test_recursion_circuit_single_fib() {
-    let params = test_system_params_small();
-    let log_trace_degree = 3;
-
+#[test_matrix(
+    [2,3],
+    [8,5],
+    [3],
+    [0,1,3,5]
+)]
+fn test_recursion_circuit_single_fib(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_degree: usize,
+) {
+    if log_trace_degree > l_skip + n_stack {
+        return;
+    }
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
     let (vk, proof) = fib.keygen_and_prove(&engine);
@@ -122,9 +112,13 @@ fn test_recursion_circuit_single_fib() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_recursion_circuit_interactions() {
-    let params = test_system_params_small();
+#[test_case(2, 8, 3)]
+#[test_case(5, 5, 4)]
+#[test_case(5, 6, 4)]
+#[test_case(6, 6, 5)]
+fn test_recursion_circuit_interactions(l_skip: usize, n_stack: usize, k_whir: usize) {
+    setup_tracing_with_log_level(Level::DEBUG);
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     let fx = InteractionsFixture11;
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -135,11 +129,18 @@ fn test_recursion_circuit_interactions() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_preflight_single_fib_sponge() {
-    let params = test_system_params_small();
+#[test_case(2, 8, 3, 5)]
+#[test_case(3, 5, 3, 5)]
+#[test_case(3, 5, 3, 1)]
+fn test_preflight_single_fib_sponge(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_degree: usize,
+) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSpongeRecorder>::new(params);
-    let fib = FibFixture::new(0, 1, 1 << 5);
+    let fib = FibFixture::new(0, 1, 1 << log_trace_degree);
     let (pk, vk) = fib.keygen(&engine);
 
     let mut prover_sponge = DuplexSpongeRecorder::default();
@@ -152,9 +153,11 @@ fn test_preflight_single_fib_sponge() {
     assert_eq!(preflight.transcript.len(), prover_sponge_len);
 }
 
-#[test]
-fn test_preflight_cached_trace() {
-    let params = test_system_params_small();
+#[test_case(2, 8, 3)]
+#[test_case(5, 5, 4)]
+#[test_case(5, 6, 4)]
+fn test_preflight_cached_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     let fx = CachedFixture11::new(params);
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -165,9 +168,12 @@ fn test_preflight_cached_trace() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_preflight_preprocessed_trace() {
-    let engine = test_engine_small();
+#[test_case(2, 8, 3)]
+#[test_case(5, 5, 4)]
+#[test_case(6, 5, 4)]
+fn test_preflight_preprocessed_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
+    let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
     let height = 1 << 5;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
     let fx = PreprocessedFibFixture::new(0, 1, sels);
@@ -181,7 +187,7 @@ fn test_preflight_preprocessed_trace() {
 
 #[test]
 fn test_preflight_interactions() {
-    let params = test_system_params_small();
+    let params = default_test_params_small();
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSpongeRecorder>::new(params);
     let fx = InteractionsFixture11;
     let (pk, vk) = fx.keygen(&engine);
@@ -200,10 +206,12 @@ fn test_preflight_interactions() {
 // Multi-proof tests
 ///////////////////////////////////////////////////////////////////////////////
 
-#[test]
-fn test_recursion_circuit_two_fib_proofs() {
-    let params = test_system_params_small();
-    let log_trace_degree = 3;
+#[test_case(3)]
+#[test_case(2 ; "when fib log_height equals l_skip")]
+#[test_case(1 ; "when fib log_height less than l_skip")]
+#[test_case(0 ; "when fib log_height is zero")]
+fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
+    let params = default_test_params_small();
 
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
@@ -223,10 +231,12 @@ fn test_recursion_circuit_two_fib_proofs() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_recursion_circuit_multiple_fib_proofs() {
-    let params = test_system_params_small();
-    let log_trace_degree = 3;
+#[test_case(3)]
+#[test_case(2 ; "when fib log_height equals l_skip")]
+#[test_case(1 ; "when fib log_height less than l_skip")]
+#[test_case(0 ; "when fib log_height is zero")]
+fn test_recursion_circuit_multiple_fib_proofs(log_trace_degree: usize) {
+    let params = default_test_params_small();
 
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
@@ -252,9 +262,11 @@ fn test_recursion_circuit_multiple_fib_proofs() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_recursion_circuit_two_preprocessed() {
-    let params = test_system_params_small();
+#[test_case(2, 8, 3)]
+#[test_case(5, 5, 4)]
+#[test_case(6, 5, 4)]
+fn test_recursion_circuit_two_preprocessed(l_skip: usize, n_stack: usize, k_whir: usize) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let height = 1 << 4;
@@ -276,9 +288,11 @@ fn test_recursion_circuit_two_preprocessed() {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test]
-fn test_recursion_circuit_multiple_preprocessed() {
-    let params = test_system_params_small();
+#[test_case(2, 8, 3)]
+#[test_case(5, 5, 4)]
+#[test_case(6, 5, 4)]
+fn test_recursion_circuit_multiple_preprocessed(l_skip: usize, n_stack: usize, k_whir: usize) {
+    let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let height = 1 << 4;
@@ -308,7 +322,7 @@ fn test_recursion_circuit_multiple_preprocessed() {
 
 #[test]
 fn test_recursion_circuit_two_interactions() {
-    let params = test_system_params_small();
+    let params = default_test_params_small();
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let fx = InteractionsFixture11;
@@ -326,7 +340,7 @@ fn test_recursion_circuit_two_interactions() {
 
 #[test]
 fn test_recursion_circuit_multiple_interactions() {
-    let params = test_system_params_small();
+    let params = default_test_params_small();
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     // Generate multiple interaction proofs - they should use the same VK
@@ -351,7 +365,7 @@ fn test_recursion_circuit_multiple_interactions() {
 
 #[test]
 fn test_recursion_circuit_two_cached() {
-    let params = test_system_params_small();
+    let params = default_test_params_small();
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let fx = CachedFixture11::new(params);
@@ -369,7 +383,7 @@ fn test_recursion_circuit_two_cached() {
 
 #[test]
 fn test_recursion_circuit_multiple_cached() {
-    let params = test_system_params_small();
+    let params = default_test_params_small();
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
     let fx = CachedFixture11::new(params);
@@ -392,6 +406,59 @@ fn test_recursion_circuit_multiple_cached() {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+// NEGATIVE HYPERCUBE TESTS
+///////////////////////////////////////////////////////////////////////////////
+fn run_negative_hypercube_test<Fx: TestFixture>(
+    fx: Fx,
+    mut params: SystemParams,
+    num_proofs: usize,
+) {
+    params.l_skip += 3;
+    let engine = BabyBearPoseidon2CpuEngineV2::new(params);
+    assert!(num_proofs <= 5);
+
+    let (vk, proof) = fx.keygen_and_prove(&engine);
+
+    let (circuit, pk) = verifier_circuit_keygen::<5>(&vk);
+    let vk_commit_data = circuit.commit_child_vk(&engine, &vk);
+    let ctxs = circuit.generate_proving_ctxs::<DuplexSpongeRecorder>(
+        &vk,
+        vk_commit_data,
+        &(0..num_proofs).map(|_| proof.clone()).collect_vec(),
+    );
+    debug(&circuit.airs(), &pk.per_air, &ctxs);
+}
+
+#[test_case(1)]
+#[test_case(4)]
+fn test_neg_hypercube_fib(num_proofs: usize) {
+    let params = default_test_params_small();
+    let fx = FibFixture::new(0, 1, 1 << 3);
+    run_negative_hypercube_test(fx, params, num_proofs);
+}
+
+#[test_case(1)]
+#[test_case(4)]
+fn test_neg_hypercube_cached(num_proofs: usize) {
+    let params = default_test_params_small();
+    // NOTE: the CachedFixture's cached trace needs correct params, run_negative_hypercube_test will
+    // +3 to params.l_skip
+    let mut fx_params = params;
+    fx_params.l_skip += 3;
+    let fx = CachedFixture11::new(fx_params);
+    run_negative_hypercube_test(fx, params, num_proofs);
+}
+
+#[test_case(1)]
+#[test_case(4)]
+fn test_neg_hypercube_preprocessed(num_proofs: usize) {
+    let params = default_test_params_small();
+    let sels = (0..(1 << 4)).map(|i| i % 2 == 0).collect_vec();
+    let fx = PreprocessedFibFixture::new(0, 1, sels);
+    run_negative_hypercube_test(fx, params, num_proofs);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 // CUDA TRACEGEN TESTS
 ///////////////////////////////////////////////////////////////////////////////
 #[cfg(feature = "cuda")]
@@ -400,7 +467,8 @@ mod cuda {
     use itertools::zip_eq;
     use openvm_cuda_common::copy::MemCopyD2H;
     use openvm_stark_sdk::config::setup_tracing_with_log_level;
-    use stark_backend_v2::{keygen::types::SystemParams, prover::MatrixView};
+    use stark_backend_v2::prover::MatrixView;
+    use test_case::test_matrix;
     use tracing::Level;
 
     use super::*;
@@ -458,53 +526,56 @@ mod cuda {
         }
     }
 
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_single_fib() {
-        let params = test_system_params_small();
-        let fx = FibFixture::new(0, 1, 1 << 3);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 1);
+    #[test_matrix(
+        [2,3],
+        [8,5],
+        [3],
+        [1,3,5],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_single_fib(
+        l_skip: usize,
+        n_stack: usize,
+        k_whir: usize,
+        log_trace_degree: usize,
+        num_proofs: usize,
+    ) {
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
+        let fx = FibFixture::new(0, 1, 1 << log_trace_degree);
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_cached() {
-        let params = test_system_params_small();
+    #[test_matrix(
+        [1,2,5],
+        [5,8],
+        [3,4],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_cached(l_skip: usize, n_stack: usize, k_whir: usize, num_proofs: usize) {
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
         let fx = CachedFixture11::new(params);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 1);
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_preprocessed() {
-        let params = test_system_params_small();
-        let sels = (0..(1 << 5)).map(|i| i % 2 == 0).collect_vec();
+    #[test_matrix(
+        [1,2,5],
+        [5,8],
+        [3,4],
+        [1,3,5],
+        [1,4]
+    )]
+    fn test_cuda_tracegen_preprocessed(
+        l_skip: usize,
+        n_stack: usize,
+        k_whir: usize,
+        log_trace_degree: usize,
+        num_proofs: usize,
+    ) {
+        let params = test_system_params_small(l_skip, n_stack, k_whir);
+        let sels = (0..(1 << log_trace_degree))
+            .map(|i| i % 2 == 0)
+            .collect_vec();
         let fx = PreprocessedFibFixture::new(0, 1, sels);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 1);
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_multi_fib() {
-        let params = test_system_params_small();
-        let fx = FibFixture::new(0, 1, 1 << 3);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 4);
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_multi_cached() {
-        let params = test_system_params_small();
-        let fx = CachedFixture11::new(params);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 4);
-    }
-
-    #[cfg(feature = "cuda")]
-    #[test]
-    fn test_cuda_tracegen_multi_preprocessed() {
-        let params = test_system_params_small();
-        let sels = (0..(1 << 5)).map(|i| i % 2 == 0).collect_vec();
-        let fx = PreprocessedFibFixture::new(0, 1, sels);
-        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, 4);
+        compare_cpu_tracegen_vs_gpu_tracegen(fx, params, num_proofs);
     }
 }

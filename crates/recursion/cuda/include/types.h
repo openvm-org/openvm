@@ -2,6 +2,7 @@
 
 #include "fp.h"
 
+#include <cstdint>
 #include <stddef.h>
 
 const size_t DIGEST_SIZE = 8;
@@ -9,10 +10,10 @@ typedef Fp Digest[DIGEST_SIZE];
 
 typedef struct {
     size_t air_idx;
-    size_t hypercube_dim;
     size_t cached_idx;
     size_t starting_cidx;
     size_t total_interactions;
+    uint8_t log_height;
 } TraceMetadata;
 
 typedef struct {

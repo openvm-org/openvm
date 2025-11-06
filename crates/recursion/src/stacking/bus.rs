@@ -57,8 +57,8 @@ define_typed_per_proof_permutation_bus!(EqBaseBus, EqBaseMessage);
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct EqKernelLookupMessage<T> {
     pub n: T,
-    pub eq: [T; D_EF],
-    pub k_rot: [T; D_EF],
+    pub eq_in: [T; D_EF],
+    pub k_rot_in: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(EqKernelLookupBus, EqKernelLookupMessage);

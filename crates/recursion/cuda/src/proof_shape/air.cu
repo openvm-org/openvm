@@ -10,6 +10,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 
 const size_t NUM_LIMBS = 4;
 const size_t LIMB_BITS = 8;
@@ -44,6 +45,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T idx;
     T sorted_idx;
     T log_height;
+    T n_sign_bit;
 
     T part_common_main_mult;
     T part_preprocessed_mult;
@@ -53,7 +55,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T is_present;
     T height;
 
-    T height_limbs[NUM_LIMBS];
+    T lifted_height_limbs[NUM_LIMBS];
     T num_interactions_limbs[NUM_LIMBS];
     T total_interactions_limbs[NUM_LIMBS];
 
@@ -89,8 +91,10 @@ __device__ __forceinline__ void fill_present_row(
     RangeChecker &range_checker,
     PowerChecker<32> &pow_checker
 ) {
-    size_t log_height = trace_data.hypercube_dim + l_skip;
+    size_t log_height = static_cast<size_t>(trace_data.log_height);
+    int32_t n = static_cast<int32_t>(log_height) - static_cast<int32_t>(l_skip);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, log_height);
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, n < 0 ? 1 : 0);
 
     COL_WRITE_VALUE(
         row, typename Cols<MAX_CACHED>::template Type, part_common_main_mult, Fp::one()
@@ -107,14 +111,17 @@ __device__ __forceinline__ void fill_present_row(
     );
 
     size_t height = 1 << log_height;
+    size_t lifted_height = max(height, (size_t)(1 << l_skip));
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, height);
 
-    Decomp height_decomp, num_interactions_decomp, total_interactions_decomp;
-    decompose(height_decomp, height);
-    decompose(num_interactions_decomp, height * air_data.num_interactions_per_row);
+    Decomp lifted_height_decomp, num_interactions_decomp, total_interactions_decomp;
+    decompose(lifted_height_decomp, lifted_height);
+    decompose(num_interactions_decomp, lifted_height * air_data.num_interactions_per_row);
     decompose(total_interactions_decomp, trace_data.total_interactions);
-    COL_WRITE_ARRAY(row, typename Cols<MAX_CACHED>::template Type, height_limbs, height_decomp);
+    COL_WRITE_ARRAY(
+        row, typename Cols<MAX_CACHED>::template Type, lifted_height_limbs, lifted_height_decomp
+    );
     COL_WRITE_ARRAY(
         row,
         typename Cols<MAX_CACHED>::template Type,
@@ -129,32 +136,44 @@ __device__ __forceinline__ void fill_present_row(
     );
     decompose(
         total_interactions_decomp,
-        trace_data.total_interactions + height * air_data.num_interactions_per_row
+        trace_data.total_interactions + lifted_height * air_data.num_interactions_per_row
     );
 
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        range_checker.add_count(height_decomp[i]);
+        range_checker.add_count(lifted_height_decomp[i]);
         range_checker.add_count(total_interactions_decomp[i]);
     }
 
     size_t non_zero_idx = 0;
     for (size_t i = 0; i < NUM_LIMBS; i++) {
-        if (height_decomp[i] != 0) {
+        if (lifted_height_decomp[i] != 0) {
             non_zero_idx = i;
             break;
         }
     }
+    uint32_t height_limb = lifted_height_decomp[non_zero_idx];
+
+    uint32_t carry = 0;
+    const uint32_t MASK = (1 << LIMB_BITS) - 1;
 
 #pragma unroll
     for (size_t i = 0; i < NUM_LIMBS - 1; i++) {
         if (i < non_zero_idx) {
             range_checker.add_count(0);
         } else {
-            range_checker.add_count((height_decomp[i] * num_interactions_decomp[i]) >> LIMB_BITS);
+            uint32_t interactions_per_row_limb =
+                static_cast<uint32_t>(
+                    air_data.num_interactions_per_row >> ((i - non_zero_idx) * LIMB_BITS)
+                ) &
+                MASK;
+            carry += height_limb * interactions_per_row_limb;
+            carry = (carry - num_interactions_decomp[i]) >> LIMB_BITS;
+            range_checker.add_count(carry);
         }
     }
 
+    pow_checker.add_range_count(static_cast<uint32_t>(abs(n)));
     pow_checker.add_pow_count(log_height);
 
 #pragma unroll
@@ -182,6 +201,7 @@ __device__ __forceinline__ void fill_non_present_row(
     RangeChecker &range_checker
 ) {
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, log_height, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
     COL_WRITE_VALUE(
         row, typename Cols<MAX_CACHED>::template Type, part_common_main_mult, Fp::zero()
     );
@@ -191,7 +211,9 @@ __device__ __forceinline__ void fill_non_present_row(
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, starting_cidx, final_cidx);
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, Fp::zero());
-    row.fill_zero(COL_INDEX(typename Cols<MAX_CACHED>::template Type, height_limbs), NUM_LIMBS);
+    row.fill_zero(
+        COL_INDEX(typename Cols<MAX_CACHED>::template Type, lifted_height_limbs), NUM_LIMBS
+    );
     row.fill_zero(
         COL_INDEX(typename Cols<MAX_CACHED>::template Type, num_interactions_limbs), NUM_LIMBS
     );
@@ -237,6 +259,7 @@ __device__ __forceinline__ void fill_summary_row(
         row, typename Cols<MAX_CACHED>::template Type, part_preprocessed_mult, Fp::zero()
     );
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
     row.fill_zero(part_cached_mult_idx, MAX_CACHED);
     row.fill_zero(part_cached_mult_idx + MAX_CACHED, MAX_CACHED * DIGEST_SIZE);
 
@@ -273,7 +296,7 @@ __device__ __forceinline__ void fill_summary_row(
     for (int i = 0; i < NUM_LIMBS; i++) {
         // non_zero_marker
         row.write(
-            COL_INDEX(typename Cols<MAX_CACHED>::template Type, height_limbs) + i,
+            COL_INDEX(typename Cols<MAX_CACHED>::template Type, lifted_height_limbs) + i,
             i == nonzero_idx && final_total_interactions > 0
         );
         // diff_marker
@@ -367,12 +390,14 @@ __global__ void proof_shape_tracegen(
             }
 
             if (record_idx + 1 < inputs.num_airs) {
-                size_t current_hypercube_dim = trace_data.hypercube_dim;
-                size_t next_hypercube_dim =
+                uint8_t current_log_height = trace_data.log_height;
+                uint8_t next_log_height =
                     record_idx + 1 < proof_data.num_present
-                        ? sorted_trace_data[proof_idx][record_idx + 1].hypercube_dim
+                        ? sorted_trace_data[proof_idx][record_idx + 1].log_height
                         : 0;
-                pow_checker.add_range_count(current_hypercube_dim - next_hypercube_dim);
+                pow_checker.add_range_count(
+                    static_cast<uint32_t>(current_log_height - next_log_height)
+                );
             }
 
             if (record_idx < proof_data.num_present) {

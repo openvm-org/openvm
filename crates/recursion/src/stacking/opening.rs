@@ -19,7 +19,7 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirHeightsBus, AirHeightsBusMessage, ColumnClaimsBus, ColumnClaimsMessage,
+        ColumnClaimsBus, ColumnClaimsMessage, LiftedHeightsBus, LiftedHeightsBusMessage,
         StackingModuleBus, StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     stacking::{
@@ -58,10 +58,11 @@ pub struct OpeningClaimsCols<F> {
     pub is_main: F,
     pub is_transition_main: F,
 
-    // Received from proof shape (n + l_skip, 2^{n + l_skip}, 2^{- (n + l_skip)})
-    pub log_height: F,
-    pub height: F,
-    pub height_inv: F,
+    // From proof shape (n, n_lift + l_skip, 2^{n_lift + l_skip}, 2^{- (n_lift + l_skip)})
+    pub hypercube_dim: F,
+    pub log_lifted_height: F,
+    pub lifted_height: F,
+    pub lifted_height_inv: F,
 
     // Sampled transcript values
     pub tidx: F,
@@ -75,8 +76,8 @@ pub struct OpeningClaimsCols<F> {
     pub is_last_for_claim: F,
 
     // Lookups to compute claim coefficient
-    pub eq: [F; D_EF],
-    pub k_rot: [F; D_EF],
+    pub eq_in: [F; D_EF],
+    pub k_rot_in: [F; D_EF],
     pub eq_bits: [F; D_EF],
 
     // Intermediate values to compute claim coefficient
@@ -148,7 +149,7 @@ impl OpeningClaimsTraceGenerator {
                 })
                 .unwrap_or(num_rows - 1);
 
-            for (i, (claim, slice, (eq, k_rot, eq_bits), chunk)) in
+            for (i, (claim, slice, (eq_in, k_rot_in, eq_bits), chunk)) in
                 izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
             {
                 let ColumnClaimsMessage {
@@ -174,9 +175,16 @@ impl OpeningClaimsTraceGenerator {
                 cols.is_main = F::from_bool(part_idx == F::ZERO);
                 cols.is_transition_main = F::from_bool(i + 1 != num_rows && i != last_main_idx);
 
-                cols.log_height = F::from_canonical_usize(slice.n + vk.inner.params.l_skip);
-                cols.height = F::from_canonical_usize(1 << (slice.n + vk.inner.params.l_skip));
-                cols.height_inv = cols.height.inverse();
+                let n_lift = slice.n.max(0) as usize;
+                cols.hypercube_dim = if slice.n.is_positive() {
+                    F::from_canonical_usize(n_lift)
+                } else {
+                    -F::from_canonical_usize(slice.n.unsigned_abs())
+                };
+                cols.log_lifted_height = F::from_canonical_usize(n_lift + vk.inner.params.l_skip);
+                cols.lifted_height =
+                    F::from_canonical_usize(1 << (n_lift + vk.inner.params.l_skip));
+                cols.lifted_height_inv = cols.lifted_height.inverse();
 
                 cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
                 cols.lambda
@@ -190,8 +198,8 @@ impl OpeningClaimsTraceGenerator {
                 cols.row_idx = F::from_canonical_usize(slice.row_idx);
                 cols.is_last_for_claim = F::from_bool(slice.is_last_for_commit);
 
-                cols.eq.copy_from_slice(eq.as_base_slice());
-                cols.k_rot.copy_from_slice(k_rot.as_base_slice());
+                cols.eq_in.copy_from_slice(eq_in.as_base_slice());
+                cols.k_rot_in.copy_from_slice(k_rot_in.as_base_slice());
                 cols.eq_bits.copy_from_slice(eq_bits.as_base_slice());
 
                 let lambda_pow_eq_bits = lambda_pow * eq_bits;
@@ -199,7 +207,7 @@ impl OpeningClaimsTraceGenerator {
                     .copy_from_slice(lambda_pow_eq_bits.as_base_slice());
 
                 stacking_claim_coefficient +=
-                    lambda_pow_eq_bits * (eq + preflight.stacking.lambda * k_rot);
+                    lambda_pow_eq_bits * (eq_in + preflight.stacking.lambda * k_rot_in);
                 cols.stacking_claim_coefficient
                     .copy_from_slice(stacking_claim_coefficient.as_base_slice());
                 if slice.is_last_for_commit {
@@ -243,7 +251,7 @@ impl OpeningClaimsTraceGenerator {
 ///////////////////////////////////////////////////////////////////////////
 pub struct OpeningClaimsAir {
     // External buses
-    pub air_heights_bus: AirHeightsBus,
+    pub lifted_heights_bus: LiftedHeightsBus,
     pub stacking_module_bus: StackingModuleBus,
     pub column_claims_bus: ColumnClaimsBus,
     pub transcript_bus: TranscriptBus,
@@ -463,7 +471,7 @@ where
             .assert_zero(next.row_idx);
         builder
             .when(not::<AB::Expr>(local.is_last_for_claim))
-            .assert_eq(local.row_idx + local.height, next.row_idx);
+            .assert_eq(local.row_idx + local.lifted_height, next.row_idx);
 
         builder
             .when(and::<AB::Expr>(
@@ -471,7 +479,7 @@ where
                 not::<AB::Expr>(next.commit_idx - local.commit_idx),
             ))
             .assert_eq(
-                local.row_idx + local.height,
+                local.row_idx + local.lifted_height,
                 AB::F::from_canonical_usize(1 << self.n_stack),
             );
 
@@ -485,7 +493,10 @@ where
             &mut builder.when(local.is_first),
             ext_field_multiply(
                 local.lambda_pow_eq_bits,
-                ext_field_add::<AB::Expr>(local.eq, ext_field_multiply(local.lambda, local.k_rot)),
+                ext_field_add::<AB::Expr>(
+                    local.eq_in,
+                    ext_field_multiply(local.lambda, local.k_rot_in),
+                ),
             ),
             local.stacking_claim_coefficient,
         );
@@ -494,7 +505,10 @@ where
             &mut builder.when(local.is_last_for_claim),
             ext_field_multiply(
                 next.lambda_pow_eq_bits,
-                ext_field_add::<AB::Expr>(next.eq, ext_field_multiply(next.lambda, next.k_rot)),
+                ext_field_add::<AB::Expr>(
+                    next.eq_in,
+                    ext_field_multiply(next.lambda, next.k_rot_in),
+                ),
             ),
             next.stacking_claim_coefficient,
         );
@@ -505,7 +519,10 @@ where
                 local.stacking_claim_coefficient,
                 ext_field_multiply(
                     next.lambda_pow_eq_bits,
-                    ext_field_add::<AB::Expr>(next.eq, ext_field_multiply(next.lambda, next.k_rot)),
+                    ext_field_add::<AB::Expr>(
+                        next.eq_in,
+                        ext_field_multiply(next.lambda, next.k_rot_in),
+                    ),
                 ),
             ),
             next.stacking_claim_coefficient,
@@ -527,13 +544,14 @@ where
          * from ProofShapeAir, while eq(u, r), k_rot(u, r), and eq_>(u, b) values are
          * computed and provided via lookup by other stacking module AIRs.
          */
-        self.air_heights_bus.receive(
+        self.lifted_heights_bus.receive(
             builder,
             local.proof_idx,
-            AirHeightsBusMessage {
+            LiftedHeightsBusMessage {
                 sort_idx: local.sort_idx,
-                height: local.height,
-                log_height: local.log_height,
+                hypercube_dim: local.hypercube_dim,
+                lifted_height: local.lifted_height,
+                log_lifted_height: local.log_lifted_height,
             },
             local.is_valid,
         );
@@ -542,26 +560,26 @@ where
             builder,
             local.proof_idx,
             EqKernelLookupMessage {
-                n: local.log_height - AB::F::from_canonical_usize(self.l_skip),
-                eq: local.eq.map(Into::into),
-                k_rot: local.k_rot.map(Into::into),
+                n: local.hypercube_dim,
+                eq_in: local.eq_in,
+                k_rot_in: local.k_rot_in,
             },
             local.is_valid,
         );
 
         builder
             .when(local.is_valid)
-            .assert_one(local.height * local.height_inv);
+            .assert_one(local.lifted_height * local.lifted_height_inv);
 
         self.eq_bits_lookup_bus.receive(
             builder,
             local.proof_idx,
             EqBitsLookupMessage {
                 b_value: local.row_idx
-                    * local.height_inv
+                    * local.lifted_height_inv
                     * AB::F::from_canonical_usize(1 << self.l_skip),
                 num_bits: AB::Expr::from_canonical_usize(self.n_stack + self.l_skip)
-                    - local.log_height,
+                    - local.log_lifted_height,
                 eval: local.eq_bits.map(Into::into),
             },
             local.is_valid,

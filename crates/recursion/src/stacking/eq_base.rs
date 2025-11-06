@@ -108,12 +108,13 @@ impl EqBaseTraceGenerator {
         let mut total_rows = 0usize;
 
         for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
-            let mut mult = 0usize;
+            let mut mults = vec![0usize; vk.inner.params.l_skip + 1];
             for (sort_idx, (_, vdata)) in
                 preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
             {
-                if vdata.hypercube_dim == 0 {
-                    mult += proof.batch_constraint_proof.column_openings[sort_idx]
+                if vdata.log_height <= vk.inner.params.l_skip {
+                    let neg_n = vk.inner.params.l_skip - vdata.log_height;
+                    mults[neg_n] += proof.batch_constraint_proof.column_openings[sort_idx]
                         .iter()
                         .flatten()
                         .collect_vec()
@@ -171,7 +172,7 @@ impl EqBaseTraceGenerator {
                     .copy_from_slice(prod_r_omega_1.as_base_slice());
 
                 if is_last {
-                    cols.mult = F::from_canonical_usize(mult);
+                    cols.mult = F::from_canonical_usize(mults[0]);
                 }
 
                 let l_skip = vk.inner.params.l_skip - row_idx;
@@ -192,7 +193,7 @@ impl EqBaseTraceGenerator {
                         ) * F::from_canonical_usize(1 << l_skip))
                         .as_base_slice(),
                     );
-                    // TODO: negative multiplicities
+                    cols.mult_neg = F::from_canonical_usize(mults[row_idx]);
                 }
 
                 cols.u_pow_rev.copy_from_slice(u_pow_rev.as_base_slice());
@@ -483,8 +484,8 @@ where
             local.proof_idx,
             EqKernelLookupMessage {
                 n: AB::Expr::ZERO,
-                eq: eq_u_r.clone(),
-                k_rot: eq_u_r_omega.clone(),
+                eq_in: eq_u_r.clone(),
+                k_rot_in: eq_u_r_omega.clone(),
             },
             next.mult,
         );
@@ -562,8 +563,8 @@ where
             local.proof_idx,
             EqKernelLookupMessage {
                 n: AB::Expr::ZERO - local.row_idx,
-                eq: ext_field_multiply(in_n.clone(), local.eq_neg),
-                k_rot: ext_field_multiply(in_n, local.k_rot_neg),
+                eq_in: ext_field_multiply(in_n.clone(), local.eq_neg),
+                k_rot_in: ext_field_multiply(in_n, local.k_rot_neg),
             },
             local.mult_neg,
         );

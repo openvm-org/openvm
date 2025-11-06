@@ -82,10 +82,10 @@ where
         // Summary:
         // - idx consistency: TODO to increase the nested-loop sub-AIR dimension; the first valid
         //   row forces `idx_is_zero`, `idx = 0`, and validity; every step either keeps `idx` at
-        //   zero or increments it by one, invalid rows must have `idx = 0`, wrapping to zero implies
-        //   the previous value hit `hypercube_volume` and sets `next.idx_is_zero`; additionally, the
-        //   first transition after the header is forced to drop `idx` to zero to ensure the layer
-        //   size condition.
+        //   zero or increments it by one, invalid rows must have `idx = 0`, wrapping to zero
+        //   implies the previous value hit `hypercube_volume` and sets `next.idx_is_zero`;
+        //   additionally, the first transition after the header is forced to drop `idx` to zero to
+        //   ensure the layer size condition.
         // - is_l_skip consistency: the flag is boolean, cleared on invalid rows, asserted on the
         //   last layer, preserved while the index keeps advancing, and cleared when a new layer
         //   begins.
@@ -142,9 +142,9 @@ where
             .when(next.is_valid)
             .assert_one(next.idx_is_zero);
 
-        // Important: we need to enforce dropping idx to zero if it is going to become hypercube_volume.
-        // We can leave this to inner interactions, but then we need to guarantee that the first layer
-        // has size 1.
+        // Important: we need to enforce dropping idx to zero if it is going to become
+        // hypercube_volume. We can leave this to inner interactions, but then we need to
+        // guarantee that the first layer has size 1.
         builder
             .when(next.is_valid * local.is_first)
             .assert_one(next.idx_is_zero);
@@ -267,11 +267,11 @@ pub(crate) fn generate_eq_mle_blob(
         let mut row_idx = 0;
         let n_logup = preflight.proof_shape.n_logup;
         for (air_idx, vdata) in preflight.proof_shape.sorted_trace_vdata.iter() {
-            let n = vdata.hypercube_dim;
+            let n_lift = vdata.log_height.saturating_sub(l_skip);
             let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
             for _ in 0..num_interactions {
-                blob.all_stacked_ids.push((n as u32, row_idx));
-                row_idx += 1 << (l_skip + n);
+                blob.all_stacked_ids.push((n_lift as u32, row_idx));
+                row_idx += 1 << (l_skip + n_lift);
                 if row_idx == 1 << (l_skip + n_logup) {
                     row_idx = 0;
                 }

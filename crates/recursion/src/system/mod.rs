@@ -24,10 +24,10 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{BatchConstraintModule, LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX},
     bus::{
-        AirHeightsBus, AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        CommitmentsBus, ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus,
-        MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, StackingIndicesBus, StackingModuleBus,
-        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
+        ConstraintSumcheckRandomnessBus, ExpBitsLenBus, GkrModuleBus, HyperdimBus,
+        LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus, PublicValuesBus, StackingIndicesBus,
+        StackingModuleBus, TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::exp_bits_len::ExpBitsLenAir,
@@ -131,7 +131,8 @@ pub struct BusInventory {
     // Data buses
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub air_heights_bus: AirHeightsBus,
+    pub hyperdim_bus: HyperdimBus,
+    pub lifted_heights_bus: LiftedHeightsBus,
     pub stacking_indices_bus: StackingIndicesBus,
     pub commitments_bus: CommitmentsBus,
     pub public_values_bus: PublicValuesBus,
@@ -253,7 +254,8 @@ impl BusInventory {
             // Data buses
             air_shape_bus: AirShapeBus::new(b.new_bus_idx()),
             air_part_shape_bus: AirPartShapeBus::new(b.new_bus_idx()),
-            air_heights_bus: AirHeightsBus::new(b.new_bus_idx()),
+            hyperdim_bus: HyperdimBus::new(b.new_bus_idx()),
+            lifted_heights_bus: LiftedHeightsBus::new(b.new_bus_idx()),
             stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
             commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
