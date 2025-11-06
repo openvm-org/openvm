@@ -63,11 +63,9 @@ where
             }
         }
         // Jump branch
-        asm_str += &format!("   mov r13, {}\n", next_pc);
         asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
 
         asm_str += &format!("{}:\n", not_jump_label);
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
 
         Ok(asm_str)
     }

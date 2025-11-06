@@ -114,9 +114,6 @@ where
             asm_str += &format!("   pinsrd xmm{}, eax, 1\n", xmm_map_reg_a);
         }
 
-        // pc += DEFAULT_PC_STEP
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-
         Ok(asm_str)
     }
 

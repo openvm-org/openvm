@@ -245,7 +245,6 @@ where
         }
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
         Ok(asm_str)
     }
 }

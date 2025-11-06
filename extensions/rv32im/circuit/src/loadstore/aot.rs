@@ -119,9 +119,6 @@ where
             _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),
         }
 
-        // pc += DEFAULT_PC_STEP
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-
         Ok(asm_str)
     }
 }

@@ -88,9 +88,6 @@ where
             }
         }
 
-        // pc += DEFAULT_PC_STEP
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-
         Ok(asm_str)
     }
 }

@@ -215,9 +215,6 @@ where
         asm_str += &format!("{}:\n", done_label);
         asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
 
-        // pc += DEFAULT_PC_STEP
-        asm_str += &format!("   add r13, {}\n", DEFAULT_PC_STEP);
-
         Ok(asm_str)
     }
 

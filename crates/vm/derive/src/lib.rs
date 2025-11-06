@@ -343,8 +343,8 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn call_extern_handler(&self) -> ::std::string::String {
-                        self.0.call_extern_handler()
+                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
+                        self.0.call_extern_handler(pc)
                     }
 
                     fn fallback_to_interpreter(
@@ -353,12 +353,14 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         pop_internal_registers_str: &str,
                         rv32_regs_to_xmm_str: &str,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
+                        pc: u32,
                     ) -> ::std::string::String {
                         self.0.fallback_to_interpreter(
                             push_internal_registers_str,
                             pop_internal_registers_str,
                             rv32_regs_to_xmm_str,
                             inst,
+                            pc,
                         )
                     }
 
@@ -415,7 +417,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::is_aot_supported(x, inst)
                     };
                     let call_extern_handler_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x, pc)
                     };
                     let fallback_to_interpreter_arm = quote! {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::fallback_to_interpreter(
@@ -424,6 +426,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                             pop_internal_registers_str,
                             rv32_regs_to_xmm_str,
                             inst,
+                            pc,
                         )
                     };
                     let generate_x86_asm_arm = quote! {
@@ -461,7 +464,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn call_extern_handler(&self) -> ::std::string::String {
+                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
                         match self {
                             #(#call_extern_handler_arms,)*
                         }
@@ -473,6 +476,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         pop_internal_registers_str: &str,
                         rv32_regs_to_xmm_str: &str,
                         inst: &::openvm_circuit::arch::instructions::instruction::Instruction<#first_ty_generic>,
+                        pc: u32,
                     ) -> ::std::string::String {
                         match self {
                             #(#fallback_to_interpreter_arms,)*

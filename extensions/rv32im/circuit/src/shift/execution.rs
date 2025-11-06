@@ -191,7 +191,6 @@ where
         }
         // General Register -> XMM
         asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
         // let it fall to the next instruction
         Ok(asm_str)
     }
