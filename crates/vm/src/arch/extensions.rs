@@ -23,19 +23,15 @@ use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
+    prover::MatrixDimensions,
     rap::AnyRap,
     AirRef,
 };
 use rustc_hash::FxHashMap;
 use stark_backend_v2::{
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
     prover::{
-        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2, ProverBackendV2 as ProverBackend,
+        ProvingContextV2 as ProvingContext,
     },
     AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
 };
@@ -707,15 +703,10 @@ where
                 ),
             )
             .enumerate()
-            .filter(|(_air_id, ctx)| {
-                (!ctx.cached_mains.is_empty() || ctx.common_main.is_some())
-                    && ctx.main_trace_height() > 0
-            })
+            .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
             .collect();
 
-        Ok(ProvingContext {
-            per_air: ctx_without_empties,
-        })
+        Ok(ProvingContext::new(ctx_without_empties))
     }
 }
 
