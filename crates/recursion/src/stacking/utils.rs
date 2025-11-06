@@ -16,7 +16,7 @@ pub struct StackedSliceData {
     pub col_idx: usize,
     pub row_idx: usize,
     pub n: isize,
-    pub is_last_for_commit: bool,
+    pub is_last_for_claim: bool,
 }
 
 pub fn get_stacked_slice_data(
@@ -33,20 +33,20 @@ pub fn get_stacked_slice_data(
 
     let mut push_res = |log_height: usize, is_last_for_commit| {
         let n = log_height as isize - vk.inner.params.l_skip as isize;
+        let col_height = 1 << (n.max(0) as usize + vk.inner.params.l_skip);
+        debug_assert!(row_idx + col_height <= stacked_height);
         res.push(StackedSliceData {
             commit_idx,
             col_idx,
             row_idx,
             n,
-            is_last_for_commit,
+            is_last_for_claim: is_last_for_commit || row_idx + col_height == stacked_height,
         });
         if is_last_for_commit {
             commit_idx += 1;
             col_idx = 0;
             row_idx = 0;
         } else {
-            let col_height = 1 << (n.max(0) as usize + vk.inner.params.l_skip);
-            debug_assert!(row_idx + col_height <= stacked_height);
             row_idx = (row_idx + col_height) % stacked_height;
             if row_idx == 0 {
                 col_idx += 1;
