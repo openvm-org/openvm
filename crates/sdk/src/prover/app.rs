@@ -374,9 +374,12 @@ mod async_prover {
             drop(metered_interpreter);
             let pure_interpreter = vm.interpreter(&self.app_exe)?;
             let mut tasks = Vec::with_capacity(segments.len());
+            let mut num_ins_last = 0;
             for (seg_idx, segment) in segments.into_iter().enumerate() {
                 let semaphore = self.semaphore.clone();
                 let async_worker = self.clone();
+                state = pure_interpreter.execute_from_state(state, Some(num_ins_last))?;
+                num_ins_last = segment.num_insns;
                 let start_state = state.clone();
                 let task = spawn(
                     async move {
