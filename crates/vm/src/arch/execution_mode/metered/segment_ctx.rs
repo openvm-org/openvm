@@ -314,13 +314,14 @@ impl SegmentationCtx {
     /// Try segment if there is at least one instruction
     #[inline(always)]
     pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
-        let instret = self.instret + self.segment_check_insns - self.instrets_until_check;
+        self.instret += self.segment_check_insns - self.instrets_until_check;
+        self.instrets_until_check = self.segment_check_insns;
         let instret_start = self
             .segments
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let num_insns = instret - instret_start;
+        let num_insns = self.instret - instret_start;
         self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
     }
 
