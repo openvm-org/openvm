@@ -80,7 +80,7 @@ where
     #[allow(dead_code)]
     fn debug_cur_string(str: &String) {
         println!("DEBUG");
-        println!("{}", str);
+        println!("{str}");
     }
 
     #[allow(dead_code)]
@@ -174,8 +174,8 @@ where
         let mut asm_str = String::new();
 
         for r in 0..16 {
-            asm_str += &format!("   mov rdi, [r15 + 8*{}]\n", r);
-            asm_str += &format!("   pinsrq xmm{}, rdi, 0\n", r);
+            asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
+            asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
         }
 
         asm_str
@@ -199,7 +199,7 @@ where
 
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
-            asm_str += &format!("   movq [r15 + 8*{}], xmm{}\n", r, r);
+            asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
         }
 
         asm_str
@@ -224,7 +224,7 @@ where
         let mut asm_str = String::new();
         asm_str += "    mov rax, 0\n";
         for r in 0..16 {
-            asm_str += &format!("   pinsrq xmm{}, rax, 0\n", r);
+            asm_str += &format!("   pinsrq xmm{r}, rax, 0\n");
         }
 
         asm_str
@@ -302,11 +302,11 @@ where
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
-            asm_str += &format!("asm_execute_pc_{}:\n", pc);
+            asm_str += &format!("asm_execute_pc_{pc}:\n");
 
             // Check if we should suspend or not
             asm_str += "    cmp r12, 0\n";
-            asm_str += &format!("    je asm_run_end_{}\n", pc);
+            asm_str += &format!("    je asm_run_end_{pc}\n");
             asm_str += "    dec r12\n";
 
             if instruction.opcode.as_usize() == 0 {
@@ -316,7 +316,7 @@ where
                 asm_str += &Self::push_internal_registers();
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
-                asm_str += &format!("    mov rdx, {}\n", pc);
+                asm_str += &format!("    mov rdx, {pc}\n");
                 asm_str += "    call extern_handler\n";
                 asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
                 asm_str += "    AND rax, 1\n"; // check if the return value is 1
@@ -325,7 +325,7 @@ where
                 asm_str += &Self::pop_address_space_start();
                 // read the memory from the memory location of the RV32 registers in `GuestMemory`
                 // registers, to the appropriate XMM registers
-                asm_str += &format!("   je asm_run_end_{}\n", pc);
+                asm_str += &format!("   je asm_run_end_{pc}\n");
                 asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
                 asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
                 asm_str += "    add rcx, rdx\n"; // add the base address and the offset
@@ -371,10 +371,10 @@ where
 
         // asm_run_end part
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
-            asm_str += &format!("asm_run_end_{}:\n", pc);
+            asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += "    mov rdi, rbx\n";
             asm_str += "    mov rsi, rbp\n";
-            asm_str += &format!("    mov rdx, {}\n", pc);
+            asm_str += &format!("    mov rdx, {pc}\n");
             asm_str += "    call set_pc\n";
             asm_str += "    xor rax, rax\n";
             asm_str += &Self::pop_external_registers();
@@ -391,7 +391,7 @@ where
         }
 
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
-            asm_str += &format!("   .long asm_execute_pc_{} - map_pc_base\n", pc);
+            asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
         }
 
         Ok(asm_str)
@@ -433,9 +433,9 @@ where
         let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
         let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
 
-        let asm_source = Self::create_asm(&exe, &inventory)?;
+        let asm_source = Self::create_asm(exe, inventory)?;
         fs::write(
-            format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name),
+            format!("{src_asm_bridge_dir_str}/src/{asm_name}.s"),
             asm_source,
         )
         .expect("Failed to write generated assembly");
@@ -448,9 +448,9 @@ where
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
             .args([
-                &format!("src/{}.s", asm_name),
+                &format!("src/{asm_name}.s"),
                 "-o",
-                &format!("{}.o", asm_name),
+                &format!("{asm_name}.o"),
             ])
             .status()
             .expect("Failed to assemble the file into an object file");
@@ -465,8 +465,8 @@ where
             .current_dir(&src_asm_bridge_dir)
             .args([
                 "rcs",
-                &format!("lib{}.a", asm_name),
-                &format!("{}.o", asm_name),
+                &format!("lib{asm_name}.a"),
+                &format!("{asm_name}.o"),
             ])
             .status()
             .expect("Create a static library");
@@ -493,7 +493,7 @@ where
                 "-L",
                 src_asm_bridge_dir_str,
                 "-l",
-                &format!("static={}", asm_name),
+                &format!("static={asm_name}"),
             ])
             .status()
             .expect("Creating the dynamic library");
@@ -512,9 +512,9 @@ where
 
         let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
         // Cleanup artifacts after library is loaded into memory
-        let _ = fs::remove_file(format!("{}/src/{}.s", src_asm_bridge_dir_str, asm_name));
-        let _ = fs::remove_file(format!("{}/{}.o", src_asm_bridge_dir_str, asm_name));
-        let _ = fs::remove_file(format!("{}/lib{}.a", src_asm_bridge_dir_str, asm_name));
+        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/src/{asm_name}.s"));
+        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/{asm_name}.o"));
+        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/lib{asm_name}.a"));
         let _ = fs::remove_dir_all(root_dir.join("target").join(asm_name));
 
         let program = &exe.program;
@@ -688,9 +688,9 @@ where
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
             .args([
-                &format!("src/{}.s", asm_name),
+                &format!("src/{asm_name}.s"),
                 "-o",
-                &format!("{}.o", asm_name),
+                &format!("{asm_name}.o"),
             ])
             .status()
             .expect("Failed to assemble the file into an object file");
@@ -705,8 +705,8 @@ where
             .current_dir(&src_asm_bridge_dir)
             .args([
                 "rcs",
-                &format!("lib{}.a", asm_name),
-                &format!("{}.o", asm_name),
+                &format!("lib{asm_name}.a"),
+                &format!("{asm_name}.o"),
             ])
             .status()
             .expect("Create a static library");
@@ -731,7 +731,7 @@ where
                 "-L",
                 src_asm_bridge_dir_str,
                 "-l",
-                &format!("static={}", asm_name),
+                &format!("static={asm_name}"),
             ])
             .status()
             .expect("Creating the dynamic library");

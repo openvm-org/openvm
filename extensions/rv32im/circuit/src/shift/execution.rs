@@ -152,14 +152,14 @@ where
 
         if e == 0 {
             // [b:4]_1 <- [b:4]_1 (shift) c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_B_W, c);
+            asm_str += &format!("   {asm_opcode} {REG_B_W}, {c}\n");
         } else {
             // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
 
             asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   mov cl, {}\n", REG_C_B);
+            asm_str += &format!("   mov cl, {REG_C_B}\n");
             // reg_a = reg_a << c
-            asm_str += &format!("   {} {}, cl\n", asm_opcode, REG_B_W);
+            asm_str += &format!("   {asm_opcode} {REG_B_W}, cl\n");
         }
         // General Register -> XMM
         asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);

@@ -107,12 +107,12 @@ where
     Assertions for Pure Execution AOT
     */
     let interp_state_pure = vm
-        .naive_interpreter(&exe)?
+        .naive_interpreter(exe)?
         .execute(input.clone(), None)
         .expect("Failed to execute");
 
     let aot_state_pure = vm
-        .get_aot_instance(&exe)?
+        .get_aot_instance(exe)?
         .execute(input.clone(), None)
         .expect("Failed to execute");
 

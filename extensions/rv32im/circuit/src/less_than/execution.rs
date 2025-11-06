@@ -149,16 +149,16 @@ where
         }
 
         if e == 0 {
-            asm_str += &format!("   cmp {}, {}\n", REG_A_W, c);
+            asm_str += &format!("   cmp {REG_A_W}, {c}\n");
         } else {
             // [a:4]_1 <- [a:4]_1 + [c:4]_1
             asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   cmp {}, {}\n", REG_A_W, REG_C_W);
+            asm_str += &format!("   cmp {REG_A_W}, {REG_C_W}\n");
         }
 
         // Set REG_A to 1 if less than (signed), 0 otherwise
-        asm_str += &format!("   {} cl\n", asm_opcode); // setl cl or setb cl
-        asm_str += &format!("   movzx {}, cl\n", REG_A_W); // zero-extend to 32-bit
+        asm_str += &format!("   {asm_opcode} cl\n"); // setl cl or setb cl
+        asm_str += &format!("   movzx {REG_A_W}, cl\n"); // zero-extend to 32-bit
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         // let it fall to the next instruction

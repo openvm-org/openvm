@@ -123,18 +123,18 @@ where
 
         asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
 
-        asm_str += &format!("   add {}, {}\n", REG_B_W, imm_extended);
-        asm_str += &format!("   and {}, -2\n", REG_B_W); // clear bit 0 per RISC-V jalr
-        asm_str += &format!("   mov {}, {}\n", REG_PC_W, REG_B_W); // zero-extend into r13
+        asm_str += &format!("   add {REG_B_W}, {imm_extended}\n");
+        asm_str += &format!("   and {REG_B_W}, -2\n"); // clear bit 0 per RISC-V jalr
+        asm_str += &format!("   mov {REG_PC_W}, {REG_B_W}\n"); // zero-extend into r13
 
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
-            asm_str += &format!("   mov {}, {}\n", REG_A_W, next_pc);
+            asm_str += &format!("   mov {REG_A_W}, {next_pc}\n");
             asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         }
 
         asm_str += "   lea rdx, [rip + map_pc_base]\n";
-        asm_str += &format!("   movsxd {}, [rdx + {}]\n", REG_A, REG_PC);
+        asm_str += &format!("   movsxd {REG_A}, [rdx + {REG_PC}]\n");
         asm_str += "   add rcx, rdx\n";
         asm_str += "   jmp rcx\n";
         Ok(asm_str)

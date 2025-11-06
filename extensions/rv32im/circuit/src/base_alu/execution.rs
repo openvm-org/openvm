@@ -208,11 +208,11 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, c);
+            asm_str += &format!("   {asm_opcode} {REG_A_W}, {c}\n");
         } else {
             // load the right operand of the opcode
             asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, REG_C_W);
+            asm_str += &format!("   {asm_opcode} {REG_A_W}, {REG_C_W}\n");
         }
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);

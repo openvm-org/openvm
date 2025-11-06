@@ -45,7 +45,6 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 {
                     use openvm_circuit::arch::VmState;
                     use openvm_circuit::system::memory::online::GuestMemory;
-                    use openvm_stark_backend::config::Val;
                     let naive_interpreter = executor.interpreter_instance(&exe)?;
                     let naive_state = naive_interpreter.execute(vec![], None)?;
                     let assert_vm_state_eq =

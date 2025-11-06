@@ -15,6 +15,13 @@ use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtensi
 use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::execution_mode::ExecutionCtx;
+#[cfg(feature = "aot")]
+use std::cell::RefCell;
+#[cfg(feature = "aot")]
+use std::collections::HashMap;
+
 use openvm_circuit::{
     arch::{
         execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
@@ -31,7 +38,7 @@ use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExten
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::NativeCpuBuilder;
 use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
@@ -80,7 +87,9 @@ const APP_PROGRAMS: &[&str] = &[
     "revm_transfer",
     "pairing",
 ];
+#[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
+#[allow(dead_code)]
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
@@ -96,7 +105,7 @@ thread_local! {
 // Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads can share the same instance
 // Mutex is used to protect the cache from concurrent access
 // HashMap is used to store the instances, keyed by the program name
-
+#[allow(dead_code)]
 type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
 
 fn report_program_success(mode: &str, program: &str) {
@@ -404,6 +413,7 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
         });
 }
 
+#[allow(dead_code)]
 fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
@@ -430,6 +440,7 @@ fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<Bab
     (vm, leaf_exe, input_stream)
 }
 
+#[allow(dead_code)]
 fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
@@ -437,8 +448,7 @@ fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Ve
         fs::read(fixtures_dir.join(format!("{program}.internal.exe"))).unwrap();
     let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
 
-    let internal_pk_bytes =
-        fs::read(fixtures_dir.join(format!("{program}.internal.pk"))).unwrap();
+    let internal_pk_bytes = fs::read(fixtures_dir.join(format!("{program}.internal.pk"))).unwrap();
     let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
 
     // Load leaf proof by index (using index 0)
@@ -464,6 +474,7 @@ fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Ve
     (vm, internal_committed_exe.exe, input_stream)
 }
 
+#[allow(dead_code)]
 // Safe wrapper for the unsafe transmute operation
 fn transmute_interpreter_lifetime<'a, Ctx>(
     interpreter: InterpretedInstance<'_, BabyBear, Ctx>,
@@ -534,7 +545,12 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
         })
         .bench_values(|(vm, state, mut interpreter)| {
             let _out = expect_execution(
-                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                vm.execute_preflight(
+                    &mut interpreter,
+                    state,
+                    None,
+                    openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS,
+                ),
                 "leaf verifier preflight benchmark",
                 program,
                 "Failed to execute preflight",
@@ -602,7 +618,12 @@ fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str
         })
         .bench_values(|(vm, state, mut interpreter)| {
             let _out = expect_execution(
-                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                vm.execute_preflight(
+                    &mut interpreter,
+                    state,
+                    None,
+                    openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS,
+                ),
                 "internal verifier preflight benchmark",
                 program,
                 "Failed to execute preflight",

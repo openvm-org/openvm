@@ -172,7 +172,7 @@ pub trait AotExecutor<F> {
         let mut asm_str = String::new();
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, rbp\n";
-        asm_str += &format!("   mov rdx, {}\n", pc);
+        asm_str += &format!("   mov rdx, {pc}\n");
         asm_str += "    call extern_handler\n";
         asm_str
     }
@@ -211,7 +211,7 @@ pub trait AotExecutor<F> {
 
         asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                          // registers, to the appropriate XMM registers
-        asm_str += &format!("   je asm_run_end_{}\n", pc);
+        asm_str += &format!("   je asm_run_end_{pc}\n");
         
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
         asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)

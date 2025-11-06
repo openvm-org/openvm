@@ -65,23 +65,23 @@ where
 
         let mut asm_str = String::new();
         // eax = [b:4]_1
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
+        asm_str += &rv32_register_to_gpr(b_reg, "eax");
         // eax = ptr = [b:4]_1 + imm_extended
         asm_str += &format!("   add eax, {imm_extended}\n");
         // rcx = <start of destination address space>
         asm_str += &address_space_start_to_gpr(e_u32, "rcx");
         // rax = rax + rcx = <memory address in host memory>
-        asm_str += &format!("   lea rax, [rax + rcx]\n");
+        asm_str += &"   lea rax, [rax + rcx]\n".to_string();
 
         if enabled {
             match local_opcode {
                 Rv32LoadStoreOpcode::LOADH => {
                     asm_str += "   movsx eax, word ptr [rax]\n";
-                    asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                    asm_str += &gpr_to_rv32_register("eax", a_reg);
                 }
                 Rv32LoadStoreOpcode::LOADB => {
                     asm_str += "   movsx eax, byte ptr [rax]\n";
-                    asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                    asm_str += &gpr_to_rv32_register("eax", a_reg);
                 }
                 _ => unreachable!("LoadSignExtendExecutor should only handle LOADB/LOADH opcodes"),
             }

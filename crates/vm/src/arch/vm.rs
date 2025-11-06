@@ -252,7 +252,7 @@ where
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         println!("[eyeball check] aot instance called yay");
-        Self::aot_instance(&self, exe)
+        Self::aot_instance(self, exe)
     }
 }
 #[cfg(feature = "aot")]
@@ -309,7 +309,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<F, MeteredCtx>, StaticProgramError> {
-        Self::metered_aot_instance(&self, exe, executor_idx_to_air_idx)
+        Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
     }
 
     // Crates an AOT instance for metered execution of the given `exe`.
@@ -498,7 +498,7 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
         println!("already calling the aot one yay");
-        Self::get_aot_instance(&self, exe)
+        Self::get_aot_instance(self, exe)
     }
 
     #[cfg(feature = "aot")]

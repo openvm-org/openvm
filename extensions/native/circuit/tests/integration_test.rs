@@ -798,7 +798,7 @@ fn test_vm_pure_execution_non_continuation_aot() {
 
     let exe = VmExe::new(Program::from_instructions(&instructions));
     let executor = VmExecutor::new(test_native_config()).unwrap();
-    let mut aot_instance = executor.aot_instance(&exe).unwrap();
+    let aot_instance = executor.aot_instance(&exe).unwrap();
     let aot_vm_state = aot_instance
         .execute(vec![], None)
         .expect("Failed to execute");
