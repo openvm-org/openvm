@@ -68,3 +68,29 @@ mod aot {
         format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
     }
 }
+
+// make a string that syncs XMM to GPR, and GPR to XMM, using the override map
+pub(crate) fn SYNC_XMM_TO_GPR() -> String {
+    let mut asm_str = String::new();
+    for i in 0..32{
+        let xmm_reg = i / 2;
+        let lane = i % 2;
+        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[i] {
+            asm_str += &format!("   pextrd {}, xmm{}, {}\n", override_reg, xmm_reg, lane);
+        }
+    }
+    asm_str
+}
+
+// make a string that syncs GPR to XMM, using the override map
+pub(crate) fn SYNC_GPR_TO_XMM() -> String {
+    let mut asm_str = String::new();
+    for i in 0..32{
+        let xmm_reg = i / 2;
+        let lane = i % 2;
+        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[i] {
+            asm_str += &format!("   pinsrd xmm{}, {}, {}\n", xmm_reg, override_reg, lane);
+        }
+    }
+    asm_str
+}

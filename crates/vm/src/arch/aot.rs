@@ -135,6 +135,10 @@ where
         asm_str += "    push rax\n";
         asm_str += "    push rcx\n";
         asm_str += "    push rdx\n";
+        asm_str += "    push r8\n";
+        asm_str += "    push r9\n";
+        asm_str += "    push r10\n";
+        asm_str += "    push r11\n";
         asm_str += "    push rsi\n";
         asm_str += "    push rdi\n";
         // asm_str += &Self::push_xmm_regs();
@@ -146,6 +150,10 @@ where
         let mut asm_str = String::new();
         asm_str += "    pop rdi\n";
         asm_str += "    pop rsi\n";
+        asm_str += "    pop r11\n";
+        asm_str += "    pop r10\n";
+        asm_str += "    pop r9\n";
+        asm_str += "    pop r8\n";
         asm_str += "    pop rdx\n";
         asm_str += "    pop rcx\n";
         asm_str += "    pop rax\n";
@@ -191,15 +199,6 @@ where
 
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
-        for i in 0..32{
-            let xmm_reg = i / 2;
-            let lane = i % 2;
-            if RV32_OVERRIDE_GPRS[i].is_some(){
-                let override_reg = RV32_OVERRIDE_GPRS[i].unwrap();
-                asm_str += &format!("   pextrd {}, xmm{}, {}\n", override_reg, xmm_reg, lane)
-            }
-        }
-
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
@@ -291,6 +290,7 @@ where
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::initialize_xmm_regs();
+        asm_str+= &Self::xmm_to_rv32_regs(); // not synced in memory???
 
         asm_str += "    lea rdx, [rip + map_pc_base]\n";
         asm_str += "    movsxd rcx, [rdx + r13]\n";
@@ -345,8 +345,8 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
-            asm_str+= &Self::rv32_regs_to_xmm();
             if executor.is_aot_supported(&instruction) {
+                // issue is other rv32 regs to XMM??
                 let segment =
                     executor
                         .generate_x86_asm(&instruction, pc)
@@ -364,6 +364,10 @@ where
                             AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                         })?;
                 asm_str += &segment;
+                // so then rv32 wouldnt be synced in memory, but xmm would be synced in memory
+                // so then on the subsequent read, data would get corrupted!
+
+                // wait, is this even true? 
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
@@ -375,7 +379,6 @@ where
                     pc,
                 );
             }
-            asm_str+= &Self::xmm_to_rv32_regs();
         }
 
         // asm_run_end part
