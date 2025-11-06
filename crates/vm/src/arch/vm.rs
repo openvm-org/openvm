@@ -23,19 +23,22 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{Com, StarkGenericConfig, Val},
-    engine::StarkEngine,
-    keygen::types::{MultiStarkProvingKey, MultiStarkVerifyingKey},
     p3_field::{FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField},
     p3_util::{log2_ceil_usize, log2_strict_usize},
     proof::Proof,
-    prover::{
-        hal::{DeviceDataTransporter, MatrixDimensions, TraceCommitter},
-        types::{CommittedTraceData, DeviceMultiStarkProvingKey, ProvingContext},
-    },
+    prover::MatrixDimensions,
     verifier::VerificationError,
 };
 use p3_baby_bear::BabyBear;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    },
+    prover::DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+    StarkEngineV2 as StarkEngine,
+};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
