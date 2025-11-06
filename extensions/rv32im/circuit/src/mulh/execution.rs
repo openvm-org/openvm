@@ -36,7 +36,7 @@ const REG_A_W: &str = "eax";
 #[cfg(feature = "aot")]
 const REG_B_W: &str = "ecx";
 #[cfg(feature = "aot")]
-const REG_TMP_W: &str = "edx";
+const REG_TMP_W: &str = "esi";
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
