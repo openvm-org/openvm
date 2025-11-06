@@ -13,7 +13,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    prover::{cpu::CpuDevice, hal::MatrixDimensions},
+    prover::hal::MatrixDimensions,
     AirRef,
 };
 use rustc_hash::FxHashMap;
@@ -24,7 +24,8 @@ use stark_backend_v2::{
     },
     prover::{
         AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
-        CpuBackendV2 as CpuBackend, DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
         ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
     },
     AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
@@ -528,22 +529,21 @@ where
 #[derive(Clone)]
 pub struct SystemCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for SystemCpuBuilder
+impl<E> VmBuilder<E> for SystemCpuBuilder
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice<SC>>,
-    Val<SC>: PrimeField32,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    Val<E::SC>: PrimeField32,
 {
     type VmConfig = SystemConfig;
-    type RecordArena = MatrixRecordArena<Val<SC>>;
-    type SystemChipInventory = SystemChipInventory<SC>;
+    type RecordArena = MatrixRecordArena<Val<E::SC>>;
+    type SystemChipInventory = SystemChipInventory<E::SC>;
 
     fn create_chip_complex(
         &self,
         config: &SystemConfig,
-        airs: AirInventory<SC>,
+        airs: AirInventory<E::SC>,
     ) -> Result<
-        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend, SystemChipInventory<SC>>,
+        VmChipComplex<E::SC, MatrixRecordArena<Val<E::SC>>, CpuBackend, SystemChipInventory<E::SC>>,
         ChipInventoryError,
     > {
         let range_bus = airs.range_checker().bus;
@@ -574,11 +574,11 @@ where
             // ATTENTION: The threshold 7 here must match the one in `new_poseidon2_periphery_air`
             let direct_bus = if config.max_constraint_degree >= 7 {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 0>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 0>>()?
                     .bus
             } else {
                 inventory
-                    .next_air::<Poseidon2PeripheryAir<Val<SC>, 1>>()?
+                    .next_air::<Poseidon2PeripheryAir<Val<E::SC>, 1>>()?
                     .bus
             };
             let chip = Arc::new(Poseidon2PeripheryChip::new(
