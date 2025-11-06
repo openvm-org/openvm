@@ -728,12 +728,17 @@ where
         program: &Program<Val<E::SC>>,
     ) -> CommittedTraceData<E::PB> {
         let trace = ColMajorMatrix::from_row_major(&generate_cached_trace(program));
+        let height = trace.height();
         let d_trace = self
             .engine
             .device()
             .transport_matrix_to_device(&Arc::new(trace));
-        let (commit, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
-        (commit, Arc::new(pcs))
+        let (commitment, pcs) = self.engine.device().commit(std::slice::from_ref(&&d_trace));
+        CommittedTraceData {
+            commitment,
+            data: Arc::new(pcs),
+            height,
+        }
     }
 
     /// Convenience method to transport a host committed Exe to device. This can be used if you have
@@ -745,12 +750,15 @@ where
         &self,
         committed_exe: &VmCommittedExe<E::SC>,
     ) -> CommittedTraceData<E::PB> {
-        let commitment = committed_exe.get_program_commit();
-        let trace = &committed_exe.trace;
-        let prover_data = &committed_exe.prover_data;
-        self.engine
-            .device()
-            .transport_committed_trace_to_device(commitment, trace, prover_data)
+        let data = &committed_exe.prover_data;
+        let height = data.mat_view(0).height();
+        let d_data = self.engine.device().transport_pcs_data_to_device(data);
+        let commitment = data.commit();
+        CommittedTraceData {
+            commitment,
+            data: Arc::new(d_data),
+            height,
+        }
     }
 
     /// Loads cached program trace into the VM.
@@ -786,14 +794,14 @@ where
             .per_air
             .iter()
             .map(|pk| {
-                let constant_trace_height =
-                    pk.preprocessed_data.as_ref().map(|pd| pd.trace.height());
+                let constant_trace_height = pk.preprocessed_data.as_ref().map(|cd| cd.height);
                 let air_names = pk.air_name.clone();
-                let width = pk
-                    .vk
-                    .params
-                    .width
-                    .total_width(<<E::SC as StarkGenericConfig>::Challenge>::D);
+                // TODO[jpw]: revisit v2 width calculation
+                let width = pk.vk.params.width.total_width(
+                    <<E::SC as StarkGenericConfig>::Challenge as FieldExtensionAlgebra<
+                        Val<E::SC>,
+                    >>::D,
+                );
                 let num_interactions = pk.vk.symbolic_constraints.interactions.len();
                 (constant_trace_height, air_names, width, num_interactions)
             })
@@ -899,7 +907,7 @@ where
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[getset(get = "pub")]
-    program_commitment: Com<E::SC>,
+    program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
@@ -1305,6 +1313,7 @@ pub fn debug_proving_ctx<E, VB>(
 {
     use itertools::multiunzip;
     use openvm_stark_backend::prover::types::AirProofRawInput;
+    use stark_backend_v2::prover::StridedColMajorMatrixView;
 
     let device = vm.engine.device();
     let air_inv = vm.config().create_airs().unwrap();
@@ -1315,16 +1324,18 @@ pub fn debug_proving_ctx<E, VB>(
             let cached_mains = air_ctx
                 .cached_mains
                 .iter()
-                .map(|pre| device.transport_matrix_from_device_to_host(&pre.trace))
+                .map(|cd| {
+                    let data = device.transport_pcs_data_from_device_to_host(&cd.data);
+                    Arc::new(data.mat_view(0).to_row_major_matrix())
+                })
                 .collect_vec();
-            let common_main = air_ctx
-                .common_main
-                .as_ref()
-                .map(|m| device.transport_matrix_from_device_to_host(m));
+            let matrix = device.transport_matrix_from_device_to_host(&air_ctx.common_main);
+            let common_main =
+                StridedColMajorMatrixView::from(matrix.as_view()).to_row_major_matrix();
             let public_values = air_ctx.public_values.clone();
             let raw = AirProofRawInput {
                 cached_mains,
-                common_main,
+                common_main: Some(Arc::new(common_main)),
                 public_values,
             };
             (
@@ -1333,7 +1344,9 @@ pub fn debug_proving_ctx<E, VB>(
                 raw,
             )
         }));
-    vm.engine.debug(&airs, &pks, &proof_inputs);
+
+    // TODO
+    // vm.engine.debug(&airs, &pks, &proof_inputs);
 }
 
 #[cfg(feature = "metrics")]

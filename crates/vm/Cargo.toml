@@ -55,6 +55,7 @@ libc.workspace = true
 test-log.workspace = true
 test-case.workspace = true
 
+stark-backend-v2 = { workspace = true, features = ["test-utils"] }
 openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk.workspace = true
 openvm-native-compiler.workspace = true
@@ -79,7 +80,7 @@ perf-metrics = ["metrics"]
 basic-memory = []
 # turns on stark-backend debugger in all proofs
 stark-debug = []
-test-utils = ["dep:openvm-stark-sdk"]
+test-utils = ["dep:openvm-stark-sdk", "stark-backend-v2/test-utils"]
 # Tail call optimizations. This requires nightly for the `become` keyword (https://github.com/rust-lang/rust/pull/144232).
 # However tail call elimination is still an incomplete feature in Rust, so the `tco` feature remains experimental until then.
 tco = ["openvm-circuit-derive/tco"]
