@@ -161,8 +161,6 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &FieldExtensionPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let y: [F; EXT_DEG] = exec_state.vm_read::<F, EXT_DEG>(AS::Native as u32, pre_compute.b);
@@ -178,35 +176,29 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE
 
     exec_state.vm_write(AS::Native as u32, pre_compute.a, &x);
 
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExtensionPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OPCODE>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, OPCODE>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const OPCODE: u8>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExtensionPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OPCODE>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, OPCODE>(&pre_compute.data, exec_state);
 }

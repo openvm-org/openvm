@@ -103,21 +103,12 @@ pub enum AotError {
     Other(String),
 }
 
-/// Function pointer for interpreter execution with function signature `(pre_compute, instret, pc,
+/// Function pointer for interpreter execution with function signature `(pre_compute,
 /// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_end`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
-pub type ExecuteFunc<F, CTX> = unsafe fn(
-    pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    arg: u64,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-);
+pub type ExecuteFunc<F, CTX> =
+    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -125,18 +116,9 @@ pub type ExecuteFunc<F, CTX> = unsafe fn(
 /// - `pre_compute_buf` is the starting pointer of the pre-computed buffer.
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
-/// - `pc`, `instret`, `instret_end` are passed as separate arguments for efficiency
-///
-/// `arg` is a runtime constant that we want to keep in register:
-/// - For pure execution it is `instret_end`
-/// - For metered cost execution it is the `max_execution_cost`
-/// - For metered execution it is `segment_check_insns`
 #[cfg(feature = "tco")]
 pub type Handler<F, CTX> = unsafe fn(
     interpreter: &InterpretedInstance<F, CTX>,
-    instret: u64,
-    pc: u32,
-    arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 );
 
@@ -182,7 +164,7 @@ pub trait AotExecutor<F> {
     Function: Sets up parameters for the extern_handler call in the appropriate registers, and then calls extern_handler
 
     Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc, r14 = cur_instret
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc
 
     Postcondition: rax = return value of AOT's extern_handler
     */
@@ -191,7 +173,6 @@ pub trait AotExecutor<F> {
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, rbp\n";
         asm_str += "    mov rdx, r13\n";
-        asm_str += "    mov rcx, r14\n";
         asm_str += "    call extern_handler\n";
         asm_str
     }
@@ -200,13 +181,12 @@ pub trait AotExecutor<F> {
     Function: Fallback to interpreter execution
 
     Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc, r14 = cur_instret
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc
     - push_internal_registers_str: pushes the internal registers onto the stack, as deemed necessary by `AotState`
     - pop_internal_registers_str: pops the internal registers from the stack, as deemed necessary by `AotState`
     - rv32_regs_to_xmm_str: reads the memory from the memory location of the RV32 registers in `GuestMemory` registers, to the appropriate XMM registers, as deemed necessary by `AotState`
 
     Postcondition:
-    - instret (r14) is incremented by 1
     - pc (r13) is set to the return value of the extern_handler
     - XMM x86 registers are synced with the vm_exec_state
     - base_address of the next instruction is loaded into rcx, and x86 PC is set to the label of the next RV32 instruction, and then jumps to the next instruction
@@ -222,7 +202,6 @@ pub trait AotExecutor<F> {
 
         asm_str += push_internal_registers_str;
         asm_str += &self.call_extern_handler();
-        asm_str += "    add r14, 1\n"; // increment the instret
         asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
         asm_str += "    AND rax, 1\n"; // check if the return value is 1
         asm_str += "    cmp rax, 1\n"; // compare the return value with 1
@@ -240,14 +219,13 @@ pub trait AotExecutor<F> {
     }
 
     /*
-    Function: Generate x86 assembly for the given RV32 instruction, update the Rv32 PC (r13) and instret (r14), and transfer control to the next RV32 instruction
+    Function: Generate x86 assembly for the given RV32 instruction, update the Rv32 PC (r13), and transfer control to the next RV32 instruction
 
     Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc, r14 = cur_instret
+    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr, r13 = cur_pc
     - instruction: the instruction to be executed
 
     Postcondition:
-    - instret (r14) should be incremented by 1, after executing the corresponding RV32 instruction
     - pc (r13) should be set to the correct value, after executing the corresponding RV32 instruction
     - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
     */

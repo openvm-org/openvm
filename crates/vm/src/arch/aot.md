@@ -50,7 +50,7 @@ The next important thing to know is the `asm_bridge` and `asm_bridge_metered` cr
 
 In the `lib.rs` files contain the rust functions that would call the rust implementations of these functions. Note that `asm_bridge` and `asm_bridge_metered` is a workspace member of the `openvm` crate which allows us to just import the circuit functions and struct and dereference the `vm_exec_state` and `pre_compute_insns` we stored. 
 
-There are also `set_instret_and_pc` which will be called once at the end of the execution to sync the `VmExecState`'s pc and instret from the x86 register. And also there is `should_suspend` which is called in every instruction and returns `1` if we should suspend and `0` otherwise which is later checked by the assembly.
+There are also `set_pc` which will be called once at the end of the execution to sync the `VmExecState`'s pc from the x86 register. And also there is `should_suspend` which is called in every instruction and returns `1` if we should suspend and `0` otherwise which is later checked by the assembly.
 
 Currently, the AOT feature is tested by executing on both interpreter and AOT in `air_test_impl` of `stark_utils.py` and then asserting that the returned `instret`, `pc` `segments` and the register address space are equal.
 

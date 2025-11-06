@@ -172,8 +172,6 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &PublicValuesPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
@@ -201,32 +199,26 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
             panic!("Custom public value {} already set", idx);
         }
     }
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
     let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: MeteredExecutionCtxTrait,
@@ -235,5 +227,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(&pre_compute.data, exec_state);
 }

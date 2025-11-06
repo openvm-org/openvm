@@ -192,10 +192,9 @@ unsafe fn execute_e12_impl<
     const IS_NE: bool,
 >(
     pre_compute: &NativeBranchEqualPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
+    let mut pc = exec_state.pc();
     let rs1 = if A_IS_IMM {
         transmute_u32_to_field(&pre_compute.a_or_imm)
     } else {
@@ -207,11 +206,11 @@ unsafe fn execute_e12_impl<
         exec_state.vm_read::<F, 1>(NATIVE_AS, pre_compute.b_or_imm)[0]
     };
     if (rs1 == rs2) ^ IS_NE {
-        *pc = (*pc as isize + pre_compute.imm) as u32;
+        pc = (pc as isize + pre_compute.imm) as u32;
     } else {
-        *pc = (*pc).wrapping_add(DEFAULT_PC_STEP);
+        pc = (pc).wrapping_add(DEFAULT_PC_STEP);
     }
-    *instret += 1;
+    exec_state.set_pc(pc);
 }
 
 #[create_handler]
@@ -224,13 +223,10 @@ unsafe fn execute_e1_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &NativeBranchEqualPreCompute = pre_compute.borrow();
-    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -243,14 +239,11 @@ unsafe fn execute_e2_impl<
     const IS_NE: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<NativeBranchEqualPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<_, _, A_IS_IMM, B_IS_IMM, IS_NE>(&pre_compute.data, exec_state);
 }

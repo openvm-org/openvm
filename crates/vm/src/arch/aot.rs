@@ -34,7 +34,6 @@ const REG_AUX: &str = "r11";
 const REG_EXEC_STATE_PTR: &str = "rbx";
 const REG_INSNS_PTR: &str = "rbp";
 const REG_PC: &str = "r13";
-const REG_INSTRET: &str = "r14";
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
@@ -51,15 +50,14 @@ pub struct AotInstance<'a, F, Ctx> {
     pre_compute_buf: AlignedBuf,
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
-    pc_start: u32
+    pc_start: u32,
 }
 
 type AsmRunFn = unsafe extern "C" fn(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
-    from_state_instret: u64,
-    instret_end: u64,
+    instret_left: u64,
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -73,7 +71,8 @@ where
         asm_str += "    push rbx\n";
         asm_str += "    push r12\n";
         asm_str += "    push r13\n";
-        asm_str += "    push r14\n";
+        asm_str += "    push r15\n";
+        // A dummy push to ensure the stack is 16 bytes aligned
         asm_str += "    push r15\n";
 
         asm_str
@@ -81,8 +80,9 @@ where
 
     fn pop_external_registers() -> String {
         let mut asm_str = String::new();
+        // There was a dummy push to ensure the stack is 16 bytes aligned
         asm_str += "    pop r15\n";
-        asm_str += "    pop r14\n";
+        asm_str += "    pop r15\n";
         asm_str += "    pop r13\n";
         asm_str += "    pop r12\n";
         asm_str += "    pop rbx\n";
@@ -268,8 +268,7 @@ where
         asm_str += "    mov rbx, rdi\n";
         asm_str += "    mov rbp, rsi\n";
         asm_str += "    mov r13, rdx\n";
-        asm_str += "    mov r14, rcx\n";
-        asm_str += "    mov r12, r8\n";
+        asm_str += "    mov r12, rcx\n";
 
         asm_str += &Self::push_internal_registers();
         // Store the start of register address space in r15
@@ -317,8 +316,9 @@ where
 
             // Check if we should suspend or not
 
-            asm_str += "    cmp r14, r12\n";
-            asm_str += "    jae asm_run_end\n";
+            asm_str += "    cmp r12, 0\n";
+            asm_str += "    je asm_run_end\n";
+            asm_str += "    dec r12\n";
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
@@ -328,9 +328,7 @@ where
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
                 asm_str += "    mov rdx, r13\n";
-                asm_str += "    mov rcx, r14\n";
                 asm_str += "    call extern_handler\n";
-                asm_str += "    add r14, 1\n"; // increment the instret
                 asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
                 asm_str += "    AND rax, 1\n"; // check if the return value is 1
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
@@ -388,8 +386,7 @@ where
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, rbp\n";
         asm_str += "    mov rdx, r13\n";
-        asm_str += "    mov rcx, r14\n";
-        asm_str += "    call set_instret_and_pc\n";
+        asm_str += "    call set_pc\n";
         asm_str += "    xor rax, rax\n";
         asm_str += &Self::pop_external_registers();
         asm_str += "    ret\n";
@@ -594,10 +591,9 @@ where
         from_state: VmState<F, GuestMemory>,
         num_insns: Option<u64>,
     ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
-        let from_state_instret = from_state.instret();
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
-        let instret_end = ctx.instret_end;
+        let instret_left = ctx.instret_left;
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
@@ -616,8 +612,7 @@ where
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
-                from_state_instret,
-                instret_end,
+                instret_left,
             );
         }
 
@@ -822,11 +817,26 @@ where
         from_state: VmState<F, GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let from_state_instret = from_state.instret();
-        let from_state_pc = from_state.pc();
+        let vm_exec_state = VmExecState::new(from_state, ctx);
+        let vm_exec_state = self.execute_metered_until_suspend(vm_exec_state)?;
+        // handle execution error
+        match vm_exec_state.exit_code {
+            Ok(_) => Ok((
+                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.vm_state,
+            )),
+            Err(e) => Err(e),
+        }
+    }
 
+    // TODO: implement execute_metered_until_suspend for AOT if needed
+    pub fn execute_metered_until_suspend(
+        &self,
+        vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        let from_state_pc = vm_exec_state.vm_state.pc();
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
-            Box::new(VmExecState::new(from_state, ctx));
+            Box::new(vm_exec_state);
 
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
@@ -842,21 +852,10 @@ where
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
-                from_state_instret,
                 0, /* TODO: this is a placeholder because in the pure case asm_run needs to take
                     * in 5 args. Fix later */
             );
         }
-
-        // handle execution error
-        match vm_exec_state.exit_code {
-            Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
-                vm_exec_state.vm_state,
-            )),
-            Err(e) => Err(e),
-        }
+        Ok(*vm_exec_state)
     }
-
-    // TODO: implement execute_metered_until_suspend for AOT if needed
 }

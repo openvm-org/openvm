@@ -85,7 +85,7 @@ where
 impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
 
 pub(super) struct PhantomStateMut<'a, F> {
-    pub(super) pc: &'a mut u32,
+    pub(super) pc: u32,
     pub(super) memory: &'a mut GuestMemory,
     pub(super) streams: &'a mut Streams<F>,
     pub(super) rng: &'a mut StdRng,
@@ -170,7 +170,7 @@ fn execute_impl<F>(
     if let Some(discr) = SysPhantom::from_repr(discriminant.0) {
         if discr == SysPhantom::DebugPanic {
             return Err(ExecutionError::Fail {
-                pc: *state.pc,
+                pc: state.pc,
                 msg: "DebugPanic",
             });
         }
@@ -186,7 +186,7 @@ fn execute_impl<F>(
             (c >> 16) as u16,
         )
         .map_err(|e| ExecutionError::Phantom {
-            pc: *state.pc,
+            pc: state.pc,
             discriminant,
             inner: e,
         })?;
@@ -197,11 +197,10 @@ fn execute_impl<F>(
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &PhantomPreCompute<F>,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let sub_executor = &*pre_compute.sub_executor;
+    let pc = exec_state.pc();
     execute_impl(
         PhantomStateMut {
             pc,
@@ -212,8 +211,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
         &pre_compute.operands,
         sub_executor,
     )?;
-    *pc += DEFAULT_PC_STEP;
-    *instret += 1;
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
 }
@@ -222,27 +220,21 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
-    execute_e12_impl(pre_compute, instret, pc, exec_state)
+    execute_e12_impl(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, instret, pc, exec_state)
+    execute_e12_impl(&pre_compute.data, exec_state)
 }

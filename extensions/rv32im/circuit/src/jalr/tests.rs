@@ -388,13 +388,12 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
         .execute(vec![], None)
         .expect("interpreter execution must succeed");
 
-    let mut aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
     let aot_state = aot_instance
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
     /// TODO: add this code to AOT utils file for testing purposes to check equivalence of VMStates
-    assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
     use openvm_circuit::{
         arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,
@@ -430,8 +429,6 @@ fn test_jalr_aot_jump_forward() {
 
     let (interp_state, aot_state) = run_jalr_program(instructions);
 
-    assert_eq!(interp_state.instret(), 3);
-    assert_eq!(aot_state.instret(), 3);
     assert_eq!(interp_state.pc(), 8);
     assert_eq!(aot_state.pc(), 8);
 
@@ -459,8 +456,6 @@ fn test_jalr_aot_writes_return_address() {
 
     let (interp_state, aot_state) = run_jalr_program(instructions);
 
-    assert_eq!(interp_state.instret(), 3);
-    assert_eq!(aot_state.instret(), 3);
     assert_eq!(interp_state.pc(), 8);
     assert_eq!(aot_state.pc(), 8);
 

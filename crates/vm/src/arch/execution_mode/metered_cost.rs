@@ -71,6 +71,8 @@ pub struct MeteredCostCtx {
     pub max_execution_cost: u64,
     // Cost is number of trace cells (height * width)
     pub cost: u64,
+    /// To measure instructions/s
+    pub instret: u64,
 }
 
 impl MeteredCostCtx {
@@ -81,6 +83,7 @@ impl MeteredCostCtx {
             access_adapter_ctx,
             max_execution_cost: DEFAULT_MAX_COST,
             cost: 0,
+            instret: 0,
         }
     }
 
@@ -124,13 +127,14 @@ impl ExecutionCtxTrait for MeteredCostCtx {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(
-        _instret: u64,
-        _pc: u32,
-        max_execution_cost: u64,
-        exec_state: &mut VmExecState<F, GuestMemory, Self>,
-    ) -> bool {
-        exec_state.ctx.cost > max_execution_cost
+    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+        if exec_state.ctx.cost > exec_state.ctx.max_execution_cost {
+            true
+        } else {
+            exec_state.ctx.instret += 1;
+            false
+        }
+        
     }
 }
 

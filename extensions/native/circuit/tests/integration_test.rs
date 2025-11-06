@@ -809,7 +809,6 @@ fn test_vm_pure_execution_non_continuation_aot() {
         .execute(vec![], None)
         .expect("Failed to execute");
 
-    assert_eq!(aot_vm_state.instret(), interp_vm_state.instret());
     assert_eq!(aot_vm_state.pc(), interp_vm_state.pc());
 }
 
@@ -1013,12 +1012,12 @@ fn test_vm_execute_metered_cost_native_chips() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (cost, vm_state) = instance
+    let (ctx, _vm_state) = instance
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state.instret(), instructions.len() as u64);
-    assert!(cost > 0);
+    assert_eq!(ctx.instret, instructions.len() as u64);
+    assert!(ctx.cost > 0);
 }
 
 #[test]
@@ -1050,11 +1049,11 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx)
         .unwrap();
     let ctx = vm.build_metered_cost_ctx();
-    let (cost1, vm_state1) = instance1
+    let (ctx1, _vm_state1) = instance1
         .execute_metered_cost(vec![], ctx)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state1.instret(), instructions.len() as u64);
+    assert_eq!(ctx1.instret, instructions.len() as u64);
 
     let executor_idx_to_air_idx2 = vm.executor_idx_to_air_idx();
     let instance2 = vm
@@ -1062,10 +1061,10 @@ fn test_vm_execute_metered_cost_halt() {
         .metered_cost_instance(&exe, &executor_idx_to_air_idx2)
         .unwrap();
     let ctx2 = vm.build_metered_cost_ctx().with_max_execution_cost(0);
-    let (cost2, vm_state2) = instance2
+    let (ctx2, _vm_state2) = instance2
         .execute_metered_cost(vec![], ctx2)
         .expect("Failed to execute");
 
-    assert_eq!(vm_state2.instret(), 1);
-    assert!(cost2 < cost1);
+    assert_eq!(ctx2.instret, 1);
+    assert!(ctx2.cost < ctx1.cost);
 }
