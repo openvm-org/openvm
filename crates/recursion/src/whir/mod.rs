@@ -32,7 +32,7 @@ use crate::{
             VerifyQueryBus, WhirAlphaBus, WhirEqAlphaUBus, WhirFinalPolyBus, WhirFoldingBus,
             WhirGammaBus, WhirQueryBus, WhirSumcheckBus,
         },
-        final_poly_mle_eval::FinalPoleMleEvalAir,
+        final_poly_mle_eval::FinalPolyMleEvalAir,
         final_poly_query_eval::FinalPolyQueryEvalAir,
         folding::WhirFoldingAir,
         initial_opened_values::{InitialOpenedValueRecord, InitialOpenedValuesAir},
@@ -443,7 +443,7 @@ impl AirModule for WhirModule {
             folding_bus: self.folding_bus,
             k: params.k_whir,
         };
-        let final_poly_mle_eval_air = FinalPoleMleEvalAir {
+        let final_poly_mle_eval_air = FinalPolyMleEvalAir {
             whir_opening_point_bus: self.bus_inventory.whir_opening_point_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
             final_poly_mle_eval_bus: self.final_poly_mle_eval_bus,
@@ -451,7 +451,7 @@ impl AirModule for WhirModule {
             final_poly_bus: self.final_poly_bus,
             folding_bus: self.final_poly_folding_bus,
             num_vars: params.log_final_poly_len,
-            point_idx_start: params.n_stack + params.l_skip - params.log_final_poly_len,
+            num_sumcheck_rounds: params.num_whir_sumcheck_rounds(),
             num_whir_rounds: params.num_whir_rounds(),
             num_whir_queries: params.num_whir_queries,
         };
@@ -503,24 +503,16 @@ impl WhirModule {
 
         for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
             let mu = preflight.stacking.stacking_batching_challenge;
-            let num_commits = proof.whir_proof.initial_round_opened_rows.len();
 
-            let stacking_width: usize = proof
+            let num_total_stacking_cols: usize = proof
                 .stacking_proof
                 .stacking_openings
                 .iter()
                 .map(|opening| opening.len())
                 .sum();
-            let mu_pows = mu.powers().take(stacking_width).collect_vec();
+            let mu_pows = mu.powers().take(num_total_stacking_cols).collect_vec();
 
             for query_idx in 0..num_whir_queries {
-                let commit_widths: Vec<usize> = (0..num_commits)
-                    .map(|c| {
-                        let opened_rows = &proof.whir_proof.initial_round_opened_rows[c][query_idx];
-                        opened_rows.len() >> k_whir
-                    })
-                    .collect();
-
                 let mut codeword_vals = EF::zero_vec(1 << k_whir);
                 for (coset_idx, codeword_val) in codeword_vals.iter_mut().enumerate() {
                     let mut base = 0;
@@ -532,7 +524,7 @@ impl WhirModule {
                     {
                         let opened_rows = &opened_rows_per_query[query_idx];
 
-                        let width = commit_widths[commit_idx];
+                        let width = proof.stacking_proof.stacking_openings[commit_idx].len();
                         let num_chunks = width.div_ceil(CHUNK);
                         initial_opened_values_rows_per_proof[proof_idx] += num_chunks;
 

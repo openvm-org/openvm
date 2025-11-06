@@ -281,7 +281,7 @@ where
         );
 
         builder
-            .when(local.is_first_in_proof)
+            .when(local.is_first_in_query)
             .assert_eq(local.twiddle, AB::Expr::ONE);
         builder
             .when(local.is_same_coset_idx)

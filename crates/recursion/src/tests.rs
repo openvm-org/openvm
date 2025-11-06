@@ -25,6 +25,7 @@ use stark_backend_v2::{
     test_utils::{
         CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11,
         PreprocessedFibFixture, TestFixture, default_test_params_small, test_system_params_small,
+        test_system_params_small_with_poly_len,
     },
 };
 use test_case::{test_case, test_matrix};
@@ -90,7 +91,7 @@ fn debug(
     [2,3],
     [8,5],
     [3],
-    [0,1,3,5]
+    [0,1,3,5,8]
 )]
 fn test_recursion_circuit_single_fib(
     l_skip: usize,
@@ -168,13 +169,24 @@ fn test_preflight_cached_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test_case(2, 8, 3)]
-#[test_case(5, 5, 4)]
-#[test_case(6, 5, 4)]
-fn test_preflight_preprocessed_trace(l_skip: usize, n_stack: usize, k_whir: usize) {
+#[test_matrix(
+    [2,3,5,6],
+    [8,5],
+    [3,4],
+    [5,7,8,11]
+)]
+fn test_preflight_preprocessed_trace(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_height: usize,
+) {
+    if log_trace_height > l_skip + n_stack {
+        return;
+    }
     let params = test_system_params_small(l_skip, n_stack, k_whir);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
-    let height = 1 << 5;
+    let height = 1 << log_trace_height;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
     let fx = PreprocessedFibFixture::new(0, 1, sels);
     let (vk, proof) = fx.keygen_and_prove(&engine);
@@ -206,7 +218,8 @@ fn test_preflight_interactions() {
 // Multi-proof tests
 ///////////////////////////////////////////////////////////////////////////////
 
-#[test_case(3)]
+#[test_case(10 ; "fib log_height maximum (i.e. equals n_stack + l_skip)")]
+#[test_case(3 ; "when fib log_height greater than l_skip")]
 #[test_case(2 ; "when fib log_height equals l_skip")]
 #[test_case(1 ; "when fib log_height less than l_skip")]
 #[test_case(0 ; "when fib log_height is zero")]
@@ -231,7 +244,8 @@ fn test_recursion_circuit_two_fib_proofs(log_trace_degree: usize) {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test_case(3)]
+#[test_case(10 ; "fib log_height maximum (i.e. equals n_stack + l_skip)")]
+#[test_case(3 ; "when fib log_height greater than l_skip")]
 #[test_case(2 ; "when fib log_height equals l_skip")]
 #[test_case(1 ; "when fib log_height less than l_skip")]
 #[test_case(0 ; "when fib log_height is zero")]
@@ -262,14 +276,27 @@ fn test_recursion_circuit_multiple_fib_proofs(log_trace_degree: usize) {
     debug(&circuit.airs(), &pk.per_air, &ctxs);
 }
 
-#[test_case(2, 8, 3)]
-#[test_case(5, 5, 4)]
-#[test_case(6, 5, 4)]
-fn test_recursion_circuit_two_preprocessed(l_skip: usize, n_stack: usize, k_whir: usize) {
-    let params = test_system_params_small(l_skip, n_stack, k_whir);
+#[test_matrix(
+    [2,5,6],
+    [8,5],
+    [3,4],
+    [4,8,11]
+)]
+fn test_recursion_circuit_two_preprocessed(
+    l_skip: usize,
+    n_stack: usize,
+    k_whir: usize,
+    log_trace_height: usize,
+) {
+    let log_final_poly_len = (n_stack + l_skip) % k_whir + k_whir;
+    if log_trace_height > l_skip + n_stack || log_final_poly_len >= l_skip + n_stack {
+        return;
+    }
+    let params =
+        test_system_params_small_with_poly_len(l_skip, n_stack, k_whir, log_final_poly_len);
     let engine = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(params);
 
-    let height = 1 << 4;
+    let height = 1 << log_trace_height;
     let sels = (0..height).map(|i| i % 2 == 0).collect_vec();
 
     let preprocessed1 = PreprocessedFibFixture::new(0, 1, sels.clone());
