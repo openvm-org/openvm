@@ -600,6 +600,14 @@ fn mulh_unsigned(rs1: u32, rs2: u32) -> u32 {
 fn test_aot_mulh_variants_basic() {
     let instructions = vec![
         add_immediate(4, 1234),
+        add_immediate(8, 200),
+        mulh_register(MulHOpcode::MULH, 12, 4, 8),
+        add_immediate(16, 800),
+        add_immediate(20, 12345),
+        mulh_register(MulHOpcode::MULHSU, 24, 16, 20),
+        add_immediate(28, 1200),
+        add_immediate(32, 200),
+        mulh_register(MulHOpcode::MULHU, 36, 28, 32),
         Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
 
