@@ -66,7 +66,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
         #where_clause
         {
             use ::openvm_circuit::arch::ExecutionError;
-            let pc =exec_state.vm_state.pc();
+            let pc = exec_state.vm_state.pc();
             let pre_compute = interpreter.get_pre_compute(pc);
             #execute_stmt
 
@@ -74,6 +74,7 @@ pub fn tco_impl(item: TokenStream) -> TokenStream {
                 return;
             }
 
+            let pc = exec_state.vm_state.pc();
             let next_handler = interpreter.get_handler(pc);
             if ::core::intrinsics::unlikely(next_handler.is_none()) {
                 exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
