@@ -22,18 +22,24 @@ use openvm_circuit_primitives::var_range::{
 use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     interaction::BusIndex,
-    keygen::types::MultiStarkProvingKey,
     prover::{
         cpu::CpuBackend,
         hal::ProverBackend,
         types::{AirProvingContext, ProvingContext},
     },
     rap::AnyRap,
-    AirRef, AnyChip, Chip,
+    AirRef,
 };
 use rustc_hash::FxHashMap;
+use stark_backend_v2::{
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    },
+    prover::DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
+};
 use tracing::info_span;
 
 use super::{GenerationError, PhantomSubExecutor, SystemConfig};

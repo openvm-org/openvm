@@ -37,7 +37,7 @@ use stark_backend_v2::{
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
     },
     prover::DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-    StarkEngineV2 as StarkEngine,
+    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
 };
 use thiserror::Error;
 use tracing::{info_span, instrument};
