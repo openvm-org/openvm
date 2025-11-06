@@ -23,11 +23,6 @@ use openvm_instructions::{PhantomDiscriminant, VmOpcode};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::BusIndex,
-    prover::{
-        cpu::CpuBackend,
-        hal::ProverBackend,
-        types::{AirProvingContext, ProvingContext},
-    },
     rap::AnyRap,
     AirRef,
 };
@@ -37,7 +32,11 @@ use stark_backend_v2::{
         MultiStarkProvingKeyV2 as MultiStarkProvingKey,
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
     },
-    prover::DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+    },
     AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
 };
 use tracing::info_span;
@@ -470,15 +469,6 @@ impl<SC: StarkGenericConfig> AirInventory<SC> {
         self.config.num_airs() + self.ext_airs.len()
     }
 
-    /// Standalone function to generate proving key and verifying key for this circuit.
-    pub fn keygen<E: StarkEngine<SC = SC>>(self, engine: &E) -> MultiStarkProvingKey<SC> {
-        let mut builder = engine.keygen_builder();
-        for air in self.into_airs() {
-            builder.add_air(air);
-        }
-        builder.generate_pk()
-    }
-
     /// Returns the maximum number of bits used to represent addresses in memory
     pub fn pointer_max_bits(&self) -> usize {
         self.config.memory_config.pointer_max_bits
@@ -603,7 +593,7 @@ where
 }
 
 // SharedVariableRangeCheckerChip is only used by the CPU backend.
-impl<SC, RA> ChipInventory<SC, RA, CpuBackend<SC>>
+impl<SC, RA> ChipInventory<SC, RA, CpuBackendV2>
 where
     SC: StarkGenericConfig,
 {
