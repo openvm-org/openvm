@@ -196,7 +196,7 @@ impl OpeningClaimsTraceGenerator {
                 cols.commit_idx = F::from_canonical_usize(slice.commit_idx);
                 cols.stacked_col_idx = F::from_canonical_usize(slice.col_idx);
                 cols.row_idx = F::from_canonical_usize(slice.row_idx);
-                cols.is_last_for_claim = F::from_bool(slice.is_last_for_commit);
+                cols.is_last_for_claim = F::from_bool(slice.is_last_for_claim);
 
                 cols.eq_in.copy_from_slice(eq_in.as_base_slice());
                 cols.k_rot_in.copy_from_slice(k_rot_in.as_base_slice());
@@ -210,7 +210,7 @@ impl OpeningClaimsTraceGenerator {
                     lambda_pow_eq_bits * (eq_in + preflight.stacking.lambda * k_rot_in);
                 cols.stacking_claim_coefficient
                     .copy_from_slice(stacking_claim_coefficient.as_base_slice());
-                if slice.is_last_for_commit {
+                if slice.is_last_for_claim {
                     stacking_claim_coefficient = EF::ZERO;
                 }
 
@@ -456,7 +456,7 @@ where
             .assert_bool(next.commit_idx - local.commit_idx);
         builder
             .when(next.commit_idx - local.commit_idx)
-            .assert_zero(local.stacked_col_idx);
+            .assert_zero(next.stacked_col_idx);
 
         builder.assert_bool(local.is_last_for_claim);
         builder
@@ -464,6 +464,9 @@ where
             .assert_one(local.is_last_for_claim);
         builder
             .when(next.stacked_col_idx - local.stacked_col_idx)
+            .assert_one(local.is_last_for_claim);
+        builder
+            .when(and(local.is_valid, local.is_last))
             .assert_one(local.is_last_for_claim);
 
         builder
@@ -480,7 +483,7 @@ where
             ))
             .assert_eq(
                 local.row_idx + local.lifted_height,
-                AB::F::from_canonical_usize(1 << self.n_stack),
+                AB::F::from_canonical_usize(1 << (self.n_stack + self.l_skip)),
             );
 
         assert_array_eq(
