@@ -276,7 +276,7 @@ pub(crate) fn generate_eq_ns_trace(
                 res[i].r_prod = res[i + 1].r_prod * res[i].r;
             }
             for (_, vdata) in preflight.proof_shape.sorted_trace_vdata.iter() {
-                res[vdata.hypercube_dim].num_traces += 1;
+                res[vdata.log_height.saturating_sub(l_skip)].num_traces += 1;
             }
             res
         })

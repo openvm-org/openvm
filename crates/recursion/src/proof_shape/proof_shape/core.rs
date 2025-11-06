@@ -8,7 +8,7 @@ use itertools::fold;
 use openvm_circuit_primitives::{
     SubAir,
     encoder::Encoder,
-    utils::{and, not},
+    utils::{and, not, select},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -22,9 +22,10 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirHeightsBus, AirHeightsBusMessage, AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus,
-        AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage, GkrModuleBus,
-        GkrModuleMessage, TranscriptBus, TranscriptBusMessage,
+        AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
+        CommitmentsBus, CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
+        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
+        TranscriptBusMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -52,7 +53,12 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
 
     pub idx: F,
     pub sorted_idx: F,
+    /// Represents log2 trace height when `is_present`.
+    ///
+    /// Has a special use on summary row (when `is_last`).
     pub log_height: F,
+    /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.
+    pub n_sign_bit: F,
 
     // Lookup multiplicities for AirPartShapeBus. Note that part_cached_mult provides the
     // multiplicities for cached traces.
@@ -65,21 +71,25 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     // Columns that may be read from the transcript. Note that cached_commits is also read
     // from the transcript.
     pub is_present: F,
+    /// Will be constrained to be `2^log_height` when `is_present`.
+    ///
+    /// Has a special use on summary row (when `is_last`).
     pub height: F,
 
     // The total number of interactions over all traces needs to fit in a single field element,
     // so we assume that it only requires INTERACTIONS_LIMBS (4) limbs to store.
     //
-    // To constrain the correctness of n_logup, we ensure that total_interactions_limbs has
-    // CELLS_LIMBS * LIMB_BITS - n_logup leading zeroes. We do this by a) recording the most
-    // significant non-zero limb i and b) making sure total_interaction_limbs[i] * 2^{the
-    // number of remaining leading zeroes} is within [0, 256).
+    // To constrain the correctness of n_logup, we ensure that `total_interactions_limbs` has
+    // _exactly_ `CELLS_LIMBS * LIMB_BITS - (l_skip + n_logup)` leading zeroes. We do this by
+    // a) recording the most significant non-zero limb i and b) making sure
+    // total_interaction_limbs[i] * 2^{the number of remaining leading zeroes} is within [0,
+    // 256).
     //
     // To constrain that the total number of interactions over all traces is less than the
     // max interactions set in the vk, we record the most significant limb at which the max
     // limb decomposition and total_interactions_limbs differ. The difference between those
     // two limbs is then range checked to be within [1, 256).
-    pub height_limbs: [F; NUM_LIMBS],
+    pub lifted_height_limbs: [F; NUM_LIMBS],
     pub num_interactions_limbs: [F; NUM_LIMBS],
     pub total_interactions_limbs: [F; NUM_LIMBS],
 
@@ -126,6 +136,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
         let cols_width = ProofShapeCols::<usize, NUM_LIMBS>::width();
         let total_width =
             self.idx_encoder.width() + cols_width + self.max_cached * (DIGEST_SIZE + 1);
+        let l_skip = child_vk.inner.params.l_skip;
 
         debug_assert_eq!(proofs.len(), preflights.len());
 
@@ -141,8 +152,9 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
                 let chunk = chunks.next().unwrap();
                 let cols: &mut ProofShapeCols<F, NUM_LIMBS> = chunk[..cols_width].borrow_mut();
-                let log_height = vdata.hypercube_dim + child_vk.inner.params.l_skip;
-                let height = 1usize << log_height;
+                let log_height = vdata.log_height;
+                let height = 1 << log_height;
+                let n = log_height as isize - l_skip as isize;
 
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_valid = F::ONE;
@@ -151,6 +163,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.idx = F::from_canonical_usize(*idx);
                 cols.sorted_idx = F::from_canonical_usize(sorted_idx);
                 cols.log_height = F::from_canonical_usize(log_height);
+                cols.n_sign_bit = F::from_bool(n.is_negative());
                 sorted_idx += 1;
 
                 cols.starting_cidx = F::from_canonical_usize(cidx);
@@ -164,11 +177,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.is_present = F::ONE;
                 cols.height = F::from_canonical_usize(height);
 
-                let num_interactions = child_vk.inner.per_air[*idx].num_interactions() * height;
-                let height_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(height);
+                let lifted_height = height.max(1 << l_skip);
+                let num_interactions_per_row = child_vk.inner.per_air[*idx].num_interactions();
+                let num_interactions = num_interactions_per_row * lifted_height;
+                let lifted_height_limbs = decompose_usize::<NUM_LIMBS, LIMB_BITS>(lifted_height);
                 let num_interactions_limbs =
                     decompose_usize::<NUM_LIMBS, LIMB_BITS>(num_interactions);
-                cols.height_limbs = height_limbs.map(F::from_canonical_usize);
+                cols.lifted_height_limbs = lifted_height_limbs.map(F::from_canonical_usize);
                 cols.num_interactions_limbs = num_interactions_limbs.map(F::from_canonical_usize);
                 cols.total_interactions_limbs =
                     decompose_f::<F, NUM_LIMBS, LIMB_BITS>(total_interactions);
@@ -205,36 +220,38 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let next_total_interactions =
                     decompose_usize::<NUM_LIMBS, LIMB_BITS>(total_interactions);
                 for i in 0..NUM_LIMBS {
-                    range_checker.add_count(height_limbs[i]);
+                    range_checker.add_count(lifted_height_limbs[i]);
                     range_checker.add_count(next_total_interactions[i]);
                 }
 
-                let (nonzero_idx, height_limb) = height_limbs
+                let (nonzero_idx, height_limb) = lifted_height_limbs
                     .iter()
                     .copied()
                     .enumerate()
                     .find(|&(_, limb)| limb != 0)
                     .unwrap();
 
-                for limb in num_interactions_limbs
-                    .iter()
-                    .take(NUM_LIMBS - 1)
-                    .skip(nonzero_idx)
-                {
-                    range_checker.add_count((height_limb * limb) >> LIMB_BITS);
-                }
+                let mut carry = 0;
+                let interactions_per_row_limbs =
+                    decompose_usize::<NUM_LIMBS, LIMB_BITS>(num_interactions_per_row);
+                // carry is 0 for i in 0..nonzero_idx
                 range_checker.add_count_mult(0, nonzero_idx as u32);
+                for i in nonzero_idx..NUM_LIMBS - 1 {
+                    carry += height_limb * interactions_per_row_limbs[i - nonzero_idx];
+                    carry = (carry - num_interactions_limbs[i]) >> LIMB_BITS;
+                    range_checker.add_count(carry);
+                }
 
                 if sorted_idx < preflight.proof_shape.sorted_trace_vdata.len() {
-                    pow_checker.add_range(
-                        vdata.hypercube_dim
-                            - preflight.proof_shape.sorted_trace_vdata[sorted_idx]
-                                .1
-                                .hypercube_dim,
-                    );
+                    let diff = vdata.log_height
+                        - preflight.proof_shape.sorted_trace_vdata[sorted_idx]
+                            .1
+                            .log_height;
+                    pow_checker.add_range(diff);
                 } else if sorted_idx < num_airs {
                     pow_checker.add_range(log_height);
                 }
+                pow_checker.add_range(n.unsigned_abs());
                 pow_checker.add_pow(log_height);
             }
 
@@ -299,12 +316,22 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_last = F::ONE;
 
+                let n_logup = preflight.proof_shape.n_logup;
+                debug_assert_eq!(
+                    u32::try_from(total_interactions).unwrap().leading_zeros(),
+                    if total_interactions == 0 {
+                        u32::BITS
+                    } else {
+                        u32::BITS - (l_skip + n_logup) as u32
+                    }
+                );
                 let (nonzero_idx, has_interactions) = (0..NUM_LIMBS)
                     .rev()
                     .find(|&i| total_interactions_f[i] != F::ZERO)
                     .map(|idx| (idx, true))
                     .unwrap_or((0, false));
                 let msb_limb = total_interactions_f[nonzero_idx];
+                tracing::debug!(%l_skip, %n_logup, %total_interactions, %nonzero_idx, %msb_limb);
                 let msb_limb_zero_bits = if has_interactions {
                     let msb_limb_num_bits = u32::BITS - msb_limb.as_canonical_u32().leading_zeros();
                     LIMB_BITS - msb_limb_num_bits as usize
@@ -313,7 +340,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 };
 
                 // non_zero_marker
-                cols.height_limbs = from_fn(|i| {
+                cols.lifted_height_limbs = from_fn(|i| {
                     if i == nonzero_idx && has_interactions {
                         F::ONE
                     } else {
@@ -338,11 +365,10 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-                cols.is_n_max_greater =
-                    F::from_bool(preflight.proof_shape.n_max > preflight.proof_shape.n_logup);
+                cols.is_n_max_greater = F::from_bool(preflight.proof_shape.n_max > n_logup);
 
                 // n_logup
-                cols.starting_cidx = F::from_canonical_usize(preflight.proof_shape.n_logup);
+                cols.starting_cidx = F::from_canonical_usize(n_logup);
 
                 range_checker
                     .add_count(msb_limb.as_canonical_u32() as usize * (1 << msb_limb_zero_bits));
@@ -353,12 +379,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 );
 
                 pow_checker.add_pow(msb_limb_zero_bits);
-                pow_checker.add_range(
-                    preflight
-                        .proof_shape
-                        .n_max
-                        .abs_diff(preflight.proof_shape.n_logup),
-                );
+                pow_checker.add_range(preflight.proof_shape.n_max.abs_diff(n_logup));
 
                 // We store the pre-hash of the child vk in the summary row
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
@@ -400,7 +421,8 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub gkr_module_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
     pub air_part_shape_bus: AirPartShapeBus,
-    pub air_heights_bus: AirHeightsBus,
+    pub hyperdim_bus: HyperdimBus,
+    pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
     pub transcript_bus: TranscriptBus,
 }
@@ -496,15 +518,9 @@ where
         builder
             .when(and(not(local.is_present), local.is_valid))
             .assert_zero(local.height);
-
-        self.pow_bus.lookup_key(
-            builder,
-            PowerCheckerBusMessage {
-                log: local.log_height,
-                exp: local.height,
-            },
-            local.is_present,
-        );
+        builder
+            .when(and(not(local.is_present), local.is_valid))
+            .assert_zero(local.log_height);
 
         // Range check difference using ExponentBus to ensure local.log_height >= next.log_height
         self.range_bus.lookup_key(
@@ -590,7 +606,9 @@ where
             if let Some(preprocessed) = &air_data.preprocessed_data {
                 when_current.assert_eq(
                     local.log_height,
-                    AB::Expr::from_canonical_usize(preprocessed.hypercube_dim + self.l_skip),
+                    AB::Expr::from_canonical_usize(
+                        self.l_skip.wrapping_add_signed(preprocessed.hypercube_dim),
+                    ),
                 );
                 has_preprocessed += is_current_air.clone();
 
@@ -619,8 +637,6 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // TRANSCRIPT OBSERVATIONS
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let hypercube_dim = local.log_height.into() - AB::F::from_canonical_usize(self.l_skip);
-
         self.transcript_bus.receive(
             builder,
             local.proof_idx,
@@ -652,7 +668,7 @@ where
             local.proof_idx,
             TranscriptBusMessage {
                 tidx: tidx.clone(),
-                value: hypercube_dim.clone(),
+                value: local.log_height.into(),
                 is_sample: AB::Expr::ZERO,
             },
             not::<AB::Expr>(has_preprocessed.clone()) * local.is_valid,
@@ -708,7 +724,6 @@ where
         let num_main_parts = fold(cached_present.iter(), AB::Expr::ONE, |acc, is_present| {
             acc + is_present.clone()
         });
-
         self.air_shape_bus.send(
             builder,
             local.proof_idx,
@@ -716,16 +731,6 @@ where
                 sort_idx: local.sorted_idx.into(),
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: local.idx.into(),
-            },
-            local.is_present,
-        );
-        self.air_shape_bus.send(
-            builder,
-            local.proof_idx,
-            AirShapeBusMessage {
-                sort_idx: local.sorted_idx.into(),
-                property_idx: AirShapeProperty::HypercubeDim.to_field(),
-                value: hypercube_dim.clone(),
             },
             local.is_present,
         );
@@ -811,20 +816,67 @@ where
         });
 
         ///////////////////////////////////////////////////////////////////////////////////////////
-        // AIR HEIGHTS LOOKUP
+        // HYPERDIM (SIGNED N) LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
+        let l_skip = AB::F::from_canonical_usize(self.l_skip);
+        let n = local.log_height.into() - l_skip;
+        builder.assert_bool(local.n_sign_bit);
+        let n_abs = select(local.n_sign_bit, -n.clone(), n.clone());
+        // We range check `n_abs` is in `[0, 32)`.
+        // We constrain `n = n_sign_bit ? -n_abs : n_abs` and `n := log_height - l_skip`.
+        // This implies `log_height - l_skip` is in `(-32, 32)` and `n_abs` is its absolute value.
+        // We further use PowerCheckerBus below to range check that `log_height` is in `[0, 32)`.
+        self.range_bus.lookup_key(
+            builder,
+            RangeCheckerBusMessage {
+                value: n_abs.clone(),
+                max_bits: AB::Expr::from_canonical_usize(5),
+            },
+            local.is_present,
+        );
+        self.hyperdim_bus.send(
+            builder,
+            local.proof_idx,
+            HyperdimBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                n_abs: n_abs.clone(),
+                n_sign_bit: local.n_sign_bit.into(),
+            },
+            local.is_present,
+        );
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // LIFTED HEIGHTS LOOKUP
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        let log_lifted_height = not(local.n_sign_bit) * n_abs.clone() + l_skip;
+        // lifted_height = max(2^log_height, 2^l_skip)
+        let lifted_height = select(
+            local.n_sign_bit,
+            AB::F::from_canonical_usize(1 << self.l_skip),
+            local.height,
+        );
+        self.pow_bus.lookup_key(
+            builder,
+            PowerCheckerBusMessage {
+                log: local.log_height.into(),
+                exp: local.height.into(),
+            },
+            local.is_present,
+        );
+
         let total_width = fold(
             cached_widths,
             main_common_width + preprocessed_stacked_width,
             |acc, width| acc + width,
         );
-        self.air_heights_bus.send(
+        self.lifted_heights_bus.send(
             builder,
             local.proof_idx,
-            AirHeightsBusMessage {
-                sort_idx: local.sorted_idx,
-                height: local.height,
-                log_height: local.log_height,
+            LiftedHeightsBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                hypercube_dim: n.clone(),
+                lifted_height: lifted_height.clone(),
+                log_lifted_height,
             },
             local.is_present * total_width,
         );
@@ -905,18 +957,18 @@ where
         // decomposition to be correct above.
         builder.when(local.is_valid).assert_eq(
             fold(
-                local.height_limbs.iter().enumerate(),
+                local.lifted_height_limbs.iter().enumerate(),
                 AB::Expr::ZERO,
                 |acc, (i, limb)| acc + (AB::Expr::from_canonical_u32(1 << (i * LIMB_BITS)) * *limb),
             ),
-            local.height,
+            lifted_height,
         );
 
         for i in 0..NUM_LIMBS {
             self.range_bus.lookup_key(
                 builder,
                 RangeCheckerBusMessage {
-                    value: local.height_limbs[i].into(),
+                    value: local.lifted_height_limbs[i].into(),
                     max_bits: AB::Expr::from_canonical_usize(LIMB_BITS),
                 },
                 local.is_valid,
@@ -927,7 +979,7 @@ where
         let mut carry = vec![AB::Expr::ZERO; NUM_LIMBS * 2];
         let carry_divide = AB::F::from_canonical_u32(1 << LIMB_BITS).inverse();
 
-        for (i, &height_limb) in local.height_limbs.iter().enumerate() {
+        for (i, &height_limb) in local.lifted_height_limbs.iter().enumerate() {
             for (j, interactions_limb) in num_interactions_per_row.iter().enumerate() {
                 carry[i + j] += height_limb * interactions_limb.clone();
             }
@@ -1014,7 +1066,7 @@ where
         // non_zero_marker column array defined below, and the remaining number of leading 0 bits
         // needed within the limb using msb_limb_zero_bits_exp. Column limb_to_range_check is used
         // to store the value of the most significant limb to range check.
-        let non_zero_marker = local.height_limbs;
+        let non_zero_marker = local.lifted_height_limbs;
         let limb_to_range_check = local.height;
         let msb_limb_zero_bits_exp = local.log_height;
         let n_logup = local.starting_cidx;
@@ -1066,7 +1118,7 @@ where
         // n_max is greater than n_logup, and zero otherwise.
         builder
             .when(local.is_first)
-            .assert_eq(local.n_max, hypercube_dim);
+            .assert_eq(local.n_max, not(local.n_sign_bit) * n_abs);
         builder
             .when(local.is_valid)
             .assert_eq(local.n_max, next.n_max);

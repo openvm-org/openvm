@@ -319,7 +319,6 @@ define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum AirShapeProperty {
     AirId,
-    HypercubeDim,
     HasPreprocessed,
     NumMainParts,
     NumInteractions,
@@ -358,17 +357,29 @@ define_typed_per_proof_permutation_bus!(MerkleVerifyBus, MerkleVerifyBusMessage)
 pub struct AirShapeBusMessage<T> {
     pub sort_idx: T,
     /// The property this message encodes.
+    /// See associated enum [AirShapeProperty].
     /// - 0 means `air_id`,
-    /// - 1 means `hypercube_dim`,
-    /// - 2 means `has_preprocessed`,
-    /// - 3 means `num_main_parts`,
-    /// - 4 means `num_interactions`.
+    /// - 1 means `has_preprocessed`,
+    /// - 2 means `num_main_parts`,
+    /// - 3 means `num_interactions`.
     pub property_idx: T,
     /// The value of the corresponding property.
     pub value: T,
 }
 
 define_typed_per_proof_permutation_bus!(AirShapeBus, AirShapeBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct HyperdimBusMessage<T> {
+    pub sort_idx: T,
+    /// Sender constrains this is `abs(log_height - l_skip)`.
+    pub n_abs: T,
+    /// Sender constrains this is `n < 0 ? 1 : 0`.
+    pub n_sign_bit: T,
+}
+
+define_typed_per_proof_permutation_bus!(HyperdimBus, HyperdimBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
@@ -382,13 +393,16 @@ define_typed_per_proof_permutation_bus!(AirPartShapeBus, AirPartShapeBusMessage)
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
-pub struct AirHeightsBusMessage<T> {
+pub struct LiftedHeightsBusMessage<T> {
     pub sort_idx: T,
-    pub height: T,
-    pub log_height: T,
+    pub hypercube_dim: T,
+    /// Sender must constraint this equals `2^log_lifted_height`.
+    pub lifted_height: T,
+    /// Sender must constrain this equals `max(log_height, l_skip)`.
+    pub log_lifted_height: T,
 }
 
-define_typed_per_proof_permutation_bus!(AirHeightsBus, AirHeightsBusMessage);
+define_typed_per_proof_permutation_bus!(LiftedHeightsBus, LiftedHeightsBusMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]

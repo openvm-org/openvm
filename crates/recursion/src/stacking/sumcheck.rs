@@ -123,13 +123,13 @@ impl SumcheckRoundsTraceGenerator {
                 for (sort_idx, (_, vdata)) in
                     preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
                 {
-                    if vdata.hypercube_dim != 0 {
-                        eq_mults[vdata.hypercube_dim - 1] +=
-                            proof.batch_constraint_proof.column_openings[sort_idx]
-                                .iter()
-                                .flatten()
-                                .collect_vec()
-                                .len();
+                    if vdata.log_height > vk.inner.params.l_skip {
+                        let n = vdata.log_height - vk.inner.params.l_skip;
+                        eq_mults[n - 1] += proof.batch_constraint_proof.column_openings[sort_idx]
+                            .iter()
+                            .flatten()
+                            .collect_vec()
+                            .len();
                     }
                 }
                 eq_mults
@@ -142,8 +142,9 @@ impl SumcheckRoundsTraceGenerator {
 
                 let mut b_value_set = HashSet::<(usize, usize)>::new();
                 for slice in stacked_slices {
-                    let b_value = slice.row_idx >> (slice.n + vk.inner.params.l_skip);
-                    let total_num_bits = vk.inner.params.n_stack - slice.n;
+                    let n_lift = slice.n.max(0) as usize;
+                    let b_value = slice.row_idx >> (n_lift + vk.inner.params.l_skip);
+                    let total_num_bits = vk.inner.params.n_stack - n_lift;
 
                     for num_bits in (1..=total_num_bits).rev() {
                         let shifted_b_value = b_value >> (total_num_bits - num_bits);
@@ -509,8 +510,8 @@ where
             local.proof_idx,
             EqKernelLookupMessage {
                 n: local.round.into(),
-                eq: ext_field_multiply(local.eq_prism_base, local.eq_cube),
-                k_rot: ext_field_add(
+                eq_in: ext_field_multiply(local.eq_prism_base, local.eq_cube),
+                k_rot_in: ext_field_add(
                     ext_field_multiply(local.eq_cube_base, local.eq_cube),
                     ext_field_multiply(
                         local.rot_cube_base,

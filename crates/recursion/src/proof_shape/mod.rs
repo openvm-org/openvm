@@ -133,6 +133,7 @@ impl ProofShapeModule {
     ) where
         TS: FiatShamirTranscript + TranscriptHistory,
     {
+        let l_skip = child_vk.inner.params.l_skip;
         ts.observe_commit(child_vk.pre_hash);
         ts.observe_commit(proof.common_main_commit);
 
@@ -152,7 +153,7 @@ impl ProofShapeModule {
                 if let Some(pdata) = avk.preprocessed_data.as_ref() {
                     ts.observe_commit(pdata.commit);
                 } else {
-                    ts.observe(F::from_canonical_usize(trace_vdata.hypercube_dim));
+                    ts.observe(F::from_canonical_usize(trace_vdata.log_height));
                 }
                 debug_assert_eq!(avk.num_cached_mains(), trace_vdata.cached_commitments.len());
                 if !pvs.is_empty() {
@@ -175,16 +176,20 @@ impl ProofShapeModule {
             .enumerate()
             .filter_map(|(air_id, data)| data.map(|data| (air_id, data)))
             .collect();
-        sorted_trace_vdata.sort_by_key(|(_, data)| Reverse(data.hypercube_dim));
+        sorted_trace_vdata.sort_by_key(|(_, data)| Reverse(data.log_height));
 
         let n_max = proof
             .trace_vdata
             .iter()
-            .flat_map(|datum| datum.as_ref().map(|datum| datum.hypercube_dim))
+            .flat_map(|datum| {
+                datum
+                    .as_ref()
+                    .map(|datum| datum.log_height.saturating_sub(l_skip))
+            })
             .max()
             .unwrap();
         let num_layers = proof.gkr_proof.claims_per_layer.len();
-        let n_logup = num_layers.saturating_sub(child_vk.inner.params.l_skip);
+        let n_logup = num_layers.saturating_sub(l_skip);
 
         preflight.proof_shape = ProofShapePreflight {
             sorted_trace_vdata,
@@ -213,7 +218,8 @@ impl AirModule for ProofShapeModule {
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
-            air_heights_bus: self.bus_inventory.air_heights_bus,
+            hyperdim_bus: self.bus_inventory.hyperdim_bus,
+            lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
         };
