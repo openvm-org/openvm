@@ -9,6 +9,19 @@ use openvm_stark_sdk::{
     engine::{StarkFriEngine, VerificationDataWithFriParams},
     p3_baby_bear::BabyBear,
 };
+use stark_backend_v2::{
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey, SystemParams,
+    },
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+    },
+    test_utils::test_system_params_small,
+    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine, StarkWhirEngine,
+};
 
 use crate::{
     arch::{
@@ -25,7 +38,7 @@ cfg_if::cfg_if! {
         use crate::arch::DenseRecordArena;
         pub type TestRecordArena = DenseRecordArena;
     } else {
-        pub use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Engine as TestStarkEngine;
+        pub use stark_backend_v2::BabyBearPoseidon2CpuEngineV2 as TestStarkEngine;
         use crate::arch::MatrixRecordArena;
         pub type TestRecordArena = MatrixRecordArena<BabyBear>;
     }
@@ -67,10 +80,10 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let fri_params = FriParameters::new_for_testing(log_blowup);
+    let params = test_system_params_small(4, 16, 4);
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
-        fri_params,
+        params,
         builder,
         config,
         exe,
@@ -88,7 +101,7 @@ where
 // Same implementation as VmLocalProver, but we need to do something special to run the debug prover
 #[allow(clippy::type_complexity)]
 pub fn air_test_impl<E, VB>(
-    fri_params: FriParameters,
+    params: SystemParams,
     builder: VB,
     config: VB::VmConfig,
     exe: impl Into<VmExe<Val<E::SC>>>,
@@ -100,7 +113,7 @@ pub fn air_test_impl<E, VB>(
     Vec<VerificationDataWithFriParams<E::SC>>,
 )>
 where
-    E: StarkFriEngine,
+    E: StarkWhirEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
@@ -109,7 +122,7 @@ where
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
     setup_tracing();
-    let engine = E::new(fri_params);
+    let engine = E::new(params);
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config)?;
     let vk = pk.get_vk();
     let exe = exe.into();
