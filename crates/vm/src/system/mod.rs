@@ -14,7 +14,7 @@ use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::hal::MatrixDimensions,
-    AirRef,
+    AirRef, Chip as ChipV1,
 };
 use rustc_hash::FxHashMap;
 use stark_backend_v2::{
@@ -28,7 +28,7 @@ use stark_backend_v2::{
         DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
         ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
     },
-    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
+    AnyChip, StarkEngineV2 as StarkEngine,
 };
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
@@ -425,7 +425,8 @@ where
     }
 }
 
-impl<RA, SC> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
+type SC = stark_backend_v2::SC;
+impl<RA> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
@@ -477,6 +478,7 @@ where
             .into_iter()
             .chain(pv_ctx)
             .chain(memory_ctxs)
+            .map(AirProvingContext::from_v1_no_cached)
             .collect()
     }
 
@@ -531,7 +533,7 @@ pub struct SystemCpuBuilder;
 
 impl<E> VmBuilder<E> for SystemCpuBuilder
 where
-    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice, SC = SC>,
     Val<E::SC>: PrimeField32,
 {
     type VmConfig = SystemConfig;
