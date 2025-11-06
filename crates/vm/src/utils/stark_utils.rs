@@ -14,6 +14,7 @@ use stark_backend_v2::{
         MultiStarkProvingKeyV2 as MultiStarkProvingKey,
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey, SystemParams,
     },
+    proof::Proof,
     prover::{
         AirProvingContextV2 as AirProvingContext, CpuBackendV2,
         DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
@@ -108,12 +109,9 @@ pub fn air_test_impl<E, VB>(
     input: impl Into<Streams<Val<E::SC>>>,
     min_segments: usize,
     debug: bool,
-) -> eyre::Result<(
-    Option<MemoryImage>,
-    Vec<VerificationDataWithFriParams<E::SC>>,
-)>
+) -> eyre::Result<(Option<MemoryImage>, Vec<(MultiStarkVerifyingKey, Proof)>)>
 where
-    E: StarkWhirEngine,
+    E: StarkWhirEngine + StarkEngine<SC = stark_backend_v2::SC>,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
@@ -174,13 +172,7 @@ where
     let final_memory = (exit_code == Some(ExitCode::Success as u32)).then_some(state.memory.memory);
     let vdata = proofs
         .into_iter()
-        .map(|proof| VerificationDataWithFriParams {
-            data: VerificationData {
-                vk: vk.clone(),
-                proof,
-            },
-            fri_params: vm.engine.fri_params(),
-        })
+        .map(|proof| (vk.clone(), proof))
         .collect();
 
     Ok((final_memory, vdata))

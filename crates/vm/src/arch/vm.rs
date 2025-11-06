@@ -380,6 +380,36 @@ where
         })
     }
 
+    pub fn new_with_keygen(
+        engine: E,
+        builder: VB,
+        config: VB::VmConfig,
+    ) -> Result<(Self, MultiStarkProvingKey), VirtualMachineError>
+    where
+        E: StarkEngine<SC = stark_backend_v2::SC>,
+    {
+        let circuit = config.create_airs()?;
+        // TODO[jpw]: remove; this is just to extract constraints and FRI parameters are not used
+        let pk = {
+            use stark_backend_v2::openvm_stark_sdk::{
+                config::{baby_bear_poseidon2::BabyBearPoseidon2Engine, FriParameters},
+                engine::{StarkEngine as _, StarkFriEngine},
+            };
+            let engine_v1 = BabyBearPoseidon2Engine::new(
+                FriParameters::standard_with_100_bits_conjectured_security(2),
+            );
+            let mut builder = engine_v1.keygen_builder();
+            for air in circuit.into_airs() {
+                builder.add_air(air);
+            }
+            let pk_v1 = builder.generate_pk();
+            MultiStarkProvingKey::from_v1(engine.config(), pk_v1)
+        };
+        let d_pk = engine.device().transport_pk_to_device(&pk);
+        let vm = Self::new(engine, builder, config, d_pk)?;
+        Ok((vm, pk))
+    }
+
     pub fn config(&self) -> &VB::VmConfig {
         &self.executor.config
     }
