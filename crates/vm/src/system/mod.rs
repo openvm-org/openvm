@@ -11,17 +11,28 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
     prover::{
         cpu::{CpuBackend, CpuDevice},
-        hal::{MatrixDimensions, ProverBackend},
-        types::{AirProvingContext, CommittedTraceData},
+        hal::MatrixDimensions,
+        types::CommittedTraceData,
     },
-    AirRef, Chip,
+    AirRef,
 };
 use rustc_hash::FxHashMap;
+use stark_backend_v2::{
+    keygen::types::{
+        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
+    },
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+    },
+    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
+};
 
 use self::{connector::VmConnectorAir, program::ProgramAir, public_values::PublicValuesAir};
 use crate::{

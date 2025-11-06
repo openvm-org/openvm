@@ -22,7 +22,11 @@ use stark_backend_v2::{
         MultiStarkProvingKeyV2 as MultiStarkProvingKey,
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
     },
-    prover::DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
+        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
+    },
     AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
 };
 
