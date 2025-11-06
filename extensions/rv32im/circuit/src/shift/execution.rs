@@ -139,7 +139,6 @@ where
         // it is a hardware requirement that cl is used as the shift value
         // and we don't want to override the written [b:4]_1
         // [a:4]_1 <- [b:4]_1
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
 
         let mut asm_opcode = String::new();
         if inst.opcode == ShiftOpcode::SLL.global_opcode() {
@@ -151,6 +150,7 @@ where
         }
 
         if e == 0 {
+            asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
             // [b:4]_1 <- [b:4]_1 (shift) c
             asm_str += &format!("   {asm_opcode} {REG_B_W}, {c}\n");
         } else {

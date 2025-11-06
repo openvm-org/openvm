@@ -93,6 +93,14 @@ where
     }
 }
 
+
+
+pub const REG_PC: &str = "r13";
+pub const REG_PC_W: &str = "r13d";
+pub const REG_A_W: &str = "eax";
+pub const REG_B_W: &str = "ecx";
+pub const REG_D_W: &str = "edx";
+
 #[cfg(feature = "aot")]
 impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
     for MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -132,21 +140,21 @@ where
 
         match opcode {
             MulHOpcode::MULH => {
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   imul {}\n", REG_B_W);
+                asm += &format!("   mov {}, {}\n", REG_A_W, REG_D_W);
             }
             MulHOpcode::MULHSU => {
-                asm += &format!("   mov {REG_TMP_W}, {REG_A_W}\n");
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
-                asm += "   mov edx, ecx\n";
-                asm += "   sar edx, 31\n";
-                asm += &format!("   and edx, {REG_TMP_W}\n");
-                asm += "   add eax, edx\n";
+                asm += &format!("   imul {}\n", REG_B_W);
+                asm += &format!("   mov {}, {}\n", REG_A_W, REG_D_W);
+                asm += &format!("   mov {}, {}\n", REG_D_W, REG_B_W);
+                asm += &format!("   sar {}, 31\n", REG_D_W);
+                asm += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+                asm += &format!("   and {}, {}\n", REG_D_W, REG_B_W);
+                asm += &format!("   add {}, {}\n", REG_A_W, REG_D_W);
             }
             MulHOpcode::MULHU => {
-                asm += "   mul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   mul {}\n", REG_B_W);
+                asm += &format!("   mov {}, {}\n", REG_A_W, REG_D_W);
             }
         }
         asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
