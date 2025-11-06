@@ -130,7 +130,7 @@ where
         asm_str
     }
 
-    fn push_internal_registers() -> String {
+    fn push_internal_registers() -> String { /// hmm, does it matter if we push the xmm registers?
         let mut asm_str = String::new();
         asm_str += "    push rax\n";
         asm_str += "    push rcx\n";
@@ -172,8 +172,6 @@ where
     fn rv32_regs_to_xmm() -> String {
         let mut asm_str = String::new();
 
-        let mut asm_str = String::new();
-
         for r in 0..16 {
             asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
@@ -202,7 +200,7 @@ where
             let lane = i % 2;
             if RV32_OVERRIDE_GPRS[i].is_some(){
                 let override_reg = RV32_OVERRIDE_GPRS[i].unwrap();
-                asm_str += &format!("   pinsrd xmm{}, {}, {}\n", xmm_reg, override_reg, lane)
+                asm_str += &format!("   pextrd {}, xmm{}, {}\n", override_reg, xmm_reg, lane)
             }
         }
 
@@ -235,7 +233,12 @@ where
         for r in 0..16 {
             asm_str += &format!("   pinsrq xmm{r}, rax, 0\n");
         }
-
+        for i in 0..32{
+            if RV32_OVERRIDE_GPRS[i].is_some(){
+                let override_reg = RV32_OVERRIDE_GPRS[i].unwrap();
+                asm_str += &format!("   mov {}, 0\n", override_reg);
+            }
+        }
         asm_str
     }
 
