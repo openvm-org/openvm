@@ -58,7 +58,7 @@ fn test_io() {
     let mut compiler = AsmCompiler::new(WORD_SIZE);
     compiler.build(builder.operations);
     let asm_code = compiler.code();
-    println!("{}", asm_code);
+    println!("{asm_code}");
 
     let program = convert_program::<F, EF>(asm_code, CompilerOptions::default());
     execute_program(program, witness_stream);

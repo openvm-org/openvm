@@ -37,7 +37,7 @@ fn verify_native_max_trace_heights(
             .execute_metered(leaf_input.write_to_stream(), metered_ctx)?;
         assert_eq!(segments.len(), 1);
         let estimated_trace_heights = &segments[0].trace_heights;
-        println!("estimated_trace_heights: {:?}", estimated_trace_heights);
+        println!("estimated_trace_heights: {estimated_trace_heights:?}");
 
         // Tracegen without proving since leaf proofs take a while
         let state = vm.create_initial_state(&exe, leaf_input.write_to_stream());
@@ -50,7 +50,7 @@ fn verify_native_max_trace_heights(
             .into_iter()
             .map(|(_, air_ctx)| air_ctx.main_trace_height())
             .collect::<Vec<usize>>();
-        println!("actual_trace_heights: {:?}", actual_trace_heights);
+        println!("actual_trace_heights: {actual_trace_heights:?}");
 
         actual_trace_heights
             .iter()
@@ -58,9 +58,7 @@ fn verify_native_max_trace_heights(
             .for_each(|(&actual, &expected)| {
                 assert!(
                     actual <= (expected as usize),
-                    "Actual trace height {} exceeds expected height {}",
-                    actual,
-                    expected
+                    "Actual trace height {actual} exceeds expected height {expected}"
                 );
             });
     }

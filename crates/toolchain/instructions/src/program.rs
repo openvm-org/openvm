@@ -194,8 +194,7 @@ impl<F: Field> Display for Program<F> {
             } = instruction;
             writeln!(
                 formatter,
-                "{:?} {} {} {} {} {} {} {}",
-                opcode, a, b, c, d, e, f, g,
+                "{opcode:?} {a} {b} {c} {d} {e} {f} {g}",
             )?;
         }
         Ok(())
@@ -233,8 +232,7 @@ pub fn display_program_with_pc<F: Field>(program: &Program<F>) {
             g,
         } = instruction;
         println!(
-            "{} | {:?} {} {} {} {} {} {} {}",
-            pc, opcode, a, b, c, d, e, f, g
+            "{pc} | {opcode:?} {a} {b} {c} {d} {e} {f} {g}"
         );
     }
 }

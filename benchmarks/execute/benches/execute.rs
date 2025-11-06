@@ -124,7 +124,7 @@ where
             report_program_success(mode, program);
             value
         }
-        Err(err) => panic!("{context}: {:?}", err),
+        Err(err) => panic!("{context}: {err:?}"),
     }
 }
 
@@ -407,13 +407,13 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
 fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
-    let app_proof_bytes = fs::read(fixtures_dir.join(format!("{}.app.proof", program))).unwrap();
+    let app_proof_bytes = fs::read(fixtures_dir.join(format!("{program}.app.proof"))).unwrap();
     let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
-    let leaf_exe_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.exe", program))).unwrap();
+    let leaf_exe_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.exe"))).unwrap();
     let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
-    let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.pk", program))).unwrap();
+    let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.pk"))).unwrap();
     let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
     let leaf_inputs =
@@ -434,15 +434,15 @@ fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Ve
     let fixtures_dir = get_fixtures_dir();
 
     let internal_exe_bytes =
-        fs::read(fixtures_dir.join(format!("{}.internal.exe", program))).unwrap();
+        fs::read(fixtures_dir.join(format!("{program}.internal.exe"))).unwrap();
     let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
 
     let internal_pk_bytes =
-        fs::read(fixtures_dir.join(format!("{}.internal.pk", program))).unwrap();
+        fs::read(fixtures_dir.join(format!("{program}.internal.pk"))).unwrap();
     let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
 
     // Load leaf proof by index (using index 0)
-    let leaf_proof_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.0.proof", program)))
+    let leaf_proof_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.0.proof")))
         .expect("No leaf proof available at index 0");
     let leaf_proof: Proof<SC> = bitcode::deserialize(&leaf_proof_bytes).unwrap();
 

@@ -364,13 +364,13 @@ where
                     &Self::pop_internal_registers(),
                     &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
                     &instruction,
-                    pc
+                    pc,
                 );
             }
         }
 
         // asm_run_end part
-        for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+        for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{}:\n", pc);
             asm_str += "    mov rdi, rbx\n";
             asm_str += "    mov rsi, rbp\n";

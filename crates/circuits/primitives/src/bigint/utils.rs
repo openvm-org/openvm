@@ -20,9 +20,7 @@ pub fn range_check<AB: InteractionBuilder>(
 ) {
     assert!(
         bits <= decomp,
-        "range_check: bits {} > decomp {}",
-        bits,
-        decomp
+        "range_check: bits {bits} > decomp {decomp}"
     );
     let expr = into_expr.into();
     let bus = VariableRangeCheckerBus::new(range_bus, decomp);

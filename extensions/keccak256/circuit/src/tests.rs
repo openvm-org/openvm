@@ -141,7 +141,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let expected_output = expected_output.unwrap_or(keccak256(message));
-    println!("expected_output: {:?}", expected_output);
+    println!("expected_output: {expected_output:?}");
     println!("keccak256(message): {:?}", keccak256(message));
     assert_eq!(
         expected_output.map(F::from_canonical_u8),
@@ -191,7 +191,7 @@ fn keccak256_length_tests() {
 
     // Test special length edge cases:
     for len in [0, 135, 136, 137, 2000, 10000] {
-        println!("Testing length: {}", len);
+        println!("Testing length: {len}");
         set_and_execute(
             &mut tester,
             &mut harness.executor,

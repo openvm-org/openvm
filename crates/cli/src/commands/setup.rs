@@ -164,11 +164,11 @@ impl SetupCmd {
         let client = Client::new(&config);
 
         for k in min_k..=max_k {
-            let file_name = format!("kzg_bn254_{}.srs", k);
+            let file_name = format!("kzg_bn254_{k}.srs");
             let local_file_path = PathBuf::from(&default_params_dir).join(&file_name);
             if !local_file_path.exists() {
-                println!("Downloading {}", file_name);
-                let key = format!("challenge_0085/{}", file_name);
+                println!("Downloading {file_name}");
+                let key = format!("challenge_0085/{file_name}");
                 let resp = client
                     .get_object()
                     .bucket("axiom-crypto")

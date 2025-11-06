@@ -220,9 +220,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         };
         debug_assert!(
             align_bits as u32 <= size_bits,
-            "align_bits ({}) must be <= size_bits ({})",
-            align_bits,
-            size_bits
+            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
         );
 
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {

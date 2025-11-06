@@ -96,7 +96,7 @@ fn interaction_test(program: Program<BabyBear>, execution: Vec<u32>) {
     program_cells.extend(iter::repeat_n(BabyBear::ZERO, cells_to_add));
 
     let counter_trace = Arc::new(RowMajorMatrix::new(program_cells, 10));
-    println!("trace height = {}", original_height);
+    println!("trace height = {original_height}");
     println!("counter trace height = {}", counter_trace.height());
 
     engine

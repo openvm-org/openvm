@@ -546,7 +546,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(
                         AsmInstruction::CycleTrackerStart(),
                         Some(DebugInfo {
-                            dsl_instruction: format!("CT-{}", name),
+                            dsl_instruction: format!("CT-{name}"),
                             trace: None,
                         }),
                     );
@@ -555,7 +555,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
                     self.push(
                         AsmInstruction::CycleTrackerEnd(),
                         Some(DebugInfo {
-                            dsl_instruction: format!("CT-{}", name),
+                            dsl_instruction: format!("CT-{name}"),
                             trace: None,
                         }),
                     );
@@ -729,7 +729,7 @@ impl<F: PrimeField32 + TwoAdicField, EF: ExtensionField<F> + TwoAdicField> AsmCo
     ) {
         self.basic_blocks
             .get_mut(block_label.as_canonical_u32() as usize)
-            .unwrap_or_else(|| panic!("Missing block at label: {:?}", block_label))
+            .unwrap_or_else(|| panic!("Missing block at label: {block_label:?}"))
             .push(instruction, debug_info);
     }
 

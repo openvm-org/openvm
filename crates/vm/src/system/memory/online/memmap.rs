@@ -192,7 +192,6 @@ impl LinearMemory for MmapMemory {
 #[inline(never)]
 fn panic_oob(start: usize, size: usize, memory_size: usize) -> ! {
     panic!(
-        "Memory access out of bounds: start={} size={} memory_size={}",
-        start, size, memory_size
+        "Memory access out of bounds: start={start} size={size} memory_size={memory_size}"
     );
 }

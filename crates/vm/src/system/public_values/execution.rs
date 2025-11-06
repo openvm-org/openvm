@@ -196,7 +196,7 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
         } else {
             // Not a hard constraint violation when publishing the same value twice but the
             // program should avoid that.
-            panic!("Custom public value {} already set", idx);
+            panic!("Custom public value {idx} already set");
         }
     }
     let pc = exec_state.pc();

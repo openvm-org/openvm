@@ -128,7 +128,7 @@ fn format_cell(div: &str, span: Option<&str>, span_color: Option<&str>) -> Strin
     let mut ret = String::new();
     if let Some(span) = span {
         if let Some(color) = span_color {
-            ret.push_str(&format!("<span style='color: {}'>({})</span>", color, span));
+            ret.push_str(&format!("<span style='color: {color}'>({span})</span>"));
         }
     }
     ret.push_str(&format!(" {div}"));

@@ -122,7 +122,7 @@ pub fn field_operation<
                 input_data,
             )
         }
-        _ => panic!("Unsupported field type: {}", FIELD),
+        _ => panic!("Unsupported field type: {FIELD}"),
     }
 }
 
@@ -142,7 +142,7 @@ pub fn fp2_operation<
         x if x == FieldType::BLS12_381Coordinate as u8 => {
             fp2_operation_bls12_381::<BLOCKS, BLOCK_SIZE, OP>(input_data)
         }
-        _ => panic!("Unsupported field type for Fp2: {}", FIELD),
+        _ => panic!("Unsupported field type for Fp2: {FIELD}"),
     }
 }
 
@@ -162,7 +162,7 @@ fn field_operation_256bit<
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -185,7 +185,7 @@ fn field_operation_bls12_381_coordinate<
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -204,7 +204,7 @@ fn fp2_operation_bn254<const BLOCKS: usize, const BLOCK_SIZE: usize, const OP: u
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];
@@ -223,7 +223,7 @@ fn fp2_operation_bls12_381<const BLOCKS: usize, const BLOCK_SIZE: usize, const O
         x if x == Operation::Sub as u8 => a - b,
         x if x == Operation::Mul as u8 => a * b,
         x if x == Operation::Div as u8 => a * b.invert().unwrap(),
-        _ => panic!("Unsupported operation: {}", OP),
+        _ => panic!("Unsupported operation: {OP}"),
     };
 
     let mut output = [[0u8; BLOCK_SIZE]; BLOCKS];

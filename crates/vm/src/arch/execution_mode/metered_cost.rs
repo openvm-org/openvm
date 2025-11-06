@@ -47,9 +47,7 @@ impl AccessAdapterCtx {
         };
         debug_assert!(
             align_bits as u32 <= size_bits,
-            "align_bits ({}) must be <= size_bits ({})",
-            align_bits,
-            size_bits
+            "align_bits ({align_bits}) must be <= size_bits ({size_bits})"
         );
 
         for adapter_bits in (align_bits as u32 + 1..=size_bits).rev() {
@@ -104,11 +102,10 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
         // Prevent unbounded memory accesses per instruction
         if self.cost > 2 * std::cmp::max(self.max_execution_cost, DEFAULT_MAX_COST) {

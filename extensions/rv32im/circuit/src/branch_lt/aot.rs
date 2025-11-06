@@ -11,7 +11,7 @@ where
     F: PrimeField32,
 {
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode};
+        use openvm_instructions::{riscv::RV32_REGISTER_AS, LocalOpcode};
         use openvm_rv32im_transpiler::BranchLessThanOpcode;
 
         use crate::common::rv32_register_to_gpr;

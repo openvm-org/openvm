@@ -378,8 +378,7 @@ impl Decode for Proof<SC> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "Invalid codec version. Expected {}, got {}",
-                    CODEC_VERSION, version
+                    "Invalid codec version. Expected {CODEC_VERSION}, got {version}"
                 ),
             ));
         }

@@ -22,6 +22,8 @@ mod aot {
     pub const REG_FIRST_ARG: &str = "rdi";
     pub const REG_RETURN_VAL: &str = "rax";
 
+    pub const REG_TMP_W: &str = "r8d";
+
     pub const REG_C: &str = "r10";
     pub const REG_C_W: &str = "r10d";
     pub const REG_C_B: &str = "r10b";

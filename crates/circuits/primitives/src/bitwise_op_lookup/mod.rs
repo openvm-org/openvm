@@ -142,15 +142,15 @@ impl<const NUM_BITS: usize> BitwiseOperationLookupChip<NUM_BITS> {
 
     pub fn request_range(&self, x: u32, y: u32) {
         let upper_bound = 1 << NUM_BITS;
-        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
-        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        debug_assert!(x < upper_bound, "x out of range: {x} >= {upper_bound}");
+        debug_assert!(y < upper_bound, "y out of range: {y} >= {upper_bound}");
         self.count_range[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn request_xor(&self, x: u32, y: u32) -> u32 {
         let upper_bound = 1 << NUM_BITS;
-        debug_assert!(x < upper_bound, "x out of range: {} >= {}", x, upper_bound);
-        debug_assert!(y < upper_bound, "y out of range: {} >= {}", y, upper_bound);
+        debug_assert!(x < upper_bound, "x out of range: {x} >= {upper_bound}");
+        debug_assert!(y < upper_bound, "y out of range: {y} >= {upper_bound}");
         self.count_xor[Self::idx(x, y)].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         x ^ y
     }

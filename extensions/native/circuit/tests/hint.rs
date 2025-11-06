@@ -28,6 +28,6 @@ fn test_hint_bits_felt() {
     builder.halt();
 
     let program = builder.compile_isa();
-    println!("{}", program);
+    println!("{program}");
     execute_program(program, vec![]);
 }

@@ -26,7 +26,7 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             if skip_list.contains(&file_name) {
                 continue;
             }
-            println!("Running: {}", file_name);
+            println!("Running: {file_name}");
             let result = std::panic::catch_unwind(|| -> Result<_> {
                 let elf = decode_elf(&path)?;
                 let exe = VmExe::from_elf(
@@ -65,9 +65,9 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
             });
 
             match result {
-                Ok(Ok(_)) => println!("Passed!: {}", file_name),
-                Ok(Err(e)) => println!("Failed: {} with error: {}", file_name, e),
-                Err(_) => panic!("Panic occurred while running: {}", file_name),
+                Ok(Ok(_)) => println!("Passed!: {file_name}"),
+                Ok(Err(e)) => println!("Failed: {file_name} with error: {e}"),
+                Err(_) => panic!("Panic occurred while running: {file_name}"),
             }
         }
     }
@@ -93,7 +93,7 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             if skip_list.contains(&file_name) {
                 continue;
             }
-            println!("Running: {}", file_name);
+            println!("Running: {file_name}");
             let elf = decode_elf(&path)?;
             let exe = VmExe::from_elf(
                 elf,
@@ -108,8 +108,8 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             });
 
             match result {
-                Ok(_) => println!("Passed!: {}", file_name),
-                Err(_) => println!("Panic occurred while running: {}", file_name),
+                Ok(_) => println!("Passed!: {file_name}"),
+                Err(_) => println!("Panic occurred while running: {file_name}"),
             }
         }
     }

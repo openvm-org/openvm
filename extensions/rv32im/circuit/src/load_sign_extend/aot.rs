@@ -1,7 +1,6 @@
 use openvm_circuit::arch::{AotError, AotExecutor};
 use openvm_instructions::{
     instruction::Instruction,
-    program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };

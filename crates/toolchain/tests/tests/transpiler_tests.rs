@@ -59,7 +59,7 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
         .with_extension(ModularTranspilerExtension)
         .transpile(&elf.instructions)?;
     for instruction in program {
-        println!("{:?}", instruction);
+        println!("{instruction:?}");
     }
     Ok(())
 }

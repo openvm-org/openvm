@@ -177,11 +177,10 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
 
         // Handle access adapter updates

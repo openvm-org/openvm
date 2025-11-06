@@ -14,7 +14,7 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(feature = "aot")]
+#[allow(unused_imports)]
 use crate::common::*;
 use crate::MulHExecutor;
 
@@ -25,18 +25,6 @@ struct MulHPreCompute {
     b: u8,
     c: u8,
 }
-
-// Callee saved registers (shared with MUL AOT)
-#[cfg(feature = "aot")]
-const REG_PC: &str = "r13";
-
-// Caller saved registers
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "ecx";
-#[cfg(feature = "aot")]
-const REG_TMP_W: &str = "r8d";
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]

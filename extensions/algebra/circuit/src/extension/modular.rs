@@ -60,7 +60,7 @@ impl ModularExtension {
         let supported_moduli = self
             .supported_moduli
             .iter()
-            .map(|modulus| format!("\"{}\"", modulus))
+            .map(|modulus| format!("\"{modulus}\""))
             .collect::<Vec<String>>()
             .join(", ");
 
