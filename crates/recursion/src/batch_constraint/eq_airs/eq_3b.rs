@@ -73,9 +73,9 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir {
         // Summary:
         // - n consistency: ensure `n` stays constant on non-reset transitions, reset it to zero on
         //   the first row, initialize `inverse_hypercube_volume` to one, double it when `n`
-        //   decreases, keep it unchanged otherwise, and enforce
-        //   `hypercube_volume * inverse_hypercube_volume = 1`; TODO: receive `n_logup` from another
-        //   AIR when the first valid row appears.
+        //   decreases, keep it unchanged otherwise, and enforce `hypercube_volume *
+        //   inverse_hypercube_volume = 1`; TODO: receive `n_logup` from another AIR when the first
+        //   valid row appears.
         // - AIR column updates: zero `eq` on fictitious rows, require `is_not_fictious` implies
         //   validity, restrict `sort_idx` to change by at most one with fictitious rows preceding
         //   non-fictitious ones, force fictitious rows to have `col_idx = 0`, increment `col_idx`
@@ -266,7 +266,8 @@ fn generate_eq_3b_blob(
                 continue;
             }
 
-            while n > vdata.hypercube_dim {
+            let n_lift = vdata.log_height.saturating_sub(l_skip);
+            while n > n_lift {
                 if n_is_empty {
                     res.records.push(Eq3bRecord {
                         n,
@@ -280,7 +281,7 @@ fn generate_eq_3b_blob(
                 n -= 1;
                 n_is_empty = true;
             }
-            debug_assert_eq!(n, vdata.hypercube_dim);
+            debug_assert_eq!(n, n_lift);
 
             for col_idx in 0..num_interactions {
                 res.records.push(Eq3bRecord {

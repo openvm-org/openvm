@@ -142,7 +142,7 @@ impl StackingModule {
 impl AirModule for StackingModule {
     fn airs(&self) -> Vec<AirRef<BabyBearPoseidon2Config>> {
         let opening_air = OpeningClaimsAir {
-            air_heights_bus: self.bus_inventory.air_heights_bus,
+            lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             stacking_module_bus: self.bus_inventory.stacking_module_bus,
             column_claims_bus: self.bus_inventory.column_claims_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
