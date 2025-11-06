@@ -79,7 +79,7 @@ where
         // rcx = <start of destination address space>
         asm_str += &address_space_start_to_gpr(e_u32, "rcx");
         // rax = rax + rcx = <memory address in host memory>
-        asm_str += &"   lea rax, [rax + rcx]\n".to_string();
+        asm_str += "   lea rax, [rax + rcx]\n";
 
         match local_opcode {
             Rv32LoadStoreOpcode::LOADW => {

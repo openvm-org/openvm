@@ -1,4 +1,3 @@
-#![cfg(feature = "aot")]
 use std::{ffi::c_void, fs, process::Command};
 
 use libloading::Library;
@@ -447,11 +446,7 @@ where
         // as src/asm_run.s -o asm_run.o
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
-            .args([
-                &format!("src/{asm_name}.s"),
-                "-o",
-                &format!("{asm_name}.o"),
-            ])
+            .args([&format!("src/{asm_name}.s"), "-o", &format!("{asm_name}.o")])
             .status()
             .expect("Failed to assemble the file into an object file");
 
@@ -463,11 +458,7 @@ where
 
         let status = Command::new("ar")
             .current_dir(&src_asm_bridge_dir)
-            .args([
-                "rcs",
-                &format!("lib{asm_name}.a"),
-                &format!("{asm_name}.o"),
-            ])
+            .args(["rcs", &format!("lib{asm_name}.a"), &format!("{asm_name}.o")])
             .status()
             .expect("Create a static library");
 
@@ -687,11 +678,7 @@ where
         // as src/asm_run.s -o asm_run.o
         let status = Command::new("as")
             .current_dir(&src_asm_bridge_dir)
-            .args([
-                &format!("src/{asm_name}.s"),
-                "-o",
-                &format!("{asm_name}.o"),
-            ])
+            .args([&format!("src/{asm_name}.s"), "-o", &format!("{asm_name}.o")])
             .status()
             .expect("Failed to assemble the file into an object file");
 
@@ -703,11 +690,7 @@ where
 
         let status = Command::new("ar")
             .current_dir(&src_asm_bridge_dir)
-            .args([
-                "rcs",
-                &format!("lib{asm_name}.a"),
-                &format!("{asm_name}.o"),
-            ])
+            .args(["rcs", &format!("lib{asm_name}.a"), &format!("{asm_name}.o")])
             .status()
             .expect("Create a static library");
 

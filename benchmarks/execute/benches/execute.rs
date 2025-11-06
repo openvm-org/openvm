@@ -311,7 +311,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
     {
         let program_name = program.to_string();
         bencher
-            .with_inputs(|| Vec::<Vec<BabyBear>>::new())
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
             .bench_values(|input| {
                 expect_execution(
                     cached_aot_instance(&program_name).execute(input, None),

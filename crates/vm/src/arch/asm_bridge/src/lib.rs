@@ -128,10 +128,3 @@ pub extern "C" fn get_vm_address_space_addr(
     let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
-
-#[allow(dead_code)]
-#[no_mangle]
-pub extern "C" fn debug_vm_register_addr(mmap_ptr: *mut u32) {
-    let _first_val = unsafe { *mmap_ptr };
-    let _second_val = unsafe { *(mmap_ptr.wrapping_add(1)) };
-}
