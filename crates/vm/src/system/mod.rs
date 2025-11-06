@@ -13,11 +13,7 @@ use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::{Field, PrimeField32},
-    prover::{
-        cpu::{CpuBackend, CpuDevice},
-        hal::MatrixDimensions,
-        types::CommittedTraceData,
-    },
+    prover::{cpu::CpuDevice, hal::MatrixDimensions},
     AirRef,
 };
 use rustc_hash::FxHashMap;
@@ -27,8 +23,8 @@ use stark_backend_v2::{
         MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
     },
     prover::{
-        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
+        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
+        CpuBackendV2 as CpuBackend, DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
         ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
     },
     AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
@@ -428,13 +424,13 @@ where
     }
 }
 
-impl<RA, SC> SystemChipComplex<RA, CpuBackend<SC>> for SystemChipInventory<SC>
+impl<RA, SC> SystemChipComplex<RA, CpuBackend> for SystemChipInventory<SC>
 where
     RA: RowMajorMatrixArena<Val<SC>>,
     SC: StarkGenericConfig,
     Val<SC>: PrimeField32,
 {
-    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend<SC>>) {
+    fn load_program(&mut self, cached_program_trace: CommittedTraceData<CpuBackend>) {
         let _ = self.program_chip.cached.replace(cached_program_trace);
     }
 
@@ -447,7 +443,7 @@ where
         &mut self,
         system_records: SystemRecords<Val<SC>>,
         mut record_arenas: Vec<RA>,
-    ) -> Vec<AirProvingContext<CpuBackend<SC>>> {
+    ) -> Vec<AirProvingContext<CpuBackend>> {
         let SystemRecords {
             from_state,
             to_state,
@@ -535,7 +531,7 @@ pub struct SystemCpuBuilder;
 impl<SC, E> VmBuilder<E> for SystemCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice<SC>>,
     Val<SC>: PrimeField32,
 {
     type VmConfig = SystemConfig;
@@ -547,7 +543,7 @@ where
         config: &SystemConfig,
         airs: AirInventory<SC>,
     ) -> Result<
-        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend<SC>, SystemChipInventory<SC>>,
+        VmChipComplex<SC, MatrixRecordArena<Val<SC>>, CpuBackend, SystemChipInventory<SC>>,
         ChipInventoryError,
     > {
         let range_bus = airs.range_checker().bus;
