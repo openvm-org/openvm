@@ -71,6 +71,9 @@ impl EqNegTraceGenerator {
     ) -> RowMajorMatrix<F> {
         let l_skip = vk.inner.params.l_skip;
         let width = EqNegCols::<usize>::width();
+        if l_skip == 0 {
+            return RowMajorMatrix::new(vec![], width);
+        }
         let height = (l_skip * (l_skip + 1)) / 2 - 1;
 
         let mut trace = vec![F::ZERO; (preflights.len() * height).next_power_of_two() * width];

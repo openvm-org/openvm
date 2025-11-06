@@ -4,10 +4,10 @@ use stark_backend_v2::F;
 #[derive(Debug, Default)]
 pub struct TraceMetadata {
     pub air_idx: usize,
-    pub hypercube_dim: usize,
     pub cached_idx: usize,
     pub starting_cidx: usize,
     pub total_interactions: usize,
+    pub log_height: u8,
 }
 
 #[repr(C)]

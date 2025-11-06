@@ -92,6 +92,9 @@ pub(crate) fn generate_trace(
             cols.tidx = F::from_canonical_usize(tidx_r - (i + 1) * D_EF);
             // TODO(ayush): remove dependency on previous iteration
             omega_pow *= omega_skip_inv;
+            // TODO(TEMP): remove this temporary column
+            cols.tmp_n_notpos =
+                F::from_bool(proof.batch_constraint_proof.sumcheck_round_polys.is_empty());
         }
 
         cur_height += height;

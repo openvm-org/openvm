@@ -32,7 +32,8 @@ use crate::{
     },
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, HyperdimBus, StackingModuleBus, TranscriptBus,
+        XiRandomnessBus,
     },
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
@@ -58,6 +59,7 @@ pub struct BatchConstraintModule {
     column_opening_bus: ColumnClaimsBus,
     air_shape_bus: AirShapeBus,
     air_part_shape_bus: AirPartShapeBus,
+    hyperdim_bus: HyperdimBus,
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
@@ -102,6 +104,7 @@ impl BatchConstraintModule {
             column_opening_bus: bus_inventory.column_claims_bus,
             air_shape_bus: bus_inventory.air_shape_bus,
             air_part_shape_bus: bus_inventory.air_part_shape_bus,
+            hyperdim_bus: bus_inventory.hyperdim_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
@@ -276,6 +279,7 @@ impl AirModule for BatchConstraintModule {
             column_claims_bus: self.column_opening_bus,
             air_shape_bus: self.air_shape_bus,
             air_part_shape_bus: self.air_part_shape_bus,
+            hyperdim_bus: self.hyperdim_bus,
         };
         let expression_claim_air = ExpressionClaimAir {
             claim_bus: self.expression_claim_bus,
