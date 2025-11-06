@@ -14,15 +14,16 @@ use openvm_stark_backend::{
     p3_field::{Field, FieldAlgebra, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
     p3_maybe_rayon::prelude::*,
-    p3_util::log2_strict_usize,
-    prover::{
-        cpu::{self, CpuBackend},
-        types::{AirProvingContext, CommittedTraceData},
-    },
-    Chip,
+    prover::types::AirProvingContext,
 };
 use serde::{Deserialize, Serialize};
-use stark_backend_v2::prover::stacked_pcs::StackedPcsData;
+use stark_backend_v2::{
+    prover::{
+        stacked_pcs::StackedPcsData, CommittedTraceDataV2 as CommittedTraceData,
+        CpuBackendV2 as CpuBackend,
+    },
+    ChipV2 as Chip,
+};
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
@@ -72,14 +73,8 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
         self.program_commitment.clone()
     }
 
-    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend<SC>> {
-        let log_trace_height: u8 = log2_strict_usize(self.trace.height()).try_into().unwrap();
-        let data = cpu::PcsData::new(self.prover_data.clone(), vec![log_trace_height]);
-        CommittedTraceData {
-            commitment: self.program_commitment.clone(),
-            trace: self.trace.clone(),
-            data,
-        }
+    pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend> {
+        (self.prover_data.commit(), self.prover_data.clone())
     }
 
     /// Computes a commitment to [VmCommittedExe]. This is a Merklelized hash of:
@@ -120,10 +115,11 @@ impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
     }
 }
 
-impl<RA, SC: StarkGenericConfig> Chip<RA, CpuBackend<SC>> for ProgramChip<SC> {
+type SC = stark_backend_v2::SC;
+impl<RA> Chip<RA, CpuBackend> for ProgramChip<SC> {
     /// The cached program trace is cloned and left for future use. The clone is cheap because the
     /// cached trace is behind smart pointers. The execution frequencies are left unchanged.
-    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend<SC>> {
+    fn generate_proving_ctx(&self, _: RA) -> AirProvingContext<CpuBackend> {
         let cached = self
             .cached
             .clone()
