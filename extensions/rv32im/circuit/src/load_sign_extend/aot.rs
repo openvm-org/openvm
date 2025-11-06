@@ -57,6 +57,7 @@ where
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
         let imm_extended = imm + imm_sign * 0xffff0000;
+        let enabled = !f.is_zero();
 
         let a = a.as_canonical_u32() as u8;
         let b = b.as_canonical_u32() as u8;
@@ -73,20 +74,19 @@ where
         // rax = rax + rcx = <memory address in host memory>
         asm_str += &format!("   lea rax, [rax + rcx]\n");
 
-        match local_opcode {
-            Rv32LoadStoreOpcode::LOADH => {
-                asm_str += "   movsx eax, word ptr [rax]\n";
-                asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+        if enabled {
+            match local_opcode {
+                Rv32LoadStoreOpcode::LOADH => {
+                    asm_str += "   movsx eax, word ptr [rax]\n";
+                    asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                }
+                Rv32LoadStoreOpcode::LOADB => {
+                    asm_str += "   movsx eax, byte ptr [rax]\n";
+                    asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                }
+                _ => unreachable!("LoadSignExtendExecutor should only handle LOADB/LOADH opcodes"),
             }
-            Rv32LoadStoreOpcode::LOADB => {
-                asm_str += "   movsx eax, byte ptr [rax]\n";
-                asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
-            }
-            _ => unreachable!("LoadSignExtendExecutor should only handle LOADB/LOADH opcodes"),
         }
-
-        // instret += 1
-        asm_str += "   add r14, 1\n";
 
         Ok(asm_str)
     }

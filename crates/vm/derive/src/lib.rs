@@ -457,7 +457,7 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                 #[cfg(feature = "aot")]
                 impl #impl_generics ::openvm_circuit::arch::AotExecutor<#first_ty_generic> for #name #ty_generics #where_clause {
                     #[inline(always)]
-                    fn is_aot_supported(&self, inst: &::openvm_instructions::instruction::Instruction<F>) -> bool {
+                    fn is_aot_supported(&self, inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>) -> bool {
                         match self {
                             #(#is_aot_supported_arms,)*
                         }

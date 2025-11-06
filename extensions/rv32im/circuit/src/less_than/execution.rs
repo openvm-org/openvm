@@ -83,7 +83,6 @@ macro_rules! dispatch {
 const REG_EXEC_STATE_PTR: &str = "rbx";
 const REG_INSNS_PTR: &str = "rbp";
 const REG_PC: &str = "r13";
-const REG_INSTRET: &str = "r14";
 const REG_GUEST_MEM_PTR: &str = "r15";
 
 // Caller saved
@@ -190,7 +189,6 @@ where
         asm_str += &format!("   movzx {}, cl\n", REG_A_W); // zero-extend to 32-bit
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         // let it fall to the next instruction
         Ok(asm_str)
     }
@@ -248,8 +246,6 @@ unsafe fn execute_e12_impl<
     const IS_U32: bool,
 >(
     pre_compute: &LessThanPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -267,8 +263,8 @@ unsafe fn execute_e12_impl<
     rd[0] = cmp_result as u8;
     exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    *pc += DEFAULT_PC_STEP;
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
@@ -280,13 +276,10 @@ unsafe fn execute_e1_impl<
     const IS_U32: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &LessThanPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -298,14 +291,11 @@ unsafe fn execute_e2_impl<
     const IS_U32: bool,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LessThanPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, E_IS_IMM, IS_U32>(&pre_compute.data, exec_state);
 }

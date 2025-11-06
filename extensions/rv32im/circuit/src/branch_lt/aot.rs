@@ -42,8 +42,6 @@ where
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
         asm_str += &rv32_register_to_gpr(a_reg as u8, "eax");
         asm_str += &rv32_register_to_gpr(b_reg as u8, "ecx");
-        // instret += 1
-        asm_str += "   add r14, 1\n";
         asm_str += "   cmp eax, ecx\n";
         let not_jump_label = format!(".asm_execute_pc_{}_not_jump", pc);
         match local_opcode {

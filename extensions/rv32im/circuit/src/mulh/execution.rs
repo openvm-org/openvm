@@ -31,8 +31,6 @@ struct MulHPreCompute {
 // Callee saved registers (shared with MUL AOT)
 #[cfg(feature = "aot")]
 const REG_PC: &str = "r13";
-#[cfg(feature = "aot")]
-const REG_INSTRET: &str = "r14";
 
 // Caller saved registers
 #[cfg(feature = "aot")]
@@ -163,7 +161,6 @@ where
             }
         }
         asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
-        asm += &format!("   add {}, 1\n", REG_INSTRET);
         Ok(asm)
     }
 }
@@ -215,8 +212,6 @@ where
 #[inline(always)]
 unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &MulHPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV32_REGISTER_NUM_LIMBS] =
@@ -226,37 +221,31 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOper
     let rd = <OP as MulHOperation>::compute(rs1, rs2);
     exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    *pc += DEFAULT_PC_STEP;
-    *instret += 1;
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &MulHPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MulHPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait MulHOperation {

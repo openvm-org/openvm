@@ -79,7 +79,6 @@ macro_rules! dispatch {
 const REG_EXEC_STATE_PTR: &str = "rbx";
 const REG_INSNS_PTR: &str = "rbp";
 const REG_PC: &str = "r13";
-const REG_INSTRET: &str = "r14";
 const REG_GUEST_MEM_PTR: &str = "r15";
 
 // Caller saved
@@ -192,7 +191,6 @@ where
         }
         // General Register -> XMM
         asm_str += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_INSTRET, 1);
         // let it fall to the next instruction
         Ok(asm_str)
     }
@@ -246,8 +244,6 @@ unsafe fn execute_e12_impl<
     OP: ShiftOp,
 >(
     pre_compute: &ShiftPreCompute,
-    instret: &mut u64,
-    pc: &mut u32,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read::<u8, 4>(RV32_REGISTER_AS, pre_compute.b as u32);
@@ -263,8 +259,8 @@ unsafe fn execute_e12_impl<
     // Write the result back to memory
     exec_state.vm_write(RV32_REGISTER_AS, pre_compute.a as u32, &rd);
 
-    *instret += 1;
-    *pc = pc.wrapping_add(DEFAULT_PC_STEP);
+    let pc = exec_state.pc();
+    exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
 
 #[create_handler]
@@ -276,13 +272,10 @@ unsafe fn execute_e1_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _instret_end: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute = pre_compute.borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
@@ -294,16 +287,13 @@ unsafe fn execute_e2_impl<
     OP: ShiftOp,
 >(
     pre_compute: &[u8],
-    instret: &mut u64,
-    pc: &mut u32,
-    _arg: u64,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, instret, pc, exec_state);
+    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait ShiftOp {

@@ -254,9 +254,7 @@ pub fn verify_app_proof(
 #[cfg(feature = "async")]
 mod async_prover {
     use derivative::Derivative;
-    use openvm_circuit::{
-        arch::ExecutionError, system::memory::merkle::public_values::UserPublicValuesProof,
-    };
+    use openvm_circuit::system::memory::merkle::public_values::UserPublicValuesProof;
     use openvm_stark_sdk::config::FriParameters;
     use tokio::{spawn, sync::Semaphore, task::spawn_blocking};
     use tracing::{info_span, instrument, Instrument};
@@ -376,23 +374,12 @@ mod async_prover {
             drop(metered_interpreter);
             let pure_interpreter = vm.interpreter(&self.app_exe)?;
             let mut tasks = Vec::with_capacity(segments.len());
-            let terminal_instret = segments
-                .last()
-                .map(|s| s.instret_start + s.num_insns)
-                .unwrap_or(u64::MAX);
+            let mut num_ins_last = 0;
             for (seg_idx, segment) in segments.into_iter().enumerate() {
-                tracing::info!(
-                    %seg_idx,
-                    instret = state.instret(),
-                    %segment.instret_start,
-                    pc = state.pc(),
-                    "Re-executing",
-                );
-                let num_insns = segment.instret_start.checked_sub(state.instret()).unwrap();
-                state = pure_interpreter.execute_from_state(state, Some(num_insns))?;
-
                 let semaphore = self.semaphore.clone();
                 let async_worker = self.clone();
+                state = pure_interpreter.execute_from_state(state, Some(num_ins_last))?;
+                num_ins_last = segment.num_insns;
                 let start_state = state.clone();
                 let task = spawn(
                     async move {
@@ -432,15 +419,6 @@ mod async_prover {
             }
             // Finish execution to termination
             state = pure_interpreter.execute_from_state(state, None)?;
-            if state.instret() != terminal_instret {
-                tracing::warn!(
-                    "Pure execution terminal instret={}, metered execution terminal instret={}",
-                    state.instret(),
-                    terminal_instret
-                );
-                // This should never happen
-                return Err(ExecutionError::DidNotTerminate.into());
-            }
             let final_memory = &state.memory.memory;
             let user_public_values = UserPublicValuesProof::compute(
                 vm.config().as_ref().memory_config.memory_dimensions(),

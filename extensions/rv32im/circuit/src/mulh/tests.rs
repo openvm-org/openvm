@@ -533,7 +533,6 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
 
     let hasher = vm_poseidon2_hasher::<BabyBear>();
@@ -614,9 +613,6 @@ fn test_aot_mulh_variants_basic() {
 
     let (interp_state, aot_state) = run_mul_program(instructions);
 
-    assert_eq!(interp_state.instret(), 10);
-    assert_eq!(aot_state.instret(), 10);
-
     let x3 = read_register(&interp_state, 12);
     assert_eq!(x3, mulh_signed(1234, 200));
     assert_eq!(x3, read_register(&aot_state, 12));
@@ -641,9 +637,6 @@ fn test_aot_mulh_upper_lane() {
     ];
 
     let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), 4);
-    assert_eq!(aot_state.instret(), 4);
 
     let expected = mulh_signed(0x0000_000F, 0x0000_0002);
     let interp_val = read_register(&interp_state, 16);
@@ -696,11 +689,7 @@ fn test_aot_mulh_randomized() {
         0,
     ));
 
-    let total_insts = offsets.len() + offsets.len() + 1;
     let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), total_insts as u64);
-    assert_eq!(aot_state.instret(), total_insts as u64);
 
     for (offset, expected_val) in expected {
         let interp_val = read_register(&interp_state, offset);

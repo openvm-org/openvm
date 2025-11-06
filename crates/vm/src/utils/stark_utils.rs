@@ -122,7 +122,6 @@ where
     let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
                               rhs: &VmState<Val<E::SC>, GuestMemory>| {
         assert_eq!(lhs.pc(), rhs.pc());
-        assert_eq!(lhs.instret(), rhs.instret());
         for r in 0..addr_spaces[1].num_cells {
             let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
             let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
@@ -184,11 +183,10 @@ where
     let mut exit_code = None;
     for segment in segments {
         let Segment {
-            instret_start,
             num_insns,
             trace_heights,
+            ..
         } = segment;
-        assert_eq!(state.as_ref().unwrap().instret(), instret_start);
         let from_state = Option::take(&mut state).unwrap();
         vm.transport_init_memory_to_device(&from_state.memory);
         let PreflightExecutionOutput {

@@ -22,8 +22,6 @@ use crate::{
 #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
 pub struct VmState<F, MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
-    instret: u64,
-    #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
     pub streams: Streams<F>,
@@ -39,7 +37,6 @@ pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 impl<F: Clone, MEM> VmState<F, MEM> {
     /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new_with_defaults(
-        instret: u64,
         pc: u32,
         memory: MEM,
         streams: impl Into<Streams<F>>,
@@ -47,7 +44,6 @@ impl<F: Clone, MEM> VmState<F, MEM> {
         num_custom_pvs: usize,
     ) -> Self {
         Self {
-            instret,
             pc,
             memory,
             streams: streams.into(),
@@ -59,8 +55,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     }
 
     #[inline(always)]
-    pub fn set_instret_and_pc(&mut self, instret: u64, pc: u32) {
-        self.instret = instret;
+    pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
 
@@ -94,7 +89,6 @@ impl<F: Clone> VmState<F, GuestMemory> {
             0
         };
         VmState::new_with_defaults(
-            0,
             pc_start,
             memory,
             inputs.into(),
@@ -109,7 +103,6 @@ impl<F: Clone> VmState<F, GuestMemory> {
         pc_start: u32,
         streams: impl Into<Streams<F>>,
     ) {
-        self.instret = 0;
         self.pc = pc_start;
         self.memory.memory.fill_zero();
         self.memory.memory.set_from_sparse(init_memory);

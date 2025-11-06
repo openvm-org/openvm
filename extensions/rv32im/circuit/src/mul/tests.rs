@@ -299,7 +299,6 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
 
     let hasher = vm_poseidon2_hasher::<BabyBear>();
@@ -356,9 +355,6 @@ fn test_aot_mul_basic() {
 
     let (interp_state, aot_state) = run_mul_program(instructions);
 
-    assert_eq!(interp_state.instret(), 4);
-    assert_eq!(aot_state.instret(), 4);
-
     let interp_x3 = read_register(&interp_state, 12);
     let aot_x3 = read_register(&aot_state, 12);
     assert_eq!(interp_x3, 77);
@@ -376,9 +372,6 @@ fn test_aot_mul_upper_xmm() {
     ];
 
     let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), 4);
-    assert_eq!(aot_state.instret(), 4);
 
     let interp_x1 = read_register(&interp_state, 4);
     let aot_x1 = read_register(&aot_state, 4);
@@ -421,11 +414,7 @@ fn test_aot_mul_randomized_pairs() {
     ));
 
     let mul_count = offsets.len();
-    let total_insts = offsets.len() + mul_count + 1;
     let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), total_insts as u64);
-    assert_eq!(aot_state.instret(), total_insts as u64);
 
     for (offset, expected_val) in expected {
         let interp_val = read_register(&interp_state, offset);
@@ -451,9 +440,6 @@ fn test_aot_mul_chained_dependencies() {
     ];
 
     let (interp_state, aot_state) = run_mul_program(instructions);
-
-    assert_eq!(interp_state.instret(), 6);
-    assert_eq!(aot_state.instret(), 6);
 
     let interp_x3 = read_register(&interp_state, 12);
     let aot_x3 = read_register(&aot_state, 12);

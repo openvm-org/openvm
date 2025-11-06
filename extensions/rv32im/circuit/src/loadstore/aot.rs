@@ -119,9 +119,6 @@ where
             _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),
         }
 
-        // instret += 1
-        asm_str += "   add r14, 1\n";
-
         Ok(asm_str)
     }
 }

@@ -1,18 +1,17 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
+use openvm_circuit::arch::VmState;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
+use openvm_circuit::system::memory::online::GuestMemory;
 use openvm_rv32im_circuit::Rv32ImConfig;
 use openvm_rv32im_transpiler::{
     Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
 };
+use openvm_stark_backend::config::Val;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::decode_elf;
 use openvm_transpiler::{transpiler::Transpiler, FromElf};
-use openvm_circuit::arch::VmState;
-use openvm_stark_backend::config::Val;
-use openvm_circuit::system::memory::online::GuestMemory;
-
 
 type F = BabyBear;
 
@@ -42,25 +41,26 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
                 let interpreter = executor.instance(&exe)?;
+                #[allow(unused_variables)]
                 let state = interpreter.execute(vec![], None)?;
 
                 #[cfg(feature = "aot")]
                 {
                     let naive_interpreter = executor.interpreter_instance(&exe)?;
                     let naive_state = naive_interpreter.execute(vec![], None)?;
-                    let assert_vm_state_eq = |lhs: &VmState<BabyBear, GuestMemory>,
-                                            rhs: &VmState<BabyBear, GuestMemory>| {
-                        assert_eq!(lhs.pc(), rhs.pc());
-                        assert_eq!(lhs.instret(), rhs.instret());
-                        for r in 0..32 {
-                            let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
-                            let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-                            assert_eq!(a, b);
-                        }
-                    };
+                    let assert_vm_state_eq =
+                        |lhs: &VmState<BabyBear, GuestMemory>,
+                         rhs: &VmState<BabyBear, GuestMemory>| {
+                            assert_eq!(lhs.pc(), rhs.pc());
+                            for r in 0..32 {
+                                let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
+                                let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
+                                assert_eq!(a, b);
+                            }
+                        };
                     assert_vm_state_eq(&state, &naive_state);
                 }
-                
+
                 Ok(())
             });
 
