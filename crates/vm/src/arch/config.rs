@@ -17,18 +17,7 @@ use openvm_stark_backend::{
     p3_util::log2_strict_usize,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use stark_backend_v2::{
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
-    },
-    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
-};
+use stark_backend_v2::StarkEngineV2 as StarkEngine;
 
 use super::{AnyEnum, VmChipComplex, PUBLIC_VALUES_AIR_ID};
 use crate::{

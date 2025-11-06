@@ -22,6 +22,7 @@ use openvm_stark_backend::{
     Chip,
 };
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::prover::stacked_pcs::StackedPcsData;
 
 use super::{Instruction, ProgramExecutionCols, EXIT_CODE_FAIL};
 use crate::{
@@ -49,7 +50,7 @@ pub struct VmCommittedExe<SC: StarkGenericConfig> {
     program_commitment: Com<SC>,
     /// Program ROM as cached trace matrix.
     pub trace: Arc<RowMajorMatrix<Val<SC>>>,
-    pub prover_data: Arc<PcsProverData<SC>>,
+    pub prover_data: Arc<StackedPcsData<stark_backend_v2::F, stark_backend_v2::Digest>>,
 }
 
 impl<SC: StarkGenericConfig> VmCommittedExe<SC> {
