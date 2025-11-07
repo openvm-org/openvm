@@ -317,8 +317,8 @@ fn run_cmd(program: &str, args: &[&str]) -> Result<()> {
     let package_dir = env::current_dir()?;
     let prefix = "[test cli e2e]";
     println!(
-        "{prefix} Running command: {} {} {} ...",
-        program, args[0], args[1]
+        "{prefix} Running command: {program} {} {} ...",
+        args[0], args[1]
     );
     let mut cmd = Command::new(program);
     cmd.args(args);
