@@ -155,9 +155,9 @@ where
             asm_str += &format!("   {asm_opcode} {REG_B_W}, {c}\n");
         } else {
             // [b:4]_1 <- [b:4]_1 (shift) [c:4]_1
-
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   mov cl, {REG_C_B}\n");
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
+            asm_str += &format!("   mov cl, {}\n", REG_B_B);
+            asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
             // reg_a = reg_a << c
             asm_str += &format!("   {asm_opcode} {REG_B_W}, cl\n");
         }

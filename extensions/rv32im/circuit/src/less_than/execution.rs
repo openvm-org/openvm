@@ -152,8 +152,8 @@ where
             asm_str += &format!("   cmp {REG_A_W}, {c}\n");
         } else {
             // [a:4]_1 <- [a:4]_1 + [c:4]_1
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   cmp {REG_A_W}, {REG_C_W}\n");
+            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
+            asm_str += &format!("   cmp {REG_A_W}, {REG_B_W}\n");
         }
 
         // Set REG_A to 1 if less than (signed), 0 otherwise

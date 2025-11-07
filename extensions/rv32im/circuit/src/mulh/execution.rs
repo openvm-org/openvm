@@ -31,12 +31,10 @@ struct MulHPreCompute {
 const REG_PC: &str = "r13";
 
 // Caller saved registers
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "ecx";
-#[cfg(feature = "aot")]
-const REG_TMP_W: &str = "esi";
+pub const REG_PC_W: &str = "r13d"; 
+pub const REG_A_W: &str = "eax"; 
+pub const REG_B_W: &str = "ecx"; 
+pub const REG_D_W: &str = "edx";
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
@@ -135,31 +133,28 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
-        const REG_A_W: &str = "eax";
-        const REG_B_W: &str = "ecx";
-        const REG_TMP_W: &str = "r8d";
 
         asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
         asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
 
-        match opcode {
-            MulHOpcode::MULH => {
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
+        match opcode { 
+            MulHOpcode::MULH => { 
+                asm += &format!(" imul {}\n", REG_B_W); 
+                asm += &format!(" mov {}, {}\n", REG_A_W, REG_D_W); 
+            } 
+            MulHOpcode::MULHSU => { 
+                asm += &format!(" imul {}\n", REG_B_W); 
+                asm += &format!(" mov {}, {}\n", REG_A_W, REG_D_W); 
+                asm += &format!(" mov {}, {}\n", REG_D_W, REG_B_W); 
+                asm += &format!(" sar {}, 31\n", REG_D_W); 
+                asm += &rv32_register_to_gpr((b / 4) as u8, REG_B_W); 
+                asm += &format!(" and {}, {}\n", REG_D_W, REG_B_W); 
+                asm += &format!(" add {}, {}\n", REG_A_W, REG_D_W); 
             }
-            MulHOpcode::MULHSU => {
-                asm += &format!("   mov {REG_TMP_W}, {REG_A_W}\n");
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
-                asm += "   mov edx, ecx\n";
-                asm += "   sar edx, 31\n";
-                asm += &format!("   and edx, {REG_TMP_W}\n");
-                asm += "   add eax, edx\n";
-            }
-            MulHOpcode::MULHU => {
-                asm += "   mul ecx\n";
-                asm += "   mov eax, edx\n";
-            }
+            MulHOpcode::MULHU => { 
+                asm += &format!(" mul {}\n", REG_B_W); 
+                asm += &format!(" mov {}, {}\n", REG_A_W, REG_D_W); 
+            } 
         }
         asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         Ok(asm)

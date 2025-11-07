@@ -242,7 +242,6 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            asm_str += &format!("   {asm_opcode} {REG_A_W}, {c}\n");
             asm_str += &format!("   {} {}, {}\n", asm_opcode, str_reg_a, c);
         } else {
             // load the right operand of the opcode

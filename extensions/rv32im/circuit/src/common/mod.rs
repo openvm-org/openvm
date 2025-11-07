@@ -29,8 +29,10 @@ Relative ranking of riscv registers:
 
 pub const REG_PC: &str = "r13";
 pub const REG_PC_W: &str = "r13d";
+pub const REG_A: &str = "rcx";
 pub const REG_A_W: &str = "eax";
 pub const REG_B_W: &str = "ecx";
+pub const REG_B_B: &str = "cl";
 pub const REG_D_W: &str = "edx";
 
 pub (crate)static RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [ // replace it with string of GPR register, if want to override the default mapping
@@ -82,32 +84,64 @@ pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
     }
 }
 
-    pub(crate) fn gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String {
-        let xmm_map_reg = rv32_reg / 2;
-        if rv32_reg % 2 == 0 {
-            format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 0\n")
-        } else {
-            format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
-        }
-    }
-
-    pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
-        if address_space == 1 {
-            if "r15" != gpr {
-                return format!("    mov {gpr}, r15\n");
-            }
-            return "".to_string();
-        }
-
-        let xmm_map_reg = match address_space {
-            2 => "xmm0",
-            3 => "xmm1",
-            4 => "xmm2",
-            _ => unreachable!("Only address space 1, 2, 3, 4 is supported"),
-        };
-        format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
+pub(crate) fn gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String {
+    let xmm_map_reg = rv32_reg / 2;
+    if rv32_reg % 2 == 0 {
+        format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 0\n")
+    } else {
+        format!("   pinsrd xmm{xmm_map_reg}, {gpr}, 1\n")
     }
 }
+
+pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> String {
+    if address_space == 1 {
+        if "r15" != gpr {
+            return format!("    mov {gpr}, r15\n");
+        }
+        return "".to_string();
+    }
+
+    let xmm_map_reg = match address_space {
+        2 => "xmm0",
+        3 => "xmm1",
+        4 => "xmm2",
+        _ => unreachable!("Only address space 1, 2, 3, 4 is supported"),
+    };
+    format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
+}
+
+
+pub(crate) fn REG_MAPPING_rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> (String, String) {
+    if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
+        if gpr == override_reg {
+            return (gpr.to_string(), "".to_string());
+        }
+        return (override_reg.to_string(), format!("   mov {}, {}\n", gpr, override_reg));
+    }
+    let xmm_map_reg = rv32_reg / 2;
+    if rv32_reg % 2 == 0 {
+        (gpr.to_string(), format!("   pextrd {}, xmm{}, 0\n", gpr, xmm_map_reg))
+    } else {
+        (gpr.to_string(), format!("   pextrd {}, xmm{}, 1\n", gpr, xmm_map_reg))
+    }
+}
+
+// String of assembly to get to the register of riscv into `reg_name`; 
+pub(crate) fn REG_MAPPING_gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String{
+    if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
+        if gpr == override_reg {
+            return "".to_string();
+        }
+        return format!("   mov {}, {}\n", override_reg, gpr);
+    }
+    let xmm_map_reg = rv32_reg / 2;
+    if rv32_reg % 2 == 0 {
+        format!("   pinsrd xmm{}, {}, 0\n", xmm_map_reg, gpr)
+    } else {
+        format!("   pinsrd xmm{}, {}, 1\n", xmm_map_reg, gpr)
+    }
+}
+
 
 // make a string that syncs XMM to GPR, and GPR to XMM, using the override map
 pub(crate) fn SYNC_XMM_TO_GPR() -> String { // these should be saved by caller tho, so can be treated independently
