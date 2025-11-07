@@ -568,13 +568,17 @@ pub fn get_pc_index(pc: u32) -> usize {
     (pc / DEFAULT_PC_STEP) as usize
 }
 
-/// Bytes allocated according to the given Layout
+/// Bytes allocated according to the given Layout.
+/// Careful: this struct implements Send and Sync unsafely. Don't change the underlying data after initialization.git
 // @dev: This is duplicate from the openvm crate, but it doesn't seem worth importing `openvm` here
 // just for this.
 pub struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
 }
+
+unsafe impl Send for AlignedBuf {}
+unsafe impl Sync for AlignedBuf {}
 
 impl AlignedBuf {
     /// Allocate a new buffer whose start address is aligned to `align` bytes.

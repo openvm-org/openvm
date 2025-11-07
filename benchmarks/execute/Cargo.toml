@@ -46,7 +46,7 @@ tracing-subscriber.workspace = true
 divan = { package = "codspeed-divan-compat", version = "3.0.2" }
 
 [features]
-default = ["jemalloc"]
+default = ["jemalloc", "aot"]
 tco = ["openvm-sdk/tco"]
 aot = ["openvm-sdk/aot"]
 mimalloc = ["openvm-circuit/mimalloc"]
