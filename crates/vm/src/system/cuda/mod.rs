@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use connector::VmConnectorChipGPU;
+use cuda_backend_v2::GpuBackendV2 as GpuBackend;
 use memory::MemoryInventoryGPU;
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig, PUBLIC_VALUES_AIR_ID},
@@ -11,15 +12,17 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU;
-use openvm_cuda_backend::{prover_backend::GpuBackend, types::F};
-use openvm_stark_backend::{
-    prover::types::{AirProvingContext, CommittedTraceData},
-    Chip,
-};
+use openvm_cuda_backend::types::F;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
 use public_values::PublicValuesChipGPU;
+use stark_backend_v2::{
+    prover::{
+        AirProvingContextV2 as AirProvingContext, CommittedTraceDataV2 as CommittedTraceData,
+    },
+    ChipV2,
+};
 
 pub(crate) const DIGEST_WIDTH: usize = 8;
 
@@ -131,7 +134,9 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
         let memory_ctxs = self
             .memory_inventory
-            .generate_proving_ctxs(access_adapter_records, touched_memory);
+            .generate_proving_ctxs(access_adapter_records, touched_memory)
+            .into_iter()
+            .map(AirProvingContext::from_v1_no_cached);
 
         [program_ctx, connector_ctx]
             .into_iter()
