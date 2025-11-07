@@ -19,7 +19,11 @@ jobs:
     steps:
       - uses: runs-on/action@v2
       - uses: actions/checkout@v5
-
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: codespell-project/actions-codespell@v2
         with:
           skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./guest-libs/ruint/*
