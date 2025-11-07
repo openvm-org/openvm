@@ -553,7 +553,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
         }
         let pc = exec_state.pc();
         let pc_index = get_pc_index(pc);
-
+        println!("pc: {}, pc_index: {}", pc, pc_index);
         if let Some(inst) = fn_ptrs.get(pc_index) {
             // SAFETY: pre_compute assumed to live long enough
             unsafe { (inst.handler)(inst.pre_compute, exec_state) };
@@ -561,6 +561,7 @@ unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
             exec_state.exit_code = Err(ExecutionError::PcOutOfBounds(pc));
         }
     }
+    println!("INTERPRETER EXITED");
 }
 
 #[inline(always)]

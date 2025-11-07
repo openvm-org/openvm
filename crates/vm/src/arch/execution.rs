@@ -199,6 +199,7 @@ pub trait AotExecutor<F> {
         _inst: &Instruction<F>,
         pc: u32,
     ) -> String {
+        println!("fallback_to_interpreter");
         let mut asm_str = String::new();
 
         asm_str += push_internal_registers_str;

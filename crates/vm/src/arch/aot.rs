@@ -228,12 +228,6 @@ where
         for r in 0..16 {
             asm_str += &format!("   pinsrq xmm{r}, rax, 0\n");
         }
-        for i in 0..32{
-            if RV32_OVERRIDE_GPRS[i].is_some(){
-                let override_reg = RV32_OVERRIDE_GPRS[i].unwrap();
-                asm_str += &format!("   mov {}, 0\n", override_reg);
-            }
-        }
         asm_str
     }
 

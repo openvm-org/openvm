@@ -78,6 +78,31 @@ macro_rules! dispatch {
     };
 }
 
+// Callee saved
+const REG_EXEC_STATE_PTR: &str = "rbx";
+const REG_INSNS_PTR: &str = "rbp";
+const REG_PC: &str = "r13";
+const REG_GUEST_MEM_PTR: &str = "r15";
+
+// Caller saved
+const REG_B: &str = "rax";
+const REG_B_W: &str = "eax";
+
+const REG_A: &str = "rcx";
+const REG_A_W: &str = "ecx";
+
+const REG_FOURTH_ARG: &str = "rcx";
+const REG_THIRD_ARG: &str = "rdx";
+const REG_SECOND_ARG: &str = "rsi";
+const REG_FIRST_ARG: &str = "rdi";
+const REG_RETURN_VAL: &str = "rax";
+
+const REG_C: &str = "rsi";
+const REG_C_W: &str = "esi";
+const REG_C_B: &str = "sil";
+
+const DEFAULT_PC_OFFSET: i32 = 4;
+
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -191,7 +216,16 @@ where
         let e: i16 = to_i16(inst.e);
 
         // load the left operand of the opcode
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
+        asm_str += &SYNC_XMM_TO_GPR(); // this sync is wrong??? invalid memory reference
+        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
+            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
+        } else {
+            REG_A_W
+        };
+
+        // load the left operand of the opcode
+        let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a);
+        asm_str += &delta_str_b;
 
         let mut asm_opcode = String::new();
         if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
@@ -209,13 +243,19 @@ where
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
             asm_str += &format!("   {asm_opcode} {REG_A_W}, {c}\n");
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, str_reg_a, c);
         } else {
             // load the right operand of the opcode
-            asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   {asm_opcode} {REG_A_W}, {REG_C_W}\n");
+            let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W);
+            asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, str_reg_a, gpr_reg_c);
         }
 
-        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        asm_str += &REG_MAPPING_gpr_to_rv32_register(str_reg_a, (a / 4) as u8);
+        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
+
+        // Temporary, as migrating all instructions to use new register mapping
+        asm_str += &SYNC_GPR_TO_XMM();
         Ok(asm_str)
     }
 }

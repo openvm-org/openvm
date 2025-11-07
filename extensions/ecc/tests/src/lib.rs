@@ -178,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn test_ecdsa() -> Result<()> {
+    fn test_1ecdsa() -> Result<()> {
         let config = toml::from_str::<AppConfig<SdkVmConfig>>(include_str!(
             "../programs/openvm_k256_keccak.toml"
         ))?

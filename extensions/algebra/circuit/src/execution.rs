@@ -464,10 +464,13 @@ unsafe fn execute_e12_setup_impl<
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, addr as u32)));
+    let rs_addrs = pre_compute.rs_addrs.map(|addr| addr as u32);
     let read_data: [[[u8; BLOCK_SIZE]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + BLOCK_SIZE * BLOCKS - 1 < (1 << POINTER_MAX_BITS));
         from_fn(|i| exec_state.vm_read(RV32_MEMORY_AS, address + (i * BLOCK_SIZE) as u32))
     });
+    // getting values from memory address space...
+    // related to registers? hard to say? written to wrong location???
 
     // Extract first field element as the prime
     let input_prime = if IS_FP2 {
@@ -475,7 +478,11 @@ unsafe fn execute_e12_setup_impl<
     } else {
         BigUint::from_bytes_le(read_data[0].as_flattened())
     };
-
+    println!("rs_addrs: {:?}", rs_addrs); // divide by 4 to get the correct address
+    println!("rs_vals: {:?}", rs_vals);
+    println!("IS_FP2: {}", IS_FP2);
+    println!("read_data: {:?}", read_data);
+    println!("input_prime: {:?}, pre_compute.expr.prime: {:?}", input_prime, pre_compute.expr.prime);
     if input_prime != pre_compute.expr.prime {
         let err = ExecutionError::Fail {
             pc,

@@ -111,6 +111,8 @@ where
         .execute(input.clone(), None)
         .expect("Failed to execute");
 
+        // cant even build the aot instance, without memory seg faulting???
+        // ecdsa is sigsev
     let aot_state_pure = vm
         .get_aot_instance(exe)?
         .execute(input.clone(), None)

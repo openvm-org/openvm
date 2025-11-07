@@ -47,3 +47,9 @@ profile.json.gz
 
 # test fixtures
 benchmarks/fixtures
+
+**/*.a
+**/*.o
+**/*.s
+crates/toolchain/tests/rv32im-test-vectors/tests/*
+riscv/*
