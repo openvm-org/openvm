@@ -197,13 +197,13 @@ pub trait AotExecutor<F> {
         pop_internal_registers_str: &str,
         rv32_regs_to_xmm_str: &str,
         _inst: &Instruction<F>,
-        pc: u32
+        pc: u32,
     ) -> String {
         let mut asm_str = String::new();
 
         asm_str += push_internal_registers_str;
         asm_str += &self.call_extern_handler(pc);
-        
+
         asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
         asm_str += "    AND rax, 1\n"; // check if the return value is 1
         asm_str += "    cmp rax, 1\n"; // compare the return value with 1
@@ -212,7 +212,7 @@ pub trait AotExecutor<F> {
         asm_str += rv32_regs_to_xmm_str; // read the memory from the memory location of the RV32 registers in `GuestMemory`
                                          // registers, to the appropriate XMM registers
         asm_str += &format!("   je asm_run_end_{pc}\n");
-        
+
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
         asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
         asm_str += "    add rcx, rdx\n"; // add the base address and the offset

@@ -131,7 +131,6 @@ impl ExecutionCtxTrait for MeteredCostCtx {
             exec_state.ctx.instret += 1;
             false
         }
-        
     }
 }
 

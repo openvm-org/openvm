@@ -1007,9 +1007,7 @@ where
             .expect("No 'contracts' field found")
             .get(format!("src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol"))
             .unwrap_or_else(|| {
-                panic!(
-                    "No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found"
-                )
+                panic!("No 'src/v{OPENVM_VERSION}/OpenVmHalo2Verifier.sol' field found")
             })
             .get("OpenVmHalo2Verifier")
             .expect("No 'OpenVmHalo2Verifier' field found")

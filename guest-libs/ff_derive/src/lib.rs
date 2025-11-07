@@ -315,8 +315,8 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
                 syn::Error::new_spanned(
                     field,
                     format!(
-                        "The inner field must be an array of limbs. Change this to `[u64; {limbs}]`",
-                    ),
+                    "The inner field must be an array of limbs. Change this to `[u64; {limbs}]`",
+                ),
                 )
                 .to_compile_error(),
             )
@@ -331,9 +331,7 @@ fn validate_struct(ast: &syn::ItemStruct, limbs: usize) -> Option<proc_macro2::T
         return Some(
             syn::Error::new_spanned(
                 arr,
-                format!(
-                    "PrimeField derive requires 64-bit limbs. Change this to `[u64; {limbs}]"
-                ),
+                format!("PrimeField derive requires 64-bit limbs. Change this to `[u64; {limbs}]"),
             )
             .to_compile_error(),
         );

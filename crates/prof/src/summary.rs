@@ -183,9 +183,7 @@ impl AggregateMetrics {
                 .get(PROVE_EXCL_TRACE_TIME_LABEL)
                 .map(|s| s.sum.val)
                 .unwrap_or(0.0);
-            println!(
-                "{execute_metered} {execute_preflight} {trace_gen} {stark_prove}"
-            );
+            println!("{execute_metered} {execute_preflight} {trace_gen} {stark_prove}");
             MdTableCell::new(
                 execute_metered + execute_preflight + trace_gen + stark_prove,
                 None,

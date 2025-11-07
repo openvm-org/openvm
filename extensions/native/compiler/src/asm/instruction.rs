@@ -334,10 +334,7 @@ impl<F: PrimeField32, EF: ExtensionField<F>> AsmInstruction<F, EF> {
                 write!(f, "poseidon2_permute ({dst})fp, ({lhs})fp")
             }
             AsmInstruction::Poseidon2Compress(result, src1, src2) => {
-                write!(
-                    f,
-                    "poseidon2_compress ({result})fp, ({src1})fp, ({src2})fp"
-                )
+                write!(f, "poseidon2_compress ({result})fp, ({src1})fp, ({src2})fp")
             }
             AsmInstruction::PrintF(dst) => {
                 write!(f, "print_f ({dst})fp")

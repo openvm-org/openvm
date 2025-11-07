@@ -609,9 +609,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         }
         let mod_idx = intmod_idx.expect("mod_idx is required");
 
-        println!(
-            "[init] complex #{complex_idx} = {struct_name} (mod_idx = {mod_idx})"
-        );
+        println!("[init] complex #{complex_idx} = {struct_name} (mod_idx = {mod_idx})");
 
         for op_type in ["add", "sub", "mul", "div"] {
             let func_name = syn::Ident::new(

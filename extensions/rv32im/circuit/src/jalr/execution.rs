@@ -3,8 +3,6 @@ use std::{
     mem::size_of,
 };
 
-#[cfg(feature = "aot")]
-use crate::common::*;
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 #[cfg(feature = "aot")]
@@ -19,6 +17,8 @@ use openvm_rv32im_transpiler::Rv32JalrOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv32JalrExecutor;
+#[cfg(feature = "aot")]
+use crate::common::*;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]

@@ -178,9 +178,7 @@ fn get_internal_verifier_proof_indices(
         return (ProofType::Internal, vec![proof_to_wrap_idx]);
     }
 
-    panic!(
-        "Invalid internal verifier index {internal_verifier_index}"
-    );
+    panic!("Invalid internal verifier index {internal_verifier_index}");
 }
 
 fn main() -> Result<()> {

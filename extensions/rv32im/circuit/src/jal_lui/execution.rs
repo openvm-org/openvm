@@ -125,7 +125,7 @@ where
             let next_pc = pc as i32 + signed_imm;
             debug_assert!(next_pc >= 0);
             asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
-        } ;
+        };
 
         Ok(asm_str)
     }

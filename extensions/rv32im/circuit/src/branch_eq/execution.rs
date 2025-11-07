@@ -149,7 +149,7 @@ where
             }
         }
         asm_str += &format!("{not_jump_label}:\n");
-    
+
         Ok(asm_str)
     }
 

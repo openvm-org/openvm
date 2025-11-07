@@ -17,7 +17,6 @@ use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::execution_mode::ExecutionCtx;
-
 use openvm_circuit::{
     arch::{
         execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
@@ -94,8 +93,8 @@ static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new()
 static SUCCESSFUL_EXECUTIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 // Cachce for AOT instances, that is only initialized once, across all threads
-// Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads can share the same instance
-// Mutex is used to protect the cache from concurrent access
+// Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads
+// can share the same instance Mutex is used to protect the cache from concurrent access
 // HashMap is used to store the instances, keyed by the program name
 #[allow(dead_code)]
 type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;

@@ -569,7 +569,8 @@ pub fn get_pc_index(pc: u32) -> usize {
 }
 
 /// Bytes allocated according to the given Layout.
-/// Careful: this struct implements Send and Sync unsafely. Don't change the underlying data after initialization.git
+/// Careful: this struct implements Send and Sync unsafely. Don't change the underlying data after
+/// initialization.git
 // @dev: This is duplicate from the openvm crate, but it doesn't seem worth importing `openvm` here
 // just for this.
 pub struct AlignedBuf {

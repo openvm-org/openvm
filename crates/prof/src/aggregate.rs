@@ -302,9 +302,7 @@ impl AggregateMetrics {
                 let value = self
                     .by_group
                     .get(group_name)
-                    .unwrap_or_else(|| {
-                        panic!("Group '{group_name}' should exist in by_group map")
-                    })
+                    .unwrap_or_else(|| panic!("Group '{group_name}' should exist in by_group map"))
                     .clone();
                 (key, value)
             })
