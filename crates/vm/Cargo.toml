@@ -42,8 +42,6 @@ getset.workspace = true
 dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
-sha2 = { workspace = true, optional = true }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
@@ -86,10 +84,8 @@ test-utils = ["dep:openvm-stark-sdk"]
 tco = ["openvm-circuit-derive/tco"]
 # Ahead-of-time execution
 aot = [
-    "dep:hex",
     "dep:libloading",
     "dep:openvm-rv32im-transpiler",
-    "dep:sha2",
     "openvm-circuit-derive/aot",
 ]
 # Disable bounds checking in memory operations for performance

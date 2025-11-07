@@ -609,14 +609,11 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         }
         let mod_idx = intmod_idx.expect("mod_idx is required");
 
-        println!(
-            "[init] complex #{} = {} (mod_idx = {})",
-            complex_idx, struct_name, mod_idx
-        );
+        println!("[init] complex #{complex_idx} = {struct_name} (mod_idx = {mod_idx})");
 
         for op_type in ["add", "sub", "mul", "div"] {
             let func_name = syn::Ident::new(
-                &format!("complex_{}_extern_func_{}", op_type, struct_name),
+                &format!("complex_{op_type}_extern_func_{struct_name}"),
                 span.into(),
             );
             let mut chars = op_type.chars().collect::<Vec<_>>();
@@ -639,7 +636,7 @@ pub fn complex_init(input: TokenStream) -> TokenStream {
         }
 
         let setup_extern_func = syn::Ident::new(
-            &format!("complex_setup_extern_func_{}", struct_name),
+            &format!("complex_setup_extern_func_{struct_name}"),
             span.into(),
         );
 

@@ -240,8 +240,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
                 execution_result,
                 Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
             ),
-            "Expected failure: the public value root proof has a wrong pv commit: {:?}",
-            execution_result
+            "Expected failure: the public value root proof has a wrong pv commit: {execution_result:?}"
         );
     }
 
@@ -262,8 +261,7 @@ fn test_public_values_and_leaf_verification() -> eyre::Result<()> {
                 execution_result,
                 Err(VirtualMachineError::Execution(ExecutionError::Fail { .. }))
             ),
-            "Expected failure: the public value root proof has a wrong path proof: {:?}",
-            execution_result
+            "Expected failure: the public value root proof has a wrong path proof: {execution_result:?}"
         );
     }
     Ok(())
@@ -317,7 +315,7 @@ fn test_metered_execution_suspension() -> eyre::Result<()> {
                 .map(|state| state.vm_state.memory.read::<u8, 1>(2, 100))
                 .collect()
         };
-        println!("Values at address space 2, ptr: 100: {:?}", values);
+        println!("Values at address space 2, ptr: 100: {values:?}");
     }
 
     Ok(())
@@ -354,7 +352,7 @@ fn test_static_verifier_custom_pv_handler() -> eyre::Result<()> {
             let leaf_commit = compress_babybear_var_to_bn254(builder, pvs.leaf_verifier_commit);
             let num_public_values = pvs.public_values.len();
 
-            println!("num_public_values: {}", num_public_values);
+            println!("num_public_values: {num_public_values}");
             println!("self.exe_commit: {:?}", self.exe_commit);
             println!("self.leaf_verifier_commit: {:?}", self.leaf_verifier_commit);
 

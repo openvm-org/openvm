@@ -9,16 +9,13 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode, VmOpcode,
+    LocalOpcode,
 };
 use openvm_rv32im_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{
-    adapters::imm_to_bytes,
-    common::{gpr_to_rv32_register, rv32_register_to_gpr},
-    BaseAluExecutor,
-};
+#[allow(unused_imports)]
+use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -80,32 +77,6 @@ macro_rules! dispatch {
         )
     };
 }
-
-// Callee saved
-const REG_EXEC_STATE_PTR: &str = "rbx";
-const REG_INSNS_PTR: &str = "rbp";
-const REG_PC: &str = "r13";
-const REG_GUEST_MEM_PTR: &str = "r15";
-
-// Caller saved
-const REG_B: &str = "rax";
-const REG_B_W: &str = "eax";
-
-const REG_A: &str = "rcx";
-const REG_A_W: &str = "ecx";
-
-const REG_FOURTH_ARG: &str = "rcx";
-const REG_THIRD_ARG: &str = "rdx";
-const REG_SECOND_ARG: &str = "rsi";
-const REG_FIRST_ARG: &str = "rdi";
-const REG_RETURN_VAL: &str = "rax";
-
-const REG_C: &str = "r10";
-const REG_C_W: &str = "r10d";
-const REG_C_B: &str = "r10b";
-const REG_AUX: &str = "r11";
-
-const DEFAULT_PC_OFFSET: i32 = 4;
 
 impl<F, A, const LIMB_BITS: usize> InterpreterExecutor<F>
     for BaseAluExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS>
@@ -203,11 +174,11 @@ impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
 where
     F: PrimeField32,
 {
-    fn is_aot_supported(&self, instruction: &Instruction<F>) -> bool {
+    fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
         true
     }
 
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
+    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let to_i16 = |c: F| -> i16 {
             let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
             let c_i24 = ((c_u24 << 8) as i32) >> 8;
@@ -237,11 +208,11 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, c);
+            asm_str += &format!("   {asm_opcode} {REG_A_W}, {c}\n");
         } else {
             // load the right operand of the opcode
             asm_str += &rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, REG_A_W, REG_C_W);
+            asm_str += &format!("   {asm_opcode} {REG_A_W}, {REG_C_W}\n");
         }
 
         asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);

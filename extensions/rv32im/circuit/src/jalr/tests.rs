@@ -393,7 +393,7 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    /// TODO: add this code to AOT utils file for testing purposes to check equivalence of VMStates
+    // TODO: add this code to AOT utils file for testing purposes to check equivalence of VMStates
     assert_eq!(interp_state.pc(), aot_state.pc());
     use openvm_circuit::{
         arch::hasher::poseidon2::vm_poseidon2_hasher, system::memory::merkle::MerkleTree,

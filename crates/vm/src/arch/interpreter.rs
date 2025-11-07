@@ -195,7 +195,7 @@ where
     /// - This function assumes that the `pc` is within program bounds - this should be the case if
     ///   the pc is checked to be in bounds before jumping to it.
     /// - The returned slice may not be entirely initialized, but it is the job of each Executor to
-    /// initialize the parts of the buffer that the instruction handler will use.
+    ///   initialize the parts of the buffer that the instruction handler will use.
     #[cfg(feature = "tco")]
     #[inline(always)]
     pub fn get_pre_compute(&self, pc: u32) -> &[u8] {
@@ -568,13 +568,18 @@ pub fn get_pc_index(pc: u32) -> usize {
     (pc / DEFAULT_PC_STEP) as usize
 }
 
-/// Bytes allocated according to the given Layout
+/// Bytes allocated according to the given Layout.
+/// Careful: this struct implements Send and Sync unsafely. Don't change the underlying data after
+/// initialization.git
 // @dev: This is duplicate from the openvm crate, but it doesn't seem worth importing `openvm` here
 // just for this.
 pub struct AlignedBuf {
     pub ptr: *mut u8,
     pub layout: Layout,
 }
+
+unsafe impl Send for AlignedBuf {}
+unsafe impl Sync for AlignedBuf {}
 
 impl AlignedBuf {
     /// Allocate a new buffer whose start address is aligned to `align` bytes.

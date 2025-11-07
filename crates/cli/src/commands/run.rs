@@ -306,21 +306,21 @@ impl RunCmd {
         match self.run_args.mode {
             ExecutionMode::Pure => {
                 let output = sdk.execute(exe, inputs)?;
-                println!("Execution output: {:?}", output);
+                println!("Execution output: {output:?}");
             }
             ExecutionMode::Meter => {
                 let (output, (cost, instret)) = sdk.execute_metered_cost(exe, inputs)?;
-                println!("Execution output: {:?}", output);
+                println!("Execution output: {output:?}");
 
-                println!("Number of instructions executed: {}", instret);
-                println!("Total cost: {}", cost);
+                println!("Number of instructions executed: {instret}");
+                println!("Total cost: {cost}");
             }
             ExecutionMode::Segment => {
                 let (output, segments) = sdk.execute_metered(exe, inputs)?;
-                println!("Execution output: {:?}", output);
+                println!("Execution output: {output:?}");
 
                 let total_instructions: u64 = segments.iter().map(|s| s.num_insns).sum();
-                println!("Number of instructions executed: {}", total_instructions);
+                println!("Number of instructions executed: {total_instructions}");
                 println!("Total segments: {}", segments.len());
             }
         }

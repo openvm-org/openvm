@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -16,8 +14,8 @@ use openvm_instructions::{
 use openvm_rv32im_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[cfg(feature = "aot")]
-use crate::common::{gpr_to_rv32_register, rv32_register_to_gpr};
+#[allow(unused_imports)]
+use crate::common::*;
 use crate::MulHExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -27,18 +25,6 @@ struct MulHPreCompute {
     b: u8,
     c: u8,
 }
-
-// Callee saved registers (shared with MUL AOT)
-#[cfg(feature = "aot")]
-const REG_PC: &str = "r13";
-
-// Caller saved registers
-#[cfg(feature = "aot")]
-const REG_A_W: &str = "eax";
-#[cfg(feature = "aot")]
-const REG_B_W: &str = "ecx";
-#[cfg(feature = "aot")]
-const REG_TMP_W: &str = "r8d";
 
 impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV32_REGISTER_NUM_LIMBS }, LIMB_BITS> {
     #[inline(always)]
@@ -137,6 +123,9 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
+        const REG_A_W: &str = "eax";
+        const REG_B_W: &str = "ecx";
+        const REG_TMP_W: &str = "r8d";
 
         asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
         asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);

@@ -120,7 +120,7 @@ fn main() -> Result<()> {
             PROGRAMS_AND_INPUTS.len(),
             program,
             input
-                .map(|i| format!("(input: {})", i))
+                .map(|i| format!("(input: {i})"))
                 .unwrap_or_else(|| "(no input)".to_string())
         );
 
@@ -155,7 +155,7 @@ fn main() -> Result<()> {
 
         // Save app proof
         write_fixture(
-            fixtures_dir.join(format!("{}.app.proof", program)),
+            fixtures_dir.join(format!("{program}.app.proof")),
             &app_proof,
             "app proof",
         )?;
@@ -166,25 +166,25 @@ fn main() -> Result<()> {
 
         // Save keys
         write_fixture(
-            fixtures_dir.join(format!("{}.leaf.exe", program)),
+            fixtures_dir.join(format!("{program}.leaf.exe")),
             &app_pk.leaf_committed_exe.exe,
             "leaf exe",
         )?;
 
         write_fixture(
-            fixtures_dir.join(format!("{}.leaf.pk", program)),
+            fixtures_dir.join(format!("{program}.leaf.pk")),
             &agg_pk.leaf_vm_pk.vm_pk,
             "leaf proving key",
         )?;
 
         write_fixture(
-            fixtures_dir.join(format!("{}.internal.exe", program)),
+            fixtures_dir.join(format!("{program}.internal.exe")),
             &agg_pk.internal_committed_exe.exe,
             "internal exe",
         )?;
 
         write_fixture(
-            fixtures_dir.join(format!("{}.internal.pk", program)),
+            fixtures_dir.join(format!("{program}.internal.pk")),
             &agg_pk.internal_vm_pk.vm_pk,
             "internal proving key",
         )?;
@@ -208,9 +208,9 @@ fn main() -> Result<()> {
         // Save leaf proofs
         for (i, leaf_proof) in leaf_proofs.iter().enumerate() {
             write_fixture(
-                fixtures_dir.join(format!("{}.leaf.{}.proof", program, i)),
+                fixtures_dir.join(format!("{program}.leaf.{i}.proof")),
                 leaf_proof,
-                &format!("leaf proof {}", i),
+                &format!("leaf proof {i}"),
             )?;
         }
 

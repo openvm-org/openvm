@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
+#![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
 use openvm_circuit::{
     arch::{
@@ -22,7 +23,7 @@ mod auipc;
 mod base_alu;
 mod branch_eq;
 mod branch_lt;
-pub(crate) mod common;
+pub mod common;
 mod divrem;
 mod hintstore;
 mod jal_lui;

@@ -45,6 +45,7 @@ cuda = [
     "dep:cuda-runtime-sys",
     "openvm-circuit-primitives/cuda",
 ]
+aot = ["openvm-circuit/aot"]
 parallel = ["openvm-stark-backend/parallel"]
 test-utils = [
     "dep:halo2curves-axiom",

@@ -706,6 +706,6 @@ impl GpuChipTester {
             &expected_error
         );
         let result = self.simple_test();
-        assert_eq!(result.err(), Some(expected_error), "{}", msg);
+        assert_eq!(result.err(), Some(expected_error), "{msg}");
     }
 }

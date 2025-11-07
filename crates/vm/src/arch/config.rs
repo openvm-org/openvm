@@ -143,7 +143,7 @@ pub trait InitFileGenerator {
             let dest_path = Path::new(manifest_dir)
                 .join(init_file_name.unwrap_or(OPENVM_DEFAULT_INIT_FILE_NAME));
             let mut f = File::create(&dest_path)?;
-            write!(f, "{}", contents)?;
+            write!(f, "{contents}")?;
         }
         Ok(())
     }

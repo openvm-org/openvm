@@ -1,7 +1,6 @@
 use openvm_circuit::arch::{AotError, AotExecutor};
 use openvm_instructions::{
     instruction::Instruction,
-    program::DEFAULT_PC_STEP,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
     LocalOpcode, NATIVE_AS,
 };
@@ -74,46 +73,46 @@ where
 
         let mut asm_str = String::new();
         // eax = [b:4]_1
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "eax");
+        asm_str += &rv32_register_to_gpr(b_reg, "eax");
         // eax = ptr = [b:4]_1 + imm_extended
         asm_str += &format!("   add eax, {imm_extended}\n");
         // rcx = <start of destination address space>
         asm_str += &address_space_start_to_gpr(e_u32, "rcx");
         // rax = rax + rcx = <memory address in host memory>
-        asm_str += &format!("   lea rax, [rax + rcx]\n");
+        asm_str += "   lea rax, [rax + rcx]\n";
 
         match local_opcode {
             Rv32LoadStoreOpcode::LOADW => {
                 asm_str += "   mov eax, [rax]\n";
-                asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                asm_str += &gpr_to_rv32_register("eax", a_reg);
             }
             Rv32LoadStoreOpcode::LOADHU => {
                 asm_str += "   movzx eax, word ptr [rax]\n";
-                asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                asm_str += &gpr_to_rv32_register("eax", a_reg);
             }
             Rv32LoadStoreOpcode::LOADBU => {
                 asm_str += "   movzx eax, byte ptr [rax]\n";
-                asm_str += &gpr_to_rv32_register("eax", a_reg as u8);
+                asm_str += &gpr_to_rv32_register("eax", a_reg);
             }
             Rv32LoadStoreOpcode::STOREW => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg as u8, "ecx");
+                asm_str += &rv32_register_to_gpr(a_reg, "ecx");
                 asm_str += "   mov [rax], ecx\n";
             }
             Rv32LoadStoreOpcode::STOREH => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg as u8, "ecx");
+                asm_str += &rv32_register_to_gpr(a_reg, "ecx");
                 asm_str += "   mov word ptr [rax], cx\n";
             }
             Rv32LoadStoreOpcode::STOREB => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg as u8, "ecx");
+                asm_str += &rv32_register_to_gpr(a_reg, "ecx");
                 asm_str += "   mov byte ptr [rax], cl\n";
             }
             _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),

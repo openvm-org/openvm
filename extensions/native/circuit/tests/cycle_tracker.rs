@@ -46,9 +46,9 @@ fn test_cycle_tracker() {
     });
 
     for (i, debug_info) in program.debug_infos().deref().iter().enumerate() {
-        println!("debug_info {}: {:?}", i, debug_info);
+        println!("debug_info {i}: {debug_info:?}");
     }
 
-    println!("{}", program);
+    println!("{program}");
     execute_program(program, vec![]);
 }

@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
@@ -138,81 +136,79 @@ where
                 DivRemOpcode::REMU => "remu",
             }
         );
-        let done_label = format!("{}__done", label_prefix);
+        let done_label = format!("{label_prefix}__done");
 
-        let zero_label = format!("{}__divisor_zero", label_prefix);
-        let overflow_label = format!("{}__overflow", label_prefix);
-        let normal_label = format!("{}__normal", label_prefix);
-        let normal_label = format!("{}__normal", label_prefix);
+        let zero_label = format!("{label_prefix}__divisor_zero");
+        let overflow_label = format!("{label_prefix}__overflow");
+        let normal_label = format!("{label_prefix}__normal");
         match local_opcode {
             DivRemOpcode::DIV => {
                 asm_str += "   test ecx, ecx\n";
-                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
-                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += &format!("   jne {normal_label}\n");
                 asm_str += "   cmp ecx, -1\n";
-                asm_str += &format!("   jne {}\n", normal_label);
-                asm_str += &format!("   jmp {}\n", overflow_label);
+                asm_str += &format!("   jne {normal_label}\n");
+                asm_str += &format!("   jmp {overflow_label}\n");
 
-                asm_str += &format!("{}:\n", normal_label);
+                asm_str += &format!("{normal_label}:\n");
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   idiv ecx\n";
                 asm_str += "   mov edx, eax\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", zero_label);
+                asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, -1\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", overflow_label);
+                asm_str += &format!("{overflow_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::DIVU => {
                 asm_str += "   test ecx, ecx\n";
-                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   div ecx\n";
                 asm_str += "   mov edx, eax\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", zero_label);
+                asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, -1\n";
             }
             DivRemOpcode::REM => {
-
                 asm_str += "   test ecx, ecx\n";
-                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += &format!("   je {zero_label}\n");
                 asm_str += "   cmp eax, 0x80000000\n";
-                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += &format!("   jne {normal_label}\n");
                 asm_str += "   cmp ecx, -1\n";
-                asm_str += &format!("   jne {}\n", normal_label);
+                asm_str += &format!("   jne {normal_label}\n");
                 asm_str += "   mov edx, 0\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", normal_label);
+                asm_str += &format!("{normal_label}:\n");
                 // sign-extend EAX into EDX:EAX
                 asm_str += "   cdq\n";
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   idiv ecx\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", zero_label);
+                asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
             DivRemOpcode::REMU => {
                 asm_str += "   test ecx, ecx\n";
-                asm_str += &format!("   je {}\n", zero_label);
+                asm_str += &format!("   je {zero_label}\n");
                 // eax = eax / ecx, edx = eax % ecx
                 asm_str += "   div ecx\n";
-                asm_str += &format!("   jmp {}\n", done_label);
+                asm_str += &format!("   jmp {done_label}\n");
 
-                asm_str += &format!("{}:\n", zero_label);
+                asm_str += &format!("{zero_label}:\n");
                 asm_str += "   mov edx, eax\n";
             }
         }
-        asm_str += &format!("{}:\n", done_label);
+        asm_str += &format!("{done_label}:\n");
         asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
 
         Ok(asm_str)

@@ -857,7 +857,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let execution_where_clause = quote! { where #(#execution_where_predicates),* };
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
 
-    let executor_type = Ident::new(&format!("{}Executor", name), name.span());
+    let executor_type = Ident::new(&format!("{name}Executor"), name.span());
 
     let token_stream = TokenStream::from(quote! {
         #[derive(

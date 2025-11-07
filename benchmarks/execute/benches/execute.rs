@@ -1,6 +1,5 @@
 use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs, io,
     path::Path,
     sync::{Arc, Mutex, OnceLock},
@@ -16,11 +15,11 @@ use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtensi
 use openvm_benchmarks_utils::{get_elf_path, get_fixtures_dir, get_programs_dir, read_elf_file};
 use openvm_bigint_circuit::{Int256, Int256CpuProverExt, Int256Executor};
 use openvm_bigint_transpiler::Int256TranspilerExtension;
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::execution_mode::ExecutionCtx;
 use openvm_circuit::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCostCtx},
-        instructions::exe::VmExe,
-        interpreter::InterpretedInstance,
+        execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
         ContinuationVmProof, *,
     },
     derive::VmConfig,
@@ -34,7 +33,7 @@ use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExten
 use openvm_ecc_transpiler::EccTranspilerExtension;
 use openvm_keccak256_circuit::{Keccak256, Keccak256CpuProverExt, Keccak256Executor};
 use openvm_keccak256_transpiler::Keccak256TranspilerExtension;
-use openvm_native_circuit::{NativeCpuBuilder, NATIVE_MAX_TRACE_HEIGHTS};
+use openvm_native_circuit::NativeCpuBuilder;
 use openvm_native_recursion::hints::Hintable;
 use openvm_pairing_circuit::{
     PairingCurve, PairingExtension, PairingExtensionExecutor, PairingProverExt,
@@ -83,23 +82,21 @@ const APP_PROGRAMS: &[&str] = &[
     "revm_transfer",
     "pairing",
 ];
+#[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
+#[allow(dead_code)]
 const INTERNAL_VERIFIER_PROGRAMS: &[&str] = &["fibonacci"];
 
 static VM_PROVING_KEY: OnceLock<MultiStarkProvingKey<SC>> = OnceLock::new();
 static METERED_COST_CTX: OnceLock<(MeteredCostCtx, Vec<usize>)> = OnceLock::new();
 static EXECUTOR: OnceLock<VmExecutor<BabyBear, ExecuteConfig>> = OnceLock::new();
 static SUCCESSFUL_EXECUTIONS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
-#[cfg(feature = "aot")]
-thread_local! {
-    static AOT_INSTANCE_CACHE: RefCell<HashMap<String, Arc<AotInstance<'static, BabyBear, ExecutionCtx>>>> =
-        RefCell::new(HashMap::new());
-}
-// Cachce for AOT instances, that is only initialized once, across all threads
-// Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads can share the same instance
-// Mutex is used to protect the cache from concurrent access
-// HashMap is used to store the instances, keyed by the program name
 
+// Cachce for AOT instances, that is only initialized once, across all threads
+// Arc (atomically referenced counted pointer) is used to store the instance, so multiple threads
+// can share the same instance Mutex is used to protect the cache from concurrent access
+// HashMap is used to store the instances, keyed by the program name
+#[allow(dead_code)]
 type NativeVm = VirtualMachine<BabyBearPoseidon2Engine, NativeCpuBuilder>;
 
 fn report_program_success(mode: &str, program: &str) {
@@ -127,7 +124,7 @@ where
             report_program_success(mode, program);
             value
         }
-        Err(err) => panic!("{context}: {:?}", err),
+        Err(err) => panic!("{context}: {err:?}"),
     }
 }
 
@@ -304,11 +301,12 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
     #[cfg(feature = "aot")]
     {
         let program_name = program.to_string();
+        let aot_instance = create_aot_instance(&program_name);
         bencher
-            .with_inputs(|| Vec::<Vec<BabyBear>>::new())
+            .with_inputs(Vec::<Vec<BabyBear>>::new)
             .bench_values(|input| {
                 expect_execution(
-                    cached_aot_instance(&program_name).execute(input, None),
+                    aot_instance.execute(input, None),
                     "AOT benchmark",
                     program,
                     "Failed to execute program in AOT mode",
@@ -337,25 +335,13 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
 }
 
 #[cfg(feature = "aot")]
-fn cached_aot_instance(program: &str) -> Arc<AotInstance<'static, BabyBear, ExecutionCtx>> {
-    AOT_INSTANCE_CACHE.with(|cache| {
-        if let Some(instance) = cache.borrow().get(program).cloned() {
-            return instance;
-        }
-
-        let exe = load_program_executable(program)
-            .expect("Failed to load program executable for AOT cache");
-        let instance = executor()
-            .instance(&exe)
-            .unwrap_or_else(|err| panic!("Failed to create AOT instance for {program}: {err}"));
-        let instance = Arc::new(instance);
-
-        let mut guard = cache.borrow_mut();
-        let entry = guard
-            .entry(program.to_string())
-            .or_insert_with(|| instance.clone());
-        entry.clone()
-    })
+fn create_aot_instance(program: &str) -> AotInstance<'static, BabyBear, ExecutionCtx> {
+    let exe =
+        load_program_executable(program).expect("Failed to load program executable for AOT cache");
+    let instance = executor()
+        .instance(&exe)
+        .unwrap_or_else(|err| panic!("Failed to create AOT instance for {program}: {err}"));
+    instance
 }
 
 #[divan::bench(args = APP_PROGRAMS, sample_count=5)]
@@ -407,16 +393,17 @@ fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
         });
 }
 
+#[allow(dead_code)]
 fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
-    let app_proof_bytes = fs::read(fixtures_dir.join(format!("{}.app.proof", program))).unwrap();
+    let app_proof_bytes = fs::read(fixtures_dir.join(format!("{program}.app.proof"))).unwrap();
     let app_proof: ContinuationVmProof<SC> = bitcode::deserialize(&app_proof_bytes).unwrap();
 
-    let leaf_exe_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.exe", program))).unwrap();
+    let leaf_exe_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.exe"))).unwrap();
     let leaf_exe: VmExe<BabyBear> = bitcode::deserialize(&leaf_exe_bytes).unwrap();
 
-    let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.pk", program))).unwrap();
+    let leaf_pk_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.pk"))).unwrap();
     let leaf_pk = bitcode::deserialize(&leaf_pk_bytes).unwrap();
 
     let leaf_inputs =
@@ -433,19 +420,19 @@ fn setup_leaf_verifier(program: &str) -> (NativeVm, VmExe<BabyBear>, Vec<Vec<Bab
     (vm, leaf_exe, input_stream)
 }
 
+#[allow(dead_code)]
 fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Vec<Vec<BabyBear>>) {
     let fixtures_dir = get_fixtures_dir();
 
     let internal_exe_bytes =
-        fs::read(fixtures_dir.join(format!("{}.internal.exe", program))).unwrap();
+        fs::read(fixtures_dir.join(format!("{program}.internal.exe"))).unwrap();
     let internal_exe: VmExe<BabyBear> = bitcode::deserialize(&internal_exe_bytes).unwrap();
 
-    let internal_pk_bytes =
-        fs::read(fixtures_dir.join(format!("{}.internal.pk", program))).unwrap();
+    let internal_pk_bytes = fs::read(fixtures_dir.join(format!("{program}.internal.pk"))).unwrap();
     let internal_pk = bitcode::deserialize(&internal_pk_bytes).unwrap();
 
     // Load leaf proof by index (using index 0)
-    let leaf_proof_bytes = fs::read(fixtures_dir.join(format!("{}.leaf.0.proof", program)))
+    let leaf_proof_bytes = fs::read(fixtures_dir.join(format!("{program}.leaf.0.proof")))
         .expect("No leaf proof available at index 0");
     let leaf_proof: Proof<SC> = bitcode::deserialize(&leaf_proof_bytes).unwrap();
 
@@ -467,6 +454,7 @@ fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Ve
     (vm, internal_committed_exe.exe, input_stream)
 }
 
+#[allow(dead_code)]
 // Safe wrapper for the unsafe transmute operation
 fn transmute_interpreter_lifetime<'a, Ctx>(
     interpreter: InterpretedInstance<'_, BabyBear, Ctx>,
@@ -537,7 +525,12 @@ fn benchmark_leaf_verifier_execute_preflight(bencher: Bencher, program: &str) {
         })
         .bench_values(|(vm, state, mut interpreter)| {
             let _out = expect_execution(
-                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                vm.execute_preflight(
+                    &mut interpreter,
+                    state,
+                    None,
+                    openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS,
+                ),
                 "leaf verifier preflight benchmark",
                 program,
                 "Failed to execute preflight",
@@ -605,7 +598,12 @@ fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str
         })
         .bench_values(|(vm, state, mut interpreter)| {
             let _out = expect_execution(
-                vm.execute_preflight(&mut interpreter, state, None, NATIVE_MAX_TRACE_HEIGHTS),
+                vm.execute_preflight(
+                    &mut interpreter,
+                    state,
+                    None,
+                    openvm_native_circuit::NATIVE_MAX_TRACE_HEIGHTS,
+                ),
                 "internal verifier preflight benchmark",
                 program,
                 "Failed to execute preflight",

@@ -72,12 +72,10 @@ impl Field for Secp256k1Scalar {
         unimplemented!()
     }
 
-    #[must_use]
     fn square(&self) -> Self {
         self * self
     }
 
-    #[must_use]
     fn double(&self) -> Self {
         self + self
     }

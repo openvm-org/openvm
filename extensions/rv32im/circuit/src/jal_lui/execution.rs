@@ -117,16 +117,14 @@ where
             imm << 12
         };
 
-        asm_str += &format!("   mov edx, {}\n", rd);
+        asm_str += &format!("   mov edx, {rd}\n");
         if enabled {
-            asm_str += &gpr_to_rv32_register("edx", a_reg as u8);
+            asm_str += &gpr_to_rv32_register("edx", a_reg);
         }
         if is_jal {
             let next_pc = pc as i32 + signed_imm;
             debug_assert!(next_pc >= 0);
-            asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
-        } else {
-            
+            asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
         };
 
         Ok(asm_str)

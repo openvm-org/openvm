@@ -11,7 +11,7 @@ where
     F: PrimeField32,
 {
     fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use openvm_instructions::{program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode};
+        use openvm_instructions::{riscv::RV32_REGISTER_AS, LocalOpcode};
         use openvm_rv32im_transpiler::BranchLessThanOpcode;
 
         use crate::common::rv32_register_to_gpr;
@@ -40,32 +40,32 @@ where
         let b_reg = b / 4;
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
-        asm_str += &rv32_register_to_gpr(a_reg as u8, "eax");
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "ecx");
+        asm_str += &rv32_register_to_gpr(a_reg, "eax");
+        asm_str += &rv32_register_to_gpr(b_reg, "ecx");
         asm_str += "   cmp eax, ecx\n";
-        let not_jump_label = format!(".asm_execute_pc_{}_not_jump", pc);
+        let not_jump_label = format!(".asm_execute_pc_{pc}_not_jump");
         match local_opcode {
             BranchLessThanOpcode::BGE => {
                 // less (signed) -> not jump
-                asm_str += &format!("   jl {}\n", not_jump_label);
+                asm_str += &format!("   jl {not_jump_label}\n");
             }
             BranchLessThanOpcode::BGEU => {
                 // below (unsigned) -> not jump
-                asm_str += &format!("   jb {}\n", not_jump_label);
+                asm_str += &format!("   jb {not_jump_label}\n");
             }
             BranchLessThanOpcode::BLT => {
                 // greater or equal (signed) -> not jump
-                asm_str += &format!("   jge {}\n", not_jump_label);
+                asm_str += &format!("   jge {not_jump_label}\n");
             }
             BranchLessThanOpcode::BLTU => {
                 // above or equal (unsigned) -> not jump
-                asm_str += &format!("   jae {}\n", not_jump_label);
+                asm_str += &format!("   jae {not_jump_label}\n");
             }
         }
         // Jump branch
-        asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+        asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
 
-        asm_str += &format!("{}:\n", not_jump_label);
+        asm_str += &format!("{not_jump_label}:\n");
 
         Ok(asm_str)
     }

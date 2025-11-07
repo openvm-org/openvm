@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS, LocalOpcode,
 };
@@ -134,24 +132,24 @@ where
         let b_reg = b / 4;
 
         // Calculate the result. Inputs: eax, ecx. Outputs: edx.
-        asm_str += &rv32_register_to_gpr(a_reg as u8, "eax");
-        asm_str += &rv32_register_to_gpr(b_reg as u8, "ecx");
+        asm_str += &rv32_register_to_gpr(a_reg, "eax");
+        asm_str += &rv32_register_to_gpr(b_reg, "ecx");
         asm_str += "   cmp eax, ecx\n";
-        let not_jump_label = format!(".asm_execute_pc_{}_not_jump", pc);
+        let not_jump_label = format!(".asm_execute_pc_{pc}_not_jump");
         match local_opcode {
             BranchEqualOpcode::BEQ => {
-                asm_str += &format!("   jne {}\n", not_jump_label);
-                asm_str += &format!("   mov r13, {}\n", next_pc);
-                asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+                asm_str += &format!("   jne {not_jump_label}\n");
+                asm_str += &format!("   mov r13, {next_pc}\n");
+                asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
             BranchEqualOpcode::BNE => {
-                asm_str += &format!("   je {}\n", not_jump_label);
-                asm_str += &format!("   mov r13, {}\n", next_pc);
-                asm_str += &format!("   jmp asm_execute_pc_{}\n", next_pc);
+                asm_str += &format!("   je {not_jump_label}\n");
+                asm_str += &format!("   mov r13, {next_pc}\n");
+                asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
             }
         }
-        asm_str += &format!("{}:\n", not_jump_label);
-    
+        asm_str += &format!("{not_jump_label}:\n");
+
         Ok(asm_str)
     }
 

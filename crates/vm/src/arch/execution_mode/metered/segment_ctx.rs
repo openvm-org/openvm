@@ -267,7 +267,7 @@ impl SegmentationCtx {
                 .iter()
                 .zip(self.air_names.iter())
                 .filter(|(&height, _)| height > 0)
-                .map(|(&height, name)| format!("  {} = {}", name, height))
+                .map(|(&height, name)| format!("  {name} = {height}"))
                 .collect::<Vec<_>>()
                 .join("\n");
             tracing::warn!(

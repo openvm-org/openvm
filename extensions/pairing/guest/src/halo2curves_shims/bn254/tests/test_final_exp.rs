@@ -69,7 +69,10 @@ pub fn generate_test_points_generator_scalar<const N: usize>(
     Vec<AffinePoint<Fq>>,
     Vec<AffinePoint<Fq2>>,
 ) {
-    assert!(N % 2 == 0, "Must have even number of P and Q scalars");
+    assert!(
+        N.is_multiple_of(2),
+        "Must have even number of P and Q scalars"
+    );
     let mut P_vec: Vec<G1Affine> = Vec::new();
     let mut Q_vec: Vec<G2Affine> = Vec::new();
     for i in 0..N {

@@ -182,8 +182,7 @@ where
 {
     debug_assert!(
         addr_space == F::ZERO || addr_space == F::from_canonical_u32(NATIVE_AS),
-        "addr_space={} is not valid",
-        addr_space
+        "addr_space={addr_space} is not valid"
     );
 
     if addr_space == F::ZERO {

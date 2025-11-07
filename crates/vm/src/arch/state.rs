@@ -34,6 +34,13 @@ pub struct VmState<F, MEM = GuestMemory> {
 
 pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
+impl<F, MEM> VmState<F, MEM> {
+    #[inline(always)]
+    pub fn set_pc(&mut self, pc: u32) {
+        self.pc = pc;
+    }
+}
+
 impl<F: Clone, MEM> VmState<F, MEM> {
     /// `num_custom_pvs` should only be nonzero when the PublicValuesAir exists.
     pub fn new_with_defaults(
@@ -52,11 +59,6 @@ impl<F: Clone, MEM> VmState<F, MEM> {
             #[cfg(feature = "metrics")]
             metrics: VmMetrics::default(),
         }
-    }
-
-    #[inline(always)]
-    pub fn set_pc(&mut self, pc: u32) {
-        self.pc = pc;
     }
 
     #[inline(always)]

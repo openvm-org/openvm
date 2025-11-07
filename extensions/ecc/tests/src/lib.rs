@@ -157,7 +157,7 @@ mod tests {
 
         let p = Secp256k1Affine::generator();
         let p = (p + p + p).to_affine();
-        println!("decompressed: {:?}", p);
+        println!("decompressed: {p:?}");
 
         let q_x: [u8; 32] =
             hex!("0100000000000000000000000000000000000000000000000000000000000000");

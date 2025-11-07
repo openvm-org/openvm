@@ -18,12 +18,7 @@ pub fn range_check<AB: InteractionBuilder>(
     into_expr: impl Into<AB::Expr>,
     count: impl Into<AB::Expr>,
 ) {
-    assert!(
-        bits <= decomp,
-        "range_check: bits {} > decomp {}",
-        bits,
-        decomp
-    );
+    assert!(bits <= decomp, "range_check: bits {bits} > decomp {decomp}");
     let expr = into_expr.into();
     let bus = VariableRangeCheckerBus::new(range_bus, decomp);
     bus.range_check(expr, bits).eval(builder, count);

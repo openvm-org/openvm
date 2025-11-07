@@ -12,11 +12,13 @@ pub struct BasicMemory {
 }
 
 impl BasicMemory {
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn as_ptr(&self) -> *const u8 {
         self.ptr.as_ptr()
     }
 
+    #[allow(dead_code)]
     #[inline(always)]
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr.as_ptr()
@@ -240,7 +242,7 @@ impl LinearMemory for BasicMemory {
             self.size
         );
         assert!(
-            start % std::mem::align_of::<T>() == 0,
+            start.is_multiple_of(std::mem::align_of::<T>()),
             "get_aligned_slice: misaligned start"
         );
 

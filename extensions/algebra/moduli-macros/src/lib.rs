@@ -88,7 +88,7 @@ pub fn moduli_declare(input: TokenStream) -> TokenStream {
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect::<Vec<_>>()
             .join("");
         macro_rules! create_extern_func {
@@ -1009,20 +1009,18 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         let modulus_hex = modulus_bytes
             .iter()
             .rev()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect::<Vec<_>>()
             .join("");
 
         let setup_extern_func = syn::Ident::new(
-            &format!("moduli_setup_extern_func_{}", modulus_hex),
+            &format!("moduli_setup_extern_func_{modulus_hex}"),
             span.into(),
         );
 
         for op_type in ["add", "sub", "mul", "div"] {
-            let func_name = syn::Ident::new(
-                &format!("{}_extern_func_{}", op_type, modulus_hex),
-                span.into(),
-            );
+            let func_name =
+                syn::Ident::new(&format!("{op_type}_extern_func_{modulus_hex}"), span.into());
             let mut chars = op_type.chars().collect::<Vec<_>>();
             chars[0] = chars[0].to_ascii_uppercase();
             let local_opcode = syn::Ident::new(
@@ -1045,7 +1043,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         }
 
         let is_eq_extern_func =
-            syn::Ident::new(&format!("is_eq_extern_func_{}", modulus_hex), span.into());
+            syn::Ident::new(&format!("is_eq_extern_func_{modulus_hex}"), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #is_eq_extern_func(rs1: usize, rs2: usize) -> bool {
@@ -1063,7 +1061,7 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
         });
 
         let hint_non_qr_extern_func = syn::Ident::new(
-            &format!("hint_non_qr_extern_func_{}", modulus_hex),
+            &format!("hint_non_qr_extern_func_{modulus_hex}"),
             span.into(),
         );
         externs.push(quote::quote_spanned! { span.into() =>
@@ -1084,10 +1082,8 @@ pub fn moduli_init(input: TokenStream) -> TokenStream {
 
         // This function will be defined regardless of whether the modulus is prime or not,
         // but it will be called only if the modulus is prime.
-        let hint_sqrt_extern_func = syn::Ident::new(
-            &format!("hint_sqrt_extern_func_{}", modulus_hex),
-            span.into(),
-        );
+        let hint_sqrt_extern_func =
+            syn::Ident::new(&format!("hint_sqrt_extern_func_{modulus_hex}"), span.into());
         externs.push(quote::quote_spanned! { span.into() =>
             #[no_mangle]
             extern "C" fn #hint_sqrt_extern_func(rs1: usize) {

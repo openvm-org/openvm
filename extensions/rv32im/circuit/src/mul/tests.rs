@@ -294,7 +294,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>
         .execute(vec![], None)
         .expect("interpreter execution must succeed");
 
-    let mut aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
     let aot_state = aot_instance
         .execute(vec![], None)
         .expect("AOT execution must succeed");
@@ -413,7 +413,6 @@ fn test_aot_mul_randomized_pairs() {
         0,
     ));
 
-    let mul_count = offsets.len();
     let (interp_state, aot_state) = run_mul_program(instructions);
 
     for (offset, expected_val) in expected {

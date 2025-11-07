@@ -7,7 +7,7 @@ use syn::Ident;
 
 /// Returns t{n} as an ident.
 fn get_temp(n: usize) -> Ident {
-    Ident::new(&format!("t{}", n), proc_macro2::Span::call_site())
+    Ident::new(&format!("t{n}"), proc_macro2::Span::call_site())
 }
 
 pub(crate) fn generate(

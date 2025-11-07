@@ -143,7 +143,7 @@ where
                         metrics.update_backtrace(pc);
                         if let Some(mut backtrace) = metrics.prev_backtrace.take() {
                             backtrace.resolve();
-                            eprintln!("openvm program failure; backtrace:\n{:?}", backtrace);
+                            eprintln!("openvm program failure; backtrace:\n{backtrace:?}");
                         } else {
                             eprintln!("openvm program failure; no backtrace");
                         }

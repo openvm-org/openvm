@@ -92,7 +92,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         ctx
     }
 
-    /// This changes the frequency of segment checks. BE CAREFUL when you change this during execution!
+    /// This changes the frequency of segment checks. BE CAREFUL when you change this during
+    /// execution!
     pub fn with_max_trace_height(mut self, max_trace_height: u32) -> Self {
         self.segmentation_ctx.set_max_trace_height(max_trace_height);
         let max_check_freq = (max_trace_height / 2) as u64;
@@ -129,7 +130,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
 
     #[inline(always)]
     pub fn check_and_segment(&mut self) -> bool {
-        // We track the segmentation check by instrets_until_check instead of instret in order to save a register in AOT mode.
+        // We track the segmentation check by instrets_until_check instead of instret in order to
+        // save a register in AOT mode.
         self.segmentation_ctx.instrets_until_check -= 1;
         if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
@@ -177,11 +179,10 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
             address_space != RV32_IMM_AS,
             "address space must not be immediate"
         );
-        debug_assert!(size > 0, "size must be greater than 0, got {}", size);
+        debug_assert!(size > 0, "size must be greater than 0, got {size}");
         debug_assert!(
             size.is_power_of_two(),
-            "size must be a power of 2, got {}",
-            size
+            "size must be a power of 2, got {size}"
         );
 
         // Handle access adapter updates

@@ -5,8 +5,6 @@ use std::{
 
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
-#[cfg(feature = "aot")]
-use openvm_instructions::VmOpcode;
 use openvm_instructions::{
     instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV32_REGISTER_AS,
 };
@@ -104,14 +102,14 @@ where
         }
 
         let xmm_map_reg_a = a / 8;
-        asm_str += &format!("   mov eax, {}\n", rd);
+        asm_str += &format!("   mov eax, {rd}\n");
 
         if (a / 4) % 2 == 0 {
             // write eax to the [0:32) bits of xmm_map_reg_a
-            asm_str += &format!("   pinsrd xmm{}, eax, 0\n", xmm_map_reg_a);
+            asm_str += &format!("   pinsrd xmm{xmm_map_reg_a}, eax, 0\n");
         } else {
             // write eax to the [32:64) bits of xmm_map_reg_a
-            asm_str += &format!("   pinsrd xmm{}, eax, 1\n", xmm_map_reg_a);
+            asm_str += &format!("   pinsrd xmm{xmm_map_reg_a}, eax, 1\n");
         }
 
         Ok(asm_str)

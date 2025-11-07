@@ -112,7 +112,7 @@ impl MetricDb {
                 .map(|key| {
                     label_dict
                         .get(key)
-                        .unwrap_or_else(|| panic!("Label key '{}' should exist in label_dict", key))
+                        .unwrap_or_else(|| panic!("Label key '{key}' should exist in label_dict"))
                         .clone()
                 })
                 .collect();
@@ -179,7 +179,7 @@ impl MetricDb {
                         .map(|m| Self::format_number(m.value))
                         .unwrap_or_default();
 
-                    row.push_str(&format!("{} | ", metric_value));
+                    row.push_str(&format!("{metric_value} | "));
                 }
 
                 markdown_output.push_str(&row);
