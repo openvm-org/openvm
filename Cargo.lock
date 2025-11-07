@@ -1544,7 +1544,7 @@ checksum = "e2931af7e13dc045d8e9d26afccc6fa115d64e115c9c84b1166288b46f6782c2"
 [[package]]
 name = "cuda-backend-v2"
 version = "2.0.0-alpha"
-source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#b0651733f275ad501f554de633cc2771890df905"
+source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#c332bfe3cbc5dbf65d9a9dd82df48e991749e093"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -4621,6 +4621,7 @@ dependencies = [
  "openvm-stark-sdk",
  "rand 0.8.5",
  "serde",
+ "stark-backend-v2",
  "strum",
  "test-case",
 ]
@@ -6881,7 +6882,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 [[package]]
 name = "stark-backend-v2"
 version = "2.0.0-alpha"
-source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#b0651733f275ad501f554de633cc2771890df905"
+source = "git+ssh://git@github.com/axiom-crypto/v2-proof-system.git?branch=main#c332bfe3cbc5dbf65d9a9dd82df48e991749e093"
 dependencies = [
  "cfg-if",
  "derivative",
