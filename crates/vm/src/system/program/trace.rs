@@ -70,7 +70,7 @@ impl VmCommittedExe<SC> {
         }
     }
     pub fn get_program_commit(&self) -> Com<SC> {
-        self.program_commitment.clone()
+        self.program_commitment
     }
 
     pub fn get_committed_trace(&self) -> CommittedTraceData<CpuBackend> {

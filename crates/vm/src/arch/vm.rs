@@ -36,13 +36,12 @@ use stark_backend_v2::{
     },
     proof::Proof,
     prover::{
-        AirProvingContextV2 as AirProvingContext, ColMajorMatrix,
-        CommittedTraceDataV2 as CommittedTraceData, CpuBackendV2, DeviceDataTransporterV2,
+        ColMajorMatrix, CommittedTraceDataV2 as CommittedTraceData, DeviceDataTransporterV2,
         DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
         ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext, TraceCommitterV2,
     },
     verifier::VerifierError as VerificationError,
-    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine,
+    StarkEngineV2 as StarkEngine,
 };
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -954,7 +953,7 @@ where
         exe: Arc<VmExe<Val<E::SC>>>,
         cached_program_trace: CommittedTraceData<E::PB>,
     ) -> Result<Self, StaticProgramError> {
-        let program_commitment = cached_program_trace.commitment.clone();
+        let program_commitment = cached_program_trace.commitment;
         vm.load_program(cached_program_trace);
         let interpreter = vm.preflight_interpreter(&exe)?;
         let state = vm.create_initial_state(&exe, vec![]);

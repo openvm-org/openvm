@@ -26,14 +26,13 @@ use openvm_stark_sdk::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
-    BabyBearPoseidon2CpuEngineV2, ChipV2, StarkEngineV2, SystemParams,
+    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix}, ChipV2, StarkEngineV2,
 };
 use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip, ProgramCols},
+    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
     utils::test_cpu_engine,
 };
 

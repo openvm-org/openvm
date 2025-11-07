@@ -1,27 +1,15 @@
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::{
     config::{Com, Val},
-    engine::VerificationData,
     p3_field::PrimeField32,
 };
 use openvm_stark_sdk::{
-    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing, FriParameters},
-    engine::{StarkFriEngine, VerificationDataWithFriParams},
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing},
     p3_baby_bear::BabyBear,
 };
 use stark_backend_v2::{
-    keygen::types::{
-        MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
-    },
-    proof::Proof,
-    prover::{
-        AirProvingContextV2 as AirProvingContext, CpuBackendV2,
-        DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
-        ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
-    },
-    AnyChip, BabyBearPoseidon2CpuEngineV2, StarkEngineV2 as StarkEngine, StarkWhirEngine,
-    SystemParams,
+    keygen::types::MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey, proof::Proof,
+    BabyBearPoseidon2CpuEngineV2, StarkEngineV2 as StarkEngine, StarkWhirEngine, SystemParams,
 };
 
 use crate::{

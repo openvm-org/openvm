@@ -6,15 +6,13 @@ use std::{
 use openvm_instructions::{
     instruction::Instruction, program::Program, LocalOpcode, SystemOpcode::TERMINATE,
 };
-use openvm_stark_backend::{
-    config::StarkGenericConfig, engine::StarkEngine, p3_field::FieldAlgebra,
-};
+use openvm_stark_backend::p3_field::FieldAlgebra;
 use openvm_stark_sdk::{
     config::baby_bear_poseidon2::BabyBearPoseidon2Config, p3_baby_bear::BabyBear,
 };
 use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix, CpuBackendV2},
-    BabyBearPoseidon2CpuEngineV2, ChipV2, StarkEngineV2, SystemParams,
+    prover::{AirProvingContextV2 as AirProvingContext, CpuBackendV2},
+    StarkEngineV2,
 };
 
 use super::VmConnectorPvs;
