@@ -510,6 +510,7 @@ impl<C: Config + Debug> Halo2ConstraintCompiler<C> {
                     backtrace.resolve();
                     eprintln!("openvm circuit failure; backtrace:\n{backtrace:?}");
                 }
+                #[allow(clippy::panicking_unwrap)]
                 res.unwrap();
             }
             #[cfg(feature = "metrics")]
