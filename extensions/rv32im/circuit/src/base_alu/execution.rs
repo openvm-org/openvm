@@ -190,18 +190,8 @@ where
         let c: i16 = to_i16(inst.c);
         let e: i16 = to_i16(inst.e);
 
-        // Temporary, as migrating all instructions to use new register mapping
-        asm_str += &SYNC_XMM_TO_GPR();
         // load the left operand of the opcode
-        let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
-            RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
-        } else {
-            REG_A_W
-        };
-
-        // load the left operand of the opcode
-        let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a);
-        asm_str += &delta_str_b;
+        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
 
         let mut asm_opcode = String::new();
         if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
@@ -225,11 +215,7 @@ where
             asm_str += &format!("   {asm_opcode} {REG_A_W}, {REG_C_W}\n");
         }
 
-        asm_str += &REG_MAPPING_gpr_to_rv32_register(str_reg_a, (a / 4) as u8);
-        asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
-
-        // Temporary, as migrating all instructions to use new register mapping
-        asm_str += &SYNC_GPR_TO_XMM();
+        asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
         Ok(asm_str)
     }
 }

@@ -290,7 +290,6 @@ where
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::initialize_xmm_regs();
-        asm_str+= &Self::xmm_to_rv32_regs(); // not synced in memory???
 
         asm_str += "    lea rdx, [rip + map_pc_base]\n";
         asm_str += "    movsxd rcx, [rdx + r13]\n";
@@ -309,6 +308,7 @@ where
         }
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
+            println!("pc: {}, instruction: {:?}", pc, instruction);
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
