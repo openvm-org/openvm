@@ -176,7 +176,7 @@ impl ProofShapeModule {
             .enumerate()
             .filter_map(|(air_id, data)| data.map(|data| (air_id, data)))
             .collect();
-        sorted_trace_vdata.sort_by_key(|(_, data)| Reverse(data.log_height));
+        sorted_trace_vdata.sort_by_key(|(air_idx, data)| (Reverse(data.log_height), *air_idx));
 
         let n_max = proof
             .trace_vdata
