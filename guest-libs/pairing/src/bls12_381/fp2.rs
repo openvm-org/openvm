@@ -55,7 +55,7 @@ impl FieldExtension<Fp> for Fp2 {
     }
 
     fn frobenius_map(&self, power: usize) -> Self {
-        if power % 2 == 0 {
+        if power.is_multiple_of(2) {
             self.clone()
         } else {
             Self {

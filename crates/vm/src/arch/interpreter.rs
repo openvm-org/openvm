@@ -195,7 +195,7 @@ where
     /// - This function assumes that the `pc` is within program bounds - this should be the case if
     ///   the pc is checked to be in bounds before jumping to it.
     /// - The returned slice may not be entirely initialized, but it is the job of each Executor to
-    /// initialize the parts of the buffer that the instruction handler will use.
+    ///   initialize the parts of the buffer that the instruction handler will use.
     #[cfg(feature = "tco")]
     #[inline(always)]
     pub fn get_pre_compute(&self, pc: u32) -> &[u8] {

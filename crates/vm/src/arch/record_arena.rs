@@ -235,7 +235,7 @@ impl DenseRecordArena {
     }
 
     pub fn align_to(&mut self, alignment: usize) {
-        debug_assert!(MAX_ALIGNMENT % alignment == 0);
+        debug_assert!(MAX_ALIGNMENT.is_multiple_of(alignment));
         let offset =
             (alignment - (self.records_buffer.get_ref().as_ptr() as usize % alignment)) % alignment;
         self.records_buffer.set_position(offset as u64);

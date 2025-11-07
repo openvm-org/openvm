@@ -242,7 +242,7 @@ impl LinearMemory for BasicMemory {
             self.size
         );
         assert!(
-            start % std::mem::align_of::<T>() == 0,
+            start.is_multiple_of(std::mem::align_of::<T>()),
             "get_aligned_slice: misaligned start"
         );
 

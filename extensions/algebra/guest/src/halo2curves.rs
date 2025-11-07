@@ -285,7 +285,7 @@ mod bls12_381 {
         }
 
         fn frobenius_map(&self, power: usize) -> Self {
-            if power % 2 == 0 {
+            if power.is_multiple_of(2) {
                 *self
             } else {
                 // note: Fq2::frobenius_map is same as Fq2::conjugate
