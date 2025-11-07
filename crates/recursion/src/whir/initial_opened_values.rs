@@ -15,8 +15,7 @@ use p3_field::{
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::SystemParams,
+    D_EF, EF, F, SystemParams,
     poseidon2::{CHUNK, WIDTH},
     proof::Proof,
 };
