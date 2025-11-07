@@ -1,15 +1,11 @@
-use std::array::from_fn;
-
 use itertools::Itertools;
-use p3_field::{FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::FieldAlgebra;
 use stark_backend_v2::{
     EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{eval_eq_mle, eval_eq_prism, eval_in_uni, eval_rot_kernel_prism},
     proof::{Proof, TraceVData},
 };
-
-use crate::bus::ColumnClaimsMessage;
 
 pub struct StackedSliceData {
     pub commit_idx: usize,
@@ -79,34 +75,42 @@ pub fn get_stacked_slice_data(
     res
 }
 
-pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnClaimsMessage<F>> {
+pub(in crate::stacking) struct ColumnOpeningPair {
+    pub sort_idx: usize,
+    pub part_idx: usize,
+    pub col_idx: usize,
+    pub col_claim: EF,
+    pub rot_claim: EF,
+}
+
+pub fn sorted_column_claims(proof: &Proof) -> Vec<ColumnOpeningPair> {
     let mut ret = Vec::new();
     let column_openings = &proof.batch_constraint_proof.column_openings;
 
     for (sort_idx, parts) in column_openings.iter().enumerate() {
-        for (col_idx, (col_claim, rot_claim)) in parts[0].iter().enumerate() {
-            let msg = ColumnClaimsMessage {
-                sort_idx: F::from_canonical_usize(sort_idx),
-                part_idx: F::ZERO,
-                col_idx: F::from_canonical_usize(col_idx),
-                col_claim: from_fn(|i| col_claim.as_base_slice()[i]),
-                rot_claim: from_fn(|i| rot_claim.as_base_slice()[i]),
+        for (col_idx, &(col_claim, rot_claim)) in parts[0].iter().enumerate() {
+            let opening_pair = ColumnOpeningPair {
+                sort_idx,
+                part_idx: 0,
+                col_idx,
+                col_claim,
+                rot_claim,
             };
-            ret.push(msg);
+            ret.push(opening_pair);
         }
     }
 
     for (sort_idx, parts) in column_openings.iter().enumerate() {
         for (part_idx, cols) in parts.iter().enumerate().skip(1) {
-            for (col_idx, (col_claim, rot_claim)) in cols.iter().enumerate() {
-                let msg = ColumnClaimsMessage {
-                    sort_idx: F::from_canonical_usize(sort_idx),
-                    part_idx: F::from_canonical_usize(part_idx),
-                    col_idx: F::from_canonical_usize(col_idx),
-                    col_claim: from_fn(|i| col_claim.as_base_slice()[i]),
-                    rot_claim: from_fn(|i| rot_claim.as_base_slice()[i]),
+            for (col_idx, &(col_claim, rot_claim)) in cols.iter().enumerate() {
+                let opening_pair = ColumnOpeningPair {
+                    sort_idx,
+                    part_idx,
+                    col_idx,
+                    col_claim,
+                    rot_claim,
                 };
-                ret.push(msg);
+                ret.push(opening_pair);
             }
         }
     }

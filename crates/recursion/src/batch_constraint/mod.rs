@@ -2,17 +2,21 @@ use core::iter::zip;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use openvm_stark_backend::{AirRef, keygen::types::TraceWidth};
+use openvm_stark_backend::{
+    AirRef,
+    air_builders::symbolic::{SymbolicExpressionNode, symbolic_variable::Entry},
+    keygen::types::TraceWidth,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-use p3_field::{Field, TwoAdicField};
-use p3_matrix::Matrix;
+use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, Digest, F, StarkEngineV2,
+    BabyBearPoseidon2CpuEngineV2, Digest, EF, F, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
+    poly_common::eval_eq_uni_at_one,
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{BatchConstraintProof, Proof},
     prover::{
-        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, CpuDeviceV2, TraceCommitterV2,
+        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, TraceCommitterV2,
         stacked_pcs::StackedPcsData,
     },
 };
@@ -24,16 +28,15 @@ use crate::{
             ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
         },
         eq_airs::{Eq3bAir, EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
-        expr_eval::{
-            ColumnClaimAir, ExpressionClaimAir, InteractionsFoldingAir, SymbolicExpressionAir,
-        },
+        expr_eval::{ColumnClaimAir, InteractionsFoldingAir, SymbolicExpressionAir},
+        expression_claim::ExpressionClaimAir,
         fractions_folder::FractionsFolderAir,
         sumcheck::{MultilinearSumcheckAir, UnivariateSumcheckAir},
     },
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, HyperdimBus, StackingModuleBus, TranscriptBus,
-        XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, HyperdimBus, PublicValuesBus, StackingModuleBus,
+        TranscriptBus, XiRandomnessBus,
     },
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
@@ -44,6 +47,7 @@ use crate::{
 pub mod bus;
 pub mod eq_airs;
 pub mod expr_eval;
+pub mod expression_claim;
 pub mod fractions_folder;
 pub mod sumcheck;
 
@@ -60,6 +64,7 @@ pub struct BatchConstraintModule {
     air_shape_bus: AirShapeBus,
     air_part_shape_bus: AirPartShapeBus,
     hyperdim_bus: HyperdimBus,
+    public_values_bus: PublicValuesBus,
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
@@ -105,6 +110,7 @@ impl BatchConstraintModule {
             air_shape_bus: bus_inventory.air_shape_bus,
             air_part_shape_bus: bus_inventory.air_part_shape_bus,
             hyperdim_bus: bus_inventory.hyperdim_bus,
+            public_values_bus: bus_inventory.public_values_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
@@ -269,9 +275,10 @@ impl AirModule for BatchConstraintModule {
         let symbolic_expression_air = SymbolicExpressionAir {
             expr_bus: self.symbolic_expression_bus,
             claim_bus: self.expression_claim_bus,
-            stacking_module_bus: self.stacking_module_bus,
             column_claims_bus: self.column_opening_bus,
             interactions_folding_bus: self.interactions_folding_bus,
+            hyperdim_bus: self.hyperdim_bus,
+            public_values_bus: self.public_values_bus,
             cnt_proofs: self.max_num_proofs,
         };
         let column_claim_air = ColumnClaimAir {
@@ -280,6 +287,7 @@ impl AirModule for BatchConstraintModule {
             air_shape_bus: self.air_shape_bus,
             air_part_shape_bus: self.air_part_shape_bus,
             hyperdim_bus: self.hyperdim_bus,
+            stacking_module_bus: self.stacking_module_bus,
         };
         let expression_claim_air = ExpressionClaimAir {
             claim_bus: self.expression_claim_bus,
@@ -289,6 +297,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             air_shape_bus: self.air_shape_bus,
             interaction_bus: self.interactions_folding_bus,
+            expression_claim_bus: self.expression_claim_bus,
         };
         vec![
             Arc::new(fraction_folder_air) as AirRef<_>,
@@ -308,6 +317,143 @@ impl AirModule for BatchConstraintModule {
     }
 }
 
+pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
+    // Per proof, per air (vkey order), the evaluations. For optional AIRs without traces, the
+    // innermost vec is empty.
+    // TODO: Make this flatter.
+    pub expr_evals: Vec<Vec<Vec<EF>>>,
+}
+
+impl BatchConstraintModule {
+    fn generate_blob(
+        &self,
+        child_vk: &MultiStarkVerifyingKeyV2,
+        proofs: &[Proof],
+        preflights: &[Preflight],
+    ) -> BatchConstraintBlobCpu {
+        let child_vk = &child_vk.inner;
+        let params = child_vk.params;
+
+        let mut expr_evals_per_proof = vec![];
+        for (proof, preflight) in zip(proofs, preflights) {
+            let rs = &preflight.batch_constraint.sumcheck_rnd;
+
+            let (&rs_0, rs_rest) = rs.split_first().unwrap();
+            let mut is_first_row_by_log_height = vec![];
+            let mut is_last_row_by_log_height = vec![];
+
+            for log_height in 0..=params.l_skip {
+                let omega = F::two_adic_generator(log_height);
+                is_first_row_by_log_height.push(eval_eq_uni_at_one(log_height, rs_0));
+                is_last_row_by_log_height.push(eval_eq_uni_at_one(log_height, rs_0 * omega));
+            }
+            for (i, &r) in rs_rest.iter().enumerate() {
+                is_first_row_by_log_height
+                    .push(is_first_row_by_log_height[params.l_skip + i] * (EF::ONE - r));
+                is_last_row_by_log_height.push(is_last_row_by_log_height[params.l_skip + i] * r);
+            }
+
+            let mut expr_evals_per_air = vec![];
+            for (air_idx, vk) in child_vk.per_air.iter().enumerate() {
+                if proof.trace_vdata[air_idx].is_none() {
+                    continue;
+                }
+
+                let openings = &proof.batch_constraint_proof.column_openings;
+                let (sorted_idx, ref vdata) = preflight.proof_shape.sorted_trace_vdata[air_idx];
+
+                let constraints = &vk.symbolic_constraints.constraints;
+                let mut expr_evals = vec![EF::ZERO; constraints.nodes.len()];
+
+                for (node_idx, node) in constraints.nodes.iter().enumerate() {
+                    match node {
+                        SymbolicExpressionNode::Variable(var) => match var.entry {
+                            Entry::Preprocessed { offset } => {
+                                expr_evals[node_idx] = match offset {
+                                    0 => openings[sorted_idx][1][var.index].0,
+                                    1 => openings[sorted_idx][1][var.index].1,
+                                    _ => unreachable!(),
+                                };
+                            }
+                            Entry::Main { part_index, offset } => {
+                                let part = if part_index == 0 {
+                                    0
+                                } else {
+                                    part_index + vk.preprocessed_data.is_some() as usize
+                                };
+                                expr_evals[node_idx] = match offset {
+                                    0 => openings[sorted_idx][part][var.index].0,
+                                    1 => openings[sorted_idx][part][var.index].1,
+                                    _ => unreachable!(),
+                                };
+                            }
+                            Entry::Permutation { .. } => unreachable!(),
+                            Entry::Public => {
+                                expr_evals[node_idx] =
+                                    EF::from_base(proof.public_values[air_idx][var.index]);
+                            }
+                            Entry::Challenge => unreachable!(),
+                            Entry::Exposed => unreachable!(),
+                        },
+                        SymbolicExpressionNode::IsFirstRow => {
+                            expr_evals[node_idx] = is_first_row_by_log_height[vdata.log_height];
+                        }
+                        SymbolicExpressionNode::IsLastRow => {
+                            expr_evals[node_idx] = is_last_row_by_log_height[vdata.log_height];
+                        }
+                        SymbolicExpressionNode::IsTransition => {
+                            expr_evals[node_idx] =
+                                EF::ONE - is_last_row_by_log_height[vdata.log_height];
+                        }
+                        SymbolicExpressionNode::Constant(val) => {
+                            expr_evals[node_idx] = EF::from_base(*val);
+                        }
+                        SymbolicExpressionNode::Add {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            debug_assert!(*left_idx < node_idx);
+                            debug_assert!(*right_idx < node_idx);
+                            expr_evals[node_idx] = expr_evals[*left_idx] + expr_evals[*right_idx];
+                        }
+                        SymbolicExpressionNode::Sub {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            debug_assert!(*left_idx < node_idx);
+                            debug_assert!(*right_idx < node_idx);
+                            expr_evals[node_idx] = expr_evals[*left_idx] - expr_evals[*right_idx];
+                        }
+                        SymbolicExpressionNode::Neg {
+                            idx,
+                            degree_multiple: _,
+                        } => {
+                            debug_assert!(*idx < node_idx);
+                            expr_evals[node_idx] = -expr_evals[*idx];
+                        }
+                        SymbolicExpressionNode::Mul {
+                            left_idx,
+                            right_idx,
+                            degree_multiple: _,
+                        } => {
+                            debug_assert!(*left_idx < node_idx);
+                            debug_assert!(*right_idx < node_idx);
+                            expr_evals[node_idx] = expr_evals[*left_idx] * expr_evals[*right_idx];
+                        }
+                    };
+                }
+                expr_evals_per_air.push(expr_evals);
+            }
+            expr_evals_per_proof.push(expr_evals_per_air);
+        }
+        BatchConstraintBlobCpu {
+            expr_evals: expr_evals_per_proof,
+        }
+    }
+}
+
 impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
     /// **Note**: This generates all common main traces but leaves the cached trace for
     /// `SymbolicExpressionAir` unset. The cached trace must be loaded **after** calling this
@@ -318,11 +464,14 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         proofs: &[Proof],
         preflights: &[Preflight],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>> {
+        let blob = self.generate_blob(child_vk, proofs, preflights);
+
         let common = expr_eval::generate_symbolic_expr_common_trace(
             child_vk,
             proofs,
             preflights,
             self.max_num_proofs,
+            &blob,
         );
         let transpose =
             |trace| AirProvingContextV2::simple_no_pis(ColMajorMatrix::from_row_major(&trace));
@@ -355,11 +504,11 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(expr_eval::generate_column_claim_trace(
                 child_vk, proofs, preflights,
             )),
-            transpose(expr_eval::generate_expression_claim_trace(
+            transpose(expression_claim::generate_trace(
                 child_vk, proofs, preflights,
             )),
             transpose(expr_eval::generate_interactions_folding_trace(
-                child_vk, proofs, preflights,
+                child_vk, &blob, preflights,
             )),
         ]
     }
@@ -374,15 +523,9 @@ impl BatchConstraintModule {
         child_vk: &MultiStarkVerifyingKeyV2,
     ) -> (Digest, StackedPcsData<F, Digest>) {
         let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
-        assert_eq!(
-            cached_trace.height(),
-            1,
-            "fix me once cached trace is implemented"
-        );
-        let mut fake_params = engine.device().config();
-        fake_params.l_skip = 0;
-        let fake_device = CpuDeviceV2::new(fake_params);
-        fake_device.commit(&[&ColMajorMatrix::from_row_major(&cached_trace)])
+        engine
+            .device()
+            .commit(&[&ColMajorMatrix::from_row_major(&cached_trace)])
     }
 }
 
