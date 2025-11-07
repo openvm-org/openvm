@@ -72,16 +72,20 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
+    "fibonacci_recursive",
     "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
+    "quicksort",
+    "bubblesort",
+    "factorial_iterative_u256",
     "revm_snailtracer",
-    // "keccak256",
-    // "sha256",
+    "keccak256",
+    "keccak256_iter",
+    "sha256",
+    "sha256_iter",
     "revm_transfer",
     "pairing",
 ];
+
 #[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
 #[allow(dead_code)]
@@ -296,7 +300,7 @@ fn executor() -> &'static VmExecutor<BabyBear, ExecuteConfig> {
     })
 }
 
-#[divan::bench(args = APP_PROGRAMS, sample_count=10)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=1)]
 fn benchmark_execute(bencher: Bencher, program: &str) {
     #[cfg(feature = "aot")]
     {
@@ -344,7 +348,7 @@ fn create_aot_instance(program: &str) -> AotInstance<'static, BabyBear, Executio
     instance
 }
 
-#[divan::bench(args = APP_PROGRAMS, sample_count=5)]
+#[divan::bench(args = APP_PROGRAMS, sample_count=1)]
 fn benchmark_execute_metered(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
@@ -372,7 +376,7 @@ fn benchmark_execute_metered(bencher: Bencher, program: &str) {
         });
 }
 
-#[divan::bench(ignore = true, args = APP_PROGRAMS, sample_count=5)]
+#[divan::bench(ignore = true, args = APP_PROGRAMS, sample_count=1)]
 fn benchmark_execute_metered_cost(bencher: Bencher, program: &str) {
     bencher
         .with_inputs(|| {
