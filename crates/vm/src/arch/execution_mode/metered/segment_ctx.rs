@@ -1,3 +1,7 @@
+use abi_stable::{
+    std_types::{RString, RVec},
+    StableAbi,
+};
 use getset::WithSetters;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
@@ -10,14 +14,16 @@ pub const DEFAULT_MAX_TRACE_HEIGHT: u32 = 1 << DEFAULT_MAX_TRACE_HEIGHT_BITS;
 pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
-#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
+#[repr(C)]
+#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize, StableAbi)]
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
-    pub trace_heights: Vec<u32>,
+    pub trace_heights: RVec<u32>,
 }
 
-#[derive(Clone, Copy, Debug, WithSetters)]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, WithSetters, StableAbi)]
 pub struct SegmentationLimits {
     #[getset(set_with = "pub")]
     pub max_trace_height: u32,
@@ -37,19 +43,20 @@ impl Default for SegmentationLimits {
     }
 }
 
-#[derive(Clone, Debug, WithSetters)]
+#[repr(C)]
+#[derive(Clone, Debug, WithSetters, StableAbi)]
 pub struct SegmentationCtx {
-    pub segments: Vec<Segment>,
-    pub(crate) air_names: Vec<String>,
-    pub(crate) widths: Vec<usize>,
-    interactions: Vec<usize>,
+    pub segments: RVec<Segment>,
+    pub(crate) air_names: RVec<RString>,
+    pub(crate) widths: RVec<usize>,
+    interactions: RVec<usize>,
     pub(crate) segmentation_limits: SegmentationLimits,
     pub instret: u64,
     pub instrets_until_check: u64,
     #[getset(set_with = "pub")]
     pub segment_check_insns: u64,
     /// Checkpoint of trace heights at last known state where all thresholds satisfied
-    pub(crate) checkpoint_trace_heights: Vec<u32>,
+    pub(crate) checkpoint_trace_heights: RVec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
 }
@@ -65,16 +72,17 @@ impl SegmentationCtx {
         assert_eq!(air_names.len(), interactions.len());
 
         let num_airs = air_names.len();
+        let air_names: RVec<RString> = air_names.into_iter().map(RString::from).collect();
         Self {
-            segments: Vec::new(),
+            segments: RVec::new(),
             air_names,
-            widths,
-            interactions,
+            widths: widths.into(),
+            interactions: interactions.into(),
             segmentation_limits,
             instret: 0,
             instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            checkpoint_trace_heights: vec![0; num_airs],
+            checkpoint_trace_heights: vec![0; num_airs].into(),
             checkpoint_instret: 0,
         }
     }
@@ -88,16 +96,17 @@ impl SegmentationCtx {
         assert_eq!(air_names.len(), interactions.len());
 
         let num_airs = air_names.len();
+        let air_names: RVec<RString> = air_names.into_iter().map(RString::from).collect();
         Self {
-            segments: Vec::new(),
+            segments: RVec::new(),
             air_names,
-            widths,
-            interactions,
+            widths: widths.into(),
+            interactions: interactions.into(),
             segmentation_limits: SegmentationLimits::default(),
             instret: 0,
             instrets_until_check: DEFAULT_SEGMENT_CHECK_INSNS,
             segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
-            checkpoint_trace_heights: vec![0; num_airs],
+            checkpoint_trace_heights: vec![0; num_airs].into(),
             checkpoint_instret: 0,
         }
     }
@@ -257,25 +266,26 @@ impl SegmentationCtx {
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-        let (segment_instret, segment_heights) = if self.checkpoint_instret > instret_start {
-            (
-                self.checkpoint_instret,
-                self.checkpoint_trace_heights.clone(),
-            )
-        } else {
-            let trace_heights_str = trace_heights
-                .iter()
-                .zip(self.air_names.iter())
-                .filter(|(&height, _)| height > 0)
-                .map(|(&height, name)| format!("  {name} = {height}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-            tracing::warn!(
-                "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
-            );
-            // No valid checkpoint, use current values
-            (instret, trace_heights.to_vec())
-        };
+            let (segment_instret, segment_heights): (u64, RVec<u32>) =
+            if self.checkpoint_instret > instret_start {
+                (
+                    self.checkpoint_instret,
+                    self.checkpoint_trace_heights.clone(),
+                )
+            } else {
+                let trace_heights_str = trace_heights
+                    .iter()
+                    .zip(self.air_names.iter())
+                    .filter(|(&height, _)| height > 0)
+                    .map(|(&height, name)| format!("  {name} = {height}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                tracing::warn!(
+                    "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
+                );
+                // No valid checkpoint, use current values
+                (instret, trace_heights.to_vec().into())
+            };
 
         // Reset current trace heights and checkpoint
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
@@ -322,7 +332,7 @@ impl SegmentationCtx {
             .map_or(0, |s| s.instret_start + s.num_insns);
 
         let num_insns = self.instret - instret_start;
-        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec());
+        self.create_segment::<true>(instret_start, num_insns, trace_heights.to_vec().into());
     }
 
     /// Push a new segment with logging
@@ -331,14 +341,14 @@ impl SegmentationCtx {
         &mut self,
         instret_start: u64,
         num_insns: u64,
-        trace_heights: Vec<u32>,
+        trace_heights: RVec<u32>,
     ) {
         debug_assert!(
             num_insns > 0,
             "Segment should contain at least one instruction"
         );
 
-        self.log_segment_info::<IS_FINAL>(instret_start, num_insns, &trace_heights);
+        self.log_segment_info::<IS_FINAL>(instret_start, num_insns, trace_heights.as_slice());
         self.segments.push(Segment {
             instret_start,
             num_insns,

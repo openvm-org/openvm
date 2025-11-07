@@ -114,6 +114,7 @@ incremental = true
 lto = "thin"
 
 [workspace.dependencies]
+abi_stable = "0.11.3"
 # Stark Backend
 openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1", default-features = false }
 openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", tag = "v1.2.1", default-features = false }

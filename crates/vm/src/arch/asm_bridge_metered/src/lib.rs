@@ -1,7 +1,10 @@
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use openvm_circuit::{
-    arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, VmExecState},
+    arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, ExecutionError, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -18,6 +21,7 @@ extern "C" {
         vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
+        instret_left: u64,
     );
 }
 
@@ -34,8 +38,9 @@ pub unsafe extern "C" fn asm_run(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
+    instret_left: u64,
 ) {
-    asm_run_internal(vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc);
+    asm_run_internal(vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc, instret_left);
 }
 
 type F = BabyBear;

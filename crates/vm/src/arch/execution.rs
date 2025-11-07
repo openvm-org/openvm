@@ -24,6 +24,7 @@ use crate::{
     },
 };
 
+#[repr(C)]
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]

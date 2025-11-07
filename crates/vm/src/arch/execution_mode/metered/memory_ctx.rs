@@ -1,16 +1,19 @@
+use abi_stable::{std_types::{ROption, RVec}, StableAbi};
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Debug, StableAbi)]
 pub struct BitSet {
-    words: Box<[u64]>,
+    words: RVec<u64>,
 }
 
 impl BitSet {
     pub fn new(num_bits: usize) -> Self {
+        let len = num_bits.div_ceil(u64::BITS as usize);
         Self {
-            words: vec![0; num_bits.div_ceil(u64::BITS as usize)].into_boxed_slice(),
+            words: vec![0; len].into(),
         }
     }
 
@@ -89,27 +92,27 @@ impl BitSet {
 
     #[inline(always)]
     pub fn clear(&mut self) {
-        // SAFETY: words is valid for self.words.len() elements
-        unsafe {
-            std::ptr::write_bytes(self.words.as_mut_ptr(), 0, self.words.len());
+        for word in self.words.iter_mut() {
+            *word = 0;
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Debug, StableAbi)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,
-    min_block_size_bits: Vec<u8>,
+    min_block_size_bits: RVec<u8>,
     pub boundary_idx: usize,
-    pub merkle_tree_index: Option<usize>,
+    pub merkle_tree_index: ROption<usize>,
     pub adapter_offset: usize,
     continuations_enabled: bool,
     chunk: u32,
     chunk_bits: u32,
     page_access_count: usize,
     // Note: 32 is the maximum access adapter size.
-    addr_space_access_count: Vec<usize>,
+    addr_space_access_count: RVec<usize>,
 }
 
 impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
@@ -123,16 +126,16 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
         Self {
             // Address height already considers `chunk_bits`.
             page_indices: BitSet::new(1 << (merkle_height.saturating_sub(PAGE_BITS))),
-            min_block_size_bits: config.memory_config.min_block_size_bits(),
+            min_block_size_bits: config.memory_config.min_block_size_bits().into(),
             boundary_idx: config.memory_boundary_air_id(),
-            merkle_tree_index: config.memory_merkle_air_id(),
+            merkle_tree_index: config.memory_merkle_air_id().into(),
             adapter_offset: config.access_adapter_air_id_offset(),
             chunk,
             chunk_bits,
             memory_dimensions,
             continuations_enabled: config.continuation_enabled,
             page_access_count: 0,
-            addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1],
+            addr_space_access_count: vec![0; (1 << memory_dimensions.addr_space_height) + 1].into(),
         }
     }
 
@@ -246,7 +249,7 @@ impl<const PAGE_BITS: usize> MemoryCtx<PAGE_BITS> {
             *trace_heights.get_unchecked_mut(self.boundary_idx) += leaves;
         }
 
-        if let Some(merkle_tree_idx) = self.merkle_tree_index {
+        if let ROption::RSome(merkle_tree_idx) = self.merkle_tree_index {
             debug_assert!(merkle_tree_idx < trace_heights.len());
             debug_assert!(trace_heights.len() >= 2);
 

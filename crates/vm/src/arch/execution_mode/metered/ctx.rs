@@ -1,5 +1,9 @@
 use std::num::NonZero;
 
+use abi_stable::{
+    std_types::{ROption, RVec},
+    StableAbi,
+};
 use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
@@ -18,10 +22,11 @@ use crate::{
 
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
-#[derive(Clone, Debug, Getters, Setters, WithSetters)]
+#[repr(C)]
+#[derive(Clone, Debug, Getters, Setters, WithSetters, StableAbi)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
-    pub trace_heights: Vec<u32>,
-    pub is_trace_height_constant: Vec<bool>,
+    pub trace_heights: RVec<u32>,
+    pub is_trace_height_constant: RVec<bool>,
     pub memory_ctx: MemoryCtx<PAGE_BITS>,
     pub segmentation_ctx: SegmentationCtx,
     #[getset(get = "pub", set = "pub", set_with = "pub")]
@@ -49,6 +54,8 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
                 })
                 .unzip();
 
+        let trace_heights: RVec<u32> = trace_heights.into();
+        let is_trace_height_constant: RVec<bool> = is_trace_height_constant.into();
         let memory_ctx = MemoryCtx::new(config);
 
         // Assert that the indices are correct
@@ -57,7 +64,7 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             "air_name={}",
             air_names[memory_ctx.boundary_idx]
         );
-        if let Some(merkle_tree_index) = memory_ctx.merkle_tree_index {
+        if let ROption::RSome(merkle_tree_index) = memory_ctx.merkle_tree_index {
             debug_assert!(
                 air_names[merkle_tree_index].contains("Merkle"),
                 "air_name={}",
@@ -115,11 +122,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 
     pub fn segments(&self) -> &[Segment] {
-        &self.segmentation_ctx.segments
+        self.segmentation_ctx.segments.as_slice()
     }
 
     pub fn into_segments(self) -> Vec<Segment> {
-        self.segmentation_ctx.segments
+        self.segmentation_ctx.segments.into_vec()
     }
 
     fn reset_segment(&mut self) {
