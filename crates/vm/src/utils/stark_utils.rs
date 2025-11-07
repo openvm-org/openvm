@@ -29,9 +29,15 @@ pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngineV2 {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        pub use openvm_cuda_backend::{engine::GpuBabyBearPoseidon2Engine as TestStarkEngine, chip::cpu_proving_ctx_to_gpu};
+        pub use openvm_cuda_backend::{chip::cpu_proving_ctx_to_gpu};
+        pub use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2 as TestStarkEngine;
         use crate::arch::DenseRecordArena;
         pub type TestRecordArena = DenseRecordArena;
+
+        pub fn test_gpu_engine() -> TestStarkEngine {
+            setup_tracing();
+            TestStarkEngine::new(SystemParams::new_for_testing(20))
+        }
     } else {
         pub use stark_backend_v2::BabyBearPoseidon2CpuEngineV2 as TestStarkEngine;
         use crate::arch::MatrixRecordArena;

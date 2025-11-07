@@ -4106,7 +4106,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#25a5c801839b495ba5b81e6fd43581113358c196"
 dependencies = [
  "bincode 2.0.1",
  "bincode_derive",
@@ -4138,7 +4138,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#25a5c801839b495ba5b81e6fd43581113358c196"
 dependencies = [
  "cc",
  "glob",
@@ -4147,7 +4147,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#25a5c801839b495ba5b81e6fd43581113358c196"
 dependencies = [
  "bytesize",
  "ctor",
@@ -4799,7 +4799,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#25a5c801839b495ba5b81e6fd43581113358c196"
 dependencies = [
  "bitcode",
  "cfg-if",
@@ -4829,7 +4829,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "1.2.1"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#48b9bf621c50e08296e2e490b1cb4980a68c41b8"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#25a5c801839b495ba5b81e6fd43581113358c196"
 dependencies = [
  "dashmap",
  "derivative",
@@ -6882,6 +6882,7 @@ name = "stark-backend-v2"
 version = "2.0.0-alpha"
 dependencies = [
  "cfg-if",
+ "derivative",
  "derive-new 0.7.0",
  "eyre",
  "getset",
