@@ -12,7 +12,7 @@ use openvm_stark_sdk::{
 use stark_backend_v2::{
     keygen::types::{
         MultiStarkProvingKeyV2 as MultiStarkProvingKey,
-        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey, SystemParams,
+        MultiStarkVerifyingKeyV2 as MultiStarkVerifyingKey,
     },
     proof::Proof,
     prover::{
@@ -20,8 +20,8 @@ use stark_backend_v2::{
         DeviceMultiStarkProvingKeyV2 as DeviceMultiStarkProvingKey,
         ProverBackendV2 as ProverBackend, ProvingContextV2 as ProvingContext,
     },
-    test_utils::test_system_params_small,
-    AnyChip, ChipV2 as Chip, StarkEngineV2 as StarkEngine, StarkWhirEngine,
+    AnyChip, BabyBearPoseidon2CpuEngineV2, StarkEngineV2 as StarkEngine, StarkWhirEngine,
+    SystemParams,
 };
 
 use crate::{
@@ -32,6 +32,11 @@ use crate::{
     },
     system::memory::{MemoryImage, CHUNK},
 };
+
+/// Supports `trace height <= 2^20`.
+pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngineV2 {
+    BabyBearPoseidon2CpuEngineV2::new(SystemParams::new_for_testing(20))
+}
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
@@ -81,7 +86,7 @@ where
     while config.as_ref().max_constraint_degree > (1 << log_blowup) + 1 {
         log_blowup += 1;
     }
-    let params = test_system_params_small(4, 16, 4);
+    let params = SystemParams::new_for_testing(20); // max log_trace_height=20
     let debug = std::env::var("OPENVM_SKIP_DEBUG") != Result::Ok(String::from("1"));
     let (final_memory, _) = air_test_impl::<TestStarkEngine, VB>(
         params,
