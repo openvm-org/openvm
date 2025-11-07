@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use eyre::Result;
-use stark_backend_v2::{
-    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
-    proof::Proof,
-};
+use stark_backend_v2::{SystemParams, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 
 mod nonroot;
 mod root;

@@ -1,9 +1,6 @@
 use itertools::Itertools;
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
-use stark_backend_v2::{
-    Digest,
-    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
-};
+use stark_backend_v2::{Digest, SystemParams, keygen::types::MultiStarkVerifyingKeyV2};
 
 use crate::cuda::types::AirData;
 

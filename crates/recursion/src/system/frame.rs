@@ -1,8 +1,8 @@
 use itertools::Itertools;
 use stark_backend_v2::{
-    Digest, F,
+    Digest, F, SystemParams,
     keygen::types::{
-        MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2, StarkVerifyingParamsV2, SystemParams,
+        MultiStarkVerifyingKeyV2, StarkVerifyingKeyV2, StarkVerifyingParamsV2,
         VerifierSinglePreprocessedData,
     },
 };
