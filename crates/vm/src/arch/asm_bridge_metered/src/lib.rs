@@ -4,7 +4,9 @@ use std::{
 };
 
 use openvm_circuit::{
-    arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, ExecutionError, VmExecState},
+    arch::{
+        execution_mode::MeteredCtx, interpreter::PreComputeInstruction, ExecutionError, VmExecState,
+    },
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -40,7 +42,12 @@ pub unsafe extern "C" fn asm_run(
     from_state_pc: u32,
     instret_left: u64,
 ) {
-    asm_run_internal(vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc, instret_left);
+    asm_run_internal(
+        vm_exec_state_ptr,
+        pre_compute_insns_ptr,
+        from_state_pc,
+        instret_left,
+    );
 }
 
 type F = BabyBear;

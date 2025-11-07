@@ -266,26 +266,27 @@ impl SegmentationCtx {
             .last()
             .map_or(0, |s| s.instret_start + s.num_insns);
 
-            let (segment_instret, segment_heights): (u64, RVec<u32>) =
-            if self.checkpoint_instret > instret_start {
-                (
-                    self.checkpoint_instret,
-                    self.checkpoint_trace_heights.clone(),
-                )
-            } else {
-                let trace_heights_str = trace_heights
-                    .iter()
-                    .zip(self.air_names.iter())
-                    .filter(|(&height, _)| height > 0)
-                    .map(|(&height, name)| format!("  {name} = {height}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                tracing::warn!(
+        let (segment_instret, segment_heights): (u64, RVec<u32>) = if self.checkpoint_instret
+            > instret_start
+        {
+            (
+                self.checkpoint_instret,
+                self.checkpoint_trace_heights.clone(),
+            )
+        } else {
+            let trace_heights_str = trace_heights
+                .iter()
+                .zip(self.air_names.iter())
+                .filter(|(&height, _)| height > 0)
+                .map(|(&height, name)| format!("  {name} = {height}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+            tracing::warn!(
                     "No valid checkpoint, creating segment using instret={instret}\ntrace_heights=[\n{trace_heights_str}\n]"
                 );
-                // No valid checkpoint, use current values
-                (instret, trace_heights.to_vec().into())
-            };
+            // No valid checkpoint, use current values
+            (instret, trace_heights.to_vec().into())
+        };
 
         // Reset current trace heights and checkpoint
         self.reset_trace_heights(trace_heights, &segment_heights, is_trace_height_constant);
