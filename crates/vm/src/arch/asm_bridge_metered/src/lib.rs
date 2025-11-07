@@ -1,12 +1,7 @@
-use std::{
-    ffi::c_void,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{
-        execution_mode::MeteredCtx, interpreter::PreComputeInstruction, ExecutionError, VmExecState,
-    },
+    arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, VmExecState},
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
