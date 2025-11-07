@@ -10,8 +10,8 @@ use p3_field::FieldAlgebra;
 use p3_matrix::dense::RowMajorMatrix;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
-    F,
-    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
+    F, SystemParams,
+    keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::poseidon2_perm,
     proof::Proof,
     prover::{AirProvingContextV2, ColMajorMatrix, CpuBackendV2},
