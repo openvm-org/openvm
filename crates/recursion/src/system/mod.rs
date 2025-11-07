@@ -8,7 +8,7 @@ use openvm_stark_backend::{AirRef, interaction::BusIndex};
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, Digest, EF, F,
+    BabyBearPoseidon2CpuEngineV2, DIGEST_SIZE, EF, F,
     keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::{
         WIDTH,
@@ -16,8 +16,7 @@ use stark_backend_v2::{
     },
     proof::{Proof, TraceVData},
     prover::{
-        AirProvingContextV2, ColMajorMatrix, CpuBackendV2, ProverBackendV2,
-        stacked_pcs::StackedPcsData,
+        AirProvingContextV2, ColMajorMatrix, CommittedTraceDataV2, CpuBackendV2, ProverBackendV2,
     },
 };
 
@@ -373,9 +372,14 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         &self,
         engine: &BabyBearPoseidon2CpuEngineV2,
         child_vk: &MultiStarkVerifyingKeyV2,
-    ) -> (Digest, Arc<StackedPcsData<F, Digest>>) {
-        let (commit, data) = self.batch_constraint.commit_child_vk(engine, child_vk);
-        (commit, Arc::new(data))
+    ) -> CommittedTraceDataV2<CpuBackendV2> {
+        let (commitment, data) = self.batch_constraint.commit_child_vk(engine, child_vk);
+        let height = 1 << data.layout.sorted_cols[0].2.log_height();
+        CommittedTraceDataV2 {
+            commitment,
+            data: Arc::new(data),
+            height,
+        }
     }
 
     /// The generic `TS` allows using different transcript implementations for debugging purposes.
@@ -383,7 +387,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
     pub fn generate_proving_ctxs<TS>(
         &self,
         child_vk: &MultiStarkVerifyingKeyV2,
-        child_vk_pcs_data: (Digest, Arc<StackedPcsData<F, Digest>>),
+        child_vk_pcs_data: CommittedTraceDataV2<CpuBackendV2>,
         proofs: &[Proof],
     ) -> Vec<AirProvingContextV2<CpuBackendV2>>
     where
@@ -432,8 +436,7 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
     use cuda_backend_v2::{
-        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, stacked_pcs::StackedPcsDataGpu,
-        transport_matrix_h2d_col_major,
+        BabyBearPoseidon2GpuEngineV2, GpuBackendV2, transport_matrix_h2d_col_major,
     };
 
     use super::*;
@@ -446,15 +449,20 @@ pub mod cuda_tracegen {
             &self,
             engine: &BabyBearPoseidon2GpuEngineV2,
             child_vk: &MultiStarkVerifyingKeyV2,
-        ) -> (Digest, Arc<StackedPcsDataGpu<F, Digest>>) {
-            let (commit, data) = self.batch_constraint.commit_child_vk_gpu(engine, child_vk);
-            (commit, Arc::new(data))
+        ) -> CommittedTraceDataV2<GpuBackendV2> {
+            let (commitment, data) = self.batch_constraint.commit_child_vk_gpu(engine, child_vk);
+            let height = 1 << data.layout.sorted_cols[0].2.log_height();
+            CommittedTraceDataV2 {
+                commitment,
+                data: Arc::new(data),
+                height,
+            }
         }
 
         pub fn generate_proving_ctxs_gpu<TS>(
             &self,
             child_vk: &MultiStarkVerifyingKeyV2,
-            child_vk_pcs_data: (Digest, Arc<StackedPcsDataGpu<F, Digest>>),
+            child_vk_pcs_data: CommittedTraceDataV2<GpuBackendV2>,
             proofs: &[Proof],
         ) -> Vec<AirProvingContextV2<GpuBackendV2>>
         where

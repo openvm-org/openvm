@@ -8,8 +8,8 @@ use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdic
 use p3_maybe_rayon::prelude::*;
 use p3_symmetric::Permutation;
 use stark_backend_v2::{
-    EF, F,
-    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
+    EF, F, SystemParams,
+    keygen::types::MultiStarkVerifyingKeyV2,
     poly_common::{Squarable, interpolate_quadratic_at_012},
     poseidon2::{
         CHUNK, WIDTH, poseidon2_perm,

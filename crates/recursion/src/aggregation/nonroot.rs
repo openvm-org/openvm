@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use eyre::Result;
 use stark_backend_v2::{
-    keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2, SystemParams},
+    SystemParams,
+    keygen::types::{MultiStarkProvingKeyV2, MultiStarkVerifyingKeyV2},
     proof::Proof,
 };
 

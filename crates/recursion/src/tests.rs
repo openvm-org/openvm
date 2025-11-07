@@ -5,7 +5,7 @@ use openvm_stark_backend::{
     AirRef,
     engine::StarkEngine,
     keygen::types::{MultiStarkProvingKey, StarkProvingKey},
-    prover::{MatrixDimensions, types::AirProofRawInput},
+    prover::types::AirProofRawInput,
 };
 use openvm_stark_sdk::{
     config::{
@@ -15,13 +15,11 @@ use openvm_stark_sdk::{
     },
     engine::StarkFriEngine,
 };
-use p3_field::FieldAlgebra;
-use p3_matrix::dense::RowMajorMatrix;
 use stark_backend_v2::{
-    BabyBearPoseidon2CpuEngineV2, F,
-    keygen::types::{MultiStarkVerifyingKeyV2, SystemParams},
+    BabyBearPoseidon2CpuEngineV2, F, SystemParams,
+    keygen::types::MultiStarkVerifyingKeyV2,
     poseidon2::sponge::{DuplexSponge, DuplexSpongeRecorder, TranscriptHistory},
-    prover::{AirProvingContextV2, CpuBackendV2, MatrixView, StridedColMajorMatrixView},
+    prover::{AirProvingContextV2, CpuBackendV2, StridedColMajorMatrixView},
     test_utils::{
         CachedFixture11, DuplexSpongeValidator, FibFixture, InteractionsFixture11,
         PreprocessedFibFixture, TestFixture, default_test_params_small, test_system_params_small,
@@ -59,17 +57,7 @@ fn debug(
     for (air_idx, air) in airs.iter().enumerate() {
         tracing::debug!(%air_idx, air_name = %air.name());
     }
-    let transpose = |mat: StridedColMajorMatrixView<F>| {
-        let mut values = F::zero_vec(mat.height() * mat.width());
-        let width = mat.width();
-        let height = mat.height();
-        for r in 0..height {
-            for c in 0..width {
-                values[r * width + c] = *mat.get(r, c).unwrap();
-            }
-        }
-        Arc::new(RowMajorMatrix::new(values, width))
-    };
+    let transpose = |mat: StridedColMajorMatrixView<F>| Arc::new(mat.to_row_major_matrix());
     let engine = BabyBearPoseidon2Engine::new(FriParameters::standard_fast());
     let inputs = ctxs
         .iter()
@@ -77,7 +65,7 @@ fn debug(
             cached_mains: ctx
                 .cached_mains
                 .iter()
-                .map(|(_, d)| transpose(d.layout.mat_view(0, &d.matrix)))
+                .map(|cd| transpose(cd.data.mat_view(0)))
                 .collect_vec(),
             common_main: Some(transpose(ctx.common_main.as_view().into())),
             public_values: ctx.public_values.clone(),
@@ -493,6 +481,7 @@ mod cuda {
     use cuda_backend_v2::BabyBearPoseidon2GpuEngineV2;
     use itertools::zip_eq;
     use openvm_cuda_common::copy::MemCopyD2H;
+    use openvm_stark_backend::prover::MatrixDimensions;
     use openvm_stark_sdk::config::setup_tracing_with_log_level;
     use stark_backend_v2::prover::MatrixView;
     use test_case::test_matrix;
