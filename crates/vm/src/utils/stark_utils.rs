@@ -35,6 +35,7 @@ use crate::{
 
 /// Supports `trace height <= 2^20`.
 pub fn test_cpu_engine() -> BabyBearPoseidon2CpuEngineV2 {
+    setup_tracing();
     BabyBearPoseidon2CpuEngineV2::new(SystemParams::new_for_testing(20))
 }
 

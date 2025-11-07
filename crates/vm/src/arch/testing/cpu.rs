@@ -7,29 +7,23 @@ use openvm_circuit_primitives::var_range::{
 use openvm_instructions::{instruction::Instruction, riscv::RV32_REGISTER_AS, NATIVE_AS};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::VerificationData,
     interaction::PermutationCheckBus,
     p3_field::{Field, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
     p3_util::log2_strict_usize,
-    prover::{
-        cpu::{CpuBackend, CpuDevice},
-        types::AirProvingContext,
-    },
+    prover::{cpu::CpuBackend, types::AirProvingContext},
     rap::AnyRap,
-    verifier::VerificationError,
     AirRef, Chip,
 };
 use openvm_stark_sdk::{
-    config::{
-        baby_bear_blake3::{BabyBearBlake3Config, BabyBearBlake3Engine},
-        baby_bear_poseidon2::{BabyBearPoseidon2Config, BabyBearPoseidon2Engine},
-        setup_tracing_with_log_level, FriParameters,
-    },
-    engine::{StarkEngine, StarkFriEngine},
+    config::{baby_bear_poseidon2::BabyBearPoseidon2Config, setup_tracing_with_log_level},
     p3_baby_bear::BabyBear,
 };
 use rand::{rngs::StdRng, RngCore, SeedableRng};
+use stark_backend_v2::{
+    prover::AirProvingContextV2, verifier::VerifierError, StarkEngineV2,
+    VerificationDataV2 as VerificationData,
+};
 use tracing::Level;
 
 use crate::{
@@ -54,6 +48,7 @@ use crate::{
         program::ProgramBus,
         SystemPort,
     },
+    utils::test_cpu_engine,
 };
 
 pub struct VmChipTestBuilder<F: Field> {
@@ -294,8 +289,7 @@ impl<F: PrimeField32> VmChipTestBuilder<F> {
     }
 }
 
-// Use Blake3 as hash for faster tests.
-pub type TestSC = BabyBearBlake3Config;
+pub type TestSC = stark_backend_v2::SC;
 
 impl VmChipTestBuilder<BabyBear> {
     pub fn build(self) -> VmChipTester<TestSC> {
@@ -533,29 +527,34 @@ where
         self
     }
 
-    /// Given a function to produce an engine from the max trace height,
-    /// runs a simple test on that engine
-    pub fn test<E, P: Fn() -> E>(
-        self, // do no take ownership so it's easier to prank
-        engine_provider: P,
-    ) -> Result<VerificationData<SC>, VerificationError>
-    where
-        E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    {
-        assert!(self.memory.is_none(), "Memory must be finalized");
-        let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
-        engine_provider().run_test_impl(airs, ctxs)
-    }
+    // TODO[jpw]: put back once we can make it generic in SC
+    // /// Given a function to produce an engine from the max trace height,
+    // /// runs a simple test on that engine
+    // pub fn test<E, P: Fn() -> E>(
+    //     self, // do no take ownership so it's easier to prank
+    //     engine_provider: P,
+    // ) -> Result<VerificationData<SC>, VerificationError>
+    // where
+    //     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    // {
+    //     assert!(self.memory.is_none(), "Memory must be finalized");
+    //     let (airs, ctxs): (Vec<_>, Vec<_>) = self.air_ctxs.into_iter().unzip();
+    //     engine_provider().run_test_impl(airs, ctxs)
+    // }
 }
 
 impl VmChipTester<BabyBearPoseidon2Config> {
-    pub fn simple_test(
-        self,
-    ) -> Result<VerificationData<BabyBearPoseidon2Config>, VerificationError> {
-        self.test(|| BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(1)))
+    pub fn simple_test(self) -> Result<VerificationData, VerifierError> {
+        assert!(self.memory.is_none(), "Memory must be finalized");
+        let (airs, ctxs): (Vec<_>, Vec<_>) = self
+            .air_ctxs
+            .into_iter()
+            .map(|(air, ctx_v1)| (air, AirProvingContextV2::from_v1_no_cached(ctx_v1)))
+            .unzip();
+        test_cpu_engine().run_test(airs, ctxs)
     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
+    pub fn simple_test_with_expected_error(self, expected_error: VerifierError) {
         let msg = format!(
             "Expected verification to fail with {:?}, but it didn't",
             &expected_error
@@ -565,17 +564,17 @@ impl VmChipTester<BabyBearPoseidon2Config> {
     }
 }
 
-impl VmChipTester<BabyBearBlake3Config> {
-    pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError> {
-        self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
-    }
+// impl VmChipTester<BabyBearBlake3Config> {
+//     pub fn simple_test(self) -> Result<VerificationData<BabyBearBlake3Config>, VerificationError>
+// {         self.test(|| BabyBearBlake3Engine::new(FriParameters::new_for_testing(1)))
+//     }
 
-    pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
-        let msg = format!(
-            "Expected verification to fail with {:?}, but it didn't",
-            &expected_error
-        );
-        let result = self.simple_test();
-        assert_eq!(result.err(), Some(expected_error), "{}", msg);
-    }
-}
+//     pub fn simple_test_with_expected_error(self, expected_error: VerificationError) {
+//         let msg = format!(
+//             "Expected verification to fail with {:?}, but it didn't",
+//             &expected_error
+//         );
+//         let result = self.simple_test();
+//         assert_eq!(result.err(), Some(expected_error), "{}", msg);
+//     }
+// }

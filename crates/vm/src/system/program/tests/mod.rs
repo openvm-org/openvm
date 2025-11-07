@@ -11,7 +11,8 @@ use openvm_native_compiler::{
 };
 use openvm_rv32im_transpiler::BranchEqualOpcode::*;
 use openvm_stark_backend::{
-    config::StarkGenericConfig, p3_field::FieldAlgebra, p3_matrix::dense::RowMajorMatrix,
+    p3_field::FieldAlgebra,
+    p3_matrix::{dense::RowMajorMatrix, Matrix},
     prover::MatrixDimensions,
 };
 use openvm_stark_sdk::{
@@ -32,7 +33,7 @@ use static_assertions::assert_impl_all;
 
 use crate::{
     arch::{instructions::SystemOpcode::*, testing::READ_INSTRUCTION_BUS},
-    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip},
+    system::program::{trace::VmCommittedExe, ProgramAir, ProgramBus, ProgramChip, ProgramCols},
     utils::test_cpu_engine,
 };
 
@@ -187,8 +188,8 @@ fn test_program_without_field_arithmetic() {
     interaction_test(program, vec![0, 2, 4, 1]);
 }
 
-#[test]
-#[should_panic(expected = "LogUp multiset equality check failed.")]
+#[test] // TODO: add expected reason for panic
+#[should_panic] // LogUp sum is not zero, prover assert fails
 fn test_program_negative() {
     let instructions = vec![
         Instruction::large_from_isize(STOREW.global_opcode(), -1, 0, 0, 0, 1, 0, 1),
@@ -225,8 +226,12 @@ fn test_program_negative() {
             instruction.e,
         ]);
     }
-    let mut counter_trace = RowMajorMatrix::new(program_rows, 8);
+    let width = 8;
+    let mut counter_trace = RowMajorMatrix::new(program_rows, width);
     counter_trace.row_mut(1)[1] = BabyBear::ZERO;
+    let rows_used = counter_trace.height();
+    let height = rows_used.next_power_of_two();
+    counter_trace.values.resize(height * width, BabyBear::ZERO);
     let counter_trace = ColMajorMatrix::from_row_major(&counter_trace);
 
     engine

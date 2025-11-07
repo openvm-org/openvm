@@ -45,6 +45,7 @@ fn test_vm_connector_happy_path() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, should_panic)] // Debug assertion will fail in the prover
 fn test_vm_connector_wrong_exit_code() {
     let exit_code = 1789;
     test_impl(false, exit_code, |air_ctx| {
@@ -54,6 +55,7 @@ fn test_vm_connector_wrong_exit_code() {
 }
 
 #[test]
+#[cfg_attr(debug_assertions, should_panic)] // Debug assertion will fail in the prover
 fn test_vm_connector_wrong_is_terminate() {
     let exit_code = 1789;
     test_impl(false, exit_code, |air_ctx| {
