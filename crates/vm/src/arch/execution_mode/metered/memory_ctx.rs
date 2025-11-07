@@ -1,13 +1,10 @@
-use abi_stable::{
-    std_types::{ROption, RVec},
-    StableAbi,
-};
+use abi_stable::std_types::{ROption, RVec};
 use openvm_instructions::riscv::{RV32_NUM_REGISTERS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS};
 
 use crate::{arch::SystemConfig, system::memory::dimensions::MemoryDimensions};
 
 #[repr(C)]
-#[derive(Clone, Debug, StableAbi)]
+#[derive(Clone, Debug)]
 pub struct BitSet {
     words: RVec<u64>,
 }
@@ -102,7 +99,7 @@ impl BitSet {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, StableAbi)]
+#[derive(Clone, Debug)]
 pub struct MemoryCtx<const PAGE_BITS: usize> {
     pub page_indices: BitSet,
     memory_dimensions: MemoryDimensions,

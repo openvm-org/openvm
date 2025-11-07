@@ -1,4 +1,3 @@
-use abi_stable::StableAbi;
 use derive_new::new;
 use openvm_stark_backend::p3_util::log2_strict_usize;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use crate::{
 // indicates that there are 2^`addr_space_height` address spaces numbered starting from 1,
 // and that each address space has 2^`address_height` addresses numbered starting from 0
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, StableAbi, new)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, new)]
 pub struct MemoryDimensions {
     /// Address space height
     pub addr_space_height: usize,

@@ -1,7 +1,4 @@
-use abi_stable::{
-    std_types::{RString, RVec},
-    StableAbi,
-};
+use abi_stable::std_types::{RString, RVec};
 use getset::WithSetters;
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
@@ -15,7 +12,7 @@ pub const DEFAULT_MAX_CELLS: usize = 1_200_000_000; // 1.2B
 const DEFAULT_MAX_INTERACTIONS: usize = BabyBear::ORDER_U32 as usize;
 
 #[repr(C)]
-#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize, StableAbi)]
+#[derive(derive_new::new, Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub instret_start: u64,
     pub num_insns: u64,
@@ -23,7 +20,7 @@ pub struct Segment {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, WithSetters, StableAbi)]
+#[derive(Clone, Copy, Debug, WithSetters)]
 pub struct SegmentationLimits {
     #[getset(set_with = "pub")]
     pub max_trace_height: u32,
@@ -44,7 +41,7 @@ impl Default for SegmentationLimits {
 }
 
 #[repr(C)]
-#[derive(Clone, Debug, WithSetters, StableAbi)]
+#[derive(Clone, Debug, WithSetters)]
 pub struct SegmentationCtx {
     pub segments: RVec<Segment>,
     pub(crate) air_names: RVec<RString>,

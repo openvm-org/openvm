@@ -1,9 +1,6 @@
 use std::num::NonZero;
 
-use abi_stable::{
-    std_types::{ROption, RVec},
-    StableAbi,
-};
+use abi_stable::std_types::{ROption, RVec};
 use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
 use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
@@ -23,7 +20,7 @@ use crate::{
 pub const DEFAULT_PAGE_BITS: usize = 6;
 
 #[repr(C)]
-#[derive(Clone, Debug, Getters, Setters, WithSetters, StableAbi)]
+#[derive(Clone, Debug, Getters, Setters, WithSetters)]
 pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
     pub trace_heights: RVec<u32>,
     pub is_trace_height_constant: RVec<bool>,
