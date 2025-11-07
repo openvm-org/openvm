@@ -130,7 +130,7 @@ where
         asm_str
     }
 
-    fn push_internal_registers() -> String { /// hmm, does it matter if we push the xmm registers?
+    fn push_internal_registers() -> String {
         let mut asm_str = String::new();
         asm_str += "    push rax\n";
         asm_str += "    push rcx\n";
@@ -199,11 +199,12 @@ where
 
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
+
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
         }
-        
+
         asm_str
     }
 
@@ -228,6 +229,7 @@ where
         for r in 0..16 {
             asm_str += &format!("   pinsrq xmm{r}, rax, 0\n");
         }
+
         asm_str
     }
 
@@ -302,7 +304,6 @@ where
         }
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
-            println!("pc: {}, instruction: {:?}", pc, instruction);
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
@@ -339,8 +340,8 @@ where
             let executor = inventory
                 .get_executor(instruction.opcode)
                 .expect("executor not found for opcode");
+
             if executor.is_aot_supported(&instruction) {
-                // issue is other rv32 regs to XMM??
                 let segment =
                     executor
                         .generate_x86_asm(&instruction, pc)
@@ -358,10 +359,6 @@ where
                             AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                         })?;
                 asm_str += &segment;
-                // so then rv32 wouldnt be synced in memory, but xmm would be synced in memory
-                // so then on the subsequent read, data would get corrupted!
-
-                // wait, is this even true? 
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();

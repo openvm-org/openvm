@@ -215,17 +215,13 @@ where
         let c: i16 = to_i16(inst.c);
         let e: i16 = to_i16(inst.e);
 
-        // load the left operand of the opcode
-        asm_str += &SYNC_XMM_TO_GPR(); // this sync is wrong??? invalid memory reference
+        // Temporary, as migrating all instructions to use new register mapping
+        asm_str += &SYNC_XMM_TO_GPR();
         let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
             RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
         } else {
             REG_A_W
         };
-
-        // load the left operand of the opcode
-        let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a);
-        asm_str += &delta_str_b;
 
         let mut asm_opcode = String::new();
         if inst.opcode == BaseAluOpcode::ADD.global_opcode() {
@@ -242,15 +238,34 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, str_reg_a, c);
+            let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, a != b); 
+            // if a == b, then we are modifying b, so we need to force write to gpr_reg_b
+            asm_str += &delta_str_b; // data is now in gpr_reg_b
+            asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, c); // gpr_reg_b (op)= c
+            asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
         } else {
             // load the right operand of the opcode
-            let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W);
-            asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
-            asm_str += &format!("   {} {}, {}\n", asm_opcode, str_reg_a, gpr_reg_c);
+            if a == c{
+                println!("a == c");
+                // have to write c to a temp, cuz b - c, order of operands matters
+                let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W, true); 
+                asm_str += &delta_str_c;
+                let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, true); 
+                // if a!=b, have to move the value to a, instead of modifying b
+                asm_str += &delta_str_b;
+                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
+                asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
+            }
+            else{
+                // if a!=b, have to move the value to a, instead of modifying b
+                let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, true); 
+                asm_str += &delta_str_b; // data is now in gpr_reg_b
+                let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+                asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
+                asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
+                asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
+            }
         }
-
-        asm_str += &REG_MAPPING_gpr_to_rv32_register(str_reg_a, (a / 4) as u8);
         asm_str += &format!("   add {}, {}\n", REG_PC, DEFAULT_PC_OFFSET);
 
         // Temporary, as migrating all instructions to use new register mapping

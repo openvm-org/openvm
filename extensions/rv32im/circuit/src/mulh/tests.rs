@@ -38,7 +38,7 @@ use openvm_instructions::{
 };
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 #[cfg(feature = "aot")]
-use openvm_rv32im_transpiler::BaseAluOpcode::ADD;
+use openvm_rv32im_transpiler::BaseAluOpcode::{ADD, SUB};
 use openvm_rv32im_transpiler::MulHOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -701,6 +701,25 @@ fn test_aot_mulh_randomized() {
         assert_eq!(interp_val, aot_val, "AOT mismatch at offset {offset}");
     }
 }
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_mul_custom() {
+    let offsets: [usize; 14] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56];
+    let mut rng = create_seeded_rng();
+    let mut instructions = Vec::new();
+    for &offset in &offsets {
+        let value_i32 = rng.gen_range(-(1i32 << 11)..(1i32 << 11));
+        let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
+        instructions.push(add_immediate(offset, imm_field));
+    }
+    instructions.push(Instruction::from_usize(SUB.global_opcode(), [40, 40, 40, RV32_REGISTER_AS as usize, RV32_REGISTER_AS as usize]));
+    instructions.push(Instruction::from_usize(SUB.global_opcode(), [40, 44, 44, RV32_REGISTER_AS as usize, RV32_REGISTER_AS as usize]));
+    instructions.push(Instruction::from_usize(SUB.global_opcode(), [48, 52, 48, RV32_REGISTER_AS as usize, RV32_REGISTER_AS as usize]));
+    instructions.push(Instruction::from_usize(SUB.global_opcode(), [52, 40, 40, RV32_REGISTER_AS as usize, RV32_REGISTER_AS as usize]));
+    instructions.push(Instruction::from_usize(SUB.global_opcode(), [56, 48, 52, RV32_REGISTER_AS as usize, RV32_REGISTER_AS as usize]));
+    instructions.push(Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0));
+    let (interp_state, aot_state) = run_mul_program(instructions);
+} 
 
 // ////////////////////////////////////////////////////////////////////////////////////
 //  CUDA TESTS

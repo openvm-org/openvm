@@ -111,12 +111,25 @@ pub(crate) fn address_space_start_to_gpr(address_space: u32, gpr: &str) -> Strin
 }
 
 
-pub(crate) fn REG_MAPPING_rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> (String, String) {
-    if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
-        if gpr == override_reg {
-            return (gpr.to_string(), "".to_string());
+/*
+pre condition: XMM and GPR registers contain the riscv32 register values
+rv32_reg is index of the riscv32 register
+gpr: is the TARGET register to write to (GPR)
+post condition:
+- if rv32_reg is overridden:
+    if gpr == override_Reg, data is already in the correct location
+    - return empty_string, gpr
+    otherwise, write data from override_reg to gpr
+- otherwise, copy from associate XMM register to gpr
+- 
+*/
+// if its a temporary register, then even if its overridden, we need to write to it
+pub(crate) fn REG_MAPPING_rv32_register_to_gpr(rv32_reg: u8, gpr: &str, is_gpr_force_write: bool) -> (String, String) {
+    if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] { // a/4 is overridden, b/4 is overridden
+        if is_gpr_force_write {
+            return (gpr.to_string(), format!("   mov {}, {}\n", gpr, override_reg));
         }
-        return (override_reg.to_string(), format!("   mov {}, {}\n", gpr, override_reg));
+        return (override_reg.to_string(), "".to_string());
     }
     let xmm_map_reg = rv32_reg / 2;
     if rv32_reg % 2 == 0 {
@@ -127,9 +140,19 @@ pub(crate) fn REG_MAPPING_rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> (Stri
 }
 
 // String of assembly to get to the register of riscv into `reg_name`; 
+// copy from GPR to rv32_reg
+/*
+precondition: correct rv32 data is stored in GPR, and needs to be written into the associated rv32 register
+postcondition:
+- if rv32_reg is overridden:
+    if gpr == override_Reg, data is already in the correct location
+    - return empty_string
+    otherwise, write data from gpr to override_reg
+- otherwise, copy from gpr to associate XMM register
+*/
 pub(crate) fn REG_MAPPING_gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String{
     if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
-        if gpr == override_reg {
+        if gpr == override_reg { //already in correct location
             return "".to_string();
         }
         return format!("   mov {}, {}\n", override_reg, gpr);
@@ -143,7 +166,10 @@ pub(crate) fn REG_MAPPING_gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> Strin
 }
 
 
-// make a string that syncs XMM to GPR, and GPR to XMM, using the override map
+/*
+pre condition: XMM stores the ground truth of the registres
+post condition: overridden GPR registers also contain the corresponding values
+*/
 pub(crate) fn SYNC_XMM_TO_GPR() -> String { // these should be saved by caller tho, so can be treated independently
     let mut asm_str = String::new();
     for i in 0..32{
@@ -157,7 +183,10 @@ pub(crate) fn SYNC_XMM_TO_GPR() -> String { // these should be saved by caller t
     asm_str
 }
 
-// make a string that syncs GPR to XMM, using the override map
+/*
+pre condition: GPR registers contain the correct values, for the associated riscv32 registers
+post condition: XMM stores the ground truth of the registres
+*/
 pub(crate) fn SYNC_GPR_TO_XMM() -> String {
     let mut asm_str = String::new();
     for i in 0..32{
@@ -170,4 +199,3 @@ pub(crate) fn SYNC_GPR_TO_XMM() -> String {
     asm_str
 }
 
-// sigsev when copying from XMM to GPR and vice versa??
