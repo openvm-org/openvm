@@ -536,6 +536,7 @@ pub mod cuda_tracegen {
         transport_matrix_h2d_col_major,
     };
     use itertools::Itertools;
+    use p3_matrix::Matrix;
 
     use super::*;
     use crate::cuda::{
