@@ -26,7 +26,8 @@ use openvm_stark_sdk::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use stark_backend_v2::{
-    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix}, ChipV2, StarkEngineV2,
+    prover::{AirProvingContextV2 as AirProvingContext, ColMajorMatrix},
+    ChipV2, StarkEngineV2,
 };
 use static_assertions::assert_impl_all;
 
