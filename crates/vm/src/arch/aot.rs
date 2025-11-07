@@ -42,7 +42,7 @@ type AsmRunFn = unsafe extern "C" fn(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     from_state_pc: u32,
-    instret_left: u64,
+    pre_compute_insns_len: u64,
 );
 
 impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
@@ -795,7 +795,7 @@ where
         // handle execution error
         match vm_exec_state.exit_code {
             Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
+                vm_exec_state.ctx.segmentation_ctx.segments.into_vec(),
                 vm_exec_state.vm_state,
             )),
             Err(e) => Err(e),
@@ -820,13 +820,13 @@ where
             let vm_exec_state_ptr =
                 &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
+            let pre_compute_len = self.pre_compute_insns_box.len() as u64;
 
             asm_run(
                 vm_exec_state_ptr as *mut c_void,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
-                0, /* TODO: this is a placeholder because in the pure case asm_run needs to take
-                    * in 5 args. Fix later */
+                pre_compute_len,
             );
         }
         Ok(*vm_exec_state)

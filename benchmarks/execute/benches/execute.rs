@@ -72,15 +72,7 @@ use openvm_transpiler::{transpiler::Transpiler, FromElf};
 use serde::{Deserialize, Serialize};
 
 const APP_PROGRAMS: &[&str] = &[
-    // "fibonacci_recursive",
-    "fibonacci_iterative",
-    // "quicksort",
-    // "bubblesort",
-    "revm_snailtracer",
-    // "keccak256",
-    // "sha256",
-    "revm_transfer",
-    "pairing",
+    "factorial_iterative_u256"
 ];
 #[allow(dead_code)]
 const LEAF_VERIFIER_PROGRAMS: &[&str] = &["kitchen-sink"];
@@ -610,3 +602,4 @@ fn benchmark_internal_verifier_execute_preflight(bencher: Bencher, program: &str
             );
         });
 }
+*/

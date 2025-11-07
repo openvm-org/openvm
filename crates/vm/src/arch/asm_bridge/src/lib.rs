@@ -84,13 +84,18 @@ pub extern "C" fn extern_handler(
     };
 
     let pc = vm_exec_state_ref.vm_state.pc();
-    match vm_exec_state_ref.exit_code {
-        Ok(None) => pc,
-        _ => {
-            // special indicator that we must terminate
-            // this won't collide with actual pc value because pc values are always multiple of 4
-            pc + 1
-        }
+
+    if vm_exec_state_ref
+        .exit_code
+        .as_ref()
+        .is_ok_and(|exit_code| exit_code.is_none())
+    {
+        // execution continues
+        pc
+    } else {
+        // special indicator that we must terminate
+        // this won't collide with actual pc value because pc values are always multiple of 4
+        pc + 1
     }
 }
 

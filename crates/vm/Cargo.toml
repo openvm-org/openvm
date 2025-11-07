@@ -8,6 +8,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+abi_stable.workspace = true
 p3-baby-bear = { workspace = true }
 p3-field = { workspace = true }
 

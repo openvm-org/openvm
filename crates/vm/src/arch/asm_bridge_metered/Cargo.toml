@@ -14,6 +14,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 cc = "1.0"
-openvm-circuit = { workspace = true, features = ["test-utils"] }
-openvm-stark-sdk.workspace = true
-openvm-instructions.workspace = true
+openvm-circuit = { workspace = true, default-features = false }
+openvm-stark-sdk = { workspace = true, default-features = false }
+openvm-instructions = { workspace = true, default-features = false }
