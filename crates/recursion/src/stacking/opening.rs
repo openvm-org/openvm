@@ -28,7 +28,9 @@ use crate::{
             EqKernelLookupBus, EqKernelLookupMessage, StackingModuleTidxBus,
             StackingModuleTidxMessage, SumcheckClaimsBus, SumcheckClaimsMessage,
         },
-        utils::{compute_coefficients, get_stacked_slice_data, sorted_column_claims},
+        utils::{
+            ColumnOpeningPair, compute_coefficients, get_stacked_slice_data, sorted_column_claims,
+        },
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -141,7 +143,7 @@ impl OpeningClaimsTraceGenerator {
                 .enumerate()
                 .skip(1)
                 .find_map(|(i, claim)| {
-                    if claim.part_idx != F::ZERO {
+                    if claim.part_idx != 0 {
                         Some(i - 1)
                     } else {
                         None
@@ -152,13 +154,12 @@ impl OpeningClaimsTraceGenerator {
             for (i, (claim, slice, (eq_in, k_rot_in, eq_bits), chunk)) in
                 izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
             {
-                let ColumnClaimsMessage {
+                let ColumnOpeningPair {
                     sort_idx,
                     part_idx,
                     col_idx,
                     col_claim,
                     rot_claim,
-                    ..
                 } = claim;
                 let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
                 cols.proof_idx = proof_idx_value;
@@ -166,13 +167,13 @@ impl OpeningClaimsTraceGenerator {
                 cols.is_first = F::from_bool(i == 0);
                 cols.is_last = F::from_bool(i + 1 == num_rows);
 
-                cols.sort_idx = sort_idx;
-                cols.part_idx = part_idx;
-                cols.col_idx = col_idx;
-                cols.col_claim = col_claim;
-                cols.rot_claim = rot_claim;
+                cols.sort_idx = F::from_canonical_usize(sort_idx);
+                cols.part_idx = F::from_canonical_usize(part_idx);
+                cols.col_idx = F::from_canonical_usize(col_idx);
+                cols.col_claim.copy_from_slice(col_claim.as_base_slice());
+                cols.rot_claim.copy_from_slice(rot_claim.as_base_slice());
 
-                cols.is_main = F::from_bool(part_idx == F::ZERO);
+                cols.is_main = F::from_bool(part_idx == 0);
                 cols.is_transition_main = F::from_bool(i + 1 != num_rows && i != last_main_idx);
 
                 let n_lift = slice.n.max(0) as usize;
@@ -214,8 +215,6 @@ impl OpeningClaimsTraceGenerator {
                     stacking_claim_coefficient = EF::ZERO;
                 }
 
-                let col_claim = EF::from_base_slice(&col_claim);
-                let rot_claim = EF::from_base_slice(&rot_claim);
                 s_0 += lambda_pow * (col_claim + preflight.stacking.lambda * rot_claim);
                 cols.s_0.copy_from_slice(s_0.as_base_slice());
             }
@@ -378,11 +377,23 @@ where
             builder,
             local.proof_idx,
             ColumnClaimsMessage {
-                sort_idx: local.sort_idx,
-                part_idx: local.part_idx,
-                col_idx: local.col_idx,
-                col_claim: local.col_claim,
-                rot_claim: local.rot_claim,
+                sort_idx: local.sort_idx.into(),
+                part_idx: local.part_idx.into(),
+                col_idx: local.col_idx.into(),
+                claim: local.col_claim.map(Into::into),
+                is_rot: AB::Expr::ZERO,
+            },
+            local.is_valid,
+        );
+        self.column_claims_bus.receive(
+            builder,
+            local.proof_idx,
+            ColumnClaimsMessage {
+                sort_idx: local.sort_idx.into(),
+                part_idx: local.part_idx.into(),
+                col_idx: local.col_idx.into(),
+                claim: local.rot_claim.map(Into::into),
+                is_rot: AB::Expr::ONE,
             },
             local.is_valid,
         );

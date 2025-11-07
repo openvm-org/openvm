@@ -101,7 +101,6 @@ define_typed_per_proof_permutation_bus!(ExpressionClaimBus, ExpressionClaimMessa
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct InteractionsFoldingMessage<T> {
-    pub node_idx: T,
     pub interaction_idx: T,
     pub is_mult: T,
     pub idx_in_message: T,

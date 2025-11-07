@@ -336,12 +336,14 @@ pub struct MerkleVerifyBusMessage<T> {
     /// The idx of the merkle proof in the proof, might have additional bits (so not 0 at the root)
     /// It will be the same for all the rows in the hashing leaves part.
     pub merkle_idx: T,
-    /// The total depth of the merkle proof including the leaves part, equal to merkle_proof.len() + 1 + k
+    /// The total depth of the merkle proof including the leaves part, equal to merkle_proof.len()
+    /// + 1 + k
     pub total_depth: T,
-    /// The height of this value, [0, k) are for the hashing leaves part, [k, total_depth) are for the merkle proof part.
+    /// The height of this value, [0, k) are for the hashing leaves part, [k, total_depth) are for
+    /// the merkle proof part.
     pub height: T,
-    /// For the leaves, it will be 0 ~ 2^k - 1, for the next intermediate values, it will be 0 ~ 2^{k-1} - 1
-    /// 0 for merkle proof part.
+    /// For the leaves, it will be 0 ~ 2^k - 1, for the next intermediate values, it will be 0 ~
+    /// 2^{k-1} - 1 0 for merkle proof part.
     pub leaf_sub_idx: T,
     /// Either the leaf hash, or the intermediate hash, or the sibling hash
     pub value: [T; DIGEST_SIZE],
@@ -456,8 +458,8 @@ pub struct ColumnClaimsMessage<T> {
     pub sort_idx: T,
     pub part_idx: T,
     pub col_idx: T,
-    pub col_claim: [T; D_EF],
-    pub rot_claim: [T; D_EF],
+    pub claim: [T; D_EF],
+    pub is_rot: T,
 }
 
 define_typed_per_proof_permutation_bus!(ColumnClaimsBus, ColumnClaimsMessage);
