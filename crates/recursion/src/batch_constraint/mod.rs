@@ -24,11 +24,14 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{
         bus::{
-            BatchConstraintConductorBus, Eq3bBus, EqMleBus, EqSharpUniBus, EqZeroNBus,
-            ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
+            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqMleBus, EqSharpUniBus,
+            EqZeroNBus, ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus,
+            SymbolicExpressionBus,
         },
         eq_airs::{Eq3bAir, EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
-        expr_eval::{ColumnClaimAir, InteractionsFoldingAir, SymbolicExpressionAir},
+        expr_eval::{
+            ColumnClaimAir, ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
+        },
         expression_claim::ExpressionClaimAir,
         fractions_folder::FractionsFolderAir,
         sumcheck::{MultilinearSumcheckAir, UnivariateSumcheckAir},
@@ -77,6 +80,7 @@ pub struct BatchConstraintModule {
     symbolic_expression_bus: SymbolicExpressionBus,
     expression_claim_bus: ExpressionClaimBus,
     interactions_folding_bus: InteractionsFoldingBus,
+    constraints_folding_bus: ConstraintsFoldingBus,
 
     l_skip: usize,
     max_constraint_degree: usize,
@@ -120,6 +124,7 @@ impl BatchConstraintModule {
             symbolic_expression_bus: SymbolicExpressionBus::new(b.new_bus_idx()),
             expression_claim_bus: ExpressionClaimBus::new(b.new_bus_idx()),
             interactions_folding_bus: InteractionsFoldingBus::new(b.new_bus_idx()),
+            constraints_folding_bus: ConstraintsFoldingBus::new(b.new_bus_idx()),
             l_skip,
             max_constraint_degree,
             widths,
@@ -149,6 +154,7 @@ impl BatchConstraintModule {
         }
 
         // Constraint batching
+        let lambda_tidx = ts.len();
         let _lambda = ts.sample_ext();
 
         for (sum_claim_p, sum_claim_q) in zip(numerator_term_per_air, denominator_term_per_air) {
@@ -203,6 +209,7 @@ impl BatchConstraintModule {
         }
 
         preflight.batch_constraint = BatchConstraintPreflight {
+            lambda_tidx,
             tidx_before_univariate,
             tidx_before_multilinear,
             tidx_before_column_openings,
@@ -277,6 +284,7 @@ impl AirModule for BatchConstraintModule {
             claim_bus: self.expression_claim_bus,
             column_claims_bus: self.column_opening_bus,
             interactions_folding_bus: self.interactions_folding_bus,
+            constraints_folding_bus: self.constraints_folding_bus,
             hyperdim_bus: self.hyperdim_bus,
             public_values_bus: self.public_values_bus,
             cnt_proofs: self.max_num_proofs,
@@ -299,6 +307,11 @@ impl AirModule for BatchConstraintModule {
             interaction_bus: self.interactions_folding_bus,
             expression_claim_bus: self.expression_claim_bus,
         };
+        let constraints_folding_air = ConstraintsFoldingAir {
+            transcript_bus: self.transcript_bus,
+            constraint_bus: self.constraints_folding_bus,
+            expression_claim_bus: self.expression_claim_bus,
+        };
         vec![
             Arc::new(fraction_folder_air) as AirRef<_>,
             Arc::new(sumcheck_uni_air) as AirRef<_>,
@@ -313,6 +326,7 @@ impl AirModule for BatchConstraintModule {
             Arc::new(column_claim_air) as AirRef<_>,
             Arc::new(expression_claim_air) as AirRef<_>,
             Arc::new(interactions_folding_air) as AirRef<_>,
+            Arc::new(constraints_folding_air) as AirRef<_>,
         ]
     }
 }
@@ -508,6 +522,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
                 child_vk, proofs, preflights,
             )),
             transpose(expr_eval::generate_interactions_folding_trace(
+                child_vk, &blob, preflights,
+            )),
+            transpose(expr_eval::generate_constraints_folding_trace(
                 child_vk, &blob, preflights,
             )),
         ]

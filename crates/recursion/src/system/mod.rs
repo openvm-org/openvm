@@ -189,6 +189,7 @@ pub struct GkrPreflight {
 
 #[derive(Clone, Debug, Default)]
 pub struct BatchConstraintPreflight {
+    pub lambda_tidx: usize,
     pub tidx_before_univariate: usize,
     pub tidx_before_multilinear: usize,
     pub tidx_before_column_openings: usize,

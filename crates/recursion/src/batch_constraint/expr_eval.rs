@@ -30,8 +30,9 @@ use crate::{
     batch_constraint::{
         BatchConstraintBlobCpu,
         bus::{
-            ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus,
-            InteractionsFoldingMessage, SymbolicExpressionBus, SymbolicExpressionMessage,
+            ConstraintsFoldingBus, ConstraintsFoldingMessage, ExpressionClaimBus,
+            ExpressionClaimMessage, InteractionsFoldingBus, InteractionsFoldingMessage,
+            SymbolicExpressionBus, SymbolicExpressionMessage,
         },
     },
     bus::{
@@ -82,6 +83,7 @@ pub struct SymbolicExpressionAir {
     pub hyperdim_bus: HyperdimBus,
     pub column_claims_bus: ColumnClaimsBus,
     pub interactions_folding_bus: InteractionsFoldingBus,
+    pub constraints_folding_bus: ConstraintsFoldingBus,
     pub public_values_bus: PublicValuesBus,
 
     pub cnt_proofs: usize,
@@ -233,17 +235,6 @@ where
                 AB::Expr::ZERO,
                 // enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags),
             );
-            self.claim_bus.send(
-                builder,
-                proof_idx,
-                ExpressionClaimMessage {
-                    is_interaction: AB::Expr::ZERO,
-                    idx: cached_cols.constraint_idx.into(),
-                    value: value.clone(),
-                },
-                AB::Expr::ZERO,
-                // TODO: cached_cols.is_constraint,
-            );
             let _is_sel = enc.contains_flag::<AB>(
                 &flags,
                 &[
@@ -266,7 +257,7 @@ where
             );
             // TODO: Constrain cols.args[..D_EF] when _is_sel.
             let is_mult = enc.get_flag_expr::<AB>(NodeKind::InteractionMult as usize, &flags);
-            let _is_interaction = enc.contains_flag::<AB>(
+            let is_interaction = enc.contains_flag::<AB>(
                 &flags,
                 &[NodeKind::InteractionMult, NodeKind::InteractionMsgComp].map(|x| x as usize),
             );
@@ -274,13 +265,23 @@ where
                 builder,
                 proof_idx,
                 InteractionsFoldingMessage {
+                    air_idx: cached_cols.air_idx.into(),
                     interaction_idx: cached_cols.node_or_interaction_idx.into(),
                     is_mult,
                     idx_in_message: cached_cols.attrs[1].into(),
                     value: value.clone(),
                 },
-                AB::Expr::ZERO,
-                // TODO: _is_interaction,
+                is_interaction * cols.is_present,
+            );
+            self.constraints_folding_bus.send(
+                builder,
+                proof_idx,
+                ConstraintsFoldingMessage {
+                    air_idx: cached_cols.air_idx.into(),
+                    constraint_idx: cached_cols.constraint_idx.into(),
+                    value: value.clone(),
+                },
+                cached_cols.is_constraint * cols.is_present,
             );
         }
     }
@@ -453,6 +454,69 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ColumnClaimAir {
 
 #[derive(AlignedBorrow, Copy, Clone)]
 #[repr(C)]
+pub struct ExpressionClaimCols<T> {
+    is_valid: T,
+    is_first: T,
+    is_last: T,
+    proof_idx: T,
+
+    is_interaction: T,
+    idx: T,
+    lambda_tidx: T,
+    lambda: [T; D_EF],
+    value: [T; D_EF],
+}
+
+pub struct ExpressionClaimAir {
+    pub claim_bus: ExpressionClaimBus,
+    pub transcript_bus: TranscriptBus,
+}
+
+impl<F> BaseAirWithPublicValues<F> for ExpressionClaimAir {}
+impl<F> PartitionedBaseAir<F> for ExpressionClaimAir {}
+
+impl<F> BaseAir<F> for ExpressionClaimAir {
+    fn width(&self) -> usize {
+        ExpressionClaimCols::<F>::width()
+    }
+}
+
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpressionClaimAir {
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+
+        let local: &ExpressionClaimCols<AB::Var> = (*local).borrow();
+        let _next: &ExpressionClaimCols<AB::Var> = (*next).borrow();
+
+        // self.claim_bus.receive(
+        //     builder,
+        //     local.proof_idx,
+        //     ExpressionClaimMessage {
+        //         is_interaction: local.is_interaction,
+        //         idx: local.idx,
+        //         value: local.value,
+        //     },
+        //     local.is_valid,
+        // );
+
+        // for i in 0..D_EF {
+        //     self.transcript_bus.receive(
+        //         builder,
+        //         local.proof_idx,
+        //         TranscriptBusMessage {
+        //             tidx: local.lambda_tidx + AB::Expr::from_canonical_usize(i),
+        //             value: local.lambda[i].into(),
+        //             is_sample: AB::Expr::ONE,
+        //         },
+        //         local.is_first,
+        //     );
+        // }
+    }
+}
+
+#[derive(AlignedBorrow, Copy, Clone)]
+#[repr(C)]
 struct InteractionsFoldingCols<T> {
     is_valid: T,
     is_first: T,
@@ -461,6 +525,7 @@ struct InteractionsFoldingCols<T> {
 
     beta_tidx: T,
 
+    air_idx: T,
     sort_idx: T,
     interaction_idx: T,
     node_idx: T,
@@ -604,27 +669,54 @@ where
             local.cur_sum,
             local.value,
         );
+
+        // TODO: constrain that sort_idx and air_idx match
+
         self.expression_claim_bus.send(
             builder,
             local.proof_idx,
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ONE,
-                idx: local.sort_idx.into(),
+                idx: local.sort_idx * AB::Expr::TWO,
                 value: local.cur_sum.map(Into::into),
             },
-            // local.is_first_in_message,
+            // local.is_first_in_message * local.is_valid,
             AB::Expr::ZERO,
         );
         self.expression_claim_bus.send(
             builder,
             local.proof_idx,
             ExpressionClaimMessage {
-                is_interaction: AB::Expr::ZERO,
-                idx: local.sort_idx.into(),
+                is_interaction: AB::Expr::ONE,
+                idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,
                 value: next.cur_sum.map(Into::into),
             },
-            // local.is_first_in_message,
+            // local.is_first_in_message * local.is_valid,
             AB::Expr::ZERO,
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ZERO,
+                idx_in_message: next.idx_in_message.into(),
+                value: next.value.map(Into::into),
+            },
+            local.is_first_in_message * local.has_interactions,
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ONE,
+                idx_in_message: AB::Expr::ZERO,
+                value: local.value.map(Into::into),
+            },
+            local.is_first_in_message * local.has_interactions,
         );
 
         self.transcript_bus.sample_ext(
@@ -644,6 +736,146 @@ where
                 value: (local.interaction_idx + AB::Expr::ONE) * local.has_interactions,
             },
             next.is_first_in_air * local.is_valid,
+        );
+    }
+}
+
+#[derive(AlignedBorrow, Copy, Clone)]
+#[repr(C)]
+struct ConstraintsFoldingCols<T> {
+    is_valid: T,
+    is_first: T,
+    is_last: T,
+    proof_idx: T,
+
+    air_idx: T,
+    sort_idx: T,
+    constraint_idx: T,
+
+    lambda_tidx: T,
+    lambda: [T; D_EF],
+
+    value: [T; D_EF],
+    cur_sum: [T; D_EF],
+
+    is_first_in_air: T,
+    loop_aux: NestedForLoopAuxCols<T, 1>,
+}
+
+pub struct ConstraintsFoldingAir {
+    pub transcript_bus: TranscriptBus,
+    pub constraint_bus: ConstraintsFoldingBus,
+    pub expression_claim_bus: ExpressionClaimBus,
+}
+
+impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
+impl<F> PartitionedBaseAir<F> for ConstraintsFoldingAir {}
+
+impl<F> BaseAir<F> for ConstraintsFoldingAir {
+    fn width(&self) -> usize {
+        ConstraintsFoldingCols::<F>::width()
+    }
+}
+
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ConstraintsFoldingAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+
+        let local: &ConstraintsFoldingCols<AB::Var> = (*local).borrow();
+        let next: &ConstraintsFoldingCols<AB::Var> = (*next).borrow();
+
+        type LoopSubAir = NestedForLoopSubAir<2, 1>;
+        LoopSubAir {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx, local.sort_idx],
+                        is_first: [local.is_first, local.is_first_in_air],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx, next.sort_idx],
+                        is_first: [next.is_first, next.is_first_in_air],
+                    }
+                    .map_into(),
+                ),
+                local.loop_aux.map_into(),
+            ),
+        );
+
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_first);
+        builder.assert_bool(local.is_last);
+
+        builder.assert_bool(local.is_first_in_air);
+
+        // =========================== indices consistency ===============================
+        // When we are within one air, constraint_idx increases by 0/1
+        builder
+            .when(not(next.is_first_in_air))
+            .assert_bool(next.constraint_idx - local.constraint_idx);
+        // First constraint_idx within an air is zero
+        builder
+            .when(local.is_first_in_air)
+            .assert_zero(local.constraint_idx);
+
+        // ======================== lambda and cur sum consistency ============================
+        assert_array_eq(
+            &mut builder.when(not(next.is_first)),
+            local.lambda,
+            next.lambda,
+        );
+        assert_array_eq(
+            &mut builder.when(not(next.is_first_in_air)),
+            local.cur_sum,
+            ext_field_add(
+                local.value,
+                ext_field_multiply::<AB::Expr>(local.lambda, next.cur_sum),
+            ),
+        );
+        // numerator and the last element of the message are just the corresponding values
+        assert_array_eq(
+            &mut builder.when(next.is_first_in_air),
+            local.cur_sum,
+            local.value,
+        );
+
+        // TODO: constrain that sort_idx and air_idx match
+
+        self.constraint_bus.receive(
+            builder,
+            local.proof_idx,
+            ConstraintsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                constraint_idx: local.constraint_idx - AB::Expr::ONE,
+                value: local.value.map(Into::into),
+            },
+            local.is_valid * (AB::Expr::ONE - local.is_first_in_air),
+        );
+        self.expression_claim_bus.send(
+            builder,
+            local.proof_idx,
+            ExpressionClaimMessage {
+                is_interaction: AB::Expr::ZERO,
+                idx: local.sort_idx.into(),
+                value: local.cur_sum.map(Into::into),
+            },
+            // local.is_first_in_air * local.is_valid,
+            AB::Expr::ZERO,
+        );
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.lambda_tidx,
+            local.lambda,
+            local.is_valid * local.is_first,
         );
     }
 }
@@ -868,6 +1100,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 
     struct Record {
         kind: NodeKind,
+        air_idx: usize,
         node_idx: usize,
         attrs: [usize; 3],
         is_constraint: bool,
@@ -922,7 +1155,9 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         fanout_per_air.push(fanout);
     }
 
-    for (vk, fanout_per_node) in zip(child_vk.inner.per_air.iter(), fanout_per_air.into_iter()) {
+    for (air_idx, (vk, fanout_per_node)) in
+        zip(child_vk.inner.per_air.iter(), fanout_per_air.into_iter()).enumerate()
+    {
         let constraints = &vk.symbolic_constraints.constraints;
         let constraint_idxs = &constraints.constraint_idx;
 
@@ -945,10 +1180,11 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
 
             let mut record = Record {
                 kind: NodeKind::Constant,
+                air_idx,
                 node_idx,
                 attrs: [0; 3],
                 is_constraint,
-                constraint_idx: if is_constraint { 0 } else { j },
+                constraint_idx: if !is_constraint { 0 } else { j },
                 fanout,
             };
 
@@ -1033,6 +1269,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
         {
             records.push(Record {
                 kind: NodeKind::InteractionMult,
+                air_idx,
                 node_idx: interaction_idx,
                 attrs: [interaction.count, 0, 0],
                 is_constraint: false,
@@ -1042,6 +1279,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
             for (idx_in_message, &node_idx) in interaction.message.iter().enumerate() {
                 records.push(Record {
                     kind: NodeKind::InteractionMsgComp,
+                    air_idx,
                     node_idx: interaction_idx,
                     attrs: [node_idx, idx_in_message, 0],
                     is_constraint: false,
@@ -1066,6 +1304,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                 .enumerate()
             {
                 cols.flags[i] = F::from_canonical_u32(x);
+                cols.air_idx = F::from_canonical_usize(record.air_idx);
                 cols.node_or_interaction_idx = F::from_canonical_usize(record.node_idx);
                 cols.attrs = record.attrs.map(F::from_canonical_usize);
                 cols.is_constraint = F::from_bool(record.is_constraint);
@@ -1237,6 +1476,7 @@ pub(crate) fn generate_column_claim_trace(
 #[derive(Copy, Clone)]
 #[repr(C)]
 struct InteractionsFoldingRecord {
+    air_idx: usize,
     sort_idx: usize,
     interaction_idx: usize,
     node_idx: usize,
@@ -1259,13 +1499,7 @@ fn generate_interactions_folding_blob(
         .inner
         .per_air
         .iter()
-        .map(|vk| {
-            vk.symbolic_constraints
-                .interactions
-                .iter()
-                .cloned()
-                .collect_vec()
-        })
+        .map(|vk| vk.symbolic_constraints.interactions.clone())
         .collect_vec();
 
     let mut records = MultiProofVecVec::new();
@@ -1275,6 +1509,7 @@ fn generate_interactions_folding_blob(
             let inters = &interactions[*air_idx];
             if inters.is_empty() {
                 records.push(InteractionsFoldingRecord {
+                    air_idx: *air_idx,
                     sort_idx,
                     interaction_idx: 0,
                     node_idx: 0,
@@ -1287,6 +1522,7 @@ fn generate_interactions_folding_blob(
             } else {
                 for (interaction_idx, inter) in inters.iter().enumerate() {
                     records.push(InteractionsFoldingRecord {
+                        air_idx: *air_idx,
                         sort_idx,
                         interaction_idx,
                         node_idx: inter.count,
@@ -1299,6 +1535,7 @@ fn generate_interactions_folding_blob(
 
                     for (j, &node_idx) in inter.message.iter().enumerate() {
                         records.push(InteractionsFoldingRecord {
+                            air_idx: *air_idx,
                             sort_idx,
                             interaction_idx,
                             node_idx,
@@ -1311,6 +1548,7 @@ fn generate_interactions_folding_blob(
                     }
 
                     records.push(InteractionsFoldingRecord {
+                        air_idx: *air_idx,
                         sort_idx,
                         interaction_idx,
                         node_idx: inter.bus_index as usize,
@@ -1358,6 +1596,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 cols.is_valid = F::ONE;
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.beta_tidx = F::from_canonical_usize(beta_tidx);
+                cols.air_idx = F::from_canonical_usize(record.air_idx);
                 cols.sort_idx = F::from_canonical_usize(record.sort_idx);
                 cols.interaction_idx = F::from_canonical_usize(record.interaction_idx);
                 cols.node_idx = F::from_canonical_usize(record.node_idx);
@@ -1412,6 +1651,144 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
             cols.is_last = F::ONE;
             cols.is_first_in_air = F::ONE;
             cols.is_first_in_message = F::ONE;
+        });
+
+    RowMajorMatrix::new(trace, width)
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct ConstraintsFoldingRecord {
+    sort_idx: usize,
+    air_idx: usize,
+    constraint_idx: usize,
+    node_idx: usize,
+    is_first_in_air: bool,
+    // TODO value
+}
+
+struct ConstraintsFoldingBlob {
+    records: MultiProofVecVec<ConstraintsFoldingRecord>,
+}
+
+fn generate_constraints_folding_blob(
+    vk: &MultiStarkVerifyingKeyV2,
+    preflights: &[Preflight],
+) -> ConstraintsFoldingBlob {
+    let constraints = vk
+        .inner
+        .per_air
+        .iter()
+        .map(|vk| vk.symbolic_constraints.constraints.constraint_idx.clone())
+        .collect_vec();
+
+    let mut records = MultiProofVecVec::new();
+    for preflight in preflights.iter() {
+        let vdata = &preflight.proof_shape.sorted_trace_vdata;
+        for (sort_idx, (air_idx, _)) in vdata.iter().enumerate() {
+            let constrs = &constraints[*air_idx];
+            records.push(ConstraintsFoldingRecord {
+                // dummy to avoid handling case with no constraints
+                sort_idx,
+                air_idx: *air_idx,
+                constraint_idx: 0,
+                node_idx: 0,
+                is_first_in_air: true,
+            });
+            for (constraint_idx, &constr) in constrs.iter().enumerate() {
+                records.push(ConstraintsFoldingRecord {
+                    sort_idx,
+                    air_idx: *air_idx,
+                    constraint_idx: constraint_idx + 1,
+                    node_idx: constr,
+                    is_first_in_air: false,
+                });
+            }
+        }
+        records.end_proof();
+    }
+    ConstraintsFoldingBlob { records }
+}
+
+pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
+    vk: &MultiStarkVerifyingKeyV2,
+    expr_blob: &BatchConstraintBlobCpu,
+    preflights: &[Preflight],
+) -> RowMajorMatrix<F> {
+    let width = ConstraintsFoldingCols::<F>::width();
+
+    let blob = generate_constraints_folding_blob(vk, preflights);
+
+    let total_height = blob.records.len();
+    debug_assert!(total_height > 0);
+    let padding_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padding_height * width];
+
+    let mut cur_height = 0;
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let lambda_tidx = preflight.batch_constraint.lambda_tidx;
+        let lambda_slice = &preflight.transcript.values()[lambda_tidx..lambda_tidx + D_EF];
+        let records = &blob.records[pidx];
+
+        let node_claims = &expr_blob.expr_evals[pidx];
+
+        trace[cur_height * width..(cur_height + records.len()) * width]
+            .par_chunks_exact_mut(width)
+            .zip(records.par_iter())
+            .for_each(|(chunk, record)| {
+                let cols: &mut ConstraintsFoldingCols<_> = chunk.borrow_mut();
+                let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
+                cols.is_valid = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.air_idx = F::from_canonical_usize(record.air_idx);
+                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
+                cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
+                cols.lambda_tidx = F::from_canonical_usize(lambda_tidx);
+                cols.lambda.copy_from_slice(lambda_slice);
+                cols.value
+                    .copy_from_slice(node_claims[air_idx][record.node_idx].as_base_slice());
+                // cols.cur_sum
+                cols.is_first_in_air = F::from_bool(record.is_first_in_air);
+                cols.loop_aux.is_transition[0] = F::ONE;
+            });
+
+        // Setting `cur_sum`
+        let mut cur_sum = EF::ZERO;
+        let lambda = EF::from_base_slice(lambda_slice);
+        trace[cur_height * width..(cur_height + records.len()) * width]
+            .chunks_exact_mut(width)
+            .rev()
+            .for_each(|chunk| {
+                let cols: &mut ConstraintsFoldingCols<_> = chunk.borrow_mut();
+                cur_sum = cur_sum * lambda + EF::from_base_slice(&cols.value);
+                cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                if cols.is_first_in_air == F::ONE {
+                    cur_sum = EF::ZERO;
+                }
+            });
+
+        {
+            let cols: &mut ConstraintsFoldingCols<_> =
+                trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
+            cols.is_first = F::ONE;
+        }
+        cur_height += records.len();
+        {
+            let cols: &mut ConstraintsFoldingCols<_> =
+                trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
+            cols.is_last = F::ONE;
+            cols.loop_aux.is_transition[0] = F::ZERO;
+        }
+    }
+    trace[total_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut ConstraintsFoldingCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.is_first = F::ONE;
+            cols.is_last = F::ONE;
+            cols.is_first_in_air = F::ONE;
         });
 
     RowMajorMatrix::new(trace, width)

@@ -101,6 +101,7 @@ define_typed_per_proof_permutation_bus!(ExpressionClaimBus, ExpressionClaimMessa
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct InteractionsFoldingMessage<T> {
+    pub air_idx: T,
     pub interaction_idx: T,
     pub is_mult: T,
     pub idx_in_message: T,
@@ -108,3 +109,13 @@ pub struct InteractionsFoldingMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(InteractionsFoldingBus, InteractionsFoldingMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct ConstraintsFoldingMessage<T> {
+    pub air_idx: T,
+    pub constraint_idx: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(ConstraintsFoldingBus, ConstraintsFoldingMessage);

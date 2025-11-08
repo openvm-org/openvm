@@ -64,17 +64,17 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpressionClaimAir {
         //     local.is_valid,
         // );
 
-        for i in 0..D_EF {
-            self.transcript_bus.receive(
-                builder,
-                local.proof_idx,
-                TranscriptBusMessage {
-                    tidx: local.lambda_tidx + AB::Expr::from_canonical_usize(i),
-                    value: local.lambda[i].into(),
-                    is_sample: AB::Expr::ONE,
-                },
-                local.is_first,
-            );
-        }
+        // for i in 0..D_EF {
+        //     self.transcript_bus.receive(
+        //         builder,
+        //         local.proof_idx,
+        //         TranscriptBusMessage {
+        //             tidx: local.lambda_tidx + AB::Expr::from_canonical_usize(i),
+        //             value: local.lambda[i].into(),
+        //             is_sample: AB::Expr::ONE,
+        //         },
+        //         local.is_first,
+        //     );
+        // }
     }
 }
