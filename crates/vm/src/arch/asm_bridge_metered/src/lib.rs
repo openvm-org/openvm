@@ -4,9 +4,11 @@ pub use aot::*;
 mod aot {
     use std::ffi::c_void;
 
-    use openvm_circuit::arch::aot::AotMeteredVmExecState;
     use openvm_circuit::{
-        arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, VmExecState},
+        arch::{
+            aot::AotMeteredVmExecState, execution_mode::MeteredCtx,
+            interpreter::PreComputeInstruction, VmExecState,
+        },
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -86,8 +88,9 @@ mod aot {
             (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
         };
         if unsafe { (aot_vm_exec_state_ref.is_exit_code_ok_none)(vm_exec_state_ptr) } {
-            // Unsafe but `vm_state` is the first field of `VmExecState` and `pc` is the first field of `VmState`.
-            // Since all structs are `repr(C)`, `pc` should alawys in the same offset across different compilation.
+            // Unsafe but `vm_state` is the first field of `VmExecState` and `pc` is the first field
+            // of `VmState`. Since all structs are `repr(C)`, `pc` should alawys in the
+            // same offset across different compilation.
             vm_exec_state_ref.pc()
         } else {
             1
