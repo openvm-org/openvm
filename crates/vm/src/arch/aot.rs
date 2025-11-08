@@ -748,6 +748,8 @@ where
             .args([
                 "rustc",
                 "--release",
+                "--features",
+                "aot",
                 &format!(
                     "--target-dir={}/target/{}",
                     root_dir.to_str().unwrap(),

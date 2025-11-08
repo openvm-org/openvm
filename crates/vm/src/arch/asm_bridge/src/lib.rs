@@ -70,7 +70,7 @@ pub extern "C" fn extern_handler(
     // reference to vm_exec_state
     let vm_exec_state_ref =
         unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    unsafe { vm_exec_state_ref.set_pc(cur_pc) };
+    vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
     let pre_compute_insns_base_ptr =
