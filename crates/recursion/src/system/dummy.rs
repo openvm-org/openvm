@@ -11,13 +11,13 @@ impl Preflight {
     pub(crate) fn batch_constraint_sumcheck_randomness(
         &self,
     ) -> Vec<ConstraintSumcheckRandomness<F>> {
-        (0..self.proof_shape.n_global() + 1)
-            .map(|i| ConstraintSumcheckRandomness {
+        self.batch_constraint
+            .sumcheck_rnd
+            .iter()
+            .enumerate()
+            .map(|(i, r)| ConstraintSumcheckRandomness {
                 idx: F::from_canonical_usize(i),
-                challenge: self.batch_constraint.sumcheck_rnd[i]
-                    .as_base_slice()
-                    .try_into()
-                    .unwrap(),
+                challenge: r.as_base_slice().try_into().unwrap(),
             })
             .collect()
     }
