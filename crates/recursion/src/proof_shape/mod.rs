@@ -22,7 +22,7 @@ use crate::{
         range::{RangeCheckerAir, RangeCheckerTraceGenerator},
     },
     proof_shape::{
-        bus::{NumPublicValuesBus, ProofShapePermutationBus},
+        bus::{NumPublicValuesBus, ProofShapePermutationBus, StartingTidxBus},
         proof_shape::ProofShapeAir,
         pvs::PublicValuesAir,
     },
@@ -61,6 +61,7 @@ pub struct ProofShapeModule {
     range_bus: RangeCheckerBus,
     pow_bus: PowerCheckerBus,
     permutation_bus: ProofShapePermutationBus,
+    starting_tidx_bus: StartingTidxBus,
     num_pvs_bus: NumPublicValuesBus,
 
     // Required for ProofShapeAir tracegen + constraints
@@ -116,6 +117,7 @@ impl ProofShapeModule {
             range_bus: RangeCheckerBus::new(b.new_bus_idx()),
             pow_bus: PowerCheckerBus::new(b.new_bus_idx()),
             permutation_bus: ProofShapePermutationBus::new(b.new_bus_idx()),
+            starting_tidx_bus: StartingTidxBus::new(b.new_bus_idx()),
             num_pvs_bus: NumPublicValuesBus::new(b.new_bus_idx()),
             idx_encoder,
             min_cached_idx,
@@ -138,6 +140,7 @@ impl ProofShapeModule {
         ts.observe_commit(proof.common_main_commit);
 
         let mut pvs_tidx = vec![];
+        let mut starting_tidx = vec![];
 
         for (trace_vdata, avk, pvs) in izip!(
             &proof.trace_vdata,
@@ -145,6 +148,7 @@ impl ProofShapeModule {
             &proof.public_values
         ) {
             let is_air_present = trace_vdata.is_some();
+            starting_tidx.push(ts.len());
 
             if !avk.is_required {
                 ts.observe(F::from_bool(is_air_present));
@@ -193,6 +197,7 @@ impl ProofShapeModule {
 
         preflight.proof_shape = ProofShapePreflight {
             sorted_trace_vdata,
+            starting_tidx,
             pvs_tidx,
             post_tidx: ts.len(),
             n_max,
@@ -214,6 +219,7 @@ impl AirModule for ProofShapeModule {
             range_bus: self.range_bus,
             pow_bus: self.pow_bus,
             permutation_bus: self.permutation_bus,
+            starting_tidx_bus: self.starting_tidx_bus,
             num_pvs_bus: self.num_pvs_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
