@@ -397,6 +397,8 @@ define_typed_per_proof_permutation_bus!(AirPartShapeBus, AirPartShapeBusMessage)
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct LiftedHeightsBusMessage<T> {
     pub sort_idx: T,
+    pub part_idx: T,
+    pub commit_idx: T,
     pub hypercube_dim: T,
     /// Sender must constraint this equals `2^log_lifted_height`.
     pub lifted_height: T,

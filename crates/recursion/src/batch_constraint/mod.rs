@@ -370,11 +370,24 @@ impl BatchConstraintModule {
             let mut expr_evals_per_air = vec![];
             for (air_idx, vk) in child_vk.per_air.iter().enumerate() {
                 if proof.trace_vdata[air_idx].is_none() {
+                    expr_evals_per_air.push(vec![]);
                     continue;
                 }
 
                 let openings = &proof.batch_constraint_proof.column_openings;
-                let (sorted_idx, ref vdata) = preflight.proof_shape.sorted_trace_vdata[air_idx];
+                let (sorted_idx, vdata) = preflight
+                    .proof_shape
+                    .sorted_trace_vdata
+                    .iter()
+                    .enumerate()
+                    .find_map(|(sorted_idx, (idx, vdata))| {
+                        if air_idx == *idx {
+                            Some((sorted_idx, vdata))
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap();
 
                 let constraints = &vk.symbolic_constraints.constraints;
                 let mut expr_evals = vec![EF::ZERO; constraints.nodes.len()];
@@ -390,11 +403,7 @@ impl BatchConstraintModule {
                                 };
                             }
                             Entry::Main { part_index, offset } => {
-                                let part = if part_index == 0 {
-                                    0
-                                } else {
-                                    part_index + vk.preprocessed_data.is_some() as usize
-                                };
+                                let part = (part_index + 1) % (vk.num_cached_mains() + 1);
                                 expr_evals[node_idx] = match offset {
                                     0 => openings[sorted_idx][part][var.index].0,
                                     1 => openings[sorted_idx][part][var.index].1,

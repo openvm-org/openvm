@@ -12,6 +12,15 @@ define_typed_per_proof_permutation_bus!(ProofShapePermutationBus, ProofShapePerm
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct StartingTidxMessage<T> {
+    pub air_idx: T,
+    pub tidx: T,
+}
+
+define_typed_per_proof_permutation_bus!(StartingTidxBus, StartingTidxMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct NumPublicValuesMessage<T> {
     pub air_idx: T,
     pub tidx: T,
