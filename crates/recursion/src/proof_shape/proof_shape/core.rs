@@ -8,7 +8,7 @@ use itertools::fold;
 use openvm_circuit_primitives::{
     SubAir,
     encoder::Encoder,
-    utils::{and, not, select},
+    utils::{and, not, or, select},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
@@ -36,7 +36,7 @@ use crate::{
         AirMetadata,
         bus::{
             NumPublicValuesBus, NumPublicValuesMessage, ProofShapePermutationBus,
-            ProofShapePermutationMessage,
+            ProofShapePermutationMessage, StartingTidxBus, StartingTidxMessage,
         },
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
@@ -65,7 +65,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub part_common_main_mult: F,
     pub part_preprocessed_mult: F,
 
-    // First possible non-main cidx of the current AIR
+    // First possible tidx and non-main cidx of the current AIR
+    pub starting_tidx: F,
     pub starting_cidx: F,
 
     // Columns that may be read from the transcript. Note that cached_commits is also read
@@ -166,6 +167,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.n_sign_bit = F::from_bool(n.is_negative());
                 sorted_idx += 1;
 
+                cols.starting_tidx =
+                    F::from_canonical_usize(preflight.proof_shape.starting_tidx[*idx]);
                 cols.starting_cidx = F::from_canonical_usize(cidx);
                 let has_preprocessed = child_vk.inner.per_air[*idx].preprocessed_data.is_some();
                 cidx += has_preprocessed as usize;
@@ -272,6 +275,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 cols.sorted_idx = F::from_canonical_usize(sorted_idx);
                 sorted_idx += 1;
 
+                cols.starting_tidx =
+                    F::from_canonical_usize(preflight.proof_shape.starting_tidx[idx]);
                 cols.starting_cidx = F::from_canonical_usize(cidx);
 
                 cols.total_interactions_limbs = total_interactions_f;
@@ -315,6 +320,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_last = F::ONE;
+                cols.starting_tidx = F::from_canonical_usize(preflight.proof_shape.post_tidx);
 
                 let n_logup = preflight.proof_shape.n_logup;
                 debug_assert_eq!(
@@ -415,6 +421,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Internal buses
     pub permutation_bus: ProofShapePermutationBus,
+    pub starting_tidx_bus: StartingTidxBus,
     pub num_pvs_bus: NumPublicValuesBus,
 
     // Inter-module buses
@@ -535,8 +542,6 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // VK FIELD SELECTION
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let mut tidx_offset = 2 * DIGEST_SIZE;
-        let mut tidx = AB::Expr::ZERO;
         let mut num_interactions_per_row = [AB::Expr::ZERO; NUM_LIMBS];
 
         // Select values for TranscriptBus
@@ -568,8 +573,6 @@ where
 
             when_current.assert_eq(local.idx, AB::F::from_canonical_usize(i));
 
-            tidx += is_current_air.clone() * AB::F::from_canonical_usize(tidx_offset);
-
             main_common_width +=
                 is_current_air.clone() * AB::F::from_canonical_usize(air_data.main_width);
 
@@ -594,8 +597,6 @@ where
             if air_data.is_required {
                 is_required += is_current_air.clone();
                 when_current.assert_one(local.is_present);
-            } else {
-                tidx_offset += 1;
             }
 
             if i == self.min_cached_idx {
@@ -614,29 +615,43 @@ where
 
                 preprocessed_stacked_width += is_current_air.clone()
                     * AB::F::from_canonical_usize(air_data.preprocessed_width.unwrap());
-                preprocessed_commit = from_fn(|i| {
-                    is_current_air.clone()
-                        * AB::F::from_canonical_u32(preprocessed.commit[i].as_canonical_u32())
+                (0..DIGEST_SIZE).for_each(|didx| {
+                    preprocessed_commit[didx] += is_current_air.clone()
+                        * AB::F::from_canonical_u32(preprocessed.commit[didx].as_canonical_u32());
                 });
-
-                tidx_offset += DIGEST_SIZE;
-            } else {
-                tidx_offset += 1;
             }
 
             for (cached_idx, width) in air_data.cached_widths.iter().enumerate() {
                 cached_present[cached_idx] += is_current_air.clone();
                 cached_widths[cached_idx] +=
                     is_current_air.clone() * AB::Expr::from_canonical_usize(*width);
-                tidx_offset += DIGEST_SIZE;
             }
-
-            tidx_offset += air_data.num_public_values;
         }
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // TRANSCRIPT OBSERVATIONS
         ///////////////////////////////////////////////////////////////////////////////////////////
+        let is_first_idx = self.idx_encoder.get_flag_expr::<AB>(0, localv.idx_flags);
+        builder.when(is_first_idx.clone()).assert_eq(
+            local.starting_tidx,
+            AB::Expr::from_canonical_usize(2 * DIGEST_SIZE),
+        );
+
+        self.starting_tidx_bus.receive(
+            builder,
+            local.proof_idx,
+            StartingTidxMessage {
+                air_idx: local.idx * local.is_valid
+                    + AB::Expr::from_canonical_usize(self.per_air.len()) * local.is_last,
+                tidx: local.starting_tidx.into(),
+            },
+            or(
+                local.is_last,
+                and(local.is_valid, not::<AB::Expr>(is_first_idx)),
+            ),
+        );
+
+        let mut tidx = local.starting_tidx.into();
         self.transcript_bus.receive(
             builder,
             local.proof_idx,
@@ -647,7 +662,7 @@ where
             },
             not::<AB::Expr>(is_required.clone()) * local.is_valid,
         );
-        tidx += not::<AB::Expr>(is_required);
+        tidx += not::<AB::Expr>(is_required) * local.is_valid;
 
         for (didx, commit_val) in preprocessed_commit.iter().enumerate() {
             self.transcript_bus.receive(
@@ -658,10 +673,12 @@ where
                     value: commit_val.clone(),
                     is_sample: AB::Expr::ZERO,
                 },
-                has_preprocessed.clone() * local.is_valid,
+                has_preprocessed.clone() * local.is_present,
             );
         }
-        tidx += has_preprocessed.clone() * AB::Expr::from_canonical_usize(DIGEST_SIZE);
+        tidx += has_preprocessed.clone()
+            * AB::Expr::from_canonical_usize(DIGEST_SIZE)
+            * local.is_present;
 
         self.transcript_bus.receive(
             builder,
@@ -671,9 +688,9 @@ where
                 value: local.log_height.into(),
                 is_sample: AB::Expr::ZERO,
             },
-            not::<AB::Expr>(has_preprocessed.clone()) * local.is_valid,
+            not::<AB::Expr>(has_preprocessed.clone()) * local.is_present,
         );
-        tidx += not::<AB::Expr>(has_preprocessed.clone());
+        tidx += not::<AB::Expr>(has_preprocessed.clone()) * local.is_present;
 
         (0..self.max_cached).for_each(|i| {
             for didx in 0..DIGEST_SIZE {
@@ -685,14 +702,24 @@ where
                         value: localv.cached_commits[i][didx].into(),
                         is_sample: AB::Expr::ZERO,
                     },
-                    cached_present[i].clone() * local.is_valid,
+                    cached_present[i].clone() * local.is_present,
                 );
-                tidx += cached_present[i].clone();
+                tidx += cached_present[i].clone() * local.is_present;
             }
         });
 
         let num_pvs_tidx = tidx.clone();
-        tidx += num_pvs.clone();
+        tidx += num_pvs.clone() * local.is_valid;
+
+        self.starting_tidx_bus.send(
+            builder,
+            local.proof_idx,
+            StartingTidxMessage {
+                air_idx: local.idx + AB::F::ONE,
+                tidx,
+            },
+            local.is_valid,
+        );
 
         for didx in 0..DIGEST_SIZE {
             self.transcript_bus.receive(
@@ -846,15 +873,16 @@ where
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
-        // LIFTED HEIGHTS LOOKUP
+        // LIFTED HEIGHTS LOOKUP + STACKING COMMITMENTS
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let log_lifted_height = not(local.n_sign_bit) * n_abs.clone() + l_skip;
         // lifted_height = max(2^log_height, 2^l_skip)
         let lifted_height = select(
             local.n_sign_bit,
             AB::F::from_canonical_usize(1 << self.l_skip),
             local.height,
         );
+        let log_lifted_height = not(local.n_sign_bit) * n_abs.clone() + l_skip;
+
         self.pow_bus.lookup_key(
             builder,
             PowerCheckerBusMessage {
@@ -864,64 +892,86 @@ where
             local.is_present,
         );
 
-        let total_width = fold(
-            cached_widths,
-            main_common_width + preprocessed_stacked_width,
-            |acc, width| acc + width,
-        );
         self.lifted_heights_bus.send(
             builder,
             local.proof_idx,
             LiftedHeightsBusMessage {
                 sort_idx: local.sorted_idx.into(),
+                part_idx: AB::Expr::ZERO,
+                commit_idx: AB::Expr::ZERO,
                 hypercube_dim: n.clone(),
                 lifted_height: lifted_height.clone(),
-                log_lifted_height,
+                log_lifted_height: log_lifted_height.clone(),
             },
-            local.is_present * total_width,
+            local.is_present * main_common_width,
         );
 
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        // STACKING COMMITMENTS
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        let mut cidx = local.starting_cidx.into();
         builder
             .when(and(local.is_first, local.is_valid))
-            .assert_one(cidx.clone());
+            .assert_one(local.starting_cidx);
+        let mut cidx_offset = AB::Expr::ZERO;
+
+        self.lifted_heights_bus.send(
+            builder,
+            local.proof_idx,
+            LiftedHeightsBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                part_idx: cidx_offset.clone() + AB::F::ONE,
+                commit_idx: cidx_offset.clone() + local.starting_cidx,
+                hypercube_dim: n.clone(),
+                lifted_height: lifted_height.clone(),
+                log_lifted_height: log_lifted_height.clone(),
+            },
+            local.is_present * preprocessed_stacked_width,
+        );
 
         self.commitments_bus.send(
             builder,
             local.proof_idx,
             CommitmentsBusMessage {
                 major_idx: AB::Expr::ZERO,
-                minor_idx: cidx.clone(),
+                minor_idx: cidx_offset.clone() + local.starting_cidx,
                 commitment: preprocessed_commit,
             },
             has_preprocessed.clone()
                 * local.is_valid
                 * AB::Expr::from_canonical_usize(self.commit_mult),
         );
+        cidx_offset += has_preprocessed.clone();
 
-        cidx += has_preprocessed.clone();
         (0..self.max_cached).for_each(|cached_idx| {
+            self.lifted_heights_bus.send(
+                builder,
+                local.proof_idx,
+                LiftedHeightsBusMessage {
+                    sort_idx: local.sorted_idx.into(),
+                    part_idx: cidx_offset.clone() + AB::F::ONE,
+                    commit_idx: cidx_offset.clone() + local.starting_cidx,
+                    hypercube_dim: n.clone(),
+                    lifted_height: lifted_height.clone(),
+                    log_lifted_height: log_lifted_height.clone(),
+                },
+                local.is_present * cached_widths[cached_idx].clone(),
+            );
+
             self.commitments_bus.send(
                 builder,
                 local.proof_idx,
                 CommitmentsBusMessage {
                     major_idx: AB::Expr::ZERO,
-                    minor_idx: cidx.clone(),
+                    minor_idx: cidx_offset.clone() + local.starting_cidx,
                     commitment: localv.cached_commits[cached_idx].map(Into::into),
                 },
                 cached_present[cached_idx].clone()
                     * local.is_valid
                     * AB::Expr::from_canonical_usize(self.commit_mult),
             );
-            cidx += cached_present[cached_idx].clone();
+            cidx_offset += cached_present[cached_idx].clone();
         });
 
         builder
             .when(and(local.is_valid, not(next.is_last)))
-            .assert_eq(cidx, next.starting_cidx);
+            .assert_eq(local.starting_cidx + cidx_offset, next.starting_cidx);
 
         self.commitments_bus.send(
             builder,
@@ -1137,7 +1187,7 @@ where
             builder,
             local.proof_idx,
             GkrModuleMessage {
-                tidx: AB::Expr::from_canonical_usize(tidx_offset),
+                tidx: local.starting_tidx.into(),
                 n_logup: n_logup.into(),
                 n_max: local.n_max.into(),
                 is_n_max_greater: local.is_n_max_greater.into(),

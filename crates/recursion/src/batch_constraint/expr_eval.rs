@@ -304,6 +304,8 @@ pub struct ColumnClaimCols<T> {
     has_preprocessed: T,
 
     tidx: T,
+    // TODO: remove this and send properly
+    send_tidx: T,
     col_claim: [T; D_EF],
     rot_claim: [T; D_EF],
 }
@@ -362,7 +364,7 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ColumnClaimAir {
             StackingModuleMessage {
                 tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             },
-            local.is_last,
+            local.send_tidx,
         );
         self.column_claims_bus.send(
             builder,
@@ -1329,6 +1331,7 @@ pub(crate) fn generate_column_claim_trace(
         is_last: bool,
         proof_idx: usize,
         tidx: usize,
+        send_tidx: bool,
         air_idx: usize,
         sort_idx: usize,
         part_idx: usize,
@@ -1382,11 +1385,13 @@ pub(crate) fn generate_column_claim_trace(
                 col_claim_arr.copy_from_slice(col_claim.as_base_slice());
                 let mut rot_claim_arr = [F::ZERO; D_EF];
                 rot_claim_arr.copy_from_slice(rot_claim.as_base_slice());
+                let tidx = main_tidx[sort_idx] + col * 2 * D_EF;
                 rows.push(ColumnRowInfo {
                     is_first: rows.len() == initial_len,
                     is_last: false,
                     proof_idx: pidx,
-                    tidx: main_tidx[sort_idx] + col * 2 * D_EF,
+                    tidx,
+                    send_tidx: tidx + 2 * D_EF == preflight.batch_constraint.post_tidx,
                     air_idx: *air_id,
                     sort_idx,
                     part_idx: 0,
@@ -1417,6 +1422,7 @@ pub(crate) fn generate_column_claim_trace(
                         is_last: false,
                         proof_idx: pidx,
                         tidx: cur_tidx,
+                        send_tidx: cur_tidx + 2 * D_EF == preflight.batch_constraint.post_tidx,
                         air_idx: *air_id,
                         sort_idx,
                         part_idx: part + 1,
@@ -1448,6 +1454,7 @@ pub(crate) fn generate_column_claim_trace(
             cols.is_last = F::from_bool(row.is_last);
             cols.proof_idx = F::from_canonical_usize(row.proof_idx);
             cols.tidx = F::from_canonical_usize(row.tidx);
+            cols.send_tidx = F::from_bool(row.send_tidx);
             cols.air_idx = F::from_canonical_usize(row.air_idx);
             cols.sort_idx = F::from_canonical_usize(row.sort_idx);
             cols.part_idx = F::from_canonical_usize(row.part_idx);
@@ -1485,6 +1492,7 @@ struct InteractionsFoldingRecord {
     is_first_in_air: bool,
     is_last_in_air: bool,
     is_mult: bool,
+    is_bus_index: bool,
 }
 
 struct InteractionsFoldingBlob {
@@ -1518,6 +1526,7 @@ fn generate_interactions_folding_blob(
                     is_first_in_air: true,
                     is_last_in_air: true,
                     is_mult: false,
+                    is_bus_index: false,
                 });
             } else {
                 for (interaction_idx, inter) in inters.iter().enumerate() {
@@ -1531,6 +1540,7 @@ fn generate_interactions_folding_blob(
                         is_first_in_air: interaction_idx == 0,
                         is_last_in_air: false,
                         is_mult: true,
+                        is_bus_index: false,
                     });
 
                     for (j, &node_idx) in inter.message.iter().enumerate() {
@@ -1544,6 +1554,7 @@ fn generate_interactions_folding_blob(
                             is_first_in_air: false,
                             is_last_in_air: false,
                             is_mult: false,
+                            is_bus_index: false,
                         });
                     }
 
@@ -1557,6 +1568,7 @@ fn generate_interactions_folding_blob(
                         is_first_in_air: false,
                         is_last_in_air: interaction_idx + 1 == inters.len(),
                         is_mult: false,
+                        is_bus_index: true,
                     });
                 }
             }
@@ -1606,8 +1618,10 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 cols.idx_in_message = F::from_canonical_usize(record.idx_in_message);
                 cols.loop_aux.is_transition[0] = F::ONE;
                 cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
-                cols.value
-                    .copy_from_slice(node_claims[air_idx][record.node_idx].as_base_slice());
+                if !record.is_bus_index {
+                    cols.value
+                        .copy_from_slice(node_claims[air_idx][record.node_idx].as_base_slice());
+                }
                 cols.beta.copy_from_slice(beta_slice);
             });
 

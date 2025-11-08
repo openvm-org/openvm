@@ -50,6 +50,7 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T part_common_main_mult;
     T part_preprocessed_mult;
 
+    T starting_tidx;
     T starting_cidx;
 
     T is_present;
@@ -331,6 +332,7 @@ __global__ void proof_shape_tracegen(
     Fp *trace,
     size_t height,
     AirData *air_data,
+    PtrArray<size_t, NUM_PROOFS> per_row_tidx,
     PtrArray<TraceMetadata, NUM_PROOFS> sorted_trace_data,
     PtrArray<Digest, NUM_PROOFS> cached_commits,
     ProofShapePerProof *per_proof,
@@ -342,7 +344,6 @@ __global__ void proof_shape_tracegen(
     if (row_idx < NUM_PROOFS * (inputs.num_airs + 1)) {
         size_t proof_idx = row_idx / (inputs.num_airs + 1);
         size_t record_idx = row_idx % (inputs.num_airs + 1);
-        TraceMetadata trace_data = sorted_trace_data[proof_idx][record_idx];
         ProofShapePerProof proof_data = per_proof[proof_idx];
 
         COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, proof_idx, proof_idx);
@@ -358,6 +359,12 @@ __global__ void proof_shape_tracegen(
         PowerChecker<32> pow_checker(inputs.pow_checker_ptr, inputs.range_checker_5_ptr);
 
         if (record_idx == inputs.num_airs) {
+            COL_WRITE_VALUE(
+                row,
+                typename Cols<MAX_CACHED>::template Type,
+                starting_tidx,
+                per_row_tidx[proof_idx][record_idx]
+            );
             fill_summary_row<MAX_CACHED>(
                 row,
                 proof_data.final_total_interactions,
@@ -370,10 +377,19 @@ __global__ void proof_shape_tracegen(
             );
             row.fill_zero(encoder_flags_idx, encoder.width());
         } else {
+            TraceMetadata trace_data = sorted_trace_data[proof_idx][record_idx];
+
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_valid, Fp::one());
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_last, Fp::zero());
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, idx, trace_data.air_idx);
             COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, sorted_idx, record_idx);
+
+            COL_WRITE_VALUE(
+                row,
+                typename Cols<MAX_CACHED>::template Type,
+                starting_tidx,
+                per_row_tidx[proof_idx][trace_data.air_idx]
+            );
 
             COL_WRITE_VALUE(
                 row, typename Cols<MAX_CACHED>::template Type, is_n_max_greater, Fp::zero()
@@ -432,6 +448,7 @@ extern "C" int _proof_shape_tracegen(
     Fp *d_trace,
     size_t height,
     AirData *d_air_data,
+    size_t **d_per_row_tidx,
     TraceMetadata **d_sorted_trace_data,
     Digest **d_cached_commits,
     ProofShapePerProof *d_per_proof,
@@ -450,6 +467,7 @@ extern "C" int _proof_shape_tracegen(
                  d_trace,
                  height,
                  d_air_data,
+                 PtrArray<size_t, NUM_PROOFS>(d_per_row_tidx),
                  PtrArray<TraceMetadata, NUM_PROOFS>(d_sorted_trace_data),
                  PtrArray<Digest, NUM_PROOFS>(d_cached_commits),
                  d_per_proof,

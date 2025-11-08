@@ -495,7 +495,7 @@ mod cuda {
         params: SystemParams,
         num_proofs: usize,
     ) {
-        setup_tracing_with_log_level(Level::DEBUG);
+        setup_tracing_with_log_level(Level::INFO);
         let cpu_engine = BabyBearPoseidon2CpuEngineV2::new(params);
         let gpu_engine = BabyBearPoseidon2GpuEngineV2::new(params);
         let (pk, vk) = fx.keygen(&cpu_engine);

@@ -327,6 +327,7 @@ where
         builder.assert_bool(local.is_main);
         builder.when(not(local.is_valid)).assert_zero(local.is_main);
         builder.when(local.is_main).assert_zero(local.part_idx);
+        builder.when(local.is_main).assert_zero(local.commit_idx);
 
         builder.assert_bool(local.is_transition_main);
         builder
@@ -338,35 +339,30 @@ where
         builder
             .when(local.is_transition_main)
             .assert_zero(local.is_last);
-
         builder
             .when(and(not(local.is_main), next.is_main))
             .assert_one(local.is_last);
+
+        let mut when_both_main = builder.when(and(local.is_main, local.is_transition_main));
+        when_both_main.assert_bool(next.sort_idx - local.sort_idx);
+        when_both_main
+            .when_ne(local.sort_idx, next.sort_idx)
+            .assert_zero(next.col_idx);
+        when_both_main
+            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
+            .assert_one(next.col_idx - local.col_idx);
 
         let mut when_last_main = builder.when(and(local.is_main, not(next.is_main)));
         when_last_main.assert_zero((next.part_idx - AB::F::ONE) * not(local.is_last));
         when_last_main.assert_zero(next.col_idx * not(local.is_last));
 
-        let mut when_transition_main = builder.when(local.is_transition_main);
-        when_transition_main.assert_bool(next.sort_idx - local.sort_idx);
-        when_transition_main
-            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
-            .assert_bool(next.part_idx - local.part_idx);
-        when_transition_main
-            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
-            .when_ne(local.part_idx + AB::F::ONE, next.part_idx)
+        builder
+            .when(and(local.is_valid, not(local.is_last)))
+            .assert_bool(next.commit_idx - local.commit_idx);
+        builder
+            .when(and(local.is_transition_main, not(local.is_main)))
+            .when_ne(local.commit_idx + AB::F::ONE, next.commit_idx)
             .assert_one(next.col_idx - local.col_idx);
-        when_transition_main
-            .when_ne(local.sort_idx + AB::F::ONE, next.sort_idx)
-            .when_ne(local.part_idx, next.part_idx)
-            .assert_zero(next.col_idx);
-        when_transition_main
-            .when(not(local.is_main))
-            .when_ne(local.sort_idx, next.sort_idx)
-            .assert_one(next.part_idx);
-        when_transition_main
-            .when_ne(local.sort_idx, next.sort_idx)
-            .assert_zero(next.col_idx);
 
         /*
          * Compute col_claim[0] + lambda * rot_claim + ... (i.e. RLC of column/rotation claims)
@@ -563,6 +559,8 @@ where
             local.proof_idx,
             LiftedHeightsBusMessage {
                 sort_idx: local.sort_idx,
+                part_idx: local.part_idx,
+                commit_idx: local.commit_idx,
                 hypercube_dim: local.hypercube_dim,
                 lifted_height: local.lifted_height,
                 log_lifted_height: local.log_lifted_height,
