@@ -49,6 +49,7 @@ pub struct EqNsRecord {
     eq_sharp: EF,
     num_traces: usize,
     n_logup: usize,
+    n_max: usize,
 }
 
 #[derive(AlignedBorrow, Clone, Copy)]
@@ -61,6 +62,7 @@ pub struct EqNsColumns<T> {
 
     n: T,
     n_less_than_n_logup: T,
+    n_less_than_n_max: T,
     xi_n: [T; D_EF],
     r_n: [T; D_EF],
     r_product: [T; D_EF],
@@ -146,6 +148,13 @@ where
         builder
             .when(not(local.is_valid))
             .assert_zero(local.n_less_than_n_logup);
+        builder
+            .when(not(next.is_first))
+            .when(next.n_less_than_n_max)
+            .assert_one(local.n_less_than_n_max);
+        builder
+            .when(not(local.is_valid))
+            .assert_zero(local.n_less_than_n_max);
         // ========================= r consistency ==============================
         assert_array_eq(
             &mut builder.when(local.is_valid * next.is_first),
@@ -166,12 +175,12 @@ where
             ),
         ));
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
+            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
             next.eq,
             ext_field_multiply(local.eq, mult.clone()),
         );
         assert_array_eq(
-            &mut builder.when(not(next.is_first)),
+            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
             next.eq_sharp,
             ext_field_multiply(local.eq_sharp, mult.clone()),
         );
@@ -223,7 +232,7 @@ where
                 idx: local.n + AB::Expr::ONE,
                 value: local.r_n.map(|x| x.into()),
             },
-            local.is_valid * (AB::Expr::ONE - local.is_last),
+            local.n_less_than_n_max,
         );
     }
 }
@@ -251,17 +260,24 @@ pub(crate) fn generate_eq_ns_trace(
             for i in 0..n_global {
                 res.push(EqNsRecord {
                     xi: xi[l_skip + i],
-                    r: rs[1 + i],
+                    r: if i < preflight.proof_shape.n_max {
+                        rs[1 + i]
+                    } else {
+                        EF::ZERO
+                    },
                     r_prod: EF::ONE,
                     eq,
                     eq_sharp,
                     num_traces: 0,
                     n_logup: preflight.proof_shape.n_logup,
+                    n_max: preflight.proof_shape.n_max,
                 });
-                let mult =
-                    EF::ONE - xi[l_skip + i] - rs[1 + i] + (xi[l_skip + i] * rs[1 + i]).double();
-                eq *= mult;
-                eq_sharp *= mult;
+                if i < preflight.proof_shape.n_max {
+                    let mult = EF::ONE - xi[l_skip + i] - rs[1 + i]
+                        + (xi[l_skip + i] * rs[1 + i]).double();
+                    eq *= mult;
+                    eq_sharp *= mult;
+                }
             }
             res.push(EqNsRecord {
                 xi: EF::ZERO,
@@ -271,6 +287,7 @@ pub(crate) fn generate_eq_ns_trace(
                 eq_sharp,
                 num_traces: 0,
                 n_logup: preflight.proof_shape.n_logup,
+                n_max: preflight.proof_shape.n_max,
             });
             for i in (0..n_global).rev() {
                 res[i].r_prod = res[i + 1].r_prod * res[i].r;
@@ -301,6 +318,7 @@ pub(crate) fn generate_eq_ns_trace(
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.n = F::from_canonical_usize(i);
                 cols.n_less_than_n_logup = F::from_bool(i < record.n_logup);
+                cols.n_less_than_n_max = F::from_bool(i < record.n_max);
                 cols.xi_n.copy_from_slice(record.xi.as_base_slice());
                 cols.r_n.copy_from_slice(record.r.as_base_slice());
                 cols.r_product
