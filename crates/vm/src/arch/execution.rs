@@ -85,6 +85,12 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
+    #[error("Failed to create temporary file: {err}")]
+    FailToCreateTemporaryFile { err: String },
+    #[error("Failed to write into temporary file: {err}")]
+    FailToWriteTemporaryFile { err: String },
+    #[error("Failed to generate dynamic library: {err}")]
+    FailToGenerateDynamicLibrary { err: String },
 }
 
 #[cfg(feature = "aot")]

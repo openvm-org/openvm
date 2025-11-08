@@ -30,7 +30,6 @@ members = [
     "crates/continuations",
     "crates/vm",
     "crates/vm/src/arch/asm_bridge",
-    "crates/vm/src/arch/asm_bridge_metered",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",

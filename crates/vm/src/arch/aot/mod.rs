@@ -7,18 +7,18 @@ use rand::Rng;
 
 use crate::{
     arch::{
-        execution_mode::{ExecutionCtx, MeteredCtx, Segment},
+        execution_mode::ExecutionCtx,
         interpreter::{
-            alloc_pre_compute_buf, get_metered_pre_compute_instructions,
-            get_metered_pre_compute_max_size, get_pre_compute_instructions,
-            get_pre_compute_max_size, split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
+            alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
+            split_pre_compute_buf, AlignedBuf, PreComputeInstruction,
         },
         AotError, ExecutionCtxTrait, ExecutionError, Executor, ExecutorInventory, ExitCode,
-        MeteredExecutionCtxTrait, MeteredExecutor, StaticProgramError, Streams, SystemConfig,
-        VmExecState, VmState,
+        StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
+
+mod metered_execute;
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
@@ -36,49 +36,6 @@ pub struct AotInstance<'a, F, Ctx> {
     lib: Library,
     pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
     pc_start: u32,
-}
-
-/// A wrapper of `VmExecState` that is used in the assembly bridge.
-#[repr(C)]
-pub struct AotMeteredVmExecState {
-    pub vm_exec_state: *mut c_void,
-    pub should_suspend: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> bool,
-    pub set_pc: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void, pc: u32),
-    pub is_exit_code_ok_none: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> bool,
-    pub pc: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> u32,
-}
-
-unsafe extern "C" fn should_suspend_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> bool {
-    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
-    VmExecState::<F, GuestMemory, CTX>::should_suspend(state)
-}
-
-unsafe extern "C" fn set_pc_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void, pc: u32) {
-    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
-    VmExecState::<F, GuestMemory, CTX>::set_pc(state, pc);
-}
-
-unsafe extern "C" fn is_exit_code_ok_none_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> bool {
-    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
-    VmExecState::<F, GuestMemory, CTX>::is_exit_code_ok_none(state)
-}
-unsafe extern "C" fn pc_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> u32 {
-    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
-    state.vm_state.pc()
-}
-
-fn new_aot_vm_exec_state<F, CTX: ExecutionCtxTrait>(
-    vm_exec_state: &mut VmExecState<F, GuestMemory, CTX>,
-) -> AotMeteredVmExecState {
-    let raw: *mut VmExecState<F, GuestMemory, CTX> = vm_exec_state;
-    let opaque: *mut c_void = raw.cast();
-    AotMeteredVmExecState {
-        vm_exec_state: opaque,
-        should_suspend: should_suspend_shim::<F, CTX>,
-        set_pc: set_pc_shim::<F, CTX>,
-        is_exit_code_ok_none: is_exit_code_ok_none_shim::<F, CTX>,
-        pc: pc_shim::<F, CTX>,
-    }
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -669,212 +626,5 @@ fn check_termination(exit_code: Result<Option<u32>, ExecutionError>) -> Result<(
     match did_terminate {
         true => Ok(()),
         false => Err(ExecutionError::DidNotTerminate),
-    }
-}
-
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
-where
-    F: PrimeField32,
-    Ctx: MeteredExecutionCtxTrait,
-{
-    /// Creates a new instance for metered execution.
-    pub fn new_metered<E>(
-        inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: MeteredExecutor<F>,
-    {
-        let default_name = String::from("asm_x86_run");
-        Self::new_metered_with_asm_name(inventory, exe, executor_idx_to_air_idx, &default_name)
-    }
-
-    /// Creates a new interpreter instance for metered execution.
-    pub fn new_metered_with_asm_name<E>(
-        inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-        asm_name: &String,
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: MeteredExecutor<F>,
-    {
-        // source asm_bridge directory
-        // this is fixed
-        // can unwrap because its fixed and guaranteed to exist
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
-
-        let src_asm_bridge_dir =
-            std::path::Path::new(manifest_dir).join("src/arch/asm_bridge_metered");
-        let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
-
-        // ar rcs libasm_runtime.a asm_run.o
-        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime
-
-        // run the below command from the `src_asm_bridge_dir` directory
-        // as src/asm_run.s -o asm_run.o
-        let status = Command::new("as")
-            .current_dir(&src_asm_bridge_dir)
-            .args([&format!("src/{asm_name}.s"), "-o", &format!("{asm_name}.o")])
-            .status()
-            .expect("Failed to assemble the file into an object file");
-
-        assert!(
-            status.success(),
-            "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
-            status.code()
-        );
-
-        let status = Command::new("ar")
-            .current_dir(&src_asm_bridge_dir)
-            .args(["rcs", &format!("lib{asm_name}.a"), &format!("{asm_name}.o")])
-            .status()
-            .expect("Create a static library");
-
-        assert!(
-            status.success(),
-            "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
-            status.code()
-        );
-
-        let status = Command::new("cargo")
-            .current_dir(&src_asm_bridge_dir)
-            .args([
-                "rustc",
-                "--release",
-                "--features",
-                "aot",
-                &format!(
-                    "--target-dir={}/target/{}",
-                    root_dir.to_str().unwrap(),
-                    asm_name
-                ),
-                "--",
-                "-L",
-                src_asm_bridge_dir_str,
-                "-l",
-                &format!("static={asm_name}"),
-            ])
-            .status()
-            .expect("Creating the dynamic library");
-
-        assert!(
-            status.success(),
-            "Cargo build failed with exit code: {:?}",
-            status.code()
-        );
-
-        let lib_path = root_dir
-            .join("target")
-            .join(asm_name)
-            .join("release")
-            .join("libasm_bridge_metered.so");
-        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-
-        let program = &exe.program;
-        let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
-        let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
-        let mut split_pre_compute_buf =
-            split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-
-        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
-            program,
-            inventory,
-            executor_idx_to_air_idx,
-            &mut split_pre_compute_buf,
-        )?;
-        let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
-            pre_compute_insns.into_boxed_slice();
-
-        let init_memory = exe.init_memory.clone();
-
-        Ok(Self {
-            system_config: inventory.config().clone(),
-            pre_compute_buf,
-            pre_compute_insns_box,
-            pc_start: exe.pc_start,
-            init_memory,
-            lib,
-        })
-    }
-}
-
-impl<F> AotInstance<'_, F, MeteredCtx>
-where
-    F: PrimeField32,
-{
-    /// Metered exeecution for the given `inputs`. Execution begins from the initial
-    /// state specified by the `VmExe`. This function executes the program until termination.
-    ///
-    /// Returns the segmentation boundary data and the final VM state when execution stops.
-    ///
-    /// Assumes the program doesn't jump to out of bounds pc
-    pub fn execute_metered(
-        &self,
-        inputs: impl Into<Streams<F>>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_state = self.create_initial_vm_state(inputs);
-        self.execute_metered_from_state(vm_state, ctx)
-    }
-
-    /// Metered execution for the given `VmState`. This function executes the program until
-    /// termination
-    ///
-    /// Returns the segmentation boundary data and the final VM state when execution stops.
-    ///
-    /// Assume program doesn't jump to out of bounds pc
-    pub fn execute_metered_from_state(
-        &self,
-        from_state: VmState<F, GuestMemory>,
-        ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
-        let vm_exec_state = VmExecState::new(from_state, ctx);
-        let vm_exec_state = self.execute_metered_until_suspend(vm_exec_state)?;
-        // handle execution error
-        match vm_exec_state.exit_code {
-            Ok(_) => Ok((
-                vm_exec_state.ctx.segmentation_ctx.segments,
-                vm_exec_state.vm_state,
-            )),
-            Err(e) => Err(e),
-        }
-    }
-
-    // TODO: implement execute_metered_until_suspend for AOT if needed
-    pub fn execute_metered_until_suspend(
-        &self,
-        vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
-        let from_state_pc = vm_exec_state.vm_state.pc();
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
-            Box::new(vm_exec_state);
-
-        unsafe {
-            let asm_run: libloading::Symbol<AsmRunFn> = self
-                .lib
-                .get(b"asm_run")
-                .expect("Failed to get asm_run symbol");
-
-            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
-            let mut aot_vm_exec_state = new_aot_vm_exec_state(&mut vm_exec_state);
-            let aot_vm_exec_state_ptr: *mut c_void =
-                (&mut aot_vm_exec_state as *mut AotMeteredVmExecState).cast();
-
-            asm_run(
-                aot_vm_exec_state_ptr,
-                pre_compute_insns_ptr as *const c_void,
-                from_state_pc,
-                0, /* TODO: this is a placeholder because in the pure case asm_run needs to take
-                    * in 5 args. Fix later */
-            );
-        }
-        Ok(*vm_exec_state)
     }
 }
