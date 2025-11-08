@@ -108,7 +108,8 @@ where
     }
 
     fn generate_metered_asm() -> String {
-        // Assumption: these functions are created at compile time so their pointers don't change over time.
+        // Assumption: these functions are created at compile time so their pointers don't change
+        // over time.
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, Ctx> as *const ());
         let metered_extern_handler_ptr =
             format!("{:p}", metered_extern_handler::<F, Ctx> as *const ());
