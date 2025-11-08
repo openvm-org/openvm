@@ -597,18 +597,11 @@ pub mod cuda_tracegen {
             engine: &BabyBearPoseidon2GpuEngineV2,
             child_vk: &MultiStarkVerifyingKeyV2,
         ) -> (Digest, StackedPcsDataGpu<F, Digest>) {
-            // TODO: gpu tracegen
             let cached_trace = expr_eval::generate_symbolic_expr_cached_trace(child_vk);
-            assert_eq!(
-                cached_trace.height(),
-                1,
-                "fix me once cached trace is implemented"
-            );
-            let mut fake_params = engine.device().config();
-            fake_params.l_skip = 0;
-            let fake_device = GpuDeviceV2::new(fake_params);
             let cached_trace = ColMajorMatrix::from_row_major(&cached_trace);
-            fake_device.commit(&[&transport_matrix_h2d_col_major(&cached_trace).unwrap()])
+            engine
+                .device()
+                .commit(&[&transport_matrix_h2d_col_major(&cached_trace).unwrap()])
         }
     }
 }
