@@ -37,6 +37,7 @@ bitcode = { workspace = true }
 
 [features]
 default = ["parallel", "jemalloc"]
+aot = ["openvm-circuit/aot", "openvm-native-circuit/aot"]
 static-verifier = [
     "openvm-native-compiler/halo2-compiler",
     "snark-verifier-sdk",

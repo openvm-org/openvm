@@ -4,7 +4,7 @@
 .global asm_run_internal
 
 /*
-rbx = vm_exec_state_ptr 
+rbx = aot_vm_exec_state_ptr 
 rbp = pre_compute_insns_ptr
 r13 = cur_pc 
 r12 is currently unused 
@@ -17,29 +17,29 @@ asm_run_internal:
     push r12
     push r13
     push r13     ; A dummy push to ensure the stack is 16 bytes aligned
-    mov rbx, rdi ; rbx = rdi = vm_exec_state_ptr 
+    mov rbx, rdi ; rbx = rdi = aot_vm_exec_state_ptr 
     mov rbp, rsi ; rbp = rsi = pre_compute_insns_ptr 
     mov r13, rdx ; r13 = rdx = from_state_pc 
 
 asm_execute:
-    mov rdi, rbx        ; rdi = vm_exec_state_ptr 
-    call should_suspend ; should_suspend(vm_exec_state_ptr)
+    mov rdi, rbx        ; rdi = aot_vm_exec_state_ptr 
+    call should_suspend ; should_suspend(aot_vm_exec_state_ptr)
     cmp rax, 1          ; if return value of should_suspend is 1 
     je asm_run_end      ; jump to asm_run_end
-    mov rdi, rbx        ; rdi = vm_exec_state_ptr
+    mov rdi, rbx        ; rdi = aot_vm_exec_state_ptr
     mov rsi, rbp        ; rsi = pre_compute_insns_ptr
     mov rdx, r13        ; rdx = cur_pc 
-    call metered_extern_handler ; metered_extern_handler(vm_exec_state_ptr, pre_compute_insns_ptr, cur_pc)
+    call metered_extern_handler ; metered_extern_handler(aot_vm_exec_state_ptr, pre_compute_insns_ptr, cur_pc)
     cmp rax, 1          ; if return value of metered_extern_handler is 1 
     je asm_run_end      ; jump to asm_run_end 
     mov r13, rax        ; cur_pc = return value of metered_extern_handler
     jmp asm_execute     ; jump to asm_execute 
 
 asm_run_end:
-    mov rdi, rbx        ; rdi = vm_exec_state_ptr
+    mov rdi, rbx        ; rdi = aot_vm_exec_state_ptr
     mov rsi, rbp        ; rsi = pre_compute_insns_ptr
     mov rdx, r13        ; rdx = cur_pc 
-    call metered_set_pc ; metered_set_pc(vm_exec_state_ptr, pre_compute_insns_ptr, cur_pc)
+    call metered_set_pc ; metered_set_pc(aot_vm_exec_state_ptr, pre_compute_insns_ptr, cur_pc)
     xor rax, rax        ; set return value to 0
     pop r13
     pop r13

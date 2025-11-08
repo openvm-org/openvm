@@ -58,14 +58,6 @@ perf-metrics = [
 ]
 evm-prove = []
 
-# [[bench]]
-# name = "fibonacci_execute"
-# harness = false
-
-# [[bench]]
-# name = "regex_execute"
-# harness = false
-
 [[bench]]
 name = "execute"
 harness = false
