@@ -5,7 +5,7 @@ mod tests {
     use eyre::Result;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
-        system::memory::merkle::public_values::UserPublicValuesProof,
+        system::memory::merkle::{public_values::UserPublicValuesProof, MerkleTree},
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
@@ -177,12 +177,10 @@ mod tests {
         let state = instance.execute(vec![], None)?;
         let final_memory = state.memory.memory;
         let hasher = vm_poseidon2_hasher::<F>();
-        let pv_proof = UserPublicValuesProof::compute(
-            config.as_ref().memory_config.memory_dimensions(),
-            64,
-            &hasher,
-            &final_memory,
-        );
+        let md = config.as_ref().memory_config.memory_dimensions();
+        let tree = MerkleTree::from_memory(&final_memory, &md, &hasher);
+        let top_tree = tree.top_tree(md.addr_space_height);
+        let pv_proof = UserPublicValuesProof::compute(md, 64, &hasher, &final_memory, &top_tree);
         let mut bytes = [0u8; 32];
         for (i, byte) in bytes.iter_mut().enumerate() {
             *byte = i as u8;

@@ -6,9 +6,7 @@ use tracing::instrument;
 
 use crate::{
     arch::{hasher::Hasher, MemoryCellType, ADDR_SPACE_OFFSET},
-    system::memory::{
-        dimensions::MemoryDimensions, merkle::tree::MerkleTree, online::LinearMemory, MemoryImage,
-    },
+    system::memory::{dimensions::MemoryDimensions, online::LinearMemory, MemoryImage},
 };
 
 pub const PUBLIC_VALUES_AS: u32 = 3;
@@ -45,29 +43,32 @@ pub enum UserPublicValuesProofError {
 }
 
 impl<const CHUNK: usize, F: PrimeField32> UserPublicValuesProof<CHUNK, F> {
-    /// Computes the proof of the public values from the final memory state.
+    /// Computes the proof of the public values from the final memory state and the Merkle top
+    /// sub-tree of address space roots. This function will re-compute the empty merkle roots of
+    /// each height `0..=address_height` internally.
+    ///
     /// Assumption:
     /// - `num_public_values` is a power of two * CHUNK. It cannot be 0.
-    // TODO[jpw]: this currently reconstructs the merkle tree from final memory; we should avoid
-    // this. We should make this a function within SystemChipComplex
+    /// - `top_tree` is 0-indexed and a segment tree of length `2 * 2^addr_space_height - 1`.
     #[instrument(name = "compute_user_public_values_proof", skip_all)]
     pub fn compute(
         memory_dimensions: MemoryDimensions,
         num_public_values: usize,
         hasher: &(impl Hasher<CHUNK, F> + Sync),
         final_memory: &MemoryImage,
+        top_tree: &[[F; CHUNK]],
     ) -> Self {
-        let proof = compute_merkle_proof_to_user_public_values_root(
-            memory_dimensions,
-            num_public_values,
-            hasher,
-            final_memory,
-        );
         let public_values = extract_public_values(num_public_values, final_memory)
             .iter()
             .map(|&x| F::from_canonical_u8(x))
             .collect_vec();
         let public_values_commit = hasher.merkle_root(&public_values);
+        let proof = compute_merkle_proof_to_user_public_values_root(
+            memory_dimensions,
+            num_public_values,
+            hasher,
+            top_tree,
+        );
         UserPublicValuesProof {
             proof,
             public_values,
@@ -127,14 +128,16 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
     memory_dimensions: MemoryDimensions,
     num_public_values: usize,
     hasher: &(impl Hasher<CHUNK, F> + Sync),
-    final_memory: &MemoryImage,
+    top_tree: &[[F; CHUNK]],
 ) -> Vec<[F; CHUNK]> {
     assert_eq!(
         num_public_values % CHUNK,
         0,
         "num_public_values must be a multiple of memory chunk {CHUNK}"
     );
-    let tree = MerkleTree::<F, CHUNK>::from_memory(final_memory, &memory_dimensions, hasher);
+    let address_height = memory_dimensions.address_height;
+    let addr_space_height = memory_dimensions.addr_space_height;
+    assert_eq!(top_tree.len(), (2 << addr_space_height) - 1);
     let num_pv_chunks: usize = num_public_values / CHUNK;
     // This enforces the number of public values cannot be 0.
     assert!(
@@ -142,24 +145,31 @@ fn compute_merkle_proof_to_user_public_values_root<const CHUNK: usize, F: PrimeF
         "pv_height must be a power of two"
     );
     let pv_height = log2_strict_usize(num_pv_chunks);
-    let address_leading_zeros = memory_dimensions.address_height - pv_height;
+    let address_leading_zeros = address_height - pv_height;
 
     let mut cur_node_idx = 1; // root
-    let mut proof = Vec::with_capacity(memory_dimensions.addr_space_height + address_leading_zeros);
-    for i in 0..memory_dimensions.addr_space_height {
+    let mut proof = Vec::with_capacity(addr_space_height + address_leading_zeros);
+    let zero_nodes: Vec<_> = (0..address_height)
+        .scan(hasher.hash(&[F::ZERO; CHUNK]), |acc, _| {
+            let result = Some(*acc);
+            *acc = hasher.compress(acc, acc);
+            result
+        })
+        .collect();
+    for i in 0..addr_space_height {
         let bit = 1 << (memory_dimensions.addr_space_height - i - 1);
+        // Recall: top_tree is 0-indexed, but cur_node_idx is 1-indexed
         if (PUBLIC_VALUES_AS - ADDR_SPACE_OFFSET) & bit != 0 {
-            proof.push(tree.get_node(cur_node_idx * 2));
+            proof.push(top_tree[cur_node_idx * 2 - 1]);
             cur_node_idx = cur_node_idx * 2 + 1;
         } else {
-            proof.push(tree.get_node(cur_node_idx * 2 + 1));
+            proof.push(top_tree[cur_node_idx * 2]);
             cur_node_idx *= 2;
         }
     }
-    for _ in 0..address_leading_zeros {
-        // always go left
-        proof.push(tree.get_node(cur_node_idx * 2 + 1));
-        cur_node_idx *= 2;
+    for i in 0..address_leading_zeros {
+        // node is always on the left, the sibling is always zero node hash
+        proof.push(zero_nodes[address_height - 1 - i]);
     }
     proof.reverse();
     proof
@@ -205,7 +215,8 @@ mod tests {
     #[test]
     fn test_public_value_happy_path() {
         let mut vm_config = SystemConfig::default().without_continuations();
-        vm_config.memory_config.addr_space_height = 4;
+        let addr_space_height = 4;
+        vm_config.memory_config.addr_space_height = addr_space_height;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
         let num_public_values = 16;
@@ -221,11 +232,14 @@ mod tests {
         expected_pvs[15] = F::ONE;
 
         let hasher = vm_poseidon2_hasher();
+        let tree = MerkleTree::from_memory(&memory.memory, &memory_dimensions, &hasher);
+        let top_tree = tree.top_tree(addr_space_height);
         let pv_proof = UserPublicValuesProof::<{ CHUNK }, F>::compute(
             memory_dimensions,
             num_public_values,
             &hasher,
             &memory.memory,
+            &top_tree,
         );
         assert_eq!(pv_proof.public_values, expected_pvs);
         let final_memory_root =

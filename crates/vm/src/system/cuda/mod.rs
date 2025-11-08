@@ -21,6 +21,8 @@ use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
 use public_values::PublicValuesChipGPU;
 
+use crate::system::memory::CHUNK;
+
 pub(crate) const DIGEST_WIDTH: usize = 8;
 
 pub mod access_adapters;
@@ -138,6 +140,16 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             .chain(pv_ctx)
             .chain(memory_ctxs)
             .collect()
+    }
+
+    fn memory_top_tree(&self) -> Option<&[[F; CHUNK]]> {
+        self.memory_inventory
+            .persistent
+            .as_ref()
+            .and_then(|persistent| {
+                let top_tree = &persistent.merkle_tree.top_roots_host;
+                (!top_tree.is_empty()).then_some(top_tree.as_slice())
+            })
     }
 
     #[cfg(feature = "metrics")]

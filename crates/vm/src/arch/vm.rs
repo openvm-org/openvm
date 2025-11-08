@@ -772,6 +772,11 @@ where
             .transport_init_memory_to_device(memory);
     }
 
+    /// See [`SystemChipComplex::memory_top_tree`].
+    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; CHUNK]]> {
+        self.chip_complex.system.memory_top_tree()
+    }
+
     pub fn executor_idx_to_air_idx(&self) -> Vec<usize> {
         let ret = self.chip_complex.inventory.executor_idx_to_air_idx();
         tracing::debug!("executor_idx_to_air_idx: {:?}", ret);
@@ -1021,11 +1026,13 @@ where
         }
         let to_state = state.unwrap();
         let final_memory = &to_state.memory.memory;
+        let final_memory_top_tree = vm.memory_top_tree().expect("memory top tree should exist");
         let user_public_values = UserPublicValuesProof::compute(
             vm.config().as_ref().memory_config.memory_dimensions(),
             vm.config().as_ref().num_public_values,
             &vm_poseidon2_hasher(),
             final_memory,
+            final_memory_top_tree,
         );
         self.state = Some(to_state);
         Ok(ContinuationVmProof {

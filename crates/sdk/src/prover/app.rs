@@ -254,6 +254,7 @@ pub fn verify_app_proof(
 #[cfg(feature = "async")]
 mod async_prover {
     use derivative::Derivative;
+    use eyre::eyre;
     use openvm_circuit::{
         arch::ExecutionError, system::memory::merkle::public_values::UserPublicValuesProof,
     };
@@ -376,10 +377,8 @@ mod async_prover {
             drop(metered_interpreter);
             let pure_interpreter = vm.interpreter(&self.app_exe)?;
             let mut tasks = Vec::with_capacity(segments.len());
-            let terminal_instret = segments
-                .last()
-                .map(|s| s.instret_start + s.num_insns)
-                .unwrap_or(u64::MAX);
+            let user_pv_proof: Arc<OnceLock<UserPublicValuesProof<CHUNK, Val<E::SC>>>> =
+                Arc::new(OnceLock::new());
             for (seg_idx, segment) in segments.into_iter().enumerate() {
                 tracing::info!(
                     %seg_idx,
@@ -394,6 +393,7 @@ mod async_prover {
                 let semaphore = self.semaphore.clone();
                 let async_worker = self.clone();
                 let start_state = state.clone();
+                let user_pv_proof = user_pv_proof.clone();
                 let task = spawn(
                     async move {
                         let _permit = semaphore.acquire().await?;
@@ -414,12 +414,25 @@ mod async_prover {
                                     let instance = &mut worker.instance;
                                     let vm = &mut instance.vm;
                                     let preflight_interpreter = &mut instance.interpreter;
-                                    let (segment_proof, _) = vm.prove(
+                                    let (segment_proof, final_memory) = vm.prove(
                                         preflight_interpreter,
                                         start_state,
                                         Some(segment.num_insns),
                                         &segment.trace_heights,
                                     )?;
+                                    if let Some(final_memory) = final_memory {
+                                        let top_tree = vm.memory_top_tree().unwrap();
+                                        let proof = UserPublicValuesProof::compute(
+                                            vm.config().as_ref().memory_config.memory_dimensions(),
+                                            vm.config().as_ref().num_public_values,
+                                            &vm_poseidon2_hasher(),
+                                            &final_memory.memory,
+                                            top_tree,
+                                        );
+                                        user_pv_proof.set(proof).map_err(|_| {
+                                            eyre!("Only one segment should be terminal")
+                                        })?;
+                                    }
                                     Ok(segment_proof)
                                 },
                             )
@@ -430,30 +443,16 @@ mod async_prover {
                 );
                 tasks.push(task);
             }
-            // Finish execution to termination
-            state = pure_interpreter.execute_from_state(state, None)?;
-            if state.instret() != terminal_instret {
-                tracing::warn!(
-                    "Pure execution terminal instret={}, metered execution terminal instret={}",
-                    state.instret(),
-                    terminal_instret
-                );
-                // This should never happen
-                return Err(ExecutionError::DidNotTerminate.into());
-            }
-            let final_memory = &state.memory.memory;
-            let user_public_values = UserPublicValuesProof::compute(
-                vm.config().as_ref().memory_config.memory_dimensions(),
-                vm.config().as_ref().num_public_values,
-                &vm_poseidon2_hasher(),
-                final_memory,
-            );
 
             let mut proofs = Vec::with_capacity(tasks.len());
             for task in tasks {
                 let proof = task.await??;
                 proofs.push(proof);
             }
+            let user_public_values = user_pv_proof
+                .get()
+                .ok_or(ExecutionError::DidNotTerminate)?
+                .clone();
             let cont_proof = ContinuationVmProof {
                 per_segment: proofs,
                 user_public_values,

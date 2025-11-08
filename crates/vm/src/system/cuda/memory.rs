@@ -138,7 +138,7 @@ impl MemoryInventoryGPU {
             TouchedMemory::Persistent(partition) => {
                 let persistent = self
                     .persistent
-                    .as_ref()
+                    .as_mut()
                     .expect("persistent touched memory requires persistent memory interface");
 
                 let unpadded_merkle_height =

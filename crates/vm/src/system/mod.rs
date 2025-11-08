@@ -35,7 +35,7 @@ use crate::{
     system::{
         connector::VmConnectorChip,
         memory::{
-            interface::MemoryInterfaceAirs,
+            interface::{MemoryInterface, MemoryInterfaceAirs},
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
             MemoryAirInventory, MemoryController, TimestampedEquipartition, CHUNK,
@@ -94,6 +94,16 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
+
+    /// This function only returns `Some` when continuations is enabled.
+    /// When continuations is enabled, it returns the top merkle sub-tree of the memory merkle tree
+    /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
+    /// tree formed from the roots of the sub-trees for each address space.
+    ///
+    /// This function **must** return `Some` if called after
+    /// [`generate_proving_ctx`](Self::generate_proving_ctx) and may return `None` if called before
+    /// that.
+    fn memory_top_tree(&self) -> Option<&[[PB::Val; CHUNK]]>;
 
     /// This function is only used for metric collection purposes and custom implementations are
     /// free to ignore it.
@@ -470,6 +480,16 @@ where
             .chain(pv_ctx)
             .chain(memory_ctxs)
             .collect()
+    }
+
+    fn memory_top_tree(&self) -> Option<&[[Val<SC>; CHUNK]]> {
+        match &self.memory_controller.interface_chip {
+            MemoryInterface::Persistent { merkle_chip, .. } => {
+                let top_tree = &merkle_chip.top_tree;
+                (!top_tree.is_empty()).then_some(top_tree.as_slice())
+            }
+            MemoryInterface::Volatile { .. } => None,
+        }
     }
 
     #[cfg(feature = "metrics")]

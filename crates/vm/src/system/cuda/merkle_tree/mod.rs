@@ -195,6 +195,7 @@ pub struct MemoryMerkleTree {
     pub height: usize,
     pub hasher_buffer: SharedBuffer<F>,
     mem_config: MemoryConfig,
+    pub(crate) top_roots_host: Vec<H>,
 }
 
 impl MemoryMerkleTree {
@@ -242,6 +243,7 @@ impl MemoryMerkleTree {
             zero_hash,
             hasher_buffer: hasher_chip.shared_buffer(),
             mem_config,
+            top_roots_host: vec![],
         }
     }
 
@@ -318,7 +320,7 @@ impl MemoryMerkleTree {
 
     /// Updates the tree and returns the merkle trace.
     pub fn update_with_touched_blocks(
-        &self,
+        &mut self,
         unpadded_height: usize,
         d_touched_blocks: &DeviceBuffer<u32>, // consists of (as, label, ts, [F; 8])
         empty_touched_blocks: bool,
@@ -367,7 +369,8 @@ impl MemoryMerkleTree {
                 output
             }
         };
-        public_values.extend(self.top_roots.to_host().unwrap()[0].to_vec());
+        self.top_roots_host = self.top_roots.to_host().unwrap();
+        public_values.extend(self.top_roots_host[0]);
 
         AirProvingContext::new(Vec::new(), Some(merkle_trace), public_values)
     }
