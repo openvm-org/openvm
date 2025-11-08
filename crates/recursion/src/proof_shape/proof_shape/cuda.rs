@@ -66,6 +66,10 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
             + max_cached * (DIGEST_SIZE + 1);
         let trace = DeviceMatrix::with_capacity(height, width);
 
+        let per_row_tidx = preflights_gpu
+            .iter()
+            .map(|preflight| preflight.proof_shape.per_row_tidx.as_ptr())
+            .collect_vec();
         let sorted_trace_data = preflights_gpu
             .iter()
             .map(|preflight| preflight.proof_shape.sorted_trace_vdata.as_ptr())
@@ -103,6 +107,7 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
                 trace.buffer(),
                 height,
                 &vk_gpu.per_air,
+                per_row_tidx,
                 sorted_trace_data,
                 cached_commits,
                 &per_proof,

@@ -1,3 +1,5 @@
+use std::iter::once;
+
 use itertools::Itertools;
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use stark_backend_v2::{Digest, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -35,6 +37,7 @@ pub struct ProofShapePreflightGpu {
     pub sorted_trace_vdata: DeviceBuffer<TraceMetadata>,
     pub sorted_cached_commits: DeviceBuffer<Digest>,
 
+    pub per_row_tidx: DeviceBuffer<usize>,
     pub pvs_tidx: DeviceBuffer<usize>,
     pub post_tidx: usize,
 
@@ -129,10 +132,18 @@ impl PreflightGpu {
                     }),
             )
             .collect_vec();
+        let per_row_tidx = preflight
+            .proof_shape
+            .starting_tidx
+            .iter()
+            .copied()
+            .chain(once(preflight.proof_shape.post_tidx))
+            .collect_vec();
 
         ProofShapePreflightGpu {
             sorted_trace_vdata: to_device_or_nullptr(&sorted_trace_vdata).unwrap(),
             sorted_cached_commits: to_device_or_nullptr(&sorted_cached_commits).unwrap(),
+            per_row_tidx: to_device_or_nullptr(&per_row_tidx).unwrap(),
             pvs_tidx: to_device_or_nullptr(&preflight.proof_shape.pvs_tidx).unwrap(),
             post_tidx: preflight.proof_shape.post_tidx,
             num_present: preflight.proof_shape.sorted_trace_vdata.len(),
