@@ -108,17 +108,15 @@ where
     }
 
     fn generate_metered_asm() -> String {
-        // Assumption: these functions are created at compile time so their pointers don't change
-        // over time.
+        // Assumption: these functions are created at compile time so their pointers don't change over time.
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, Ctx> as *const ());
         let metered_extern_handler_ptr =
             format!("{:p}", metered_extern_handler::<F, Ctx> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, Ctx> as *const ());
-        let ret = ASM_TEMPLATE
+        ASM_TEMPLATE
             .replace("{should_suspend_ptr}", &should_suspend_ptr)
             .replace("{metered_extern_handler_ptr}", &metered_extern_handler_ptr)
-            .replace("{set_pc_ptr}", &set_pc_ptr);
-        ret
+            .replace("{set_pc_ptr}", &set_pc_ptr)
     }
 }
 
