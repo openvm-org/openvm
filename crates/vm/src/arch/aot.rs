@@ -38,6 +38,49 @@ pub struct AotInstance<'a, F, Ctx> {
     pc_start: u32,
 }
 
+/// A wrapper of `VmExecState` that is used in the assembly bridge.
+#[repr(C)]
+pub struct AotMeteredVmExecState {
+    pub vm_exec_state: *mut c_void,
+    pub should_suspend: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> bool,
+    pub set_pc: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void, pc: u32),
+    pub is_exit_code_ok_none: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> bool,
+    pub pc: unsafe extern "C" fn(vm_exec_state_ptr: *mut c_void) -> u32,
+}
+
+unsafe extern "C" fn should_suspend_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> bool {
+    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
+    VmExecState::<F, GuestMemory, CTX>::should_suspend(state)
+}
+
+unsafe extern "C" fn set_pc_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void, pc: u32) {
+    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
+    VmExecState::<F, GuestMemory, CTX>::set_pc(state, pc);
+}
+
+unsafe extern "C" fn is_exit_code_ok_none_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> bool {
+    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
+    VmExecState::<F, GuestMemory, CTX>::is_exit_code_ok_none(state)
+}
+unsafe extern "C" fn pc_shim<F, CTX: ExecutionCtxTrait>(p: *mut c_void) -> u32 {
+    let state = &mut *(p as *mut VmExecState<F, GuestMemory, CTX>);
+    state.vm_state.pc()
+}
+
+fn new_aot_vm_exec_state<F, CTX: ExecutionCtxTrait>(
+    vm_exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+) -> AotMeteredVmExecState {
+    let raw: *mut VmExecState<F, GuestMemory, CTX> = vm_exec_state;
+    let opaque: *mut c_void = raw.cast();
+    AotMeteredVmExecState {
+        vm_exec_state: opaque,
+        should_suspend: should_suspend_shim::<F, CTX>,
+        set_pc: set_pc_shim::<F, CTX>,
+        is_exit_code_ok_none: is_exit_code_ok_none_shim::<F, CTX>,
+        pc: pc_shim::<F, CTX>,
+    }
+}
+
 type AsmRunFn = unsafe extern "C" fn(
     vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
@@ -817,12 +860,13 @@ where
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
 
-            let vm_exec_state_ptr =
-                &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, MeteredCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
+            let mut aot_vm_exec_state = new_aot_vm_exec_state(&mut vm_exec_state);
+            let aot_vm_exec_state_ptr: *mut c_void =
+                (&mut aot_vm_exec_state as *mut AotMeteredVmExecState).cast();
 
             asm_run(
-                vm_exec_state_ptr as *mut c_void,
+                aot_vm_exec_state_ptr,
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 0, /* TODO: this is a placeholder because in the pure case asm_run needs to take

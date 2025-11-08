@@ -1,7 +1,10 @@
 use std::ffi::c_void;
 
 use openvm_circuit::{
-    arch::{execution_mode::MeteredCtx, interpreter::PreComputeInstruction, VmExecState},
+    arch::{
+        aot::AotMeteredVmExecState, execution_mode::MeteredCtx, interpreter::PreComputeInstruction,
+        VmExecState,
+    },
     system::memory::online::GuestMemory,
 };
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -15,7 +18,7 @@ r13 = from_state_pc
 
 extern "C" {
     fn asm_run_internal(
-        vm_exec_state_ptr: *mut c_void,       // rdi = vm_exec_state
+        aot_vm_exec_state_ptr: *mut c_void,   // rdi = aot_vm_exec_state
         pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
         from_state_pc: u32,                   // rdx = from_state.pc
     );
@@ -31,11 +34,11 @@ extern "C" {
 /// - `pre_compute_insns` must point to valid pre-compute instructions
 #[no_mangle]
 pub unsafe extern "C" fn asm_run(
-    vm_exec_state_ptr: *mut c_void,
+    aot_vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     from_state_pc: u32,
 ) {
-    asm_run_internal(vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc);
+    asm_run_internal(aot_vm_exec_state_ptr, pre_compute_insns_ptr, from_state_pc);
 }
 
 type F = BabyBear;
@@ -46,25 +49,26 @@ type Ctx = MeteredCtx;
 // works for metered execution
 #[no_mangle]
 pub extern "C" fn metered_set_pc(
-    vm_exec_state_ptr: *mut c_void,        // rdi = vm_exec_state
+    aot_vm_exec_state_ptr: *mut c_void,    // rdi = vm_exec_state
     _pre_compute_insns_ptr: *const c_void, // rsi = pre_compute_insns
     final_pc: u32,                         // rdx = final_pc
 ) {
     // reference to vm_exec_state
-    let vm_exec_state_ref =
-        unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref.vm_state.set_pc(final_pc);
+    let aot_vm_exec_state_ref =
+        unsafe { &mut *(aot_vm_exec_state_ptr as *mut AotMeteredVmExecState) };
+    unsafe { (aot_vm_exec_state_ref.set_pc)(aot_vm_exec_state_ref.vm_exec_state, final_pc) };
 }
 
 #[no_mangle]
 pub extern "C" fn metered_extern_handler(
-    vm_exec_state_ptr: *mut c_void,
+    aot_vm_exec_state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
 ) -> u32 {
-    let vm_exec_state_ref =
-        unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref.set_pc(cur_pc);
+    let aot_vm_exec_state_ref =
+        unsafe { &mut *(aot_vm_exec_state_ptr as *mut AotMeteredVmExecState) };
+    let vm_exec_state_ptr = aot_vm_exec_state_ref.vm_exec_state;
+    unsafe { (aot_vm_exec_state_ref.set_pc)(vm_exec_state_ptr, cur_pc) };
 
     // pointer to the first element of `pre_compute_insns`
     let pre_compute_insns_base_ptr =
@@ -73,29 +77,26 @@ pub extern "C" fn metered_extern_handler(
 
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
 
+    let vm_exec_state_ref =
+        unsafe { &mut *(vm_exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+
     unsafe {
         (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
     };
-
-    match vm_exec_state_ref.exit_code {
-        Ok(None) => {
-            // execution continues
-            vm_exec_state_ref.vm_state.pc()
-        }
-        _ => {
-            // special indicator that we must terminate
-            // this won't collide with actual pc value because pc values are always multiple of 4
-            1
-        }
+    if unsafe { (aot_vm_exec_state_ref.is_exit_code_ok_none)(vm_exec_state_ptr) } {
+        // Unsafe but `vm_state` is the first field of `VmExecState` and `pc` is the first field of `VmState`.
+        // Since all structs are `repr(C)`, `pc` should alawys in the same offset across different compilation.
+        vm_exec_state_ref.pc()
+    } else {
+        1
     }
 }
 
 #[no_mangle]
-pub extern "C" fn should_suspend(exec_state_ptr: *mut c_void) -> u32 {
-    // TODO: this is inconsistent with the Rust implementation. Fix it later.
-    let exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-
-    if exec_state_ref.ctx.check_and_segment() && *exec_state_ref.ctx.suspend_on_segment() {
+pub extern "C" fn should_suspend(aot_vm_exec_state_ptr: *mut c_void) -> u32 {
+    let aot_vm_exec_state_ref =
+        unsafe { &mut *(aot_vm_exec_state_ptr as *mut AotMeteredVmExecState) };
+    if unsafe { (aot_vm_exec_state_ref.should_suspend)(aot_vm_exec_state_ref.vm_exec_state) } {
         1
     } else {
         0
