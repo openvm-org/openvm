@@ -7,7 +7,7 @@ use super::{AotInstance, AsmRunFn};
 use crate::{
     arch::{
         aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim},
-        execution_mode::{ExecutionCtx, ExecutionCtxTrait},
+        execution_mode::ExecutionCtx,
         interpreter::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
             split_pre_compute_buf, PreComputeInstruction,
@@ -18,10 +18,9 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<'a, F> AotInstance<'a, F, ExecutionCtx>
 where
     F: PrimeField32,
-    Ctx: ExecutionCtxTrait,
 {
     pub fn create_pure_asm<E>(
         exe: &VmExe<F>,
@@ -47,8 +46,10 @@ where
         asm_str += "    mov r13, rdx\n";
         asm_str += "    mov r12, rcx\n";
 
-        let get_vm_address_space_addr_ptr =
-            format!("{:p}", get_vm_address_space_addr::<F, Ctx> as *const ());
+        let get_vm_address_space_addr_ptr = format!(
+            "{:p}",
+            get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
+        );
         asm_str += &Self::push_internal_registers();
         // Temporarily use r14 as the pointer to get_vm_address_space_addr
         asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
@@ -92,8 +93,9 @@ where
             asm_str += "\n";
         }
 
-        let extern_handler_ptr = format!("{:p}", extern_handler::<F, Ctx, true> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, Ctx> as *const ());
+        let extern_handler_ptr =
+            format!("{:p}", extern_handler::<F, ExecutionCtx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, ExecutionCtx> as *const ());
 
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
@@ -155,7 +157,7 @@ where
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
-                asm_str += &executor.fallback_to_interpreter::<Ctx>(
+                asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
                     &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
@@ -208,12 +210,12 @@ where
         let mut pre_compute_buf = alloc_pre_compute_buf(program, pre_compute_max_size);
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
-        let pre_compute_insns = get_pre_compute_instructions::<F, Ctx, E>(
+        let pre_compute_insns = get_pre_compute_instructions::<F, ExecutionCtx, E>(
             program,
             inventory,
             &mut split_pre_compute_buf,
         )?;
-        let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
+        let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, ExecutionCtx>]> =
             pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
@@ -228,20 +230,6 @@ where
         })
     }
 
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
-        VmState::initial(
-            &self.system_config,
-            &self.init_memory,
-            self.pc_start,
-            inputs,
-        )
-    }
-}
-
-impl<F> AotInstance<'_, F, ExecutionCtx>
-where
-    F: PrimeField32,
-{
     /// Pure AOT execution, without metering, for the given `inputs`.
     /// this function executes the program until termination
     /// Returns the final VM state when execution stops.
