@@ -29,7 +29,6 @@ members = [
     "crates/toolchain/tests",
     "crates/continuations",
     "crates/vm",
-    "crates/vm/src/arch/asm_bridge",
     "extensions/rv32im/circuit",
     "extensions/rv32im/transpiler",
     "extensions/rv32im/guest",

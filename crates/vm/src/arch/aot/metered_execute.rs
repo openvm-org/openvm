@@ -1,19 +1,19 @@
-use std::{ffi::c_void, io::Write, process::Command};
+use std::ffi::c_void;
 
-use libloading::Library;
-use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
+use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{AotInstance, AsmRunFn};
 use crate::{
     arch::{
+        aot::{asm_to_lib, extern_handler, set_pc_shim, should_suspend_shim},
         execution_mode::{MeteredCtx, Segment},
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf, PreComputeInstruction,
         },
-        ExecutionCtxTrait, ExecutionError, ExecutorInventory, MeteredExecutionCtxTrait,
-        MeteredExecutor, StaticProgramError, Streams, VmExecState, VmState,
+        ExecutionError, ExecutorInventory, MeteredExecutionCtxTrait, MeteredExecutor,
+        StaticProgramError, Streams, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -33,47 +33,7 @@ where
         E: MeteredExecutor<F>,
     {
         let start = std::time::Instant::now();
-        // Create a temporary file for the .s file.
-        let src_file = tempfile::Builder::new()
-            .prefix("asm_x86_run")
-            .suffix(".s")
-            .tempfile()
-            .expect("Failed to create temporary file for asm_x86_run .s file");
-        src_file
-            .as_file()
-            .write(Self::generate_metered_asm().as_bytes())
-            .map_err(|e| StaticProgramError::FailToWriteTemporaryFile { err: e.to_string() })?;
-        let src_path = src_file.into_temp_path();
-
-        // Create a temporary file for the .so file.
-        let lib_path = tempfile::Builder::new()
-            .prefix("asm_x86_run")
-            .suffix(".so")
-            .tempfile()
-            .map_err(|e| StaticProgramError::FailToCreateTemporaryFile { err: e.to_string() })?
-            .into_temp_path();
-
-        // gcc -fPIC -Wl,-z,noexecstack -shared asm_x86_run.s -o asm_x86_run.so
-        let status = Command::new("gcc")
-            .arg("-fPIC")
-            .arg("-Wl,-z,noexecstack")
-            .arg("-shared")
-            .arg(&src_path)
-            .arg("-o")
-            .arg(&lib_path)
-            .status()
-            .map_err(|e| StaticProgramError::FailToGenerateDynamicLibrary { err: e.to_string() })?;
-        if !status.success() {
-            return Err(StaticProgramError::FailToGenerateDynamicLibrary {
-                err: status.to_string(),
-            });
-        }
-
-        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-        tracing::trace!(
-            "Time taken to build and load .so for AotInstance metered execution: {}ms",
-            start.elapsed().as_millis()
-        );
+        let lib = asm_to_lib(&Self::generate_metered_asm())?;
 
         let program = &exe.program;
         let pre_compute_max_size = get_metered_pre_compute_max_size(program, inventory);
@@ -108,10 +68,11 @@ where
     }
 
     fn generate_metered_asm() -> String {
-        // Assumption: these functions are created at compile time so their pointers don't change over time.
+        // Assumption: these functions are created at compile time so their pointers don't change
+        // over time.
         let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, Ctx> as *const ());
         let metered_extern_handler_ptr =
-            format!("{:p}", metered_extern_handler::<F, Ctx> as *const ());
+            format!("{:p}", extern_handler::<F, Ctx, false> as *const ());
         let set_pc_ptr = format!("{:p}", set_pc_shim::<F, Ctx> as *const ());
         ASM_TEMPLATE
             .replace("{should_suspend_ptr}", &should_suspend_ptr)
@@ -284,39 +245,3 @@ asm_run_end:
     pop rbp
     ret
 "#;
-
-unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
-    state_ptr: *mut c_void,
-) -> bool {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
-    VmExecState::<F, GuestMemory, Ctx>::should_suspend(state)
-}
-
-unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
-    state.vm_state.set_pc(pc);
-}
-
-extern "C" fn metered_extern_handler<F, Ctx: ExecutionCtxTrait>(
-    state_ptr: *mut c_void,
-    pre_compute_insns_ptr: *const c_void,
-    cur_pc: u32,
-) -> u32 {
-    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
-    vm_exec_state_ref.set_pc(cur_pc);
-
-    // pointer to the first element of `pre_compute_insns`
-    let pre_compute_insns_base_ptr =
-        pre_compute_insns_ptr as *const PreComputeInstruction<'static, F, Ctx>;
-    let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
-    let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
-    unsafe {
-        (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
-    };
-    let pc = vm_exec_state_ref.pc();
-
-    match vm_exec_state_ref.exit_code {
-        Ok(None) => pc,
-        _ => 1,
-    }
-}

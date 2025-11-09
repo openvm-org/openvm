@@ -1,12 +1,15 @@
-use std::ffi::c_void;
+use std::{ffi::c_void, io::Write, process::Command};
 
 use libloading::Library;
-use openvm_instructions::exe::SparseMemoryImage;
+use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::arch::{
-    interpreter::{AlignedBuf, PreComputeInstruction},
-    ExecutionCtxTrait, SystemConfig,
+use crate::{
+    arch::{
+        interpreter::{AlignedBuf, PreComputeInstruction},
+        ExecutionCtxTrait, StaticProgramError, SystemConfig, VmExecState,
+    },
+    system::memory::online::GuestMemory,
 };
 
 mod metered_execute;
@@ -48,7 +51,7 @@ where
         asm_str += "    push rbx\n";
         asm_str += "    push r12\n";
         asm_str += "    push r13\n";
-        asm_str += "    push r15\n";
+        asm_str += "    push r14\n";
         // A dummy push to ensure the stack is 16 bytes aligned
         asm_str += "    push r15\n";
 
@@ -59,7 +62,7 @@ where
         let mut asm_str = String::new();
         // There was a dummy push to ensure the stack is 16 bytes aligned
         asm_str += "    pop r15\n";
-        asm_str += "    pop r15\n";
+        asm_str += "    pop r14\n";
         asm_str += "    pop r13\n";
         asm_str += "    pop r12\n";
         asm_str += "    pop rbx\n";
@@ -226,4 +229,102 @@ where
         let c_i24 = ((c_u24 << 8) as i32) >> 8;
         c_i24 as i16
     }
+}
+
+pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError> {
+    let start = std::time::Instant::now();
+    // Create a temporary file for the .s file.
+    let src_file = tempfile::Builder::new()
+        .prefix("asm_x86_run")
+        .suffix(".s")
+        .tempfile()
+        .expect("Failed to create temporary file for asm_x86_run .s file");
+    src_file
+        .as_file()
+        .write(asm_source.as_bytes())
+        .map_err(|e| StaticProgramError::FailToWriteTemporaryFile { err: e.to_string() })?;
+    let src_path = src_file.into_temp_path();
+
+    // Create a temporary file for the .so file.
+    let lib_path = tempfile::Builder::new()
+        .prefix("asm_x86_run")
+        .suffix(".so")
+        .tempfile()
+        .map_err(|e| StaticProgramError::FailToCreateTemporaryFile { err: e.to_string() })?
+        .into_temp_path();
+
+    // gcc -fPIC -Wl,-z,noexecstack -shared asm_x86_run.s -o asm_x86_run.so
+    let status = Command::new("gcc")
+        .arg("-fPIC")
+        .arg("-Wl,-z,noexecstack")
+        .arg("-shared")
+        .arg(&src_path)
+        .arg("-o")
+        .arg(&lib_path)
+        .status()
+        .map_err(|e| StaticProgramError::FailToGenerateDynamicLibrary { err: e.to_string() })?;
+    if !status.success() {
+        return Err(StaticProgramError::FailToGenerateDynamicLibrary {
+            err: status.to_string(),
+        });
+    }
+
+    let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
+    tracing::trace!(
+        "Time taken to build and load .so for AotInstance metered execution: {}ms",
+        start.elapsed().as_millis()
+    );
+    Ok(lib)
+}
+
+unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
+    state_ptr: *mut c_void,
+) -> bool {
+    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
+    VmExecState::<F, GuestMemory, Ctx>::should_suspend(state)
+}
+
+unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
+    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
+    state.vm_state.set_pc(pc);
+}
+
+pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: bool>(
+    state_ptr: *mut c_void,
+    pre_compute_insns_ptr: *const c_void,
+    cur_pc: u32,
+) -> u32 {
+    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    vm_exec_state_ref.set_pc(cur_pc);
+
+    // pointer to the first element of `pre_compute_insns`
+    let pre_compute_insns_base_ptr =
+        pre_compute_insns_ptr as *const PreComputeInstruction<'static, F, Ctx>;
+    let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
+    let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
+    unsafe {
+        (pre_compute_insns.handler)(pre_compute_insns.pre_compute, vm_exec_state_ref);
+    };
+    let pc = vm_exec_state_ref.pc();
+
+    match vm_exec_state_ref.exit_code {
+        Ok(None) => pc,
+        _ => {
+            if E1 {
+                pc + 1
+            } else {
+                1
+            }
+        }
+    }
+}
+
+extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
+    exec_state_ptr: *mut c_void,
+    addr_space: u64,
+) -> *mut u64 {
+    let vm_exec_state_ref =
+        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
+    ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }

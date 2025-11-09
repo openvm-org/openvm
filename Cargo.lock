@@ -840,16 +840,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "asm_bridge"
-version = "1.4.1"
-dependencies = [
- "cc",
- "openvm-circuit",
- "openvm-instructions",
- "openvm-stark-sdk",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"

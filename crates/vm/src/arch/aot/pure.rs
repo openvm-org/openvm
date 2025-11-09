@@ -1,13 +1,12 @@
-use std::{ffi::c_void, fs, process::Command};
+use std::ffi::c_void;
 
-use libloading::Library;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
-use rand::Rng;
 
 use super::{AotInstance, AsmRunFn};
 use crate::{
     arch::{
+        aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim},
         execution_mode::{ExecutionCtx, ExecutionCtxTrait},
         interpreter::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
@@ -38,35 +37,40 @@ where
         asm_str += ".intel_syntax noprefix\n";
         asm_str += ".code64\n";
         asm_str += ".section .text\n";
-        asm_str += ".global asm_run_internal\n";
+        asm_str += ".global asm_run\n";
 
         // asm_run_internal part
-        asm_str += "asm_run_internal:\n";
+        asm_str += "asm_run:\n";
         asm_str += &Self::push_external_registers();
         asm_str += "    mov rbx, rdi\n";
         asm_str += "    mov rbp, rsi\n";
         asm_str += "    mov r13, rdx\n";
         asm_str += "    mov r12, rcx\n";
 
+        let get_vm_address_space_addr_ptr =
+            format!("{:p}", get_vm_address_space_addr::<F, Ctx> as *const ());
         asm_str += &Self::push_internal_registers();
-        // Store the start of register address space in r15
+        // Temporarily use r14 as the pointer to get_vm_address_space_addr
+        asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
         asm_str += "    mov rdi, rbx\n";
-        asm_str += "    call get_vm_register_addr\n";
+        asm_str += "    mov rsi, 1\n";
+        asm_str += "    call r14\n";
+        // Store the start of register address space in r15
         asm_str += "    mov r15, rax\n";
         // Store the start of address space 2 in high 64 bits of xmm0
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 2\n";
-        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    call r14\n";
         asm_str += "    pinsrq  xmm0, rax, 1\n";
         // Store the start of address space 3 in high 64 bits of xmm1
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 3\n";
-        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    call r14\n";
         asm_str += "    pinsrq  xmm1, rax, 1\n";
         // Store the start of address space 4 in high 64 bits of xmm2
         asm_str += "    mov rdi, rbx\n";
         asm_str += "    mov rsi, 4\n";
-        asm_str += "    call get_vm_address_space_addr\n";
+        asm_str += "    call r14\n";
         asm_str += "    pinsrq  xmm2, rax, 1\n";
         asm_str += &Self::pop_internal_registers();
 
@@ -88,6 +92,9 @@ where
             asm_str += "\n";
         }
 
+        let extern_handler_ptr = format!("{:p}", extern_handler::<F, Ctx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, Ctx> as *const ());
+
         for (pc, instruction, _) in exe.program.enumerate_by_pc() {
             /* Preprocessing step, to check if we should suspend or not */
             asm_str += &format!("asm_execute_pc_{pc}:\n");
@@ -105,7 +112,8 @@ where
                 asm_str += "    mov rdi, rbx\n";
                 asm_str += "    mov rsi, rbp\n";
                 asm_str += &format!("    mov rdx, {pc}\n");
-                asm_str += "    call extern_handler\n";
+                asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
+                asm_str += "    call rax\n";
                 asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
                 asm_str += "    AND rax, 1\n"; // check if the return value is 1
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
@@ -147,7 +155,7 @@ where
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
-                asm_str += &executor.fallback_to_interpreter(
+                asm_str += &executor.fallback_to_interpreter::<Ctx>(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
                     &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
@@ -161,9 +169,9 @@ where
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += "    mov rdi, rbx\n";
-            asm_str += "    mov rsi, rbp\n";
-            asm_str += &format!("    mov rdx, {pc}\n");
-            asm_str += "    call set_pc\n";
+            asm_str += &format!("    mov rsi, {pc}\n");
+            asm_str += &format!("    mov rax, {set_pc_ptr}\n");
+            asm_str += "    call rax\n";
             asm_str += "    xor rax, rax\n";
             asm_str += &Self::pop_external_registers();
             asm_str += "    ret\n";
@@ -192,109 +200,8 @@ where
     where
         E: Executor<F>,
     {
-        let _default_name = String::from("asm_x86_run");
-        let random_name = format!("asm_x86_run_{}", rand::thread_rng().gen_range(0..1000000));
-        Self::new_with_asm_name(inventory, exe, &random_name)
-    }
-
-    /// Creates a new instance for pure execution
-    /// Specify the name of the asm file
-    pub fn new_with_asm_name<E>(
-        inventory: &'a ExecutorInventory<E>,
-        exe: &VmExe<F>,
-        asm_name: &String, // name of the asm file we write into
-    ) -> Result<Self, StaticProgramError>
-    where
-        E: Executor<F>,
-    {
-        // source asm_bridge directory
-        // this is fixed
-        // can unwrap because its fixed and guaranteed to exist
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let root_dir = std::path::Path::new(manifest_dir)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
-
-        let src_asm_bridge_dir = std::path::Path::new(manifest_dir).join("src/arch/asm_bridge");
-        let src_asm_bridge_dir_str = src_asm_bridge_dir.to_str().unwrap();
-
         let asm_source = Self::create_pure_asm(exe, inventory)?;
-        fs::write(
-            format!("{src_asm_bridge_dir_str}/src/{asm_name}.s"),
-            asm_source,
-        )
-        .expect("Failed to write generated assembly");
-
-        // ar rcs libasm_runtime.a asm_run.o
-        // cargo rustc -- -L /home/ubuntu/openvm/crates/vm/src/arch/asm_bridge -l static=asm_runtime
-
-        // run the below command from the `src_asm_bridge_dir` directory
-        // as src/asm_run.s -o asm_run.o
-        let status = Command::new("as")
-            .current_dir(&src_asm_bridge_dir)
-            .args([&format!("src/{asm_name}.s"), "-o", &format!("{asm_name}.o")])
-            .status()
-            .expect("Failed to assemble the file into an object file");
-
-        assert!(
-            status.success(),
-            "as src/<asm_name>.s -o <asm_name>.o failed with exit code: {:?}",
-            status.code()
-        );
-
-        let status = Command::new("ar")
-            .current_dir(&src_asm_bridge_dir)
-            .args(["rcs", &format!("lib{asm_name}.a"), &format!("{asm_name}.o")])
-            .status()
-            .expect("Create a static library");
-
-        assert!(
-            status.success(),
-            "ar rcs lib<asm_name>.a <asm_name>.o failed with exit code: {:?}",
-            status.code()
-        );
-
-        // library goes to `workspace_dir/target/{asm_name}/release/libasm_bridge.so`
-
-        let status = Command::new("cargo")
-            .current_dir(&src_asm_bridge_dir)
-            .args([
-                "rustc",
-                "--release",
-                &format!(
-                    "--target-dir={}/target/{}",
-                    root_dir.to_str().unwrap(),
-                    asm_name
-                ),
-                "--",
-                "-L",
-                src_asm_bridge_dir_str,
-                "-l",
-                &format!("static={asm_name}"),
-            ])
-            .status()
-            .expect("Creating the dynamic library");
-
-        assert!(
-            status.success(),
-            "Cargo build failed with exit code: {:?}",
-            status.code()
-        );
-
-        let lib_path = root_dir
-            .join("target")
-            .join(asm_name)
-            .join("release")
-            .join("libasm_bridge.so");
-
-        let lib = unsafe { Library::new(&lib_path).expect("Failed to load library") };
-        // Cleanup artifacts after library is loaded into memory
-        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/src/{asm_name}.s"));
-        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/{asm_name}.o"));
-        let _ = fs::remove_file(format!("{src_asm_bridge_dir_str}/lib{asm_name}.a"));
-        let _ = fs::remove_dir_all(root_dir.join("target").join(asm_name));
+        let lib = asm_to_lib(&asm_source)?;
 
         let program = &exe.program;
         let pre_compute_max_size = get_pre_compute_max_size(program, inventory);
@@ -366,7 +273,6 @@ where
 
         let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
-
         unsafe {
             let asm_run: libloading::Symbol<AsmRunFn> = self
                 .lib
@@ -374,11 +280,11 @@ where
                 .expect("Failed to get asm_run symbol");
 
             let vm_exec_state_ptr =
-                &mut *vm_exec_state as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+                vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
 
             asm_run(
-                vm_exec_state_ptr as *mut c_void,
+                vm_exec_state_ptr.cast(),
                 pre_compute_insns_ptr as *const c_void,
                 from_state_pc,
                 instret_left,
