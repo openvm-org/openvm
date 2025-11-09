@@ -7,7 +7,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use crate::{
     arch::{
         interpreter::{AlignedBuf, PreComputeInstruction},
-        ExecutionCtxTrait, StaticProgramError, SystemConfig, VmExecState,
+        ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -45,6 +45,15 @@ where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+        VmState::initial(
+            &self.system_config,
+            &self.init_memory,
+            self.pc_start,
+            inputs,
+        )
+    }
+
     fn push_external_registers() -> String {
         let mut asm_str = String::new();
         asm_str += "    push rbp\n";

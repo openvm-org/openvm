@@ -343,11 +343,11 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn call_extern_handler<Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait>(&self, pc: u32) -> ::std::string::String {
+                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
                         self.0.call_extern_handler(pc)
                     }
 
-                    fn fallback_to_interpreter<Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait>(
+                    fn fallback_to_interpreter(
                         &self,
                         push_internal_registers_str: &str,
                         pop_internal_registers_str: &str,
@@ -417,10 +417,10 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                         #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::is_aot_supported(x, inst)
                     };
                     let call_extern_handler_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler::<Ctx>(x, pc)
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::call_extern_handler(x, pc)
                     };
                     let fallback_to_interpreter_arm = quote! {
-                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::fallback_to_interpreter::<Ctx>(
+                        #name::#variant_name(x) => <#field_ty as ::openvm_circuit::arch::AotExecutor<#first_ty_generic>>::fallback_to_interpreter(
                             x,
                             push_internal_registers_str,
                             pop_internal_registers_str,
@@ -464,13 +464,13 @@ pub fn aot_executor_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn call_extern_handler<Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait>(&self, pc: u32) -> ::std::string::String {
+                    fn call_extern_handler(&self, pc: u32) -> ::std::string::String {
                         match self {
                             #(#call_extern_handler_arms,)*
                         }
                     }
 
-                    fn fallback_to_interpreter<Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait>(
+                    fn fallback_to_interpreter(
                         &self,
                         push_internal_registers_str: &str,
                         pop_internal_registers_str: &str,

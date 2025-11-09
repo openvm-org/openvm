@@ -174,10 +174,12 @@ pub trait AotExecutor<F> {
 
     Postcondition: rax = return value of AOT's extern_handler
     */
-    fn call_extern_handler<Ctx: ExecutionCtxTrait>(&self, pc: u32) -> String {
+    fn call_extern_handler(&self, pc: u32) -> String {
+        use crate::arch::execution_mode::ExecutionCtx;
+
         let extern_handler_ptr = format!(
             "{:p}",
-            crate::arch::aot::extern_handler::<F, Ctx, true> as *const ()
+            crate::arch::aot::extern_handler::<F, ExecutionCtx, true> as *const ()
         );
         let mut asm_str = String::new();
         asm_str += "    mov rdi, rbx\n";
@@ -202,7 +204,7 @@ pub trait AotExecutor<F> {
     - XMM x86 registers are synced with the vm_exec_state
     - base_address of the next instruction is loaded into rcx, and x86 PC is set to the label of the next RV32 instruction, and then jumps to the next instruction
     */
-    fn fallback_to_interpreter<Ctx: ExecutionCtxTrait>(
+    fn fallback_to_interpreter(
         &self,
         push_internal_registers_str: &str,
         pop_internal_registers_str: &str,
@@ -213,7 +215,7 @@ pub trait AotExecutor<F> {
         let mut asm_str = String::new();
 
         asm_str += push_internal_registers_str;
-        asm_str += &self.call_extern_handler::<Ctx>(pc);
+        asm_str += &self.call_extern_handler(pc);
 
         asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
         asm_str += "    AND rax, 1\n"; // check if the return value is 1
