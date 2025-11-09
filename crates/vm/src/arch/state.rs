@@ -131,14 +131,6 @@ impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
     pub fn should_suspend(&mut self) -> bool {
         CTX::should_suspend(self)
     }
-    #[inline(always)]
-    pub fn set_pc(&mut self, pc: u32) {
-        self.vm_state.set_pc(pc);
-    }
-    #[inline(always)]
-    pub fn is_exit_code_ok_none(&mut self) -> bool {
-        matches!(&self.exit_code, Ok(None))
-    }
 }
 
 impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {

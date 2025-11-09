@@ -42,6 +42,7 @@ getset.workspace = true
 dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }
@@ -87,6 +88,7 @@ aot = [
     "dep:libloading",
     "dep:openvm-rv32im-transpiler",
     "openvm-circuit-derive/aot",
+    "dep:tempfile",
 ]
 # Disable bounds checking in memory operations for performance
 unprotected = []

@@ -242,7 +242,6 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<F, ExecutionCtx>, StaticProgramError> {
-        println!("[eyeball check] interpreter instance called yay");
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -251,7 +250,6 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        println!("[eyeball check] aot instance called yay");
         Self::aot_instance(self, exe)
     }
 }
@@ -267,14 +265,6 @@ where
         exe: &VmExe<F>,
     ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
         AotInstance::new(&self.inventory, exe)
-    }
-
-    pub fn aot_instance_with_asm_name(
-        &self,
-        exe: &VmExe<F>,
-        asm_name: &String,
-    ) -> Result<AotInstance<F, ExecutionCtx>, StaticProgramError> {
-        AotInstance::new_with_asm_name(&self.inventory, exe, asm_name)
     }
 }
 
@@ -483,7 +473,6 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        println!("[eyeball check] Naive Interpreter version being called");
         self.executor().interpreter_instance(exe)
     }
 
@@ -497,7 +486,6 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
     {
-        println!("already calling the aot one yay");
         Self::get_aot_instance(self, exe)
     }
 
