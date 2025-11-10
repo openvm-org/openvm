@@ -47,7 +47,6 @@ pub struct EqNsRecord {
     r_prod: EF,
     eq: EF,
     eq_sharp: EF,
-    num_traces: usize,
     n_logup: usize,
     n_max: usize,
 }
@@ -68,8 +67,8 @@ pub struct EqNsColumns<T> {
     r_product: [T; D_EF],
     eq: [T; D_EF],
     eq_sharp: [T; D_EF],
-    /// The number of traces with such `n`
-    num_traces: T,
+
+    xi_mult: T,
 }
 
 pub struct EqNsAir {
@@ -202,7 +201,7 @@ where
                 idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
                 value: local.xi_n.map(|x| x.into()),
             },
-            local.n_less_than_n_logup,
+            local.n_less_than_n_logup * local.xi_mult,
         );
 
         self.zero_n_bus.receive(
@@ -268,7 +267,6 @@ pub(crate) fn generate_eq_ns_trace(
                     r_prod: EF::ONE,
                     eq,
                     eq_sharp,
-                    num_traces: 0,
                     n_logup: preflight.proof_shape.n_logup,
                     n_max: preflight.proof_shape.n_max,
                 });
@@ -285,15 +283,11 @@ pub(crate) fn generate_eq_ns_trace(
                 r_prod: EF::ONE,
                 eq,
                 eq_sharp,
-                num_traces: 0,
                 n_logup: preflight.proof_shape.n_logup,
                 n_max: preflight.proof_shape.n_max,
             });
             for i in (0..n_global).rev() {
                 res[i].r_prod = res[i + 1].r_prod * res[i].r;
-            }
-            for (_, vdata) in preflight.proof_shape.sorted_trace_vdata.iter() {
-                res[vdata.log_height.saturating_sub(l_skip)].num_traces += 1;
             }
             res
         })
@@ -326,8 +320,23 @@ pub(crate) fn generate_eq_ns_trace(
                 cols.eq.copy_from_slice(record.eq.as_base_slice());
                 cols.eq_sharp
                     .copy_from_slice(record.eq_sharp.as_base_slice());
-                cols.num_traces = F::from_canonical_usize(record.num_traces);
             });
+        let mut num_n_lift = vec![0; preflights[pidx].proof_shape.n_logup + 1];
+        for (air_idx, vdata) in preflights[pidx].proof_shape.sorted_trace_vdata.iter() {
+            let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
+            if num_interactions > 0 {
+                num_n_lift[vdata.log_height.saturating_sub(l_skip)] += num_interactions;
+            }
+        }
+        let mut xi_mult = 0;
+        for (chunk, cnt) in trace[cur_height * width..]
+            .chunks_mut(width)
+            .zip(num_n_lift.into_iter())
+        {
+            xi_mult += cnt;
+            let cols: &mut EqNsColumns<_> = chunk.borrow_mut();
+            cols.xi_mult = F::from_canonical_usize(xi_mult);
+        }
         cur_height += rows.len();
     }
     trace[total_height * width..]

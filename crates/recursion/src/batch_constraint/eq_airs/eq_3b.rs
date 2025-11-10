@@ -1,378 +1,402 @@
 use std::borrow::{Borrow, BorrowMut};
 
+use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
-    utils::{not, or},
+    utils::{assert_array_eq, not},
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2};
+use stark_backend_v2::{
+    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, prover::poly::evals_eq_hypercubes,
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    batch_constraint::{
-        bus::{Eq3bBus, EqMleBus, EqMleMessage},
-        eq_airs::EqMleBlob,
+    batch_constraint::bus::{
+        BatchConstraintConductorBus, BatchConstraintConductorMessage,
+        BatchConstraintInnerMessageType, Eq3bBus, Eq3bMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{MultiProofVecVec, assert_zeros},
+    utils::{
+        MultiProofVecVec, assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply,
+        ext_field_multiply_scalar, ext_field_one_minus,
+    },
 };
 
 #[derive(AlignedBorrow, Clone, Copy)]
 #[repr(C)]
-pub struct Eq3bColumns<T> {
+pub struct EqMleColumns<T> {
     is_valid: T,
     is_first: T,
-    is_last: T,
     proof_idx: T,
 
-    n: T,
-    hypercube_volume: T,
-    inverse_hypercube_volume: T, // 2^{-n}
-
-    is_not_fictious: T, // as opposed, for example, to when there is no trace with such n
-    is_first_for_a_valid_air: T,
-
-    stacked_row_idx: T,
     sort_idx: T,
-    col_idx: T,
+    interaction_idx: T,
+
+    n_lift: T,
+    two_to_the_n_lift: T,
+    n: T,
+    hypercube_volume: T, // 2^n
+    n_at_least_n_lift: T,
+
+    is_first_in_air: T,
+    is_first_in_interaction: T,
+
+    idx: T,         // stacked_idx >> l_skip, restored bit by bit
+    running_idx: T, // the current stacked_idx >> l_skip
+    nth_bit: T,     // TODO: can we derive it from local.idx, next.idx and hypercube volume?
+
+    loop_aux: NestedForLoopAuxCols<T, 2>,
+
+    xi: [T; D_EF],
     eq: [T; D_EF],
 }
 
-pub struct Eq3bAir {
-    pub eq_mle_bus: EqMleBus,
+/// AIR for constraining computation of the `eq(\xi_3, b_{T,\hat\sigma})` term for the logup input
+/// layer sumcheck.
+pub struct EqMleAir {
     pub eq_3b_bus: Eq3bBus,
+    pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
 
     pub l_skip: usize,
 }
 
-impl<F> BaseAirWithPublicValues<F> for Eq3bAir {}
-impl<F> PartitionedBaseAir<F> for Eq3bAir {}
+impl<F> BaseAirWithPublicValues<F> for EqMleAir {}
+impl<F> PartitionedBaseAir<F> for EqMleAir {}
 
-impl<F> BaseAir<F> for Eq3bAir {
+impl<F> BaseAir<F> for EqMleAir {
     fn width(&self) -> usize {
-        Eq3bColumns::<F>::width()
+        EqMleColumns::<F>::width()
     }
 }
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir {
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqMleAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
     fn eval(&self, builder: &mut AB) {
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
 
-        let local: &Eq3bColumns<AB::Var> = (*local).borrow();
-        let next: &Eq3bColumns<AB::Var> = (*next).borrow();
+        let local: &EqMleColumns<AB::Var> = (*local).borrow();
+        let next: &EqMleColumns<AB::Var> = (*next).borrow();
 
-        // Summary:
-        // - n consistency: ensure `n` stays constant on non-reset transitions, reset it to zero on
-        //   the first row, initialize `inverse_hypercube_volume` to one, double it when `n`
-        //   decreases, keep it unchanged otherwise, and enforce `hypercube_volume *
-        //   inverse_hypercube_volume = 1`; TODO: receive `n_logup` from another AIR when the first
-        //   valid row appears.
-        // - AIR column updates: zero `eq` on fictitious rows, require `is_not_fictious` implies
-        //   validity, restrict `sort_idx` to change by at most one with fictitious rows preceding
-        //   non-fictitious ones, force fictitious rows to have `col_idx = 0`, increment `col_idx`
-        //   within an AIR when staying on non-fictitious rows, and mark the first valid row so that
-        //   its `col_idx` resets.
-        // - Row indexing: start `stacked_row_idx` at zero, keep it fixed on fictitious rows, and
-        //   increase it by the scaled `hypercube_volume` whenever a non-fictitious row occurs.
-
-        type LoopSubAir = NestedForLoopSubAir<1, 0>;
+        type LoopSubAir = NestedForLoopSubAir<3, 2>;
         LoopSubAir {}.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
                         is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
+                        counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
+                        is_first: [
+                            local.is_first,
+                            local.is_first_in_air,
+                            local.is_first_in_interaction,
+                        ],
                     }
                     .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
+                        counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
+                        is_first: [
+                            next.is_first,
+                            next.is_first_in_air,
+                            next.is_first_in_interaction,
+                        ],
                     }
                     .map_into(),
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                local.loop_aux.map_into(),
             ),
         );
 
-        builder.assert_bool(local.is_valid);
-        builder.assert_bool(local.is_first);
-        builder.assert_bool(local.is_last);
-        builder.assert_bool(local.is_not_fictious);
+        builder.assert_bool(local.n_at_least_n_lift);
+        builder.assert_bool(local.nth_bit);
 
-        // ============================= n consistency =====================================
-        // TODO: receive n_logup = (n if is_first and is_valid) from some other air
-        builder
-            .when(not(next.is_first))
-            .assert_bool(local.n - next.n);
-        builder.when(next.is_first).assert_zero(local.n);
-        builder
-            .when(next.is_first)
-            .when(local.is_valid)
-            .assert_one(local.inverse_hypercube_volume);
-        builder
-            .when(not(next.is_first))
-            .when(local.n - next.n)
-            .assert_eq(
-                local.inverse_hypercube_volume * AB::Expr::TWO,
-                next.inverse_hypercube_volume,
-            );
-        builder
-            .when(not(next.is_first))
-            .when::<AB::Expr>(not(local.n - next.n))
-            .assert_eq(
-                local.inverse_hypercube_volume,
-                next.inverse_hypercube_volume,
-            );
-        builder
-            .when(local.is_valid)
-            .assert_one(local.hypercube_volume * local.inverse_hypercube_volume);
+        let within_one_air = not(next.is_first_in_air);
+        let within_one_interaction = not(next.is_first_in_interaction);
 
-        // ===================== air related cols update consistency =============================
-        assert_zeros(&mut builder.when(not(local.is_not_fictious)), local.eq);
+        // =============================== n consistency ==================================
         builder
-            .when(local.is_not_fictious)
-            .assert_one(local.is_valid);
-        // sort_idx always increases by 0/1
+            .when(local.is_first_in_interaction)
+            .assert_zero(local.n);
         builder
-            .when(not(next.is_first))
-            .assert_bool(next.sort_idx - local.sort_idx);
-        // For each sort_idx, first we have fictious rows and then maybe non-fictious
+            .when(local.is_first_in_interaction)
+            .when(local.is_valid)
+            .assert_one(local.hypercube_volume);
         builder
-            .when::<AB::Expr>(not(next.sort_idx - local.sort_idx))
-            .when(not(next.is_first))
-            .when(local.is_not_fictious)
-            .assert_one(next.is_not_fictious);
-        // For fictious rows, col_idx = 0
+            .when(within_one_interaction.clone())
+            .assert_eq(next.n_lift, local.n_lift);
         builder
-            .when(not(local.is_not_fictious))
-            .assert_zero(local.col_idx);
-        // For non-fictious within same sort_idx, col_idx always increases by one
-        let is_transition_within_air = (AB::Expr::ONE - next.sort_idx + local.sort_idx)
-            * local.is_not_fictious
-            * not(next.is_first);
+            .when(within_one_interaction.clone())
+            .assert_eq(next.two_to_the_n_lift, local.two_to_the_n_lift);
         builder
-            .when(is_transition_within_air)
-            .assert_one(next.col_idx - local.col_idx);
-        // First non-fictious row within an AIR has zero col_idx
-        builder.assert_eq::<AB::Var, AB::Expr>(
-            next.is_first_for_a_valid_air,
-            next.is_not_fictious
-                * or::<AB::Expr>(
-                    not(local.is_not_fictious),
-                    or(next.sort_idx - local.sort_idx, next.is_first),
-                ),
+            .when(within_one_interaction.clone())
+            .assert_eq(next.n, local.n + AB::Expr::ONE);
+        builder.when(within_one_interaction.clone()).assert_eq(
+            next.hypercube_volume,
+            local.hypercube_volume * AB::Expr::TWO,
+        );
+        // n_at_least_n_lift is nondecreasing
+        builder
+            .when(within_one_interaction.clone())
+            .when(local.n_at_least_n_lift)
+            .assert_one(next.n_at_least_n_lift);
+        // it's always 1 in the end
+        builder
+            .when(next.is_first_in_interaction)
+            .when(local.is_valid)
+            .assert_one(local.n_at_least_n_lift);
+
+        // Either there is a moment where it switches from 0 to 1, then it's when n = n_lift
+        builder
+            .when(not(local.n_at_least_n_lift))
+            .when(next.n_at_least_n_lift)
+            .assert_eq(next.n, next.n_lift);
+        builder
+            .when(not(local.n_at_least_n_lift))
+            .when(next.n_at_least_n_lift)
+            .assert_eq(next.hypercube_volume, next.two_to_the_n_lift);
+        // Or it's 1 from the beginning, in which case n_lift = 0
+        builder
+            .when(local.is_first_in_interaction)
+            .when(local.n_at_least_n_lift)
+            .assert_zero(local.n_lift);
+        builder
+            .when(local.is_first_in_interaction)
+            .when(local.n_at_least_n_lift)
+            .assert_one(local.two_to_the_n_lift);
+
+        builder.when(within_one_air).assert_eq(
+            next.running_idx,
+            local.running_idx + next.is_first_in_interaction * local.two_to_the_n_lift,
+        );
+
+        // =========================== Xi and product consistency =============================
+        // Boundary conditions
+        assert_array_eq(
+            &mut builder.when(local.is_valid * local.is_first),
+            local.eq,
+            base_to_ext::<AB::Expr>(AB::Expr::ONE),
         );
         builder
-            .when(next.is_first_for_a_valid_air)
-            .assert_zero(next.col_idx);
+            .when(local.is_first_in_interaction)
+            .assert_zero(local.idx);
+        builder.when(local.is_first).assert_zero(local.running_idx);
+        builder
+            .when(LoopSubAir::local_is_last(
+                next.is_valid,
+                next.is_first_in_interaction,
+            ))
+            .assert_eq(local.idx, local.running_idx);
 
-        // Initially row_idx = 0
+        // If n is less than n_lift, assert that xi is 1
+        assert_one_ext(
+            &mut builder
+                .when(local.is_valid)
+                .when(not(local.n_at_least_n_lift)),
+            local.xi,
+        );
+        // Within transition, idx increases by nth_bit * hypercube_volume
         builder
-            .when(local.is_first)
-            .assert_zero(local.stacked_row_idx);
-        // On fictious rows it doesn't change
+            .when(within_one_interaction.clone())
+            .assert_eq(next.idx, local.idx + local.nth_bit * local.hypercube_volume);
+        // It can't increase if n < n_lift
         builder
-            .when(not(local.is_not_fictious))
-            .when(not(next.is_first))
-            .assert_eq(local.stacked_row_idx, next.stacked_row_idx);
-        // On non-fictious rows it increases by hypercube_volume
-        builder
-            .when(local.is_not_fictious)
-            .when(not(next.is_first))
-            .assert_eq(
-                next.stacked_row_idx,
-                local.stacked_row_idx
-                    + local.hypercube_volume * AB::Expr::from_canonical_usize(1 << self.l_skip),
-            );
+            .when(not(local.n_at_least_n_lift))
+            .assert_zero(local.nth_bit);
+        // When transition, eq multiplies correspondingly
+        assert_array_eq(
+            &mut builder.when(within_one_interaction.clone()),
+            next.eq,
+            ext_field_multiply(
+                local.eq,
+                ext_field_add::<AB::Expr>(
+                    ext_field_multiply_scalar(local.xi, local.nth_bit),
+                    ext_field_multiply_scalar::<AB::Expr>(
+                        ext_field_one_minus(local.xi),
+                        AB::Expr::ONE - local.nth_bit,
+                    ),
+                ),
+            ),
+        );
 
-        self.eq_mle_bus.receive(
+        self.batch_constraint_conductor_bus.receive(
             builder,
             local.proof_idx,
-            EqMleMessage {
-                n: local.n.into(),
-                idx: local.stacked_row_idx * local.inverse_hypercube_volume,
-                eq_mle: local.eq.map(|x| x.into()),
+            BatchConstraintConductorMessage {
+                msg_type: BatchConstraintInnerMessageType::Xi.to_field(),
+                idx: local.n + AB::Expr::from_canonical_usize(self.l_skip),
+                value: local.xi.map(|x| x.into()),
             },
-            local.is_not_fictious,
+            local.n_at_least_n_lift * within_one_interaction,
         );
-        // self.eq_3b_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     Eq3bMessage {
-        //         sort_idx: local.sort_idx,
-        //         col_idx: local.col_idx,
-        //         eq_mle: local.eq,
-        //     },
-        //     local.is_valid,
-        // );
+
+        self.eq_3b_bus.send(
+            builder,
+            local.proof_idx,
+            Eq3bMessage {
+                n_lift: local.n_lift.into(),
+                n_logup: local.n.into(),
+                stacked_idx: local.idx * AB::Expr::from_canonical_usize(1 << self.l_skip),
+                eq_mle: local.eq.map(Into::into),
+            },
+            // next.is_first * local.is_valid,
+            AB::Expr::ZERO,
+        );
     }
 }
 
-#[derive(Clone, Copy)]
-#[repr(C)]
-struct Eq3bRecord {
-    n: usize,
-    stacked_row_idx: usize,
+pub(crate) struct StackedIdxRecord {
     sort_idx: usize,
-    col_idx: usize,
-    eq: [F; D_EF],
-    is_not_fictious: bool,
+    interaction_idx: usize,
+    stacked_idx: usize,
+    n_lift: usize,
+    is_last_in_air: bool,
 }
 
-/// TODO(AG): incorporate into EqMleBlob?
-struct Eq3bBlob {
-    records: MultiProofVecVec<Eq3bRecord>,
+pub struct EqMleBlob {
+    pub(crate) products: MultiProofVecVec<EF>,
+    pub(crate) all_stacked_ids: MultiProofVecVec<StackedIdxRecord>,
 }
 
-fn generate_eq_3b_blob(
-    vk: &MultiStarkVerifyingKeyV2,
-    blob: &EqMleBlob,
-    preflights: &[Preflight],
-) -> Eq3bBlob {
-    let mut res = Eq3bBlob {
-        records: MultiProofVecVec::new(),
-    };
-    let l_skip = vk.inner.params.l_skip;
-    for (pidx, preflight) in preflights.iter().enumerate() {
-        let n_logup = preflight.proof_shape.n_logup;
-        let mut n = n_logup;
-        let mut n_is_empty = true;
-        let mut row_idx = 0;
-        let products = &blob.products[pidx];
-        let vdata = &preflight.proof_shape.sorted_trace_vdata;
-        for (sort_idx, (air_idx, vdata)) in vdata.iter().enumerate() {
-            let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
-            if num_interactions == 0 {
-                res.records.push(Eq3bRecord {
-                    n,
-                    stacked_row_idx: row_idx,
-                    sort_idx,
-                    col_idx: 0,
-                    eq: [F::ZERO; _],
-                    is_not_fictious: false,
-                });
-                continue;
-            }
-
-            let n_lift = vdata.log_height.saturating_sub(l_skip);
-            while n > n_lift {
-                if n_is_empty {
-                    res.records.push(Eq3bRecord {
-                        n,
-                        stacked_row_idx: row_idx,
-                        sort_idx,
-                        col_idx: 0,
-                        eq: [F::ZERO; _],
-                        is_not_fictious: false,
-                    });
-                }
-                n -= 1;
-                n_is_empty = true;
-            }
-            debug_assert_eq!(n, n_lift);
-
-            for col_idx in 0..num_interactions {
-                res.records.push(Eq3bRecord {
-                    n,
-                    stacked_row_idx: row_idx,
-                    sort_idx,
-                    col_idx,
-                    eq: products[(1 << (n_logup - n)) - 1 + (row_idx >> (l_skip + n))]
-                        .as_base_slice()
-                        .try_into()
-                        .unwrap(),
-                    is_not_fictious: true,
-                });
-
-                n_is_empty = false;
-                row_idx += 1 << (l_skip + n);
-            }
+impl EqMleBlob {
+    fn new() -> Self {
+        Self {
+            products: MultiProofVecVec::new(),
+            all_stacked_ids: MultiProofVecVec::new(),
         }
-        debug_assert!(row_idx <= 1 << (l_skip + n_logup));
-        for n in (0..=n).rev() {
-            if n_is_empty {
-                res.records.push(Eq3bRecord {
-                    n,
-                    stacked_row_idx: row_idx,
-                    sort_idx: vdata.len(),
-                    col_idx: 0,
-                    eq: [F::ZERO; _],
-                    is_not_fictious: false,
-                });
-            }
-            n_is_empty = true;
-        }
-        res.records.end_proof();
     }
-    res
 }
 
-pub(crate) fn generate_eq_3b_trace(
+pub(crate) fn generate_eq_mle_blob(
+    vk: &MultiStarkVerifyingKeyV2,
+    preflights: &[Preflight],
+) -> EqMleBlob {
+    let l_skip = vk.inner.params.l_skip;
+    let mut blob = EqMleBlob::new();
+    for preflight in preflights.iter() {
+        blob.products.extend(evals_eq_hypercubes(
+            preflight.proof_shape.n_logup,
+            preflight.batch_constraint.xi[l_skip..l_skip + preflight.proof_shape.n_logup]
+                .iter()
+                .rev(),
+        ));
+        blob.products.end_proof();
+
+        let mut row_idx = 0;
+        let n_logup = preflight.proof_shape.n_logup;
+        for (sort_idx, (air_idx, vdata)) in
+            preflight.proof_shape.sorted_trace_vdata.iter().enumerate()
+        {
+            let n_lift = vdata.log_height.saturating_sub(l_skip);
+            let num_interactions = vk.inner.per_air[*air_idx].num_interactions();
+            for i in 0..num_interactions {
+                blob.all_stacked_ids.push(StackedIdxRecord {
+                    sort_idx,
+                    interaction_idx: i,
+                    stacked_idx: row_idx,
+                    n_lift,
+                    is_last_in_air: i + 1 == num_interactions,
+                });
+                row_idx += 1 << (l_skip + n_lift);
+                if row_idx == 1 << (l_skip + n_logup) {
+                    row_idx = 0;
+                }
+            }
+        }
+        blob.all_stacked_ids.end_proof();
+    }
+    blob
+}
+
+pub(crate) fn generate_eq_mle_trace(
     vk: &MultiStarkVerifyingKeyV2,
     blob: &EqMleBlob,
     preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let width = Eq3bColumns::<F>::width();
-
-    let blob = generate_eq_3b_blob(vk, blob, preflights);
-    let total_height = blob.records.len();
+    let width = EqMleColumns::<F>::width();
+    let l_skip = vk.inner.params.l_skip;
+    let heights = preflights
+        .iter()
+        .map(|p| (2 << p.proof_shape.n_logup) - 1)
+        .collect_vec();
+    let total_height = heights.iter().sum::<usize>();
     let padding_height = total_height.next_power_of_two();
     let mut trace = vec![F::ZERO; padding_height * width];
 
     let mut cur_height = 0;
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let xi = &preflight.batch_constraint.xi;
+        let n_logup = preflight.proof_shape.n_logup;
 
-    for pidx in 0..blob.records.num_proofs() {
-        let records = &blob.records[pidx];
-        trace[cur_height * width..(cur_height + records.len()) * width]
-            .par_chunks_exact_mut(width)
-            .zip(records.par_iter())
-            .for_each(|(chunk, record)| {
-                let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
-                cols.is_valid = F::ONE;
-                cols.proof_idx = F::from_canonical_usize(pidx);
-                cols.n = F::from_canonical_usize(record.n);
-                cols.hypercube_volume = F::from_canonical_usize(1 << record.n);
-                cols.inverse_hypercube_volume = cols.hypercube_volume.inverse();
-                cols.is_not_fictious = F::from_bool(record.is_not_fictious);
-                cols.is_first_for_a_valid_air =
-                    F::from_bool(record.is_not_fictious && record.col_idx == 0);
-                cols.stacked_row_idx = F::from_canonical_usize(record.stacked_row_idx);
-                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
-                cols.col_idx = F::from_canonical_usize(record.col_idx);
-                cols.eq = record.eq;
+        let stacked_ids = &blob.all_stacked_ids[pidx];
+        let one_height = n_logup + 1;
+        trace[cur_height * width..(cur_height + one_height * stacked_ids.len()) * width]
+            .par_chunks_exact_mut(one_height * width)
+            .enumerate()
+            .for_each(|(j, chunks)| {
+                let record = &stacked_ids[j];
+                let shifted_idx = record.stacked_idx >> l_skip;
+
+                let mut cur_eq = EF::ONE;
+                chunks
+                    .chunks_exact_mut(width)
+                    .enumerate()
+                    .for_each(|(n, chunk)| {
+                        let cols: &mut EqMleColumns<_> = chunk.borrow_mut();
+                        cols.is_valid = F::ONE;
+                        cols.is_first = F::from_bool(j == 0 && n == 0);
+                        cols.proof_idx = F::from_canonical_usize(pidx);
+
+                        cols.sort_idx = F::from_canonical_usize(record.sort_idx);
+                        cols.interaction_idx = F::from_canonical_usize(record.interaction_idx);
+                        cols.n_lift = F::from_canonical_usize(record.n_lift);
+                        cols.two_to_the_n_lift = F::from_canonical_usize(1 << record.n_lift);
+                        cols.n = F::from_canonical_usize(n);
+                        cols.n_at_least_n_lift = F::from_bool(n >= record.n_lift);
+                        cols.hypercube_volume = F::from_canonical_usize(1 << n);
+                        cols.is_first_in_air = F::from_bool(record.interaction_idx == 0 && n == 0);
+                        cols.is_first_in_interaction = F::from_bool(n == 0);
+                        cols.idx = F::from_canonical_usize(shifted_idx & ((1 << n) - 1));
+                        cols.running_idx = F::from_canonical_usize(shifted_idx);
+                        let nth_bit = (shifted_idx & (1 << n)) > 0;
+                        cols.nth_bit = F::from_bool(nth_bit);
+                        cols.loop_aux.is_transition[0] =
+                            F::from_bool(j + 1 < stacked_ids.len() || n < n_logup);
+                        cols.loop_aux.is_transition[1] =
+                            F::from_bool(!record.is_last_in_air || n < n_logup);
+                        let xi = if (record.n_lift..n_logup).contains(&n) {
+                            xi[l_skip + n]
+                        } else {
+                            EF::ONE
+                        };
+                        cols.xi.copy_from_slice(xi.as_base_slice());
+                        cols.eq.copy_from_slice(cur_eq.as_base_slice());
+                        cur_eq *= if nth_bit { xi } else { EF::ONE - xi };
+                    });
             });
-        {
-            let cols: &mut Eq3bColumns<_> =
-                trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
-            cols.is_first = F::ONE;
-        }
-        cur_height += records.len();
-        {
-            let cols: &mut Eq3bColumns<_> =
-                trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
-            cols.is_last = F::ONE;
-        }
+        cur_height += one_height * stacked_ids.len();
     }
+
     trace[cur_height * width..]
         .par_chunks_mut(width)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
+            let cols: &mut EqMleColumns<F> = chunk.borrow_mut();
             cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
             cols.is_first = F::ONE;
-            cols.is_last = F::ONE;
+            cols.is_first_in_air = F::ONE;
+            cols.is_first_in_interaction = F::ONE;
         });
 
     RowMajorMatrix::new(trace, width)
