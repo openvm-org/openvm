@@ -30,9 +30,6 @@ impl<'a, F> AotInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
 {
-
-    
-
     pub fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
