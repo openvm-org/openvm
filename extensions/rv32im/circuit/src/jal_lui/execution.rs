@@ -217,10 +217,11 @@ unsafe fn execute_e1_impl<
     const IS_JAL: bool,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &JalLuiPreCompute = pre_compute.borrow();
+    let pre_compute: &JalLuiPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<JalLuiPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_JAL, ENABLED>(pre_compute, exec_state);
 }
 
@@ -232,10 +233,12 @@ unsafe fn execute_e2_impl<
     const IS_JAL: bool,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<JalLuiPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<JalLuiPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<JalLuiPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

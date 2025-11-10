@@ -641,10 +641,14 @@ unsafe fn execute_e1_impl<
     const TOTAL_READ_SIZE: usize,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = pre_compute.borrow();
+    let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>(),
+    )
+    .borrow();
 
     execute_e12_impl::<_, _, NUM_LANES, LANE_SIZE, TOTAL_READ_SIZE, IS_SETUP>(
         pre_compute,
@@ -662,11 +666,15 @@ unsafe fn execute_e2_impl<
     const TOTAL_READ_SIZE: usize,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
-        pre_compute.borrow();
+        std::slice::from_raw_parts(
+            pre_compute,
+            size_of::<E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>>(),
+        )
+        .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

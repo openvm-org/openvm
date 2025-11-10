@@ -254,20 +254,23 @@ unsafe fn execute_range_check_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_jal_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &JalPreCompute<F> = pre_compute.borrow();
+    let pre_compute: &JalPreCompute<F> =
+        std::slice::from_raw_parts(pre_compute, size_of::<JalPreCompute<F>>()).borrow();
     execute_jal_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<JalPreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<JalPreCompute<F>> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<JalPreCompute<F>>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -277,20 +280,23 @@ unsafe fn execute_jal_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_range_check_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &RangeCheckPreCompute = pre_compute.borrow();
+    let pre_compute: &RangeCheckPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<RangeCheckPreCompute>()).borrow();
     execute_range_check_e12_impl(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_range_check_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<RangeCheckPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<RangeCheckPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<RangeCheckPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

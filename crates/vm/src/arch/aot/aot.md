@@ -2,7 +2,7 @@
 
 There is an `AotInstance` struct which stores the information generated during compile time to be used in execution time.
 ```
-pub struct AotInstance<'a, F, Ctx> {
+pub struct AotInstance<F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
@@ -10,7 +10,7 @@ pub struct AotInstance<'a, F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
+    pre_compute_insns_box: Box<[PreComputeInstruction<F, Ctx>]>,
     pc_start: u32,
 }
 ```

@@ -110,11 +110,11 @@ pub enum AotError {
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute,
-/// arg, exec_state)`. The `pre_compute: &[u8]` is a pre-computed buffer of data
+/// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
 pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: &[u8], exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.

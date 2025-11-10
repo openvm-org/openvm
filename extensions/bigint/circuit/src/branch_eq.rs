@@ -144,20 +144,23 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE:
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BranchEqPreCompute = pre_compute.borrow();
+    let pre_compute: &BranchEqPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BranchEqPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_NE>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BranchEqPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<BranchEqPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BranchEqPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

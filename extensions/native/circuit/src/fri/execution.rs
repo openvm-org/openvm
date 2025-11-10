@@ -160,20 +160,25 @@ where
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &FriReducedOpeningPreCompute = pre_compute.borrow();
+    let pre_compute: &FriReducedOpeningPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<FriReducedOpeningPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FriReducedOpeningPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<FriReducedOpeningPreCompute>>(),
+    )
+    .borrow();
     let height = execute_e12_impl(&pre_compute.data, exec_state);
     exec_state
         .ctx

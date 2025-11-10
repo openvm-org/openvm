@@ -207,20 +207,22 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &JalrPreCompute = pre_compute.borrow();
+    let pre_compute: &JalrPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<JalrPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, ENABLED>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<JalrPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<JalrPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<JalrPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

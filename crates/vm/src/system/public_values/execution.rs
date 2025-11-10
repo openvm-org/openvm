@@ -206,24 +206,29 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_I
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: ExecutionCtxTrait,
 {
-    let pre_compute: &PublicValuesPreCompute = pre_compute.borrow();
+    let pre_compute: &PublicValuesPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<PublicValuesPreCompute>()).borrow();
     execute_e12_impl::<_, _, B_IS_IMM, C_IS_IMM>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX, const B_IS_IMM: bool, const C_IS_IMM: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) where
     CTX: MeteredExecutionCtxTrait,
 {
-    let pre_compute: &E2PreCompute<PublicValuesPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<PublicValuesPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<PublicValuesPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

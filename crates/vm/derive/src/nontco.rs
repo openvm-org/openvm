@@ -55,7 +55,7 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
     let handler_fn = quote! {
         #[inline(always)]
         unsafe fn #handler_name #generics (
-            pre_compute: &[u8],
+            pre_compute: *const u8,
             exec_state: &mut ::openvm_circuit::arch::VmExecState<
                 #f_type,
                 ::openvm_circuit::system::memory::online::GuestMemory,

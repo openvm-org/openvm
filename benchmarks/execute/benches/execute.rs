@@ -18,10 +18,7 @@ use openvm_bigint_transpiler::Int256TranspilerExtension;
 #[cfg(feature = "aot")]
 use openvm_circuit::arch::execution_mode::ExecutionCtx;
 use openvm_circuit::{
-    arch::{
-        execution_mode::MeteredCostCtx, instructions::exe::VmExe, interpreter::InterpretedInstance,
-        ContinuationVmProof, *,
-    },
+    arch::{execution_mode::MeteredCostCtx, instructions::exe::VmExe, ContinuationVmProof, *},
     derive::VmConfig,
     system::*,
 };
@@ -335,7 +332,7 @@ fn benchmark_execute(bencher: Bencher, program: &str) {
 }
 
 #[cfg(feature = "aot")]
-fn create_aot_instance(program: &str) -> AotInstance<'static, BabyBear, ExecutionCtx> {
+fn create_aot_instance(program: &str) -> AotInstance<BabyBear, ExecutionCtx> {
     let exe =
         load_program_executable(program).expect("Failed to load program executable for AOT cache");
     let instance = executor()
@@ -454,17 +451,6 @@ fn setup_internal_verifier(program: &str) -> (NativeVm, Arc<VmExe<BabyBear>>, Ve
     (vm, internal_committed_exe.exe, input_stream)
 }
 
-#[allow(dead_code)]
-// Safe wrapper for the unsafe transmute operation
-fn transmute_interpreter_lifetime<'a, Ctx>(
-    interpreter: InterpretedInstance<'_, BabyBear, Ctx>,
-) -> InterpretedInstance<'a, BabyBear, Ctx> {
-    // SAFETY: We transmute the interpreter to have the same lifetime as the VM.
-    // This is safe because the vm is moved into the tuple and will remain
-    // alive for the entire duration that the interpreter is used.
-    unsafe { std::mem::transmute(interpreter) }
-}
-
 #[cfg(not(feature = "aot"))]
 #[divan::bench(args = LEAF_VERIFIER_PROGRAMS, sample_count = 5)]
 fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
@@ -472,7 +458,6 @@ fn benchmark_leaf_verifier_execute(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let (vm, leaf_exe, input_stream) = setup_leaf_verifier(program);
             let interpreter = vm.executor().instance(&leaf_exe).unwrap();
-            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream)
         })
@@ -498,7 +483,6 @@ fn benchmark_leaf_verifier_execute_metered(bencher: Bencher, program: &str) {
                 .executor()
                 .metered_instance(&leaf_exe, &executor_idx_to_air_idx)
                 .unwrap();
-            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream, ctx)
         })
@@ -545,7 +529,6 @@ fn benchmark_internal_verifier_execute(bencher: Bencher, program: &str) {
         .with_inputs(|| {
             let (vm, internal_exe, input_stream) = setup_internal_verifier(program);
             let interpreter = vm.executor().instance(&internal_exe).unwrap();
-            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream)
         })
@@ -571,7 +554,6 @@ fn benchmark_internal_verifier_execute_metered(bencher: Bencher, program: &str) 
                 .executor()
                 .metered_instance(&internal_exe, &executor_idx_to_air_idx)
                 .unwrap();
-            let interpreter = transmute_interpreter_lifetime(interpreter);
 
             (vm, interpreter, input_stream, ctx)
         })

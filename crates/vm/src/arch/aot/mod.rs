@@ -21,7 +21,7 @@ mod pure;
 /// Verify installation by `as --version`, `ar --version` and `cargo --version`
 /// Refer to AOT.md for further clarification about AOT
 ///  
-pub struct AotInstance<'a, F, Ctx> {
+pub struct AotInstance<F, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
@@ -29,7 +29,7 @@ pub struct AotInstance<'a, F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]>,
+    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
     pc_start: u32,
 }
 
@@ -40,7 +40,7 @@ type AsmRunFn = unsafe extern "C" fn(
     instret_left: u64,
 );
 
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<F, Ctx> AotInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
@@ -307,8 +307,7 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const E1: boo
     vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
-    let pre_compute_insns_base_ptr =
-        pre_compute_insns_ptr as *const PreComputeInstruction<'static, F, Ctx>;
+    let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<F, Ctx>;
     let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
     unsafe {
