@@ -6,21 +6,25 @@ mod aot {
     // Callee saved
     pub const REG_EXEC_STATE_PTR: &str = "rbx";
     pub const REG_INSNS_PTR: &str = "rbp";
+
     pub const REG_PC: &str = "r13";
+    pub const REG_PC_W: &str = "r13d";
+
     pub const REG_GUEST_MEM_PTR: &str = "r15";
 
     // Caller saved
     pub const REG_B: &str = "rax";
     pub const REG_B_W: &str = "eax";
+    pub const REG_RETURN_VAL: &str = "rax";
 
     pub const REG_A: &str = "rcx";
     pub const REG_A_W: &str = "ecx";
-
     pub const REG_FOURTH_ARG: &str = "rcx";
+
     pub const REG_THIRD_ARG: &str = "rdx";
+
     pub const REG_SECOND_ARG: &str = "rsi";
     pub const REG_FIRST_ARG: &str = "rdi";
-    pub const REG_RETURN_VAL: &str = "rax";
 
     pub const REG_TMP_W: &str = "r8d";
 
@@ -29,46 +33,11 @@ mod aot {
     pub const REG_C_B: &str = "r10b";
     pub const REG_AUX: &str = "r11";
 
-    pub const REG_PC_W: &str = "r13d";
-
     pub const DEFAULT_PC_OFFSET: i32 = 4;
 
-    pub (crate)static RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [ // replace it with string of GPR register, if want to override the default mapping
-        None, // x0
-        None, // x1
-        None, // x2
-        None, // x3
-        None, // x4
-        None, // x5
-        None, // x6
-        None, // x7
-        None, // x8
-        None, // x9
-        Some("r9d"), // x10
-        Some("r8d"), // x11
-        None, // x12
-        None, // x13
-        // Some("r11d"), // x12
-        // Some("r10d"), // x13
-        None, // x14
-        None, // x15
-        None, // x16
-        None, // x17
-        None, // x18
-        None, // x19
-        None, // x20
-        None, // x21
-        None, // x22
-        None, // x23
-        None, // x24
-        None, // x25
-        None, // x26
-        None, // x27
-        None, // x28
-        None, // x29
-        None, // x30
-        None, // x31
-    ];
+    pub(crate) use openvm_circuit::arch::aot::common::{
+        RISCV_TO_X86_OVERRIDE_MAP, SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR,
+    };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
         let xmm_map_reg = rv32_reg / 2;
@@ -157,39 +126,5 @@ mod aot {
         } else {
             format!("   pinsrd xmm{}, {}, 1\n", xmm_map_reg, gpr)
         }
-    }
-
-
-    /*
-    pre condition: XMM stores the ground truth of the registres
-    post condition: overridden GPR registers also contain the corresponding values
-    */
-    pub(crate) fn SYNC_XMM_TO_GPR() -> String { // these should be saved by caller tho, so can be treated independently
-        let mut asm_str = String::new();
-        for i in 0..32{
-            let xmm_reg = i / 2;
-            let lane = i % 2;
-            if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[i] {
-                asm_str += &format!("   pextrd {}, xmm{}, {}\n", override_reg, xmm_reg, lane);
-                //zero extends the upper bits
-            }
-        }
-        asm_str
-    }
-
-    /*
-    pre condition: GPR registers contain the correct values, for the associated riscv32 registers
-    post condition: XMM stores the ground truth of the registres
-    */
-    pub(crate) fn SYNC_GPR_TO_XMM() -> String {
-        let mut asm_str = String::new();
-        for i in 0..32{
-            let xmm_reg = i / 2;
-            let lane = i % 2;
-            if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[i] {
-                asm_str += &format!("   pinsrd xmm{}, {}, {}\n", xmm_reg, override_reg, lane);
-            }
-        }
-        asm_str
     }
 }

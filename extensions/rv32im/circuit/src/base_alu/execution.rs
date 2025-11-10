@@ -189,9 +189,6 @@ where
         let b: i16 = to_i16(inst.b);
         let c: i16 = to_i16(inst.c);
         let e: i16 = to_i16(inst.e);
-
-        // load the left operand of the opcode
-        asm_str += &SYNC_XMM_TO_GPR();
         
         let str_reg_a = if RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].is_some() {
             RISCV_TO_X86_OVERRIDE_MAP[(a / 4) as usize].unwrap()
@@ -236,7 +233,6 @@ where
             }
         }
 
-        asm_str += &SYNC_GPR_TO_XMM();
         Ok(asm_str)
     }
 }

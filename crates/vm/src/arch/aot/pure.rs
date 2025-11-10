@@ -3,7 +3,7 @@ use std::ffi::c_void;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{AotInstance, AsmRunFn};
+use super::{common::{SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR}, AotInstance, AsmRunFn};
 use crate::{
     arch::{
         aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim},
@@ -24,6 +24,9 @@ impl<'a, F> AotInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
 {
+
+    
+
     pub fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
@@ -157,12 +160,13 @@ where
                         })?;
                 asm_str += &segment;
             } else {
+                asm_str += &SYNC_GPR_TO_XMM();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
-                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
+                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm() + &SYNC_XMM_TO_GPR()),
                     &instruction,
                     pc,
                 );
