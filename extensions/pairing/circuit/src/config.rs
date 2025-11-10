@@ -15,11 +15,13 @@ use openvm_circuit_derive::VmConfig;
 use openvm_ecc_circuit::{EccCpuProverExt, WeierstrassExtension, WeierstrassExtensionExecutor};
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 use super::*;
 
@@ -73,10 +75,11 @@ impl InitFileGenerator for Rv32PairingConfig {
 #[derive(Clone)]
 pub struct Rv32PairingCpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Rv32PairingCpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Rv32PairingCpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: PrimeField32,
 {
     type VmConfig = Rv32PairingConfig;
