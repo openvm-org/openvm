@@ -12,16 +12,17 @@ use crate::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
             get_metered_pre_compute_max_size, split_pre_compute_buf,
         },
-        ExecutionError, ExecutorInventory, MeteredExecutionCtxTrait, MeteredExecutor,
-        StaticProgramError, Streams, VmExecState, VmState,
+        ExecutionError, ExecutorInventory, MeteredExecutor, StaticProgramError, Streams,
+        VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
 
-impl<F, Ctx> AotInstance<F, Ctx>
+static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, MeteredCtx>: Send, Sync);
+
+impl<F> AotInstance<F, MeteredCtx>
 where
     F: PrimeField32,
-    Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new instance for metered execution.
     pub fn new_metered<E>(
@@ -41,7 +42,7 @@ where
         let mut split_pre_compute_buf =
             split_pre_compute_buf(program, &mut pre_compute_buf, pre_compute_max_size);
 
-        let pre_compute_insns = get_metered_pre_compute_instructions::<F, Ctx, E>(
+        let pre_compute_insns = get_metered_pre_compute_instructions::<F, MeteredCtx, E>(
             program,
             inventory,
             executor_idx_to_air_idx,
@@ -68,21 +69,15 @@ where
     fn generate_metered_asm() -> String {
         // Assumption: these functions are created at compile time so their pointers don't change
         // over time.
-        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, Ctx> as *const ());
+        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ());
         let metered_extern_handler_ptr =
-            format!("{:p}", extern_handler::<F, Ctx, false> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, Ctx> as *const ());
+            format!("{:p}", extern_handler::<F, MeteredCtx, false> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
         ASM_TEMPLATE
             .replace("{should_suspend_ptr}", &should_suspend_ptr)
             .replace("{metered_extern_handler_ptr}", &metered_extern_handler_ptr)
             .replace("{set_pc_ptr}", &set_pc_ptr)
     }
-}
-
-impl<F> AotInstance<F, MeteredCtx>
-where
-    F: PrimeField32,
-{
     /// Metered exeecution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///

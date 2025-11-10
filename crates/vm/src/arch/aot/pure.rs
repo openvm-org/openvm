@@ -18,6 +18,8 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
+static_assertions::assert_impl_all!(AotInstance<p3_baby_bear::BabyBear, ExecutionCtx>: Send, Sync);
+
 impl<'a, F> AotInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
