@@ -18,14 +18,14 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-impl<'a, F, Ctx> AotInstance<F, Ctx>
+impl<F, Ctx> AotInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new instance for metered execution.
     pub fn new_metered<E>(
-        inventory: &'a ExecutorInventory<E>,
+        inventory: &ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>

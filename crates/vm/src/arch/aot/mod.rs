@@ -40,7 +40,7 @@ type AsmRunFn = unsafe extern "C" fn(
     instret_left: u64,
 );
 
-impl<'a, F, Ctx> AotInstance<F, Ctx>
+impl<F, Ctx> AotInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,

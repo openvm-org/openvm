@@ -154,11 +154,8 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &LessThanPreCompute = std::slice::from_raw_parts(
-    pre_compute,
-    size_of::<LessThanPreCompute>(),
-)
-.borrow();
+    let pre_compute: &LessThanPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_U256>(pre_compute, exec_state);
 }
 
@@ -168,11 +165,9 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<LessThanPreCompute> = std::slice::from_raw_parts(
-    pre_compute,
-    size_of::<E2PreCompute<LessThanPreCompute>>(),
-)
-.borrow();
+    let pre_compute: &E2PreCompute<LessThanPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LessThanPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
