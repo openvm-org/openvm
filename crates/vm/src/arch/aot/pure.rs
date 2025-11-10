@@ -173,7 +173,6 @@ where
                         })?;
                 asm_str += &segment;
             } else {
-                asm_str += &SYNC_GPR_TO_XMM();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
