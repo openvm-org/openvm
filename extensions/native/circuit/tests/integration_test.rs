@@ -52,7 +52,9 @@ use openvm_stark_sdk::{
     p3_baby_bear::BabyBear,
 };
 use rand::Rng;
-use stark_backend_v2::{poseidon2::sponge::DuplexSponge, SystemParams};
+use stark_backend_v2::{
+    poseidon2::sponge::DuplexSponge, BabyBearPoseidon2CpuEngineV2, SystemParams,
+};
 use test_log::test;
 
 pub fn gen_pointer<R>(rng: &mut R, len: usize) -> usize
@@ -109,7 +111,7 @@ fn test_vm_1() {
 // See crates/sdk/src/prover/root.rs for intended usage
 #[test]
 fn test_vm_override_trace_heights() -> eyre::Result<()> {
-    let e = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let e = BabyBearPoseidon2CpuEngineV2::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     let program = Program::<BabyBear>::from_instructions(&[
         Instruction::large_from_isize(ADD.global_opcode(), 0, 4, 0, 4, 0, 0, 0),
         Instruction::from_isize(TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -118,6 +120,7 @@ fn test_vm_override_trace_heights() -> eyre::Result<()> {
         program.into(),
         &e,
     ));
+    let e = TestEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
     // It's hard to define the mapping semantically. Please recompute the following magical AIR
     // heights by hands whenever something changes.
     let fixed_air_heights = vec![
