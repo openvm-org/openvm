@@ -10,7 +10,7 @@ use crate::{
         execution_mode::{MeteredCtx, Segment},
         interpreter::{
             alloc_pre_compute_buf, get_metered_pre_compute_instructions,
-            get_metered_pre_compute_max_size, split_pre_compute_buf, PreComputeInstruction,
+            get_metered_pre_compute_max_size, split_pre_compute_buf,
         },
         ExecutionError, ExecutorInventory, MeteredExecutionCtxTrait, MeteredExecutor,
         StaticProgramError, Streams, VmExecState, VmState,
@@ -47,8 +47,6 @@ where
             executor_idx_to_air_idx,
             &mut split_pre_compute_buf,
         )?;
-        let pre_compute_insns_box: Box<[PreComputeInstruction<F, Ctx>]> =
-            pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
 
@@ -60,7 +58,7 @@ where
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
-            pre_compute_insns_box,
+            pre_compute_insns,
             pc_start: exe.pc_start,
             init_memory,
             lib,
@@ -138,7 +136,7 @@ where
                 .get(b"asm_run")
                 .expect("Failed to get asm_run symbol");
 
-            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
+            let pre_compute_insns_ptr = self.pre_compute_insns.as_ptr();
             let vm_exec_state_ptr =
                 vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
 

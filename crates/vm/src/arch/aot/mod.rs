@@ -29,7 +29,7 @@ pub struct AotInstance<F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns_box: Box<[PreComputeInstruction<F, Ctx>]>,
+    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
     pc_start: u32,
 }
 

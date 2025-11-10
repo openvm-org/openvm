@@ -10,7 +10,7 @@ use crate::{
         execution_mode::ExecutionCtx,
         interpreter::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
-            split_pre_compute_buf, PreComputeInstruction,
+            split_pre_compute_buf,
         },
         AotError, ExecutionError, Executor, ExecutorInventory, ExitCode, StaticProgramError,
         Streams, VmExecState, VmState,
@@ -215,15 +215,13 @@ where
             inventory,
             &mut split_pre_compute_buf,
         )?;
-        let pre_compute_insns_box: Box<[PreComputeInstruction<F, ExecutionCtx>]> =
-            pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
 
         Ok(Self {
             system_config: inventory.config().clone(),
             pre_compute_buf,
-            pre_compute_insns_box,
+            pre_compute_insns,
             pc_start: exe.pc_start,
             init_memory,
             lib,
@@ -269,7 +267,7 @@ where
 
             let vm_exec_state_ptr =
                 vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
-            let pre_compute_insns_ptr = self.pre_compute_insns_box.as_ptr();
+            let pre_compute_insns_ptr = self.pre_compute_insns.as_ptr();
 
             asm_run(
                 vm_exec_state_ptr.cast(),
