@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
     utils::{assert_array_eq, not},
@@ -10,19 +9,12 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, TwoAdicField, extension::BinomiallyExtendable,
-};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::{
     IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSliceMut,
 };
-use stark_backend_v2::{
-    D_EF, EF, F,
-    keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::{eval_eq_sharp_uni, eval_eq_uni},
-    proof::Proof,
-};
+use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -242,47 +234,43 @@ pub(crate) fn generate_eq_ns_trace(
     preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
     let l_skip = vk.inner.params.l_skip;
-    let omega_skip_pows = F::two_adic_generator(l_skip)
-        .powers()
-        .take(1 << l_skip)
-        .collect_vec();
     // TODO: blob, MultiProofVecVec etc
     let records = preflights
         .iter()
         .map(|preflight| {
             let n_global = preflight.proof_shape.n_global();
+            let n_max = preflight.proof_shape.n_max;
             let rs = &preflight.batch_constraint.sumcheck_rnd;
             let xi = &preflight.batch_constraint.xi;
             let mut res = Vec::with_capacity(n_global + 1);
-            let mut eq = eval_eq_uni(l_skip, xi[0], rs[0]);
-            let mut eq_sharp = eval_eq_sharp_uni(&omega_skip_pows, &xi[..l_skip], rs[0]);
-            for i in 0..n_global {
+            for i in 0..n_max {
                 res.push(EqNsRecord {
                     xi: xi[l_skip + i],
-                    r: if i < preflight.proof_shape.n_max {
-                        rs[1 + i]
-                    } else {
-                        EF::ZERO
-                    },
+                    r: rs[1 + i],
                     r_prod: EF::ONE,
-                    eq,
-                    eq_sharp,
+                    eq: preflight.batch_constraint.eq_ns[i],
+                    eq_sharp: preflight.batch_constraint.eq_sharp_ns[i],
                     n_logup: preflight.proof_shape.n_logup,
                     n_max: preflight.proof_shape.n_max,
                 });
-                if i < preflight.proof_shape.n_max {
-                    let mult = EF::ONE - xi[l_skip + i] - rs[1 + i]
-                        + (xi[l_skip + i] * rs[1 + i]).double();
-                    eq *= mult;
-                    eq_sharp *= mult;
-                }
+            }
+            for i in n_max..n_global {
+                res.push(EqNsRecord {
+                    xi: xi[l_skip + i],
+                    r: EF::ZERO,
+                    r_prod: EF::ONE,
+                    eq: preflight.batch_constraint.eq_ns[n_max],
+                    eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
+                    n_logup: preflight.proof_shape.n_logup,
+                    n_max: preflight.proof_shape.n_max,
+                });
             }
             res.push(EqNsRecord {
                 xi: EF::ZERO,
                 r: EF::ZERO,
                 r_prod: EF::ONE,
-                eq,
-                eq_sharp,
+                eq: preflight.batch_constraint.eq_ns[n_max],
+                eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
                 n_logup: preflight.proof_shape.n_logup,
                 n_max: preflight.proof_shape.n_max,
             });
