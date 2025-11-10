@@ -3,10 +3,9 @@ mod tests {
     use std::{collections::HashMap, sync::Arc};
 
     use eyre::Result;
-    use openvm_circuit::system::memory::online::LinearMemory;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, Streams, VmExecutor},
-        system::memory::merkle::public_values::UserPublicValuesProof,
+        system::memory::{merkle::public_values::UserPublicValuesProof, online::LinearMemory},
         utils::{air_test, air_test_with_min_segments, test_system_config},
     };
     use openvm_instructions::{exe::VmExe, instruction::Instruction, LocalOpcode, SystemOpcode};
