@@ -24,9 +24,6 @@ impl<'a, F> AotInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
 {
-
-    
-
     pub fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
@@ -45,6 +42,7 @@ where
 
         // asm_run_internal part
         asm_str += "asm_run:\n";
+
         asm_str += &Self::push_external_registers();
         asm_str += "    mov rbx, rdi\n";
         asm_str += "    mov rbp, rsi\n";

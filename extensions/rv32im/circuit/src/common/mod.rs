@@ -1,33 +1,15 @@
 #[cfg(feature = "aot")]
 pub use aot::*;
 
+
+
 #[cfg(feature = "aot")]
 mod aot {
-    // Caller saved
-    pub const REG_C: &str = "rdx";
-    pub const REG_C_W: &str = "edx";
-    pub const REG_C_B: &str = "dx";
-    pub const REG_THIRD_ARG: &str = "rdx";
-
-    pub const REG_B: &str = "rsi";
-    pub const REG_B_W: &str = "esi";
-    pub const REG_SECOND_ARG: &str = "rsi";
-
-    pub const REG_A: &str = "rdi";
-    pub const REG_A_W: &str = "edi";
-    pub const REG_FIRST_ARG: &str = "rdi";    
-    
-    pub const REG_RETURN_VAL: &str = "rax";
-    pub const REG_D: &str = "rax";
-
-    // Callee saved
-    pub const REG_EXEC_STATE_PTR: &str = "rbx";
-    pub const REG_INSNS_PTR: &str = "rbp";
-    pub const REG_PC: &str = "r13";
-    pub const REG_PC_W: &str = "r13d";
-    pub const REG_GUEST_MEM_PTR: &str = "r15";
-
-    pub const DEFAULT_PC_OFFSET: i32 = 4;
+    pub use openvm_circuit::arch::aot::common::{
+        DEFAULT_PC_OFFSET, REG_A, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_W, REG_D,
+        REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_GUEST_MEM_PTR, REG_INSNS_PTR, REG_PC, REG_PC_W,
+        REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+    };
 
     pub(crate) use openvm_circuit::arch::aot::common::{
         RISCV_TO_X86_OVERRIDE_MAP, SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR,
