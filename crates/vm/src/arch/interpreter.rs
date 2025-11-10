@@ -695,9 +695,9 @@ fn system_opcode_pre_compute_size<F>(inst: &Instruction<F>) -> Option<usize> {
 }
 
 #[cfg(not(feature = "tco"))]
-pub fn get_pre_compute_instructions<'a, F, Ctx, E>(
+pub fn get_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
-    inventory: &'a ExecutorInventory<E>,
+    inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
 where
@@ -751,9 +751,9 @@ where
 }
 
 #[cfg(not(feature = "tco"))]
-pub fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
+pub fn get_metered_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
-    inventory: &'a ExecutorInventory<E>,
+    inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
 ) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
