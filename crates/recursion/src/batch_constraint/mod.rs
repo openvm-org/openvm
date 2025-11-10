@@ -24,11 +24,10 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{
         bus::{
-            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqMleBus, EqSharpUniBus,
-            EqZeroNBus, ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus,
-            SymbolicExpressionBus,
+            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqSharpUniBus, EqZeroNBus,
+            ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
         },
-        eq_airs::{Eq3bAir, EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
+        eq_airs::{EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
         expr_eval::{
             ColumnClaimAir, ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
         },
@@ -55,7 +54,7 @@ pub mod fractions_folder;
 pub mod sumcheck;
 
 /// AIR index within the BatchConstraintModule
-pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 9;
+pub(crate) const LOCAL_SYMBOLIC_EXPRESSION_AIR_IDX: usize = 8;
 
 pub struct BatchConstraintModule {
     transcript_bus: TranscriptBus,
@@ -73,7 +72,6 @@ pub struct BatchConstraintModule {
     sumcheck_bus: SumcheckClaimBus,
 
     zero_n_bus: EqZeroNBus,
-    eq_mle_bus: EqMleBus,
     eq_sharp_uni_bus: EqSharpUniBus,
     eq_3b_bus: Eq3bBus,
 
@@ -118,7 +116,6 @@ impl BatchConstraintModule {
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
-            eq_mle_bus: EqMleBus::new(b.new_bus_idx()),
             eq_sharp_uni_bus: EqSharpUniBus::new(b.new_bus_idx()),
             eq_3b_bus: Eq3bBus::new(b.new_bus_idx()),
             symbolic_expression_bus: SymbolicExpressionBus::new(b.new_bus_idx()),
@@ -251,8 +248,7 @@ impl AirModule for BatchConstraintModule {
             l_skip,
         };
         let eq_mle_air = EqMleAir {
-            transcript_bus: self.transcript_bus,
-            eq_mle_bus: self.eq_mle_bus,
+            eq_3b_bus: self.eq_3b_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             l_skip,
         };
@@ -272,11 +268,6 @@ impl AirModule for BatchConstraintModule {
         let eq_uni_air = EqUniAir {
             r_xi_bus: self.batch_constraint_conductor_bus,
             zero_n_bus: self.zero_n_bus,
-            l_skip,
-        };
-        let eq_3b_air = Eq3bAir {
-            eq_mle_bus: self.eq_mle_bus,
-            eq_3b_bus: self.eq_3b_bus,
             l_skip,
         };
         let symbolic_expression_air = SymbolicExpressionAir {
@@ -321,7 +312,6 @@ impl AirModule for BatchConstraintModule {
             Arc::new(eq_sharp_uni_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_receiver_air) as AirRef<_>,
             Arc::new(eq_uni_air) as AirRef<_>,
-            Arc::new(eq_3b_air) as AirRef<_>,
             Arc::new(symbolic_expression_air) as AirRef<_>,
             Arc::new(column_claim_air) as AirRef<_>,
             Arc::new(expression_claim_air) as AirRef<_>,
@@ -520,9 +510,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(uni_trace),
             transpose(uni_receiver_trace),
             transpose(eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights)),
-            transpose(eq_airs::generate_eq_3b_trace(
-                child_vk, &mle_blob, preflights,
-            )),
             symbolic_expr_ctx,
             transpose(expr_eval::generate_column_claim_trace(
                 child_vk, proofs, preflights,
