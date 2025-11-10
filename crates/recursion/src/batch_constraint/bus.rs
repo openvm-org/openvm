@@ -9,6 +9,7 @@ use crate::define_typed_per_proof_permutation_bus;
 pub(super) enum BatchConstraintInnerMessageType {
     R,
     Xi,
+    Mu,
 }
 
 impl BatchConstraintInnerMessageType {

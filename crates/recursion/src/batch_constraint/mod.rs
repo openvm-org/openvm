@@ -12,7 +12,7 @@ use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, TwoAdicField};
 use stark_backend_v2::{
     BabyBearPoseidon2CpuEngineV2, Digest, EF, F, StarkEngineV2,
     keygen::types::MultiStarkVerifyingKeyV2,
-    poly_common::eval_eq_uni_at_one,
+    poly_common::{eval_eq_sharp_uni, eval_eq_uni, eval_eq_uni_at_one},
     poseidon2::sponge::{FiatShamirTranscript, TranscriptHistory},
     proof::{BatchConstraintProof, Proof},
     prover::{
@@ -27,9 +27,10 @@ use crate::{
             BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqSharpUniBus, EqZeroNBus,
             ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
         },
-        eq_airs::{EqMleAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
+        eq_airs::{Eq3bAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
         expr_eval::{
             ColumnClaimAir, ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
+            generate_constraints_folding_blob, generate_interactions_folding_blob,
         },
         expression_claim::ExpressionClaimAir,
         fractions_folder::FractionsFolderAir,
@@ -205,6 +206,26 @@ impl BatchConstraintModule {
             }
         }
 
+        let omega_skip_pows = F::two_adic_generator(l_skip)
+            .powers()
+            .take(1 << l_skip)
+            .collect_vec();
+
+        let mut eq_ns = Vec::with_capacity(preflight.proof_shape.n_max + 1);
+        let mut eq_sharp_ns = Vec::with_capacity(preflight.proof_shape.n_max + 1);
+        let mut eq = eval_eq_uni(l_skip, xi[0], sumcheck_rnd[0]);
+        let mut eq_sharp = eval_eq_sharp_uni(&omega_skip_pows, &xi[..l_skip], sumcheck_rnd[0]);
+        eq_ns.push(eq);
+        eq_sharp_ns.push(eq_sharp);
+        for i in 0..preflight.proof_shape.n_max {
+            let mult = EF::ONE - xi[l_skip + i] - sumcheck_rnd[1 + i]
+                + (xi[l_skip + i] * sumcheck_rnd[1 + i]).double();
+            eq *= mult;
+            eq_sharp *= mult;
+            eq_ns.push(eq);
+            eq_sharp_ns.push(eq_sharp);
+        }
+
         preflight.batch_constraint = BatchConstraintPreflight {
             lambda_tidx,
             tidx_before_univariate,
@@ -213,6 +234,8 @@ impl BatchConstraintModule {
             post_tidx: ts.len(),
             xi,
             sumcheck_rnd,
+            eq_ns,
+            eq_sharp_ns,
         }
     }
 }
@@ -224,6 +247,7 @@ impl AirModule for BatchConstraintModule {
         let fraction_folder_air = FractionsFolderAir {
             transcript_bus: self.transcript_bus,
             sumcheck_bus: self.sumcheck_bus,
+            mu_bus: self.batch_constraint_conductor_bus,
             gkr_claim_bus: self.gkr_claim_bus,
         };
         let sumcheck_uni_air = UnivariateSumcheckAir {
@@ -247,7 +271,7 @@ impl AirModule for BatchConstraintModule {
             r_xi_bus: self.batch_constraint_conductor_bus,
             l_skip,
         };
-        let eq_mle_air = EqMleAir {
+        let eq_3b_air = Eq3bAir {
             eq_3b_bus: self.eq_3b_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             l_skip,
@@ -290,7 +314,7 @@ impl AirModule for BatchConstraintModule {
         };
         let expression_claim_air = ExpressionClaimAir {
             claim_bus: self.expression_claim_bus,
-            transcript_bus: self.transcript_bus,
+            mu_bus: self.batch_constraint_conductor_bus,
         };
         let interactions_folding_air = InteractionsFoldingAir {
             transcript_bus: self.transcript_bus,
@@ -308,7 +332,7 @@ impl AirModule for BatchConstraintModule {
             Arc::new(sumcheck_uni_air) as AirRef<_>,
             Arc::new(sumcheck_lin_air) as AirRef<_>,
             Arc::new(eq_ns_air) as AirRef<_>,
-            Arc::new(eq_mle_air) as AirRef<_>,
+            Arc::new(eq_3b_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_air) as AirRef<_>,
             Arc::new(eq_sharp_uni_receiver_air) as AirRef<_>,
             Arc::new(eq_uni_air) as AirRef<_>,
@@ -492,7 +516,9 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
         let symbolic_expr_ctx = transpose(common);
         let (uni_trace, uni_receiver_trace) =
             eq_airs::generate_eq_sharp_uni_traces(child_vk, proofs, preflights);
-        let mle_blob = eq_airs::generate_eq_mle_blob(child_vk, preflights);
+        let eq_3b_blob = eq_airs::generate_eq_3b_blob(child_vk, preflights);
+        let cf_blob = generate_constraints_folding_blob(child_vk, &blob, preflights);
+        let if_blob = generate_interactions_folding_blob(child_vk, &blob, &eq_3b_blob, preflights);
         vec![
             transpose(fractions_folder::generate_trace(
                 child_vk, proofs, preflights,
@@ -504,8 +530,10 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
                 child_vk, proofs, preflights,
             )),
             transpose(eq_airs::generate_eq_ns_trace(child_vk, proofs, preflights)),
-            transpose(eq_airs::generate_eq_mle_trace(
-                child_vk, &mle_blob, preflights,
+            transpose(eq_airs::generate_eq_3b_trace(
+                child_vk,
+                &eq_3b_blob,
+                preflights,
             )),
             transpose(uni_trace),
             transpose(uni_receiver_trace),
@@ -515,13 +543,13 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
                 child_vk, proofs, preflights,
             )),
             transpose(expression_claim::generate_trace(
-                child_vk, proofs, preflights,
+                child_vk, &cf_blob, &if_blob, preflights,
             )),
             transpose(expr_eval::generate_interactions_folding_trace(
-                child_vk, &blob, preflights,
+                child_vk, &blob, &if_blob, preflights,
             )),
             transpose(expr_eval::generate_constraints_folding_trace(
-                child_vk, &blob, preflights,
+                &cf_blob, preflights,
             )),
         ]
     }

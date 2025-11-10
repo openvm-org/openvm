@@ -197,6 +197,8 @@ pub struct BatchConstraintPreflight {
     pub post_tidx: usize,
     pub xi: Vec<EF>,
     pub sumcheck_rnd: Vec<EF>,
+    pub eq_ns: Vec<EF>,
+    pub eq_sharp_ns: Vec<EF>,
 }
 
 #[derive(Clone, Debug, Default)]

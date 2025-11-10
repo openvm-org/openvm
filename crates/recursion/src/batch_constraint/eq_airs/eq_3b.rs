@@ -13,9 +13,7 @@ use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{
-    D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, prover::poly::evals_eq_hypercubes,
-};
+use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -33,7 +31,7 @@ use crate::{
 
 #[derive(AlignedBorrow, Clone, Copy)]
 #[repr(C)]
-pub struct EqMleColumns<T> {
+pub struct Eq3bColumns<T> {
     is_valid: T,
     is_first: T,
     proof_idx: T,
@@ -60,25 +58,23 @@ pub struct EqMleColumns<T> {
     eq: [T; D_EF],
 }
 
-/// AIR for constraining computation of the `eq(\xi_3, b_{T,\hat\sigma})` term for the logup input
-/// layer sumcheck.
-pub struct EqMleAir {
+pub struct Eq3bAir {
     pub eq_3b_bus: Eq3bBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
 
     pub l_skip: usize,
 }
 
-impl<F> BaseAirWithPublicValues<F> for EqMleAir {}
-impl<F> PartitionedBaseAir<F> for EqMleAir {}
+impl<F> BaseAirWithPublicValues<F> for Eq3bAir {}
+impl<F> PartitionedBaseAir<F> for Eq3bAir {}
 
-impl<F> BaseAir<F> for EqMleAir {
+impl<F> BaseAir<F> for Eq3bAir {
     fn width(&self) -> usize {
-        EqMleColumns::<F>::width()
+        Eq3bColumns::<F>::width()
     }
 }
 
-impl<AB: AirBuilder + InteractionBuilder> Air<AB> for EqMleAir
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for Eq3bAir
 where
     <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
 {
@@ -86,8 +82,8 @@ where
         let main = builder.main();
         let (local, next) = (main.row_slice(0), main.row_slice(1));
 
-        let local: &EqMleColumns<AB::Var> = (*local).borrow();
-        let next: &EqMleColumns<AB::Var> = (*next).borrow();
+        let local: &Eq3bColumns<AB::Var> = (*local).borrow();
+        let next: &Eq3bColumns<AB::Var> = (*next).borrow();
 
         type LoopSubAir = NestedForLoopSubAir<3, 2>;
         LoopSubAir {}.eval(
@@ -264,35 +260,41 @@ pub(crate) struct StackedIdxRecord {
     is_last_in_air: bool,
 }
 
-pub struct EqMleBlob {
-    pub(crate) products: MultiProofVecVec<EF>,
+impl StackedIdxRecord {
+    pub fn eq_mle(&self, xi: &[EF], l_skip: usize, n_logup: usize) -> EF {
+        xi[l_skip + self.n_lift..l_skip + n_logup]
+            .iter()
+            .enumerate()
+            .map(|(i, &x)| {
+                if self.stacked_idx & (1 << (l_skip + self.n_lift + i)) > 0 {
+                    x
+                } else {
+                    EF::ONE - x
+                }
+            })
+            .fold(EF::ONE, |acc, x| acc * x)
+    }
+}
+
+pub struct Eq3bBlob {
     pub(crate) all_stacked_ids: MultiProofVecVec<StackedIdxRecord>,
 }
 
-impl EqMleBlob {
+impl Eq3bBlob {
     fn new() -> Self {
         Self {
-            products: MultiProofVecVec::new(),
             all_stacked_ids: MultiProofVecVec::new(),
         }
     }
 }
 
-pub(crate) fn generate_eq_mle_blob(
+pub(crate) fn generate_eq_3b_blob(
     vk: &MultiStarkVerifyingKeyV2,
     preflights: &[Preflight],
-) -> EqMleBlob {
+) -> Eq3bBlob {
     let l_skip = vk.inner.params.l_skip;
-    let mut blob = EqMleBlob::new();
+    let mut blob = Eq3bBlob::new();
     for preflight in preflights.iter() {
-        blob.products.extend(evals_eq_hypercubes(
-            preflight.proof_shape.n_logup,
-            preflight.batch_constraint.xi[l_skip..l_skip + preflight.proof_shape.n_logup]
-                .iter()
-                .rev(),
-        ));
-        blob.products.end_proof();
-
         let mut row_idx = 0;
         let n_logup = preflight.proof_shape.n_logup;
         for (sort_idx, (air_idx, vdata)) in
@@ -319,12 +321,12 @@ pub(crate) fn generate_eq_mle_blob(
     blob
 }
 
-pub(crate) fn generate_eq_mle_trace(
+pub(crate) fn generate_eq_3b_trace(
     vk: &MultiStarkVerifyingKeyV2,
-    blob: &EqMleBlob,
+    blob: &Eq3bBlob,
     preflights: &[Preflight],
 ) -> RowMajorMatrix<F> {
-    let width = EqMleColumns::<F>::width();
+    let width = Eq3bColumns::<F>::width();
     let l_skip = vk.inner.params.l_skip;
     let heights = preflights
         .iter()
@@ -353,7 +355,7 @@ pub(crate) fn generate_eq_mle_trace(
                     .chunks_exact_mut(width)
                     .enumerate()
                     .for_each(|(n, chunk)| {
-                        let cols: &mut EqMleColumns<_> = chunk.borrow_mut();
+                        let cols: &mut Eq3bColumns<_> = chunk.borrow_mut();
                         cols.is_valid = F::ONE;
                         cols.is_first = F::from_bool(j == 0 && n == 0);
                         cols.proof_idx = F::from_canonical_usize(pidx);
@@ -392,7 +394,7 @@ pub(crate) fn generate_eq_mle_trace(
         .par_chunks_mut(width)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let cols: &mut EqMleColumns<F> = chunk.borrow_mut();
+            let cols: &mut Eq3bColumns<F> = chunk.borrow_mut();
             cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_first_in_air = F::ONE;

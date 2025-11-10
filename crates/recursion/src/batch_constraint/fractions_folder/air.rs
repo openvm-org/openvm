@@ -12,7 +12,10 @@ use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    batch_constraint::bus::{SumcheckClaimBus, SumcheckClaimMessage},
+    batch_constraint::bus::{
+        BatchConstraintConductorBus, BatchConstraintConductorMessage,
+        BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
+    },
     bus::{BatchConstraintModuleBus, BatchConstraintModuleMessage, TranscriptBus},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply, ext_field_subtract},
@@ -43,6 +46,7 @@ pub struct FractionsFolderCols<T> {
 pub struct FractionsFolderAir {
     pub transcript_bus: TranscriptBus,
     pub sumcheck_bus: SumcheckClaimBus,
+    pub mu_bus: BatchConstraintConductorBus,
     pub gkr_claim_bus: BatchConstraintModuleBus,
 }
 
@@ -228,6 +232,17 @@ where
                 ],
             },
             local.is_valid * is_last,
+        );
+
+        self.mu_bus.send(
+            builder,
+            local.proof_idx,
+            BatchConstraintConductorMessage {
+                msg_type: BatchConstraintInnerMessageType::Mu.to_field(),
+                idx: AB::Expr::ZERO,
+                value: local.mu.map(Into::into),
+            },
+            local.is_first * local.is_valid,
         );
     }
 }
