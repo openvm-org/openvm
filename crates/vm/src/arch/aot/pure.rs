@@ -30,6 +30,9 @@ impl<'a, F> AotInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
 {
+
+    
+
     pub fn create_pure_asm<E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
@@ -173,6 +176,7 @@ where
                         })?;
                 asm_str += &segment;
             } else {
+                asm_str += &SYNC_GPR_TO_XMM();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();

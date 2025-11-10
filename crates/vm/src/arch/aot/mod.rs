@@ -16,6 +16,7 @@ use crate::{
 pub mod common;
 mod metered_execute;
 mod pure;
+pub mod common;
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
