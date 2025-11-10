@@ -19,6 +19,7 @@ openvm-instructions = { workspace = true }
 openvm-rv32im-circuit = { workspace = true }
 openvm-rv32im-transpiler = { workspace = true }
 openvm-native-compiler = { workspace = true }
+stark-backend-v2 = { workspace = true }
 
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }

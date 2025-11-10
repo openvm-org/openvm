@@ -18,10 +18,12 @@ use openvm_rv32im_circuit::{
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 
 mod sha256_chip;
 pub use sha256_chip::*;
@@ -75,10 +77,11 @@ impl InitFileGenerator for Sha256Rv32Config {}
 #[derive(Clone)]
 pub struct Sha256Rv32CpuBuilder;
 
-impl<E, SC> VmBuilder<E> for Sha256Rv32CpuBuilder
+type SC = stark_backend_v2::SC;
+impl<E> VmBuilder<E> for Sha256Rv32CpuBuilder
 where
     SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
+    E: StarkEngine<SC = SC, PB = CpuBackend, PD = CpuDevice>,
     Val<SC>: PrimeField32,
 {
     type VmConfig = Sha256Rv32Config;
