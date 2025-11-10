@@ -315,10 +315,12 @@ unsafe fn execute_pos2_e1_impl<
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
+    let pre_compute: &Pos2PreCompute<F, SBOX_REGISTERS> =
+        std::slice::from_raw_parts(pre_compute, size_of::<Pos2PreCompute<F, SBOX_REGISTERS>>())
+            .borrow();
     execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(pre_compute, exec_state);
 }
 
@@ -330,10 +332,14 @@ unsafe fn execute_pos2_e2_impl<
     const SBOX_REGISTERS: usize,
     const IS_PERM: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<Pos2PreCompute<F, SBOX_REGISTERS>>>(),
+    )
+    .borrow();
     let height =
         execute_pos2_e12_impl::<_, _, SBOX_REGISTERS, IS_PERM>(&pre_compute.data, exec_state);
     exec_state
@@ -348,10 +354,14 @@ unsafe fn execute_verify_batch_e1_impl<
     CTX: ExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = pre_compute.borrow();
+    let pre_compute: &VerifyBatchPreCompute<F, SBOX_REGISTERS> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<VerifyBatchPreCompute<F, SBOX_REGISTERS>>(),
+    )
+    .borrow();
     // NOTE: using optimistic execution
     execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(pre_compute, exec_state);
 }
@@ -363,10 +373,15 @@ unsafe fn execute_verify_batch_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const SBOX_REGISTERS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>> =
+        std::slice::from_raw_parts(
+            pre_compute,
+            size_of::<E2PreCompute<VerifyBatchPreCompute<F, SBOX_REGISTERS>>>(),
+        )
+        .borrow();
     // NOTE: using optimistic execution
     let height =
         execute_verify_batch_e12_impl::<_, _, SBOX_REGISTERS, true>(&pre_compute.data, exec_state);

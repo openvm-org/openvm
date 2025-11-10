@@ -514,10 +514,14 @@ unsafe fn execute_e1_setup_impl<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
+    let pre_compute: &FieldExpressionPreCompute = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<FieldExpressionPreCompute>(),
+)
+.borrow();
     execute_e12_setup_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2>(pre_compute, exec_state)
 }
 
@@ -530,10 +534,14 @@ unsafe fn execute_e2_setup_impl<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<E2PreCompute<FieldExpressionPreCompute>>(),
+)
+.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -551,10 +559,14 @@ unsafe fn execute_e1_impl<
     const FIELD_TYPE: u8,
     const OP: u8,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
+    let pre_compute: &FieldExpressionPreCompute = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<FieldExpressionPreCompute>(),
+)
+.borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
 }
 
@@ -569,10 +581,14 @@ unsafe fn execute_e2_impl<
     const FIELD_TYPE: u8,
     const OP: u8,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<E2PreCompute<FieldExpressionPreCompute>>(),
+)
+.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -591,10 +607,14 @@ unsafe fn execute_e1_generic_impl<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &FieldExpressionPreCompute = pre_compute.borrow();
+    let pre_compute: &FieldExpressionPreCompute = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<FieldExpressionPreCompute>(),
+)
+.borrow();
     execute_e12_generic_impl::<_, _, BLOCKS, BLOCK_SIZE>(pre_compute, exec_state);
 }
 
@@ -607,10 +627,14 @@ unsafe fn execute_e2_generic_impl<
     const BLOCK_SIZE: usize,
     const IS_FP2: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<E2PreCompute<FieldExpressionPreCompute>>(),
+)
+.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

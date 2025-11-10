@@ -1016,7 +1016,7 @@ fn parse_executor_type(
 /// ```
 /// #[create_tco_handler]
 /// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
-///     pre_compute: &[u8],
+///     pre_compute: *const u8,
 ///     state: &mut VmExecState<F, GuestMemory, CTX>,
 /// ) where
 ///     CTX: ExecutionCtxTrait,

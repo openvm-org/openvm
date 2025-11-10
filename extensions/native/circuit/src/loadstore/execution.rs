@@ -179,20 +179,22 @@ where
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_loadw<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
+    let pre_compute: &NativeLoadStorePreCompute<F> =
+        std::slice::from_raw_parts(pre_compute, size_of::<NativeLoadStorePreCompute<F>>()).borrow();
     execute_e12_loadw::<_, _, NUM_CELLS>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_storew<F: PrimeField32, CTX: ExecutionCtxTrait, const NUM_CELLS: usize>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
+    let pre_compute: &NativeLoadStorePreCompute<F> =
+        std::slice::from_raw_parts(pre_compute, size_of::<NativeLoadStorePreCompute<F>>()).borrow();
     execute_e12_storew::<_, _, NUM_CELLS>(pre_compute, exec_state);
 }
 
@@ -203,10 +205,11 @@ unsafe fn execute_e1_hint_storew<
     CTX: ExecutionCtxTrait,
     const NUM_CELLS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &NativeLoadStorePreCompute<F> = pre_compute.borrow();
+    let pre_compute: &NativeLoadStorePreCompute<F> =
+        std::slice::from_raw_parts(pre_compute, size_of::<NativeLoadStorePreCompute<F>>()).borrow();
     execute_e12_hint_storew::<_, _, NUM_CELLS>(pre_compute, exec_state)
 }
 
@@ -217,10 +220,14 @@ unsafe fn execute_e2_loadw<
     CTX: MeteredExecutionCtxTrait,
     const NUM_CELLS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<NativeLoadStorePreCompute<F>>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -234,10 +241,14 @@ unsafe fn execute_e2_storew<
     CTX: MeteredExecutionCtxTrait,
     const NUM_CELLS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<NativeLoadStorePreCompute<F>>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
@@ -251,10 +262,14 @@ unsafe fn execute_e2_hint_storew<
     CTX: MeteredExecutionCtxTrait,
     const NUM_CELLS: usize,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<NativeLoadStorePreCompute<F>> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<NativeLoadStorePreCompute<F>>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

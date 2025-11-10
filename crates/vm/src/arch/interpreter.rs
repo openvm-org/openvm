@@ -1,5 +1,3 @@
-#[cfg(feature = "tco")]
-use std::marker::PhantomData;
 use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
@@ -39,7 +37,7 @@ use crate::{
 // NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
-pub struct InterpretedInstance<'a, F, Ctx> {
+pub struct InterpretedInstance<F, Ctx> {
     system_config: SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
@@ -50,7 +48,7 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     /// SAFETY: The first `pc_base / DEFAULT_PC_STEP` entries will be unreachable. We do this to
     /// avoid needing to subtract `pc_base` during runtime.
     #[cfg(not(feature = "tco"))]
-    pre_compute_insns: Vec<PreComputeInstruction<'a, F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
     #[cfg(feature = "tco")]
     pre_compute_max_size: usize,
     /// Handler function pointers for tail call optimization.
@@ -60,16 +58,17 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     pc_start: u32,
 
     init_memory: SparseMemoryImage,
-    #[cfg(feature = "tco")]
-    phantom: PhantomData<&'a ()>,
 }
 
 #[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
-pub struct PreComputeInstruction<'a, F, Ctx> {
+pub struct PreComputeInstruction<F, Ctx> {
     pub handler: ExecuteFunc<F, Ctx>,
-    pub pre_compute: &'a [u8],
+    pub pre_compute: *const u8,
 }
+
+unsafe impl<F, Ctx> Send for PreComputeInstruction<F, Ctx> {}
+unsafe impl<F, Ctx> Sync for PreComputeInstruction<F, Ctx> {}
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -115,7 +114,7 @@ macro_rules! run {
 // pointers
 // - Generic in `Ctx`
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<F, Ctx> InterpretedInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
@@ -123,7 +122,7 @@ where
     /// Creates a new interpreter instance for pure execution.
     // (E1 execution)
     pub fn new<E>(
-        inventory: &'a ExecutorInventory<E>,
+        inventory: &ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
@@ -177,8 +176,6 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
-            #[cfg(feature = "tco")]
-            phantom: PhantomData,
         })
     }
 
@@ -198,7 +195,7 @@ where
     ///   initialize the parts of the buffer that the instruction handler will use.
     #[cfg(feature = "tco")]
     #[inline(always)]
-    pub fn get_pre_compute(&self, pc: u32) -> &[u8] {
+    pub fn get_pre_compute(&self, pc: u32) -> *const u8 {
         let pc_idx = get_pc_index(pc);
         // SAFETY:
         // - we assume that pc is in bounds
@@ -214,7 +211,7 @@ where
                 .pre_compute_buf
                 .ptr
                 .add(pc_idx * self.pre_compute_max_size);
-            std::slice::from_raw_parts(ptr, self.pre_compute_max_size)
+            ptr
         }
     }
 
@@ -226,7 +223,7 @@ where
     }
 }
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<'a, F, Ctx> InterpretedInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
@@ -293,15 +290,13 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
-            #[cfg(feature = "tco")]
-            phantom: PhantomData,
         })
     }
 }
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<F> InterpretedInstance<'_, F, ExecutionCtx>
+impl<F> InterpretedInstance<F, ExecutionCtx>
 where
     F: PrimeField32,
 {
@@ -365,7 +360,7 @@ where
     }
 }
 
-impl<F> InterpretedInstance<'_, F, MeteredCtx>
+impl<F> InterpretedInstance<F, MeteredCtx>
 where
     F: PrimeField32,
 {
@@ -456,7 +451,7 @@ where
     }
 }
 
-impl<F> InterpretedInstance<'_, F, MeteredCostCtx>
+impl<F> InterpretedInstance<F, MeteredCostCtx>
 where
     F: PrimeField32,
 {
@@ -614,10 +609,11 @@ impl Drop for AlignedBuf {
 
 #[inline(always)]
 unsafe fn terminate_execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &TerminatePreCompute = pre_compute.borrow();
+    let pre_compute: &TerminatePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<TerminatePreCompute>()).borrow();
     exec_state.exit_code = Ok(Some(pre_compute.exit_code));
     CTX::on_terminate(exec_state);
 }
@@ -703,7 +699,7 @@ pub fn get_pre_compute_instructions<'a, F, Ctx, E>(
     program: &Program<F>,
     inventory: &'a ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
@@ -729,12 +725,12 @@ where
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,
-                        pre_compute: buf,
+                        pre_compute: buf.as_ptr(),
                     }
                 } else if let Some(executor) = inventory.get_executor(inst.opcode) {
                     PreComputeInstruction {
                         handler: executor.pre_compute(pc, inst, buf)?,
-                        pre_compute: buf,
+                        pre_compute: buf.as_ptr(),
                     }
                 } else {
                     return Err(StaticProgramError::DisabledOperation {
@@ -746,7 +742,7 @@ where
                 // Dead instruction at this pc
                 PreComputeInstruction {
                     handler: unreachable_handler,
-                    pre_compute: buf,
+                    pre_compute: buf.as_ptr(),
                 }
             };
             Ok(pre_inst)
@@ -760,7 +756,7 @@ pub fn get_metered_pre_compute_instructions<'a, F, Ctx, E>(
     inventory: &'a ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<'a, F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
@@ -785,7 +781,7 @@ where
                 if let Some(handler) = get_system_opcode_handler(inst, buf) {
                     PreComputeInstruction {
                         handler,
-                        pre_compute: buf,
+                        pre_compute: buf.as_ptr(),
                     }
                 } else if let Some(&executor_idx) = inventory.instruction_lookup.get(&inst.opcode) {
                     let executor_idx = executor_idx as usize;
@@ -796,7 +792,7 @@ where
                     let air_idx = executor_idx_to_air_idx[executor_idx];
                     PreComputeInstruction {
                         handler: executor.metered_pre_compute(air_idx, pc, inst, buf)?,
-                        pre_compute: buf,
+                        pre_compute: buf.as_ptr(),
                     }
                 } else {
                     return Err(StaticProgramError::DisabledOperation {
@@ -807,7 +803,7 @@ where
             } else {
                 PreComputeInstruction {
                     handler: unreachable_handler,
-                    pre_compute: buf,
+                    pre_compute: buf.as_ptr(),
                 }
             };
             Ok(pre_inst)

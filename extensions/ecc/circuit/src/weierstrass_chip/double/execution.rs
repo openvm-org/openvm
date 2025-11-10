@@ -313,10 +313,11 @@ unsafe fn execute_e1_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &EcDoublePreCompute = pre_compute.borrow();
+    let pre_compute: &EcDoublePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<EcDoublePreCompute>()).borrow();
     execute_e12_impl::<_, _, BLOCKS, BLOCK_SIZE, CURVE_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
@@ -330,10 +331,12 @@ unsafe fn execute_e2_impl<
     const CURVE_TYPE: u8,
     const IS_SETUP: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> = pre_compute.borrow();
+    let e2_pre_compute: &E2PreCompute<EcDoublePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcDoublePreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);

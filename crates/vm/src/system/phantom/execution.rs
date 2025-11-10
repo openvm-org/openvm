@@ -219,20 +219,23 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &PhantomPreCompute<F> = pre_compute.borrow();
+    let pre_compute: &PhantomPreCompute<F> =
+        std::slice::from_raw_parts(pre_compute, size_of::<PhantomPreCompute<F>>()).borrow();
     execute_e12_impl(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<PhantomPreCompute<F>> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<PhantomPreCompute<F>> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<PhantomPreCompute<F>>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

@@ -18,7 +18,7 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<'a, F, Ctx> AotInstance<F, Ctx>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
@@ -47,7 +47,7 @@ where
             executor_idx_to_air_idx,
             &mut split_pre_compute_buf,
         )?;
-        let pre_compute_insns_box: Box<[PreComputeInstruction<'a, F, Ctx>]> =
+        let pre_compute_insns_box: Box<[PreComputeInstruction<F, Ctx>]> =
             pre_compute_insns.into_boxed_slice();
 
         let init_memory = exe.init_memory.clone();
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<F> AotInstance<'_, F, MeteredCtx>
+impl<F> AotInstance<F, MeteredCtx>
 where
     F: PrimeField32,
 {

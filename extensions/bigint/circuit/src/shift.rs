@@ -148,20 +148,28 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &ShiftPreCompute = pre_compute.borrow();
+    let pre_compute: &ShiftPreCompute = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<ShiftPreCompute>(),
+)
+.borrow();
     execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<ShiftPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<ShiftPreCompute> = std::slice::from_raw_parts(
+    pre_compute,
+    size_of::<E2PreCompute<ShiftPreCompute>>(),
+)
+.borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

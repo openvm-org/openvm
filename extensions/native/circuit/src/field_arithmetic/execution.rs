@@ -282,10 +282,11 @@ unsafe fn execute_e1_impl<
     const B_IS_IMM: bool,
     const OPCODE: u8,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &FieldArithmeticPreCompute = pre_compute.borrow();
+    let pre_compute: &FieldArithmeticPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<FieldArithmeticPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, A_IS_IMM, B_IS_IMM, OPCODE>(pre_compute, exec_state)
 }
 
@@ -298,10 +299,14 @@ unsafe fn execute_e2_impl<
     const B_IS_IMM: bool,
     const OPCODE: u8,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<FieldArithmeticPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<FieldArithmeticPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

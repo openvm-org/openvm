@@ -253,10 +253,11 @@ unsafe fn execute_e1_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &BaseAluPreCompute = pre_compute.borrow();
+    let pre_compute: &BaseAluPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<BaseAluPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
@@ -268,10 +269,12 @@ unsafe fn execute_e2_impl<
     const IS_IMM: bool,
     OP: AluOp,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let pre_compute: &E2PreCompute<BaseAluPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<BaseAluPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<BaseAluPreCompute>>())
+            .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);

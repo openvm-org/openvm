@@ -198,10 +198,11 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STOREW: bool>(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &HintStorePreCompute = pre_compute.borrow();
+    let pre_compute: &HintStorePreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<HintStorePreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_HINT_STOREW>(pre_compute, exec_state)?;
     Ok(())
 }
@@ -213,10 +214,12 @@ unsafe fn execute_e2_impl<
     CTX: MeteredExecutionCtxTrait,
     const IS_HINT_STOREW: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<HintStorePreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<HintStorePreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<HintStorePreCompute>>())
+            .borrow();
     let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STOREW>(&pre_compute.data, exec_state)?;
     exec_state
         .ctx

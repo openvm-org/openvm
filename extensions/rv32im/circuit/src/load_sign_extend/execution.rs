@@ -226,10 +226,11 @@ unsafe fn execute_e1_impl<
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &LoadSignExtendPreCompute = pre_compute.borrow();
+    let pre_compute: &LoadSignExtendPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<LoadSignExtendPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, IS_LOADB, ENABLED>(pre_compute, exec_state)
 }
 
@@ -241,10 +242,14 @@ unsafe fn execute_e2_impl<
     const IS_LOADB: bool,
     const ENABLED: bool,
 >(
-    pre_compute: &[u8],
+    pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = pre_compute.borrow();
+    let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = std::slice::from_raw_parts(
+        pre_compute,
+        size_of::<E2PreCompute<LoadSignExtendPreCompute>>(),
+    )
+    .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
