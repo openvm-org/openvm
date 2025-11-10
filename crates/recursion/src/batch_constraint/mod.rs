@@ -321,6 +321,7 @@ impl AirModule for BatchConstraintModule {
             air_shape_bus: self.air_shape_bus,
             interaction_bus: self.interactions_folding_bus,
             expression_claim_bus: self.expression_claim_bus,
+            eq_3b_bus: self.eq_3b_bus,
         };
         let constraints_folding_air = ConstraintsFoldingAir {
             transcript_bus: self.transcript_bus,
@@ -546,7 +547,11 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
                 child_vk, &cf_blob, &if_blob, preflights,
             )),
             transpose(expr_eval::generate_interactions_folding_trace(
-                child_vk, &blob, &if_blob, preflights,
+                child_vk,
+                &blob,
+                &eq_3b_blob,
+                &if_blob,
+                preflights,
             )),
             transpose(expr_eval::generate_constraints_folding_trace(
                 &cf_blob, preflights,

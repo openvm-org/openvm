@@ -62,10 +62,9 @@ define_typed_per_proof_permutation_bus!(EqZeroNBus, EqZeroNMessage);
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct Eq3bMessage<T> {
-    pub n_lift: T,
-    pub n_logup: T,
-    pub stacked_idx: T,
-    pub eq_mle: [T; D_EF],
+    pub sort_idx: T,
+    pub interaction_idx: T,
+    pub eq_3b: [T; D_EF],
 }
 
 define_typed_per_proof_permutation_bus!(Eq3bBus, Eq3bMessage);
