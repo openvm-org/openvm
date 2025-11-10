@@ -53,6 +53,10 @@ where
             "{:p}",
             get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
         );
+
+        asm_str += "    xor r8, r8\n";
+        asm_str += "    xor r9, r9\n";
+
         asm_str += &Self::push_internal_registers();
         // Temporarily use r14 as the pointer to get_vm_address_space_addr
         asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
@@ -159,13 +163,12 @@ where
                         })?;
                 asm_str += &segment;
             } else {
-                asm_str += &SYNC_GPR_TO_XMM();
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &executor.fallback_to_interpreter(
                     &Self::push_internal_registers(),
                     &Self::pop_internal_registers(),
-                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm() + &SYNC_XMM_TO_GPR()),
+                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
                     &instruction,
                     pc,
                 );

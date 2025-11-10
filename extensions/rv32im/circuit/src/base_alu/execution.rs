@@ -185,6 +185,9 @@ where
             c_i24 as i16
         };
         let mut asm_str = String::new();
+
+        // asm_str += &SYNC_XMM_TO_GPR();
+
         let a: i16 = to_i16(inst.a);
         let b: i16 = to_i16(inst.b);
         let c: i16 = to_i16(inst.c);

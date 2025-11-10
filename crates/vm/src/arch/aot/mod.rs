@@ -3,6 +3,8 @@ use std::{ffi::c_void, io::Write, process::Command};
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
+use crate::arch::aot::common::SYNC_XMM_TO_GPR;
+use crate::arch::aot::common::SYNC_GPR_TO_XMM;
 
 use crate::{
     arch::{
@@ -167,15 +169,6 @@ where
         asm_str
     }
 
-    /*
-    fn sync_vm_registers() -> String  {
-        let mut asm_str = String::new();
-        for r in 0..16 {
-            asm_str += &format!("");
-            asm_str += &format!("   mov xmm{}, \n", r);
-        }
-    }
-    */
 
     // r15 stores vm_register_address
     fn rv32_regs_to_xmm() -> String {
@@ -185,6 +178,8 @@ where
             asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
         }
+
+        asm_str += &SYNC_XMM_TO_GPR();
 
         asm_str
     }
@@ -205,6 +200,7 @@ where
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
 
+        asm_str += &SYNC_GPR_TO_XMM();
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
