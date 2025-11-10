@@ -3,35 +3,29 @@ pub use aot::*;
 
 #[cfg(feature = "aot")]
 mod aot {
+    // Caller saved
+    pub const REG_C: &str = "rdx";
+    pub const REG_C_W: &str = "edx";
+    pub const REG_C_B: &str = "dx";
+    pub const REG_THIRD_ARG: &str = "rdx";
+
+    pub const REG_B: &str = "rsi";
+    pub const REG_B_W: &str = "esi";
+    pub const REG_SECOND_ARG: &str = "rsi";
+
+    pub const REG_A: &str = "rdi";
+    pub const REG_A_W: &str = "edi";
+    pub const REG_FIRST_ARG: &str = "rdi";    
+    
+    pub const REG_RETURN_VAL: &str = "rax";
+    pub const REG_D: &str = "rax";
+
     // Callee saved
     pub const REG_EXEC_STATE_PTR: &str = "rbx";
     pub const REG_INSNS_PTR: &str = "rbp";
-
     pub const REG_PC: &str = "r13";
     pub const REG_PC_W: &str = "r13d";
-
     pub const REG_GUEST_MEM_PTR: &str = "r15";
-
-    // Caller saved
-    pub const REG_B: &str = "rax";
-    pub const REG_B_W: &str = "eax";
-    pub const REG_RETURN_VAL: &str = "rax";
-
-    pub const REG_A: &str = "rcx";
-    pub const REG_A_W: &str = "ecx";
-    pub const REG_FOURTH_ARG: &str = "rcx";
-
-    pub const REG_THIRD_ARG: &str = "rdx";
-
-    pub const REG_SECOND_ARG: &str = "rsi";
-    pub const REG_FIRST_ARG: &str = "rdi";
-
-    pub const REG_TMP_W: &str = "r8d";
-
-    pub const REG_C: &str = "r10";
-    pub const REG_C_W: &str = "r10d";
-    pub const REG_C_B: &str = "r10b";
-    pub const REG_AUX: &str = "r11";
 
     pub const DEFAULT_PC_OFFSET: i32 = 4;
 

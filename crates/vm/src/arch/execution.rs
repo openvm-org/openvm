@@ -227,9 +227,9 @@ pub trait AotExecutor<F> {
         asm_str += &format!("   je asm_run_end_{pc}\n");
 
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
-        asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
-        asm_str += "    add rcx, rdx\n"; // add the base address and the offset
-        asm_str += "    jmp rcx\n"; // jump to the next instruction (rcx is the next instruction)
+        asm_str += "    movsxd r13, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
+        asm_str += "    add r13, rdx\n"; // add the base address and the offset
+        asm_str += "    jmp r13\n"; // jump to the next instruction (rcx is the next instruction)
         asm_str += "\n";
         asm_str
     }
