@@ -24,7 +24,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
-        MultiProofVecVec, assert_one_ext, base_to_ext, ext_field_add, ext_field_multiply,
+        MultiProofVecVec, base_to_ext, ext_field_add, ext_field_multiply,
         ext_field_multiply_scalar, ext_field_one_minus,
     },
 };
@@ -195,12 +195,13 @@ where
             ))
             .assert_eq(local.idx, local.running_idx);
 
-        // If n is less than n_lift, assert that xi is 1
-        assert_one_ext(
+        // If n is less than n_lift, assert that eq doesn't change
+        assert_array_eq(
             &mut builder
                 .when(local.is_valid)
                 .when(not(local.n_at_least_n_lift)),
-            local.xi,
+            local.eq,
+            next.eq,
         );
         // Within transition, idx increases by nth_bit * hypercube_volume
         builder
@@ -237,17 +238,18 @@ where
             local.n_at_least_n_lift * within_one_interaction,
         );
 
+        // TODO constrain that air with this sort_idx has that n_lift,
+        // TODO constrain that this pidx has that n_logup
+
         self.eq_3b_bus.send(
             builder,
             local.proof_idx,
             Eq3bMessage {
-                n_lift: local.n_lift.into(),
-                n_logup: local.n.into(),
-                stacked_idx: local.idx * AB::Expr::from_canonical_usize(1 << self.l_skip),
-                eq_mle: local.eq.map(Into::into),
+                sort_idx: local.sort_idx,
+                interaction_idx: local.interaction_idx,
+                eq_3b: local.eq,
             },
-            // next.is_first * local.is_valid,
-            AB::Expr::ZERO,
+            next.is_first_in_interaction * local.is_valid,
         );
     }
 }
@@ -379,8 +381,10 @@ pub(crate) fn generate_eq_3b_trace(
                             F::from_bool(!record.is_last_in_air || n < n_logup);
                         let xi = if (record.n_lift..n_logup).contains(&n) {
                             xi[l_skip + n]
-                        } else {
+                        } else if nth_bit {
                             EF::ONE
+                        } else {
+                            EF::ZERO
                         };
                         cols.xi.copy_from_slice(xi.as_base_slice());
                         cols.eq.copy_from_slice(cur_eq.as_base_slice());
