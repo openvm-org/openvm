@@ -350,17 +350,21 @@ mod cuda_tracegen {
             );
             let blob = ProofShapeBlob;
             let mut ctxs = Vec::with_capacity(4);
-            // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
-            // can start trace gen with the correct multiplicities
+            // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
+            // This can be parallelized to separate streams for more CUDA stream parallelism, but it
+            // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
+            // launches
             ctxs.extend(
                 [
                     ProofShapeModuleChipGpu::ProofShape(proof_shape),
                     ProofShapeModuleChipGpu::PublicValues,
                 ]
-                .par_iter()
+                .iter()
                 .map(|chip| chip.generate_trace(child_vk, proofs, preflights, &blob))
                 .collect::<Vec<_>>(),
             );
+            // Caution: proof_shape **must** finish trace gen before range_checker or pow_checker
+            // can start trace gen with the correct multiplicities
             ctxs.extend([
                 Arc::try_unwrap(range_checker).unwrap().generate_trace(),
                 Arc::try_unwrap(pow_checker).unwrap().generate_trace(),
