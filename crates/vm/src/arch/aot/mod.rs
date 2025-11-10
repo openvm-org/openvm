@@ -137,28 +137,32 @@ where
 
     fn push_internal_registers() -> String {
         let mut asm_str = String::new();
-        asm_str += "    push rax\n";
+
         asm_str += "    push rcx\n";
         asm_str += "    push rdx\n";
+        asm_str += "    push rsi\n";
+        asm_str += "    push rdi\n";
         asm_str += "    push r8\n";
         asm_str += "    push r9\n";
         asm_str += "    push r10\n";
         asm_str += "    push r11\n";
-        // asm_str += &Self::push_xmm_regs();
-
+        asm_str += "    push rax\n";
+        
         asm_str
     }
 
     fn pop_internal_registers() -> String {
         let mut asm_str = String::new();
-        asm_str += "    pop r11\n";
-        asm_str += "    pop r10\n";
-        asm_str += "    pop r9\n";
-        asm_str += "    pop r8\n";
-        asm_str += "    pop rdx\n";
-        asm_str += "    pop rcx\n";
-        asm_str += "    pop rax\n";
-        // asm_str += &Self::pop_xmm_regs();
+
+        asm_str += "    push rax\n";
+        asm_str += "    push r11\n";
+        asm_str += "    push r10\n";
+        asm_str += "    push r9\n";
+        asm_str += "    push r8\n";
+        asm_str += "    push rdi\n";
+        asm_str += "    push rsi\n";
+        asm_str += "    push rdx\n";
+        asm_str += "    push rcx\n";
 
         asm_str
     }
