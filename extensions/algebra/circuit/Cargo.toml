@@ -21,6 +21,7 @@ openvm-rv32-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
+stark-backend-v2 = { workspace = true }
 
 halo2curves-axiom = { workspace = true }
 num-bigint = { workspace = true, features = ["serde"] }

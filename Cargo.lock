@@ -3878,6 +3878,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_with",
+ "stark-backend-v2",
  "strum",
  "test-case",
 ]
