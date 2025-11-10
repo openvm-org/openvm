@@ -223,16 +223,6 @@ where
         asm_str
     }
 
-    fn initialize_xmm_regs() -> String {
-        let mut asm_str = String::new();
-        asm_str += "    mov rax, 0\n";
-        for r in 0..16 {
-            asm_str += &format!("   pinsrq xmm{r}, rax, 0\n");
-        }
-
-        asm_str
-    }
-
     pub fn to_i16(c: F) -> i16 {
         let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
         let c_i24 = ((c_u24 << 8) as i32) >> 8;
