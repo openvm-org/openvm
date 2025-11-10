@@ -103,35 +103,31 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
+    /*
+    Assertions for Pure Execution AOT
+    */
     let interp_state_pure = vm
         .naive_interpreter(exe)?
         .execute(input.clone(), None)
         .expect("Failed to execute");
 
-    println!("created naive interpreter");
-
-    let aot_instance = vm.get_aot_instance(exe)?;
-
-    println!("created aot instance");
-
-    let aot_instance = aot_instance.execute(input.clone(), None)?;
-    
+    let aot_state_pure = vm
+        .get_aot_instance(exe)?
+        .execute(input.clone(), None)
+        .expect("Failed to execute");
 
     let system_config: &SystemConfig = config.as_ref();
     let addr_spaces = &system_config.memory_config.addr_spaces;
     let assert_vm_state_eq = |lhs: &VmState<Val<E::SC>, GuestMemory>,
                               rhs: &VmState<Val<E::SC>, GuestMemory>| {
-        // assert_eq!(lhs.pc(), rhs.pc());
-        println!("lhs pc {}", lhs.pc());
-        println!("rhs pc {}", rhs.pc());
-    
+        assert_eq!(lhs.pc(), rhs.pc());
         for r in 0..addr_spaces[1].num_cells {
             let a = unsafe { lhs.memory.read::<u8, 1>(1, r as u32) };
             let b = unsafe { rhs.memory.read::<u8, 1>(1, r as u32) };
-            println!("register {r} -> {:?} {:?}", a, b);
+            assert_eq!(a, b);
         }
     };
-    // assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
+    assert_vm_state_eq(&interp_state_pure, &aot_state_pure);
 
     Ok(())
 }
@@ -162,23 +158,16 @@ where
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     Com<E::SC>: AsRef<[Val<E::SC>; CHUNK]> + From<[Val<E::SC>; CHUNK]>,
 {
-    println!("went inside air_test_impl");
     setup_tracing();
     let engine = E::new(fri_params);
     let (mut vm, pk) = VirtualMachine::<E, VB>::new_with_keygen(engine, builder, config.clone())?;
-    println!("generated mut vm");
     let vk = pk.get_vk();
     let exe = exe.into();
     let input = input.into();
-    println!("build metered ctx");
     let metered_ctx = vm.build_metered_ctx(&exe);
-
-    println!("check aot equivalence");
 
     #[cfg(feature = "aot")]
     check_aot_equivalence(&vm, &config, &exe, &input)?;
-
-    println!("finish checking aot equivalence");
 
     let (segments, _) = vm
         .metered_interpreter(&exe)?
