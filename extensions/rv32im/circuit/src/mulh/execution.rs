@@ -100,7 +100,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        false
+        true
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -121,33 +121,33 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
-        const REG_A_W: &str = "eax";
-        const REG_B_W: &str = "ecx";
-        const REG_TMP_W: &str = "r8d";
-
+        
         asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
         asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
 
+        /// ERRRRR WHAT THE SIGMA
+        // mulh is just wrong in all cases...
         match opcode {
             MulHOpcode::MULH => {
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   imul {REG_A_W}\n");
+                asm += &gpr_to_rv32_register("edx", (a / 4) as u8);
             }
             MulHOpcode::MULHSU => {
-                asm += &format!("   mov {REG_TMP_W}, {REG_A_W}\n");
-                asm += "   imul ecx\n";
-                asm += "   mov eax, edx\n";
-                asm += "   mov edx, ecx\n";
+                asm += &format!("   mov {REG_TMP_W}, {REG_B_W}\n");
+                asm += &format!("   mul {REG_A_W}\n");
+                asm += &format!("   mov {REG_B_W}, edx\n");
+                asm += &format!("   mov edx, {REG_A_W}\n");
                 asm += "   sar edx, 31\n";
                 asm += &format!("   and edx, {REG_TMP_W}\n");
-                asm += "   add eax, edx\n";
+                asm += &format!("   sub {REG_B_W}, edx\n");
+                asm += &gpr_to_rv32_register(REG_B_W, (a / 4) as u8);
             }
             MulHOpcode::MULHU => {
-                asm += "   mul ecx\n";
-                asm += "   mov eax, edx\n";
+                asm += &format!("   mul {REG_A_W}\n");
+                asm += &gpr_to_rv32_register("edx", (a / 4) as u8);
             }
         }
-        asm += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+        
         Ok(asm)
     }
 }
