@@ -10,9 +10,9 @@ use p3_matrix::Matrix;
 use stark_backend_v2::D_EF;
 use stark_recursion_circuit_derive::AlignedBorrow;
 
-use crate::{
-    batch_constraint::bus::ExpressionClaimBus,
-    bus::{TranscriptBus, TranscriptBusMessage},
+use crate::batch_constraint::bus::{
+    BatchConstraintConductorBus, BatchConstraintConductorMessage, BatchConstraintInnerMessageType,
+    ExpressionClaimBus,
 };
 
 #[derive(AlignedBorrow, Copy, Clone, Debug)]
@@ -20,20 +20,18 @@ use crate::{
 pub struct ExpressionClaimCols<T> {
     pub is_valid: T,
     pub is_first: T,
-    pub is_last: T,
     pub proof_idx: T,
 
+    pub num_present: T,
     pub is_interaction: T,
     pub idx: T,
-    pub lambda_tidx: T,
-    pub lambda: [T; D_EF],
-    pub lambda_pow: [T; D_EF],
+    pub mu: [T; D_EF],
     pub value: [T; D_EF],
 }
 
 pub struct ExpressionClaimAir {
     pub claim_bus: ExpressionClaimBus,
-    pub transcript_bus: TranscriptBus,
+    pub mu_bus: BatchConstraintConductorBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ExpressionClaimAir {}
@@ -64,17 +62,15 @@ impl<AB: AirBuilder + InteractionBuilder> Air<AB> for ExpressionClaimAir {
         //     local.is_valid,
         // );
 
-        // for i in 0..D_EF {
-        //     self.transcript_bus.receive(
-        //         builder,
-        //         local.proof_idx,
-        //         TranscriptBusMessage {
-        //             tidx: local.lambda_tidx + AB::Expr::from_canonical_usize(i),
-        //             value: local.lambda[i].into(),
-        //             is_sample: AB::Expr::ONE,
-        //         },
-        //         local.is_first,
-        //     );
-        // }
+        self.mu_bus.receive(
+            builder,
+            local.proof_idx,
+            BatchConstraintConductorMessage {
+                msg_type: BatchConstraintInnerMessageType::Mu.to_field(),
+                idx: AB::Expr::ZERO,
+                value: local.mu.map(Into::into),
+            },
+            local.is_first * local.is_valid,
+        );
     }
 }

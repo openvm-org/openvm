@@ -1,0 +1,487 @@
+use std::borrow::{Borrow, BorrowMut};
+
+use itertools::Itertools;
+use openvm_circuit_primitives::{
+    SubAir,
+    utils::{assert_array_eq, not},
+};
+use openvm_stark_backend::{
+    interaction::InteractionBuilder,
+    rap::{BaseAirWithPublicValues, PartitionedBaseAir},
+};
+use p3_air::{Air, AirBuilder, BaseAir};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_matrix::{Matrix, dense::RowMajorMatrix};
+use p3_maybe_rayon::prelude::*;
+use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2};
+use stark_recursion_circuit_derive::AlignedBorrow;
+
+use crate::{
+    batch_constraint::{
+        BatchConstraintBlobCpu,
+        bus::{
+            ExpressionClaimBus, ExpressionClaimMessage, InteractionsFoldingBus,
+            InteractionsFoldingMessage,
+        },
+        eq_airs::Eq3bBlob,
+    },
+    bus::{AirShapeBus, AirShapeBusMessage, AirShapeProperty, TranscriptBus},
+    subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
+    system::Preflight,
+    utils::{MultiProofVecVec, ext_field_add, ext_field_multiply},
+};
+
+#[derive(AlignedBorrow, Copy, Clone)]
+#[repr(C)]
+struct InteractionsFoldingCols<T> {
+    is_valid: T,
+    is_first: T,
+    is_last: T,
+    proof_idx: T,
+
+    beta_tidx: T,
+
+    air_idx: T,
+    sort_idx: T,
+    interaction_idx: T,
+    node_idx: T,
+
+    has_interactions: T,
+
+    is_first_in_air: T,
+    is_first_in_message: T, // aka "is_mult"
+
+    loop_aux: NestedForLoopAuxCols<T, 2>,
+
+    idx_in_message: T,
+    value: [T; D_EF],
+    cur_sum: [T; D_EF],
+    beta: [T; D_EF],
+    eq_3b: [T; D_EF],
+}
+
+pub struct InteractionsFoldingAir {
+    pub interaction_bus: InteractionsFoldingBus,
+    pub air_shape_bus: AirShapeBus,
+    pub transcript_bus: TranscriptBus,
+    pub expression_claim_bus: ExpressionClaimBus,
+}
+
+impl<F> BaseAirWithPublicValues<F> for InteractionsFoldingAir {}
+impl<F> PartitionedBaseAir<F> for InteractionsFoldingAir {}
+
+impl<F> BaseAir<F> for InteractionsFoldingAir {
+    fn width(&self) -> usize {
+        InteractionsFoldingCols::<F>::width()
+    }
+}
+
+impl<AB: AirBuilder + InteractionBuilder> Air<AB> for InteractionsFoldingAir
+where
+    <AB::Expr as FieldAlgebra>::F: BinomiallyExtendable<D_EF>,
+{
+    fn eval(&self, builder: &mut AB) {
+        let main = builder.main();
+        let (local, next) = (main.row_slice(0), main.row_slice(1));
+
+        let local: &InteractionsFoldingCols<AB::Var> = (*local).borrow();
+        let next: &InteractionsFoldingCols<AB::Var> = (*next).borrow();
+
+        type LoopSubAir = NestedForLoopSubAir<3, 2>;
+        LoopSubAir {}.eval(
+            builder,
+            (
+                (
+                    NestedForLoopIoCols {
+                        is_enabled: local.is_valid,
+                        counter: [local.proof_idx, local.sort_idx, local.interaction_idx],
+                        is_first: [
+                            local.is_first,
+                            local.is_first_in_air,
+                            local.is_first_in_message,
+                        ],
+                    }
+                    .map_into(),
+                    NestedForLoopIoCols {
+                        is_enabled: next.is_valid,
+                        counter: [next.proof_idx, next.sort_idx, next.interaction_idx],
+                        is_first: [
+                            next.is_first,
+                            next.is_first_in_air,
+                            next.is_first_in_message,
+                        ],
+                    }
+                    .map_into(),
+                ),
+                local.loop_aux.map_into(),
+            ),
+        );
+
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_first);
+        builder.assert_bool(local.is_last);
+
+        builder.assert_bool(local.has_interactions);
+        builder.assert_bool(local.is_first_in_air);
+        builder.assert_bool(local.is_first_in_message);
+
+        // =========================== indices consistency ===============================
+        // When we are within one proof, sort_idx increases by 0/1
+        builder
+            .when(not(next.is_first))
+            .assert_bool(next.sort_idx - local.sort_idx);
+        // When we are within one AIR, interaction_idx increases by 0/1 as well
+        let within_one_air = not(next.is_first) * (AB::Expr::ONE - next.sort_idx + local.sort_idx);
+        builder
+            .when(within_one_air.clone())
+            .assert_bool(next.interaction_idx - local.interaction_idx);
+        // First AIR within a proof is zero, and first interaction within an AIR is also zero
+        builder.when(local.is_first).assert_zero(local.sort_idx);
+        builder
+            .when(not::<AB::Expr>(within_one_air))
+            .assert_zero(next.interaction_idx);
+
+        // // =========================== general consistency ================================
+        // The row describes an AIR without interactions iff it's first and last in the message,
+        // unless the row is invalid
+        builder.when(local.is_valid).assert_eq(
+            local.is_first_in_message * next.is_first_in_message,
+            not(local.has_interactions),
+        );
+        // If we have interactions, then the row is valid
+        builder
+            .when(local.has_interactions)
+            .assert_one(local.is_valid);
+        // If we don't have interactions and the row is valid, then it's first and last _within AIR_
+        builder
+            .when(not(local.has_interactions))
+            .when(local.is_valid)
+            .assert_one(local.is_first_in_air);
+        builder
+            .when(not(local.has_interactions))
+            .when(local.is_valid)
+            .assert_one(next.is_first_in_air);
+        // // If it's last in the interaction and the row is valid, then its value is just bus_idx +
+        // 1 assert_array_eq(
+        //     &mut builder.when(next.is_first_in_message).when(local.is_valid),
+        //     local.value,
+        //     base_to_ext::<AB::Expr>(local.node_idx + AB::Expr::ONE),
+        // );
+        // TODO: receive something from the symbolic expr air to check that it's indeed the bus
+        // index TODO: otherwise receive the value by node_idx
+
+        // ======================== beta and cur sum consistency ============================
+        assert_array_eq(&mut builder.when(not(next.is_first)), local.beta, next.beta);
+        assert_array_eq(
+            &mut builder.when(not(next.is_first_in_message) * not(local.is_first_in_message)),
+            local.cur_sum,
+            ext_field_add(
+                local.value,
+                ext_field_multiply::<AB::Expr>(local.beta, next.cur_sum),
+            ),
+        );
+        // numerator and the last element of the message are just the corresponding values
+        assert_array_eq(
+            &mut builder.when(next.is_first_in_message + local.is_first_in_message),
+            local.cur_sum,
+            local.value,
+        );
+
+        // TODO: constrain that sort_idx and air_idx match
+
+        self.expression_claim_bus.send(
+            builder,
+            local.proof_idx,
+            ExpressionClaimMessage {
+                is_interaction: AB::Expr::ONE,
+                idx: local.sort_idx * AB::Expr::TWO,
+                value: local.cur_sum.map(Into::into),
+            },
+            // local.is_first_in_message * local.is_valid,
+            AB::Expr::ZERO,
+        );
+        self.expression_claim_bus.send(
+            builder,
+            local.proof_idx,
+            ExpressionClaimMessage {
+                is_interaction: AB::Expr::ONE,
+                idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,
+                value: next.cur_sum.map(Into::into),
+            },
+            // local.is_first_in_message * local.is_valid,
+            AB::Expr::ZERO,
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ZERO,
+                idx_in_message: next.idx_in_message.into(),
+                value: next.value.map(Into::into),
+            },
+            local.is_first_in_message * local.has_interactions, // TODO(AG) only first in message? wtf
+        );
+        self.interaction_bus.receive(
+            builder,
+            local.proof_idx,
+            InteractionsFoldingMessage {
+                air_idx: local.air_idx.into(),
+                interaction_idx: local.interaction_idx.into(),
+                is_mult: AB::Expr::ONE,
+                idx_in_message: AB::Expr::ZERO,
+                value: local.value.map(Into::into),
+            },
+            local.is_first_in_message * local.has_interactions,
+        );
+
+        self.transcript_bus.sample_ext(
+            builder,
+            local.proof_idx,
+            local.beta_tidx,
+            local.beta,
+            local.is_valid * local.is_first,
+        );
+
+        self.air_shape_bus.receive(
+            builder,
+            local.proof_idx,
+            AirShapeBusMessage {
+                sort_idx: local.sort_idx.into(),
+                property_idx: AirShapeProperty::NumInteractions.to_field(),
+                value: (local.interaction_idx + AB::Expr::ONE) * local.has_interactions,
+            },
+            next.is_first_in_air * local.is_valid,
+        );
+    }
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub(in crate::batch_constraint) struct InteractionsFoldingRecord {
+    value: EF,
+    air_idx: usize,
+    sort_idx: usize,
+    interaction_idx: usize,
+    node_idx: usize,
+    idx_in_message: usize,
+    has_interactions: bool,
+    is_first_in_air: bool,
+    is_last_in_air: bool,
+    is_mult: bool,
+    is_bus_index: bool,
+}
+
+pub(in crate::batch_constraint) struct InteractionsFoldingBlob {
+    pub(in crate::batch_constraint) records: MultiProofVecVec<InteractionsFoldingRecord>,
+    pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<EF>,
+}
+
+pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
+    vk: &MultiStarkVerifyingKeyV2,
+    expr_blob: &BatchConstraintBlobCpu,
+    eq_3b_blob: &Eq3bBlob,
+    preflights: &[Preflight],
+) -> InteractionsFoldingBlob {
+    let interactions = vk
+        .inner
+        .per_air
+        .iter()
+        .map(|vk| vk.symbolic_constraints.interactions.clone())
+        .collect_vec();
+
+    let mut records = MultiProofVecVec::new();
+    let mut folded = MultiProofVecVec::new();
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+        let beta = EF::from_base_slice(&preflight.transcript.values()[beta_tidx..beta_tidx + D_EF]);
+
+        let eq_3bs = &eq_3b_blob.all_stacked_ids[pidx];
+        let mut cur_eq3b_idx = 0;
+
+        let node_claims = &expr_blob.expr_evals[pidx];
+        let vdata = &preflight.proof_shape.sorted_trace_vdata;
+        for (sort_idx, (air_idx, _)) in vdata.iter().enumerate() {
+            let inters = &interactions[*air_idx];
+            let mut num_sum = EF::ZERO;
+            let mut denom_sum = EF::ZERO;
+            if inters.is_empty() {
+                records.push(InteractionsFoldingRecord {
+                    value: EF::ZERO,
+                    air_idx: *air_idx,
+                    sort_idx,
+                    interaction_idx: 0,
+                    node_idx: 0,
+                    idx_in_message: 0,
+                    has_interactions: false,
+                    is_first_in_air: true,
+                    is_last_in_air: true,
+                    is_mult: false,
+                    is_bus_index: false,
+                });
+            } else {
+                for (interaction_idx, inter) in inters.iter().enumerate() {
+                    let eq_3b = eq_3bs[cur_eq3b_idx].eq_mle(
+                        &preflight.batch_constraint.xi,
+                        vk.inner.params.l_skip,
+                        preflight.proof_shape.n_logup,
+                    );
+                    cur_eq3b_idx += 1;
+                    records.push(InteractionsFoldingRecord {
+                        value: node_claims[*air_idx][inter.count],
+                        air_idx: *air_idx,
+                        sort_idx,
+                        interaction_idx,
+                        node_idx: inter.count,
+                        idx_in_message: 0,
+                        has_interactions: true,
+                        is_first_in_air: interaction_idx == 0,
+                        is_last_in_air: false,
+                        is_mult: true,
+                        is_bus_index: false,
+                    });
+                    num_sum += node_claims[*air_idx][inter.count] * eq_3b;
+
+                    let mut beta_pow = EF::ONE;
+                    let mut cur_sum = EF::ZERO;
+                    for (j, &node_idx) in inter.message.iter().enumerate() {
+                        let value = node_claims[*air_idx][node_idx];
+                        cur_sum += beta_pow * value;
+                        beta_pow *= beta;
+                        records.push(InteractionsFoldingRecord {
+                            value,
+                            air_idx: *air_idx,
+                            sort_idx,
+                            interaction_idx,
+                            node_idx,
+                            idx_in_message: j,
+                            has_interactions: true,
+                            is_first_in_air: false,
+                            is_last_in_air: false,
+                            is_mult: false,
+                            is_bus_index: false,
+                        });
+                    }
+
+                    cur_sum += beta_pow * EF::from_canonical_u16(inter.bus_index + 1);
+                    records.push(InteractionsFoldingRecord {
+                        value: EF::from_canonical_u16(inter.bus_index + 1),
+                        air_idx: *air_idx,
+                        sort_idx,
+                        interaction_idx,
+                        node_idx: inter.bus_index as usize + 1,
+                        idx_in_message: inter.message.len() + 1,
+                        has_interactions: true,
+                        is_first_in_air: false,
+                        is_last_in_air: interaction_idx + 1 == inters.len(),
+                        is_mult: false,
+                        is_bus_index: true,
+                    });
+                    denom_sum += cur_sum * eq_3b;
+                }
+            }
+            folded.push(num_sum);
+            folded.push(denom_sum);
+        }
+        folded.end_proof();
+        records.end_proof();
+    }
+    InteractionsFoldingBlob {
+        records,
+        folded_claims: folded,
+    }
+}
+
+pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
+    _vk: &MultiStarkVerifyingKeyV2,
+    expr_blob: &BatchConstraintBlobCpu,
+    if_blob: &InteractionsFoldingBlob,
+    preflights: &[Preflight],
+) -> RowMajorMatrix<F> {
+    let width = InteractionsFoldingCols::<F>::width();
+
+    let total_height = if_blob.records.len();
+    let padding_height = total_height.next_power_of_two();
+    let mut trace = vec![F::ZERO; padding_height * width];
+
+    let mut cur_height = 0;
+    for (pidx, preflight) in preflights.iter().enumerate() {
+        let beta_tidx = preflight.proof_shape.post_tidx + 2 + D_EF;
+        let beta_slice = &preflight.transcript.values()[beta_tidx..beta_tidx + D_EF];
+        let records = &if_blob.records[pidx];
+
+        let node_claims = &expr_blob.expr_evals[pidx];
+
+        trace[cur_height * width..(cur_height + records.len()) * width]
+            .par_chunks_exact_mut(width)
+            .zip(records.par_iter())
+            .for_each(|(chunk, record)| {
+                let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                let air_idx = preflight.proof_shape.sorted_trace_vdata[record.sort_idx].0;
+                cols.is_valid = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.beta_tidx = F::from_canonical_usize(beta_tidx);
+                cols.air_idx = F::from_canonical_usize(record.air_idx);
+                cols.sort_idx = F::from_canonical_usize(record.sort_idx);
+                cols.interaction_idx = F::from_canonical_usize(record.interaction_idx);
+                cols.node_idx = F::from_canonical_usize(record.node_idx);
+                cols.has_interactions = F::from_bool(record.has_interactions);
+                cols.is_first_in_air = F::from_bool(record.is_first_in_air);
+                cols.is_first_in_message = F::from_bool(record.is_mult || !record.has_interactions);
+                cols.idx_in_message = F::from_canonical_usize(record.idx_in_message);
+                cols.loop_aux.is_transition[0] = F::ONE;
+                cols.loop_aux.is_transition[1] = F::from_bool(!record.is_last_in_air);
+                if !record.is_bus_index {
+                    cols.value
+                        .copy_from_slice(node_claims[air_idx][record.node_idx].as_base_slice());
+                } else {
+                    cols.value[0] = cols.node_idx;
+                }
+                cols.beta.copy_from_slice(beta_slice);
+            });
+
+        // Setting `cur_sum`
+        let mut cur_sum = EF::ZERO;
+        let beta = EF::from_base_slice(beta_slice);
+        trace[cur_height * width..(cur_height + records.len()) * width]
+            .chunks_exact_mut(width)
+            .rev()
+            .for_each(|chunk| {
+                let cols: &mut InteractionsFoldingCols<_> = chunk.borrow_mut();
+                if cols.is_first_in_message == F::ONE {
+                    cols.cur_sum.copy_from_slice(&cols.value);
+                    cur_sum = EF::ZERO;
+                } else {
+                    cur_sum = cur_sum * beta + EF::from_base_slice(&cols.value);
+                    cols.cur_sum.copy_from_slice(cur_sum.as_base_slice());
+                }
+            });
+
+        {
+            let cols: &mut InteractionsFoldingCols<_> =
+                trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
+            cols.is_first = F::ONE;
+        }
+        cur_height += records.len();
+        {
+            let cols: &mut InteractionsFoldingCols<_> =
+                trace[(cur_height - 1) * width..cur_height * width].borrow_mut();
+            cols.is_last = F::ONE;
+            cols.loop_aux.is_transition[0] = F::ZERO;
+        }
+    }
+    trace[total_height * width..]
+        .par_chunks_mut(width)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let cols: &mut InteractionsFoldingCols<F> = chunk.borrow_mut();
+            cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
+            cols.is_first = F::ONE;
+            cols.is_last = F::ONE;
+            cols.is_first_in_air = F::ONE;
+            cols.is_first_in_message = F::ONE;
+        });
+
+    RowMajorMatrix::new(trace, width)
+}
