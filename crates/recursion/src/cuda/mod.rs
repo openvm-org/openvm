@@ -5,6 +5,7 @@ use crate::{
     system::GlobalTraceGenCtx,
 };
 
+pub mod abi;
 pub mod preflight;
 pub mod proof;
 pub mod types;
