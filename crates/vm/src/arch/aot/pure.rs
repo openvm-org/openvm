@@ -123,13 +123,7 @@ where
                 asm_str += "    cmp rax, 1\n"; // compare the return value with 1
                 asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
                 asm_str += &Self::pop_address_space_start();
-                // read the memory from the memory location of the RV32 registers in `GuestMemory`
-                // registers, to the appropriate XMM registers
-                asm_str += &format!("   je asm_run_end_{pc}\n");
-                asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
-                asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
-                asm_str += "    add rcx, rdx\n"; // add the base address and the offset
-                asm_str += "    jmp rcx\n"; // jump to the next instruction (rcx is the next instruction)
+                asm_str += &format!("   jmp asm_run_end_{pc}\n");
                 asm_str += "\n";
                 continue;
             }
