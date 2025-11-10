@@ -44,12 +44,10 @@ mod aot {
         None, // x7
         None, // x8
         None, // x9
-        // None, // x10
-        // None, // x11
-        None, // x12
-        None, // x13
         Some("r9d"), // x10
         Some("r8d"), // x11
+        None, // x12
+        None, // x13
         // Some("r11d"), // x12
         // Some("r10d"), // x13
         None, // x14

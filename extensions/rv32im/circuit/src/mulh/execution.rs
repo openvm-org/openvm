@@ -100,9 +100,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        inst.opcode == MulHOpcode::MULH.global_opcode()
-            || inst.opcode == MulHOpcode::MULHSU.global_opcode()
-            || inst.opcode == MulHOpcode::MULHU.global_opcode()
+        false
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -123,6 +121,9 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
+        const REG_A_W: &str = "eax";
+        const REG_B_W: &str = "ecx";
+        const REG_TMP_W: &str = "r8d";
 
         asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
         asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
