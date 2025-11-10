@@ -439,6 +439,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
 
 #[cfg(feature = "cuda")]
 pub mod cuda_tracegen {
+    use std::iter::zip;
+
     use cuda_backend_v2::{
         BabyBearPoseidon2GpuEngineV2, GpuBackendV2, transport_matrix_h2d_col_major,
     };
@@ -478,14 +480,18 @@ pub mod cuda_tracegen {
                 .iter()
                 .map(|proof_cpu| ProofGpu::new(child_vk, proof_cpu))
                 .collect::<Vec<_>>();
-            let preflights_gpu = proofs
+            // Run CPU preflight for each proof in parallel
+            let preflights_cpu = proofs
                 .par_iter()
                 .map(|proof| {
                     let sponge = TS::default();
-                    let preflight_cpu = self.run_preflight(sponge, child_vk, proof);
-                    // NOTE: this uses one stream per thread for H2D transfer
-                    PreflightGpu::new(child_vk, proof, &preflight_cpu)
+                    self.run_preflight(sponge, child_vk, proof)
                 })
+                .collect::<Vec<_>>();
+            // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
+            // issues
+            let preflights_gpu = zip(proofs, preflights_cpu)
+                .map(|(proof, preflight_cpu)| PreflightGpu::new(child_vk, proof, &preflight_cpu))
                 .collect::<Vec<_>>();
             const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
             let modules = vec![
@@ -496,8 +502,12 @@ pub mod cuda_tracegen {
                 &self.stacking as &dyn TraceGenModule<_, _>,
                 &self.whir as &dyn TraceGenModule<_, _>,
             ];
+            // PERF[jpw]: we avoid par_iter so that kernel launches occur on the same stream.
+            // This can be parallelized to separate streams for more CUDA stream parallelism, but it
+            // will require recording events so streams properly sync for cudaMemcpyAsync and kernel
+            // launches
             let mut ctxs_by_module = modules
-                .into_par_iter()
+                .into_iter()
                 .map(|module| {
                     module.generate_proving_ctxs(&child_vk_gpu, &proofs_gpu, &preflights_gpu)
                 })
