@@ -24,10 +24,12 @@ use openvm_rv32im_circuit::BranchEqualCoreAir;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
     p3_field::{Field, PrimeField32},
-    prover::cpu::{CpuBackend, CpuDevice},
 };
-use openvm_stark_sdk::engine::StarkEngine;
 use serde::{Deserialize, Serialize};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -268,17 +270,17 @@ where
 pub struct NativeCpuProverExt;
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
+impl<E, RA> VmProverExtension<E, RA, Native> for NativeCpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &Native,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -334,7 +336,7 @@ where
             FriReducedOpeningChip::new(FriReducedOpeningFiller::new(), mem_helper.clone());
         inventory.add_executor_chip(fri_reduced_opening);
 
-        inventory.next_air::<NativePoseidon2Air<Val<SC>, 1>>()?;
+        inventory.next_air::<NativePoseidon2Air<Val<E::SC>, 1>>()?;
         let poseidon2 = NativePoseidon2Chip::<_, 1>::new(
             NativePoseidon2Filler::new(Poseidon2Config::default()),
             mem_helper.clone(),
@@ -536,17 +538,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for CastFExtension {
     }
 }
 
-impl<E, SC, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
+impl<E, RA> VmProverExtension<E, RA, CastFExtension> for NativeCpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         _: &CastFExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();

@@ -23,7 +23,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -228,7 +227,6 @@ fn run_negative_field_extension_test(
     y: Option<[F; EXT_DEG]>,
     z: Option<[F; EXT_DEG]>,
     prank_vals: FieldExtensionPrankValues,
-    error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
@@ -278,7 +276,9 @@ fn run_negative_field_extension_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(error);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -295,7 +295,6 @@ fn rand_negative_field_extension_test() {
             opcode_flags: Some(array::from_fn(|_| rng.gen_bool(0.5))),
             divisor_inv: Some(array::from_fn(|_| rng.gen::<F>())),
         },
-        VerificationError::OodEvaluationMismatch,
     );
 }
 
@@ -309,7 +308,6 @@ fn field_extension_negative_tests() {
             z: Some([F::ZERO; EXT_DEG]),
             ..Default::default()
         },
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_field_extension_test(
@@ -320,7 +318,6 @@ fn field_extension_negative_tests() {
             divisor_inv: Some([F::ZERO; EXT_DEG]),
             ..Default::default()
         },
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_field_extension_test(
@@ -331,7 +328,6 @@ fn field_extension_negative_tests() {
             z: Some([F::ZERO; EXT_DEG]),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
 }
 

@@ -752,7 +752,6 @@ mod is_equal_tests {
             Matrix,
         },
         utils::disable_debug_builder,
-        verifier::VerificationError,
     };
 
     use super::*;
@@ -1091,7 +1090,6 @@ mod is_equal_tests {
         modulus: BigUint,
         opcode_offset: usize,
         test_case: usize,
-        expected_error: VerificationError,
     ) {
         let mut rng = create_seeded_rng();
         let mut tester: VmChipTestBuilder<F> = VmChipTestBuilder::default();
@@ -1162,54 +1160,22 @@ mod is_equal_tests {
             .load_and_prank_trace(harness, modify_trace)
             .load_periphery(bitwise)
             .finalize();
-        tester.simple_test_with_expected_error(expected_error);
+        tester
+            .simple_test()
+            .expect_err("Expected verification to fail, but it passed");
     }
 
     #[test]
     fn negative_test_modular_is_equal_1x32() {
-        run_negative_is_equal_test::<1, 32, 32>(
-            secp256k1_coord_prime(),
-            17,
-            1,
-            VerificationError::OodEvaluationMismatch,
-        );
-
-        run_negative_is_equal_test::<1, 32, 32>(
-            secp256k1_coord_prime(),
-            17,
-            2,
-            VerificationError::OodEvaluationMismatch,
-        );
-
-        run_negative_is_equal_test::<1, 32, 32>(
-            secp256k1_coord_prime(),
-            17,
-            3,
-            VerificationError::OodEvaluationMismatch,
-        );
+        run_negative_is_equal_test::<1, 32, 32>(secp256k1_coord_prime(), 17, 1);
+        run_negative_is_equal_test::<1, 32, 32>(secp256k1_coord_prime(), 17, 2);
+        run_negative_is_equal_test::<1, 32, 32>(secp256k1_coord_prime(), 17, 3);
     }
 
     #[test]
     fn negative_test_modular_is_equal_3x16() {
-        run_negative_is_equal_test::<3, 16, 48>(
-            BLS12_381_MODULUS.clone(),
-            17,
-            1,
-            VerificationError::OodEvaluationMismatch,
-        );
-
-        run_negative_is_equal_test::<3, 16, 48>(
-            BLS12_381_MODULUS.clone(),
-            17,
-            2,
-            VerificationError::OodEvaluationMismatch,
-        );
-
-        run_negative_is_equal_test::<3, 16, 48>(
-            BLS12_381_MODULUS.clone(),
-            17,
-            3,
-            VerificationError::OodEvaluationMismatch,
-        );
+        run_negative_is_equal_test::<3, 16, 48>(BLS12_381_MODULUS.clone(), 17, 1);
+        run_negative_is_equal_test::<3, 16, 48>(BLS12_381_MODULUS.clone(), 17, 2);
+        run_negative_is_equal_test::<3, 16, 48>(BLS12_381_MODULUS.clone(), 17, 3);
     }
 }

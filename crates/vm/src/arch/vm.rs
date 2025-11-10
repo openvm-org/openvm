@@ -1354,7 +1354,7 @@ pub fn debug_proving_ctx<E, VB>(
     let device = vm.engine.device();
     let air_inv = vm.config().create_airs().unwrap();
     let global_airs = air_inv.into_airs().collect_vec();
-    let (airs, pks, proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
+    let (_airs, _pks, _proof_inputs): (Vec<_>, Vec<_>, Vec<_>) =
         multiunzip(ctx.per_trace.iter().map(|(air_id, air_ctx)| {
             // Transfer from device **back** to host so the debugger can read the data.
             let cached_mains = air_ctx

@@ -19,7 +19,6 @@ use openvm_stark_backend::{
         Matrix,
     },
     utils::disable_debug_builder,
-    verifier::VerificationError,
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
@@ -234,7 +233,6 @@ fn run_negative_field_arithmetic_test(
     b: F,
     c: F,
     prank_vals: FieldExpressionPrankVals,
-    error: VerificationError,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default_native();
@@ -278,7 +276,9 @@ fn run_negative_field_arithmetic_test(
         .build()
         .load_and_prank_trace(harness, modify_trace)
         .finalize();
-    tester.simple_test_with_expected_error(error);
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
 }
 
 #[test]
@@ -291,7 +291,6 @@ fn field_arithmetic_negative_zero_div_test() {
             b: Some(F::ZERO),
             ..Default::default()
         },
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_field_arithmetic_test(
@@ -302,7 +301,6 @@ fn field_arithmetic_negative_zero_div_test() {
             c: Some(F::ZERO),
             ..Default::default()
         },
-        VerificationError::OodEvaluationMismatch,
     );
 
     run_negative_field_arithmetic_test(
@@ -314,7 +312,6 @@ fn field_arithmetic_negative_zero_div_test() {
             opcode_flags: Some([false, false, true, false]),
             ..Default::default()
         },
-        VerificationError::ChallengePhaseError,
     );
 }
 
@@ -332,7 +329,6 @@ fn field_arithmetic_negative_rand() {
             opcode_flags: Some([rng.gen(), rng.gen(), rng.gen(), rng.gen()]),
             divisor_inv: Some(rng.gen()),
         },
-        VerificationError::OodEvaluationMismatch,
     );
 }
 

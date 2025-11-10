@@ -26,12 +26,14 @@ use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
 use openvm_stark_backend::{
     config::{StarkGenericConfig, Val},
-    engine::StarkEngine,
     p3_field::PrimeField32,
-    prover::cpu::{CpuBackend, CpuDevice},
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use stark_backend_v2::{
+    prover::{CpuBackendV2 as CpuBackend, CpuDeviceV2 as CpuDevice},
+    StarkEngineV2 as StarkEngine,
+};
 use strum::EnumCount;
 
 use crate::{
@@ -292,17 +294,17 @@ impl<SC: StarkGenericConfig> VmCircuitExtension<SC> for WeierstrassExtension {
 
 // This implementation is specific to CpuBackend because the lookup chips (VariableRangeChecker,
 // BitwiseOperationLookupChip) are specific to CpuBackend.
-impl<E, SC, RA> VmProverExtension<E, RA, WeierstrassExtension> for EccCpuProverExt
+impl<E, RA> VmProverExtension<E, RA, WeierstrassExtension> for EccCpuProverExt
 where
-    SC: StarkGenericConfig,
-    E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
-    RA: RowMajorMatrixArena<Val<SC>>,
-    Val<SC>: PrimeField32,
+    E::SC: StarkGenericConfig,
+    E: StarkEngine<PB = CpuBackend, PD = CpuDevice>,
+    RA: RowMajorMatrixArena<Val<E::SC>>,
+    Val<E::SC>: PrimeField32,
 {
     fn extend_prover(
         &self,
         extension: &WeierstrassExtension,
-        inventory: &mut ChipInventory<SC, RA, CpuBackend<SC>>,
+        inventory: &mut ChipInventory<E::SC, RA, CpuBackend>,
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
@@ -332,7 +334,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 2, 32>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 2, 32>(
+                let addne = get_ec_addne_chip::<Val<E::SC>, 2, 32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -342,7 +344,7 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 2, 32>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 2, 32>(
+                let double = get_ec_double_chip::<Val<E::SC>, 2, 32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -359,7 +361,7 @@ where
                 };
 
                 inventory.next_air::<WeierstrassAir<2, 6, 16>>()?;
-                let addne = get_ec_addne_chip::<Val<SC>, 6, 16>(
+                let addne = get_ec_addne_chip::<Val<E::SC>, 6, 16>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
@@ -369,7 +371,7 @@ where
                 inventory.add_executor_chip(addne);
 
                 inventory.next_air::<WeierstrassAir<1, 6, 16>>()?;
-                let double = get_ec_double_chip::<Val<SC>, 6, 16>(
+                let double = get_ec_double_chip::<Val<E::SC>, 6, 16>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
