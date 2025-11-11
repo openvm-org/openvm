@@ -20,7 +20,11 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
-    bus::{ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus},
+    bus::{
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
+        StackingModuleMessage, TranscriptBus, UnivariateSumcheckInputBus,
+        UnivariateSumcheckInputMessage,
+    },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
@@ -48,6 +52,7 @@ pub struct UnivariateSumcheckCols<T> {
     pub value_at_r: [T; D_EF],
 
     pub tidx: T,
+    pub is_n_max_zero: T,
 
     // TODO(TEMP): remove this once there is an air to receive the final sum claim. This is to skip
     // the claim send in the case n <= 0 for now
@@ -60,7 +65,9 @@ pub struct UnivariateSumcheckAir {
     /// The degree of the univariate polynomial
     pub univariate_deg: usize,
 
+    pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub claim_bus: SumcheckClaimBus,
+    pub stacking_module_bus: StackingModuleBus,
     pub transcript_bus: TranscriptBus,
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
@@ -222,6 +229,14 @@ where
         // Interactions
         ///////////////////////////////////////////////////////////////////////
 
+        self.univariate_sumcheck_input_bus.receive(
+            builder,
+            local.proof_idx,
+            UnivariateSumcheckInputMessage {
+                is_n_max_zero: local.is_n_max_zero,
+            },
+            local.is_first * local.is_valid,
+        );
         // Sample r
         self.transcript_bus.sample_ext(
             builder,
@@ -230,12 +245,24 @@ where
             local.r,
             local.is_valid * local.is_first,
         );
+        // Observe coefficients
         self.transcript_bus.observe_ext(
             builder,
             local.proof_idx,
             local.tidx,
             local.coeff,
             local.is_valid,
+        );
+
+        // Send tidx when there are no multilinear rounds
+        self.stacking_module_bus.send(
+            builder,
+            local.proof_idx,
+            StackingModuleMessage {
+                // Skip r
+                tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            },
+            local.is_valid * local.is_first * local.is_n_max_zero,
         );
 
         self.claim_bus.receive(

@@ -33,7 +33,7 @@ use crate::{
             EqUniAir,
         },
         expr_eval::{
-            ColumnClaimAir, ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
+            ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
             generate_constraints_folding_blob, generate_interactions_folding_blob,
         },
         expression_claim::ExpressionClaimAir,
@@ -41,10 +41,9 @@ use crate::{
         sumcheck::{MultilinearSumcheckAir, UnivariateSumcheckAir},
     },
     bus::{
-        AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, HyperdimBus,
-        PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
-        XiRandomnessBus,
+        AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
+        EqNegBaseRandBus, EqNegResultBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
+        StackingModuleBus, TranscriptBus, UnivariateSumcheckInputBus, XiRandomnessBus,
     },
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
@@ -67,10 +66,10 @@ pub struct BatchConstraintModule {
     constraint_sumcheck_randomness_bus: ConstraintSumcheckRandomnessBus,
     xi_randomness_bus: XiRandomnessBus,
     gkr_claim_bus: BatchConstraintModuleBus,
+    univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     stacking_module_bus: StackingModuleBus,
     column_opening_bus: ColumnClaimsBus,
     air_shape_bus: AirShapeBus,
-    air_part_shape_bus: AirPartShapeBus,
     hyperdim_bus: HyperdimBus,
     public_values_bus: PublicValuesBus,
     sel_uni_bus: SelUniBus,
@@ -119,10 +118,10 @@ impl BatchConstraintModule {
             constraint_sumcheck_randomness_bus: bus_inventory.constraint_randomness_bus,
             xi_randomness_bus: bus_inventory.xi_randomness_bus,
             gkr_claim_bus: bus_inventory.bc_module_bus,
+            univariate_sumcheck_input_bus: bus_inventory.univariate_sumcheck_input_bus,
             stacking_module_bus: bus_inventory.stacking_module_bus,
             column_opening_bus: bus_inventory.column_claims_bus,
             air_shape_bus: bus_inventory.air_shape_bus,
-            air_part_shape_bus: bus_inventory.air_part_shape_bus,
             hyperdim_bus: bus_inventory.hyperdim_bus,
             public_values_bus: bus_inventory.public_values_bus,
             sel_uni_bus: bus_inventory.sel_uni_bus,
@@ -271,6 +270,8 @@ impl AirModule for BatchConstraintModule {
         let sumcheck_uni_air = UnivariateSumcheckAir {
             l_skip,
             univariate_deg: (self.max_constraint_degree + 1) * ((1 << l_skip) - 1),
+            univariate_sumcheck_input_bus: self.univariate_sumcheck_input_bus,
+            stacking_module_bus: self.stacking_module_bus,
             claim_bus: self.sumcheck_bus,
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
@@ -282,6 +283,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
+            stacking_module_bus: self.stacking_module_bus,
         };
         let eq_ns_air = EqNsAir {
             zero_n_bus: self.zero_n_bus,
@@ -335,14 +337,6 @@ impl AirModule for BatchConstraintModule {
             eq_neg_internal_bus: self.eq_neg_internal_bus,
             cnt_proofs: self.max_num_proofs,
         };
-        let column_claim_air = ColumnClaimAir {
-            transcript_bus: self.transcript_bus,
-            column_claims_bus: self.column_opening_bus,
-            air_shape_bus: self.air_shape_bus,
-            air_part_shape_bus: self.air_part_shape_bus,
-            hyperdim_bus: self.hyperdim_bus,
-            stacking_module_bus: self.stacking_module_bus,
-        };
         let expression_claim_air = ExpressionClaimAir {
             claim_bus: self.expression_claim_bus,
             mu_bus: self.batch_constraint_conductor_bus,
@@ -370,7 +364,6 @@ impl AirModule for BatchConstraintModule {
             Arc::new(eq_sharp_uni_receiver_air) as AirRef<_>,
             Arc::new(eq_uni_air) as AirRef<_>,
             Arc::new(symbolic_expression_air) as AirRef<_>,
-            Arc::new(column_claim_air) as AirRef<_>,
             Arc::new(expression_claim_air) as AirRef<_>,
             Arc::new(interactions_folding_air) as AirRef<_>,
             Arc::new(constraints_folding_air) as AirRef<_>,
@@ -602,9 +595,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(uni_receiver_trace),
             transpose(eq_airs::generate_eq_uni_trace(child_vk, proofs, preflights)),
             symbolic_expr_ctx,
-            transpose(expr_eval::generate_column_claim_trace(
-                child_vk, proofs, preflights,
-            )),
             transpose(expression_claim::generate_trace(
                 child_vk, &cf_blob, &if_blob, preflights,
             )),

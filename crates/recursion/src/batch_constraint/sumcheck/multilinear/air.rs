@@ -16,7 +16,10 @@ use crate::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
-    bus::{ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, TranscriptBus},
+    bus::{
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
+        StackingModuleMessage, TranscriptBus,
+    },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{
         assert_one_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar,
@@ -58,6 +61,7 @@ pub struct MultilinearSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
+    pub stacking_module_bus: StackingModuleBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
@@ -108,6 +112,7 @@ where
             ),
         );
 
+        let is_last_round = LoopSubAir::local_is_last(next.is_valid, next.is_round_start);
         let is_last_eval = LoopSubAir::local_is_last(next.is_valid, next.is_first_eval);
 
         // Eval idx starts at 0
@@ -247,6 +252,15 @@ where
             local.tidx,
             local.r,
             local.is_valid * is_last_eval.clone(),
+        );
+
+        self.stacking_module_bus.send(
+            builder,
+            local.proof_idx,
+            StackingModuleMessage {
+                tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
+            },
+            local.is_valid * is_last_round.clone(),
         );
 
         self.claim_bus.receive(
