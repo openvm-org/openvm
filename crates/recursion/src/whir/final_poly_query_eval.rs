@@ -6,7 +6,7 @@ use openvm_stark_backend::{
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
 };
 use p3_air::{Air, AirBuilder, BaseAir};
-use p3_field::{Field, FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
+use p3_field::{FieldAlgebra, FieldExtensionAlgebra, extension::BinomiallyExtendable};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
 use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
@@ -43,8 +43,8 @@ struct FinalyPolyQueryEvalCols<T> {
     is_same_round: T,
     is_same_query: T,
     is_same_phase: T,
-    query_idx_nz_inv: T,
     is_last_round: T,
+    is_query_zero: T,
     query_pow: [T; D_EF],
     alpha: [T; D_EF],
     gamma: [T; D_EF],
@@ -52,7 +52,9 @@ struct FinalyPolyQueryEvalCols<T> {
     eq_acc: [T; D_EF],
     final_poly_coeff: [T; D_EF],
     final_value_acc: [T; D_EF],
+    gamma_eq_acc: [T; D_EF],
     horner_acc: [T; D_EF],
+    do_carry: T,
 }
 
 #[derive(Debug)]
@@ -199,6 +201,21 @@ where
             local.eq_acc,
         );
         assert_array_eq(
+            &mut builder.when(local.is_first_in_query),
+            local.gamma_eq_acc,
+            local.gamma_pow,
+        );
+        assert_array_eq(
+            &mut builder.when(local_is_eq_phase.clone()),
+            next.gamma_eq_acc,
+            ext_field_multiply(local.gamma_eq_acc, eq_1(local.alpha, local.query_pow)),
+        );
+        assert_array_eq(
+            &mut builder.when((AB::Expr::ONE - local_is_eq_phase.clone()) * local.is_same_query),
+            next.gamma_eq_acc,
+            local.gamma_eq_acc,
+        );
+        assert_array_eq(
             &mut builder.when(local.is_first_in_round),
             local.gamma_pow,
             local.gamma,
@@ -219,38 +236,61 @@ where
             next.final_value_acc,
             local.final_value_acc,
         );
-        let is_query_zero = AB::Expr::ONE - local.query_idx_nz_inv * local.query_idx;
+        builder
+            .when(local.is_first_in_round)
+            .assert_one(local.is_query_zero);
+        builder
+            .when(local.is_same_query)
+            .assert_eq(local.is_query_zero, next.is_query_zero);
         builder
             .when(local.query_idx)
-            .assert_zero(is_query_zero.clone());
-        let should_add = AB::Expr::ONE - is_query_zero * local.is_last_round;
-        let should_add_ext = [
-            should_add.clone(),
-            AB::Expr::ZERO,
-            AB::Expr::ZERO,
-            AB::Expr::ZERO,
-        ];
+            .assert_zero(local.is_query_zero);
+        builder
+            .when(local.is_enabled - local.is_same_proof)
+            .assert_one(local.is_last_round);
+        builder
+            .when(local.is_same_round)
+            .assert_eq(local.is_last_round, next.is_last_round);
+        builder
+            .when(local.whir_round - AB::Expr::from_canonical_usize(self.num_whir_rounds - 1))
+            .assert_zero(local.is_last_round);
+
+        builder.assert_bool(local.do_carry);
+        builder.when(local.is_enabled).assert_eq(
+            local.do_carry,
+            (AB::Expr::ONE - local.is_same_query)
+                * local.is_same_proof
+                * (AB::Expr::ONE - local.is_query_zero * local.is_last_round),
+        );
+
         let eq_post = ext_field_multiply::<AB::Expr>(local.eq_acc, post_horner_acc.clone());
         let gamma_eq_post = ext_field_multiply::<AB::Expr>(local.gamma_pow, eq_post.clone());
-        let next_final_value_acc = ext_field_add(
-            local.final_value_acc,
-            ext_field_multiply::<AB::Expr>(gamma_eq_post.clone(), should_add_ext),
-        );
 
         assert_array_eq(
             &mut builder.when(local_is_eq_phase.clone()),
             local.horner_acc,
-            [AB::F::ZERO, AB::F::ZERO, AB::F::ZERO, AB::F::ZERO],
+            [AB::F::ZERO; 4],
         );
         assert_array_eq(
             &mut builder.when(local.is_same_query),
             next.horner_acc,
             post_horner_acc.clone(),
         );
+        let contrib = ext_field_multiply::<AB::Expr>(local.gamma_eq_acc, post_horner_acc.clone());
+        let post_final_value_acc = ext_field_add(local.final_value_acc, contrib);
         assert_array_eq(
-            &mut builder.when(local.is_same_proof * next.is_first_in_query),
+            &mut builder.when(local.do_carry),
             next.final_value_acc,
-            next_final_value_acc,
+            post_final_value_acc,
+        );
+        assert_array_eq(
+            &mut builder.when(
+                (AB::Expr::ONE - local.is_same_query)
+                    * local.is_same_proof
+                    * (local.is_query_zero * local.is_last_round),
+            ),
+            next.final_value_acc,
+            local.final_value_acc,
         );
 
         self.query_bus.receive(
@@ -288,7 +328,6 @@ where
             next.gamma,
         );
         let is_last = local.is_enabled - local.is_same_proof;
-        // degree 4?
         let final_value = ext_field_add(local.final_value_acc, gamma_eq_post);
         self.final_poly_query_eval_bus.receive(
             builder,
@@ -464,8 +503,15 @@ pub(crate) fn generate_trace(
             cols.is_same_round = F::from_bool(is_same_round);
             cols.is_same_query = F::from_bool(is_same_query);
             cols.is_same_phase = F::from_bool(is_same_phase);
-            cols.query_idx_nz_inv = cols.query_idx.try_inverse().unwrap_or_default();
+            cols.is_query_zero = F::from_bool(record.query_idx == 0);
             cols.is_last_round = F::from_bool(whir_round + 1 == num_whir_rounds);
+
+            let is_q0_last = record.query_idx == 0 && (whir_round + 1 == num_whir_rounds);
+            let do_carry = (!is_same_query) && is_same_proof && !is_q0_last;
+            cols.do_carry = F::from_bool(do_carry);
+
+            let geq_acc = record.gamma_pow * record.eq_acc;
+            cols.gamma_eq_acc.copy_from_slice(geq_acc.as_base_slice());
 
             cols.alpha.copy_from_slice(record.alpha.as_base_slice());
             cols.gamma.copy_from_slice(record.gamma.as_base_slice());
