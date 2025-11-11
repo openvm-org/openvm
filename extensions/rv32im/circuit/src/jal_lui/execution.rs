@@ -117,7 +117,7 @@ where
             imm << 12
         };
 
-        if enabled{
+        if enabled {
             if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
                 asm_str += &format!("   mov {override_reg}, {rd}\n");
             } else {
