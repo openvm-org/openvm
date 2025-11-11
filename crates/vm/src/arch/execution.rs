@@ -18,12 +18,6 @@ use crate::arch::aot::common::{
     REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
 };
 
-use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
-#[cfg(feature = "aot")]
-use crate::arch::aot::common::{
-    REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
-    REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
-};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
