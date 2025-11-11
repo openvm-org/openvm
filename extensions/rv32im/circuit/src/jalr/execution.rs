@@ -122,9 +122,8 @@ where
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
         let write_rd = !inst.f.is_zero();
 
-        let (gpr_reg_b, delta_b) = xmm_to_gpr((b / 4) as u8, REG_B_W, true); // have to use temp, since we are modifying the value
+        let (gpr_reg_b, delta_b) = xmm_to_gpr((b / 4) as u8, REG_B_W, true);
         asm_str += &delta_b;
-
         asm_str += &format!("   add {gpr_reg_b}, {imm_extended}\n");
         asm_str += &format!("   and {gpr_reg_b}, -2\n"); // clear bit 0 per RISC-V jalr
         asm_str += &format!("   mov {REG_PC_W}, {gpr_reg_b}\n"); // zero-extend into r13
@@ -135,10 +134,10 @@ where
             asm_str += &gpr_to_xmm(REG_A_W, (a / 4) as u8);
         }
 
-        asm_str += "   lea rdx, [rip + map_pc_base]\n";
-        asm_str += &format!("   movsxd {REG_A}, [rdx + {REG_PC}]\n");
-        asm_str += "   add rcx, rdx\n";
-        asm_str += "   jmp rcx\n";
+        asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
+        asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {REG_PC}]\n");
+        asm_str += &format!("   add {REG_A}, {REG_C}\n");
+        asm_str += &format!("   jmp {REG_A}\n");
         Ok(asm_str)
     }
 }
