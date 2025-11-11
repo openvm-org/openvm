@@ -96,6 +96,7 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
+        // inst.opcode == MulOpcode::MUL.global_opcode()
         false
     }
 

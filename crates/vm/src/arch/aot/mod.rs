@@ -6,7 +6,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
-        aot::common::{SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR},
+        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr},
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
@@ -177,7 +177,7 @@ where
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
         }
 
-        asm_str += &SYNC_XMM_TO_GPR();
+        asm_str += &sync_xmm_to_gpr();
 
         asm_str
     }
@@ -198,7 +198,7 @@ where
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
 
-        asm_str += &SYNC_GPR_TO_XMM();
+        asm_str += &sync_gpr_to_xmm();
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");

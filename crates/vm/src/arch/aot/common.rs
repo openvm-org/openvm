@@ -60,7 +60,7 @@ pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
     None,         // x31
 ];
 
-pub fn SYNC_XMM_TO_GPR() -> String {
+pub fn sync_xmm_to_gpr() -> String {
     let mut asm_str = String::new();
     for (rv32_reg, override_reg_opt) in RISCV_TO_X86_OVERRIDE_MAP.iter().copied().enumerate() {
         if let Some(override_reg) = override_reg_opt {
@@ -72,7 +72,7 @@ pub fn SYNC_XMM_TO_GPR() -> String {
     asm_str
 }
 
-pub fn SYNC_GPR_TO_XMM() -> String {
+pub fn sync_gpr_to_xmm() -> String {
     let mut asm_str = String::new();
     for (rv32_reg, override_reg_opt) in RISCV_TO_X86_OVERRIDE_MAP.iter().copied().enumerate() {
         if let Some(override_reg) = override_reg_opt {

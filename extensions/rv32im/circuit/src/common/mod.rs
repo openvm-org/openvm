@@ -9,7 +9,7 @@ mod aot {
         REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
     };
     pub(crate) use openvm_circuit::arch::aot::common::{
-        RISCV_TO_X86_OVERRIDE_MAP, SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR,
+        RISCV_TO_X86_OVERRIDE_MAP, sync_gpr_to_xmm, sync_xmm_to_gpr,
     };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
@@ -47,6 +47,16 @@ mod aot {
         format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
     }
 
+    /*
+    input: 
+    - riscv register number 
+    - gpr register to write into
+    - is_gpr_force_write boolean
+
+    output:
+    - string representing the general purpose regiter that stores the value of register number `rv32_reg` 
+    - emitted assembly string that performs the move
+    */
     pub(crate) fn xmm_to_gpr(
         rv32_reg: u8,
         gpr: &str,
