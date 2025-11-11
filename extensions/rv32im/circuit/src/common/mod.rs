@@ -1,8 +1,6 @@
 #[cfg(feature = "aot")]
 pub use aot::*;
 
-
-
 #[cfg(feature = "aot")]
 mod aot {
     pub(crate) use openvm_circuit::arch::aot::common::{

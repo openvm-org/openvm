@@ -3,8 +3,6 @@ use std::{ffi::c_void, io::Write, process::Command};
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
-use crate::arch::aot::common::SYNC_XMM_TO_GPR;
-use crate::arch::aot::common::SYNC_GPR_TO_XMM;
 
 use crate::{
     arch::{
@@ -18,7 +16,6 @@ use crate::{
 pub mod common;
 mod metered_execute;
 mod pure;
-pub mod common;
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
