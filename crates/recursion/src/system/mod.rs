@@ -27,7 +27,7 @@ use crate::{
         ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpBitsLenBus,
         GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus,
         PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        UnivariateSumcheckInputBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::exp_bits_len::ExpBitsLenAir,
@@ -136,6 +136,7 @@ pub struct BusInventory {
     pub stacking_indices_bus: StackingIndicesBus,
     pub commitments_bus: CommitmentsBus,
     pub public_values_bus: PublicValuesBus,
+    pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub column_claims_bus: ColumnClaimsBus,
 
     // Randomness buses
@@ -264,6 +265,7 @@ impl BusInventory {
             stacking_indices_bus: StackingIndicesBus::new(b.new_bus_idx()),
             commitments_bus: CommitmentsBus::new(b.new_bus_idx()),
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
+            univariate_sumcheck_input_bus: UnivariateSumcheckInputBus::new(b.new_bus_idx()),
             sel_uni_bus: SelUniBus::new(b.new_bus_idx()),
 
             // Randomness buses

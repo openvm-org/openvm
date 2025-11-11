@@ -163,6 +163,14 @@ define_typed_per_proof_permutation_bus!(BatchConstraintModuleBus, BatchConstrain
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct UnivariateSumcheckInputMessage<T> {
+    pub is_n_max_zero: T,
+}
+
+define_typed_per_proof_permutation_bus!(UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct StackingModuleMessage<T> {
     pub tidx: T,
 }
@@ -319,8 +327,8 @@ define_typed_lookup_bus!(Poseidon2Bus, Poseidon2BusMessage);
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum AirShapeProperty {
     AirId,
-    HasPreprocessed,
-    NumMainParts,
+    // HasPreprocessed,
+    // NumMainParts,
     NumInteractions,
 }
 

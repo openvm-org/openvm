@@ -26,10 +26,10 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirPartShapeBus, AirPartShapeBusMessage, AirShapeBus, AirShapeBusMessage, AirShapeProperty,
-        CommitmentsBus, CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus,
-        HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
-        TranscriptBusMessage,
+        AirPartShapeBus, AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus,
+        CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus, HyperdimBusMessage,
+        LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus, TranscriptBusMessage,
+        UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -48,7 +48,7 @@ use crate::{
 };
 
 #[repr(C)]
-#[derive(AlignedBorrow)]
+#[derive(AlignedBorrow, Debug)]
 pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub proof_idx: F,
     pub is_valid: F,
@@ -98,7 +98,10 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub num_interactions_limbs: [F; NUM_LIMBS],
     pub total_interactions_limbs: [F; NUM_LIMBS],
 
+    /// The maximum hypercube dimension across all present AIR traces, or zero.
+    /// Computed as max(0, n0, n1, ...) where ni = log_height_i - l_skip for each present trace.
     pub n_max: F,
+    pub n_max_inv: F,
     pub is_n_max_greater: F,
 
     pub num_air_id_lookups: F,
@@ -223,8 +226,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 total_interactions += num_interactions;
 
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
-                cols.num_air_id_lookups =
-                    F::from_canonical_usize(bc_air_shape_lookups[log_height] + 1);
+                cols.n_max_inv = cols.n_max.try_inverse().unwrap_or_default();
+                cols.num_air_id_lookups = F::from_canonical_usize(bc_air_shape_lookups[log_height]);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -313,6 +316,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.n_max_inv = cols.n_max.try_inverse().unwrap_or_default();
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -403,6 +407,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
 
                 cols.total_interactions_limbs = total_interactions_f;
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.n_max_inv = cols.n_max.try_inverse().unwrap_or_default();
                 cols.is_n_max_greater = F::from_bool(preflight.proof_shape.n_max > n_logup);
 
                 // n_logup
@@ -458,8 +463,9 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
     // Inter-module buses
     pub gkr_module_bus: GkrModuleBus,
+    pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub air_shape_bus: AirShapeBus,
-    pub air_part_shape_bus: AirPartShapeBus,
+    pub _air_part_shape_bus: AirPartShapeBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
@@ -780,7 +786,7 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // AIR SHAPE LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let num_main_parts = fold(cached_present.iter(), AB::Expr::ONE, |acc, is_present| {
+        let _num_main_parts = fold(cached_present.iter(), AB::Expr::ONE, |acc, is_present| {
             acc + is_present.clone()
         });
         self.air_shape_bus.send(
@@ -793,26 +799,26 @@ where
             },
             local.is_present * local.num_air_id_lookups,
         );
-        self.air_shape_bus.send(
-            builder,
-            local.proof_idx,
-            AirShapeBusMessage {
-                sort_idx: local.sorted_idx.into(),
-                property_idx: AirShapeProperty::HasPreprocessed.to_field(),
-                value: has_preprocessed.clone(),
-            },
-            local.is_present,
-        );
-        self.air_shape_bus.send(
-            builder,
-            local.proof_idx,
-            AirShapeBusMessage {
-                sort_idx: local.sorted_idx.into(),
-                property_idx: AirShapeProperty::NumMainParts.to_field(),
-                value: num_main_parts,
-            },
-            local.is_present,
-        );
+        // self.air_shape_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     AirShapeBusMessage {
+        //         sort_idx: local.sorted_idx.into(),
+        //         property_idx: AirShapeProperty::HasPreprocessed.to_field(),
+        //         value: has_preprocessed.clone(),
+        //     },
+        //     local.is_present,
+        // );
+        // self.air_shape_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     AirShapeBusMessage {
+        //         sort_idx: local.sorted_idx.into(),
+        //         property_idx: AirShapeProperty::NumMainParts.to_field(),
+        //         value: num_main_parts,
+        //     },
+        //     local.is_present,
+        // );
         self.air_shape_bus.send(
             builder,
             local.proof_idx,
@@ -839,40 +845,40 @@ where
                 .assert_zero(localv.part_cached_mult[cached_idx]);
         });
 
-        self.air_part_shape_bus.send(
-            builder,
-            local.proof_idx,
-            AirPartShapeBusMessage {
-                idx: local.idx.into(),
-                part: AB::Expr::ZERO,
-                width: main_common_width.clone(),
-            },
-            local.part_common_main_mult * local.is_valid,
-        );
+        // self.air_part_shape_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     AirPartShapeBusMessage {
+        //         idx: local.idx.into(),
+        //         part: AB::Expr::ZERO,
+        //         width: main_common_width.clone(),
+        //     },
+        //     local.part_common_main_mult * local.is_valid,
+        // );
 
-        self.air_part_shape_bus.send(
-            builder,
-            local.proof_idx,
-            AirPartShapeBusMessage {
-                idx: local.idx.into(),
-                part: AB::Expr::ONE,
-                width: preprocessed_stacked_width.clone(),
-            },
-            local.part_preprocessed_mult * local.is_valid,
-        );
+        // self.air_part_shape_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     AirPartShapeBusMessage {
+        //         idx: local.idx.into(),
+        //         part: AB::Expr::ONE,
+        //         width: preprocessed_stacked_width.clone(),
+        //     },
+        //     local.part_preprocessed_mult * local.is_valid,
+        // );
 
-        (0..self.max_cached).for_each(|cached_idx| {
-            self.air_part_shape_bus.send(
-                builder,
-                local.proof_idx,
-                AirPartShapeBusMessage {
-                    idx: local.idx.into(),
-                    part: AB::Expr::from_canonical_usize(1 + cached_idx) + has_preprocessed.clone(),
-                    width: cached_widths[cached_idx].clone(),
-                },
-                localv.part_cached_mult[cached_idx] * local.is_valid,
-            );
-        });
+        // (0..self.max_cached).for_each(|cached_idx| {
+        //     self.air_part_shape_bus.send(
+        //         builder,
+        //         local.proof_idx,
+        //         AirPartShapeBusMessage {
+        //             idx: local.idx.into(),
+        //             part: AB::Expr::from_canonical_usize(1 + cached_idx) + has_preprocessed.clone(),
+        //             width: cached_widths[cached_idx].clone(),
+        //         },
+        //         localv.part_cached_mult[cached_idx] * local.is_valid,
+        //     );
+        // });
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // HYPERDIM (SIGNED N) LOOKUP
@@ -1202,6 +1208,10 @@ where
             .when(local.is_first)
             .assert_eq(local.n_max, not(local.n_sign_bit) * n_abs);
         builder
+            .when(local.is_first)
+            .when(local.n_sign_bit)
+            .assert_zero(local.n_max);
+        builder
             .when(local.is_valid)
             .assert_eq(local.n_max, next.n_max);
 
@@ -1225,6 +1235,19 @@ where
                 is_n_max_greater: local.is_n_max_greater.into(),
             },
             local.is_last,
+        );
+
+        // Constrain is_n_max_zero to be one when n_max is zero, and zero otherwise.
+        builder
+            .when(local.n_max)
+            .assert_one(local.n_max * local.n_max_inv);
+        self.univariate_sumcheck_input_bus.send(
+            builder,
+            local.proof_idx,
+            UnivariateSumcheckInputMessage {
+                is_n_max_zero: AB::Expr::ONE - local.n_max * local.n_max_inv,
+            },
+            local.is_first * local.is_valid,
         );
 
         // Constrain that the total number of interactions is less than the vk-specified amount.
