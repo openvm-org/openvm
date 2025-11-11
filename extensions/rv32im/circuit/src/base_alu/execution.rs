@@ -175,7 +175,8 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, _instruction: &Instruction<F>) -> bool {
-        true
+        // true
+        false
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -185,7 +186,7 @@ where
             c_i24 as i16
         };
         let mut asm_str = String::new();
-
+        
         // asm_str += &SYNC_XMM_TO_GPR();
 
         let a: i16 = to_i16(inst.a);
