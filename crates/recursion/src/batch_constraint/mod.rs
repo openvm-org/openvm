@@ -24,9 +24,9 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{
         bus::{
-            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqNegInternalBus,
-            EqSharpUniBus, EqZeroNBus, ExpressionClaimBus, InteractionsFoldingBus,
-            SumcheckClaimBus, SymbolicExpressionBus,
+            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqNOuterBus,
+            EqNegInternalBus, EqSharpUniBus, EqZeroNBus, ExpressionClaimBus,
+            InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
         },
         eq_airs::{
             Eq3bAir, EqNegAir, EqNegTraceGenerator, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir,
@@ -74,6 +74,7 @@ pub struct BatchConstraintModule {
     hyperdim_bus: HyperdimBus,
     public_values_bus: PublicValuesBus,
     sel_uni_bus: SelUniBus,
+    eq_n_outer_bus: EqNOuterBus,
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
@@ -134,6 +135,7 @@ impl BatchConstraintModule {
             eq_3b_bus: Eq3bBus::new(b.new_bus_idx()),
             eq_neg_internal_bus: EqNegInternalBus::new(b.new_bus_idx()),
             sel_hypercube_bus: SelHypercubeBus::new(b.new_bus_idx()),
+            eq_n_outer_bus: EqNOuterBus::new(b.new_bus_idx()),
             // sel_uni bus is shared via inventory
             symbolic_expression_bus: SymbolicExpressionBus::new(b.new_bus_idx()),
             expression_claim_bus: ExpressionClaimBus::new(b.new_bus_idx()),
@@ -286,6 +288,7 @@ impl AirModule for BatchConstraintModule {
             xi_bus: self.xi_randomness_bus,
             r_xi_bus: self.batch_constraint_conductor_bus,
             sel_hypercube_bus: self.sel_hypercube_bus,
+            eq_n_outer_bus: self.eq_n_outer_bus,
             l_skip,
         };
         let eq_3b_air = Eq3bAir {
@@ -355,6 +358,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             constraint_bus: self.constraints_folding_bus,
             expression_claim_bus: self.expression_claim_bus,
+            eq_n_outer_bus: self.eq_n_outer_bus,
         };
         vec![
             Arc::new(fraction_folder_air) as AirRef<_>,
