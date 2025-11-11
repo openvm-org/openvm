@@ -355,6 +355,7 @@ impl GkrModule {
                     n_max: preflight.proof_shape.n_max,
                     logup_pow_witness: *logup_pow_witness,
                     logup_pow_sample,
+                    alpha_logup,
                     input_layer_claim,
                 };
 

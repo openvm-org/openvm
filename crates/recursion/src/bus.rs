@@ -153,32 +153,11 @@ define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintModuleMessage<T> {
-    pub tidx_alpha_beta: T,
-    // TODO(ayush): can this be derived?
     pub tidx: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
 }
 
 define_typed_per_proof_permutation_bus!(BatchConstraintModuleBus, BatchConstraintModuleMessage);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
-pub struct BatchConstraintTidxBetweenSumchecksMessage<T> {
-    pub tidx: T,
-}
-
-define_typed_per_proof_permutation_bus!(
-    BatchConstraintTidxBetweenSumchecksBus,
-    BatchConstraintTidxBetweenSumchecksMessage
-);
-
-#[repr(C)]
-#[derive(AlignedBorrow, Debug, Clone)]
-pub struct UnivariateSumcheckInputMessage<T> {
-    pub is_n_max_zero: T,
-}
-
-define_typed_per_proof_permutation_bus!(UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
