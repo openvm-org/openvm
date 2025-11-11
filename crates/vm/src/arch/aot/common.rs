@@ -1,3 +1,5 @@
+pub const REG_FOURTH_ARG: &str = "rcx";
+
 pub const REG_C: &str = "rdx";
 pub const REG_C_W: &str = "edx";
 pub const REG_C_B: &str = "dx";
@@ -13,6 +15,7 @@ pub const REG_FIRST_ARG: &str = "rdi";
 
 pub const REG_RETURN_VAL: &str = "rax";
 pub const REG_D: &str = "rax";
+pub const REG_INSTRET_END: &str = "r12";
 
 pub const REG_EXEC_STATE_PTR: &str = "rbx";
 pub const REG_INSNS_PTR: &str = "rbp";

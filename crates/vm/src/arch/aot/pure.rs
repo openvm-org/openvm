@@ -3,7 +3,13 @@ use std::ffi::c_void;
 use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{common::{SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR}, AotInstance, AsmRunFn};
+use super::{
+    common::{
+        REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
+        REG_PC, REG_SECOND_ARG, REG_THIRD_ARG, REG_D, REG_RETURN_VAL
+    },
+    AotInstance, AsmRunFn,
+};
 use crate::{
     arch::{
         aot::{asm_to_lib, extern_handler, get_vm_address_space_addr, set_pc_shim},
@@ -44,10 +50,11 @@ where
         asm_str += "asm_run:\n";
 
         asm_str += &Self::push_external_registers();
-        asm_str += "    mov rbx, rdi\n";
-        asm_str += "    mov rbp, rsi\n";
-        asm_str += "    mov r13, rdx\n";
-        asm_str += "    mov r12, rcx\n";
+
+        asm_str += &format!("   mov {REG_EXEC_STATE_PTR}, {REG_FIRST_ARG}\n");
+        asm_str += &format!("   mov {REG_INSNS_PTR}, {REG_SECOND_ARG}\n");
+        asm_str += &format!("   mov {REG_PC}, {REG_THIRD_ARG}\n");
+        asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
 
         let get_vm_address_space_addr_ptr = format!(
             "{:p}",
@@ -58,6 +65,7 @@ where
         asm_str += "    xor r9, r9\n";
 
         asm_str += &Self::push_internal_registers();
+
         // Temporarily use r14 as the pointer to get_vm_address_space_addr
         asm_str += &format!("    mov r14, {get_vm_address_space_addr_ptr}\n");
         asm_str += "    mov rdi, rbx\n";
@@ -80,14 +88,15 @@ where
         asm_str += "    mov rsi, 4\n";
         asm_str += "    call r14\n";
         asm_str += "    pinsrq  xmm2, rax, 1\n";
+
         asm_str += &Self::pop_internal_registers();
 
         asm_str += &Self::rv32_regs_to_xmm();
 
         asm_str += "    lea rdx, [rip + map_pc_base]\n";
-        asm_str += "    movsxd rcx, [rdx + r13]\n";
-        asm_str += "    add rcx, rdx\n";
-        asm_str += "    jmp rcx\n";
+        asm_str += "    movsxd r13, [rdx + r13]\n";
+        asm_str += "    add r13, rdx\n";
+        asm_str += "    jmp r13\n";
 
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
@@ -96,7 +105,6 @@ where
 
         for i in 0..(pc_base / 4) {
             asm_str += &format!("asm_execute_pc_{}:", i * 4);
-            asm_str += "\n";
             asm_str += "\n";
         }
 
@@ -118,25 +126,26 @@ where
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
-                asm_str += "    mov rdi, rbx\n";
-                asm_str += "    mov rsi, rbp\n";
-                asm_str += &format!("    mov rdx, {pc}\n");
-                asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
-                asm_str += "    call rax\n";
-                asm_str += "    mov r13, rax\n"; // move the return value of the extern_handler into r13
-                asm_str += "    AND rax, 1\n"; // check if the return value is 1
-                asm_str += "    cmp rax, 1\n"; // compare the return value with 1
-                asm_str += &Self::pop_internal_registers(); // pop the internal registers from the stack
+
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
+                asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
+                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n"); // REG_D used as auxilliary
+                asm_str += &format!("   call {REG_D}\n");
+                asm_str += &format!("   mov {REG_PC}, {REG_D}\n");
+                asm_str += &format!("   AND {REG_D}, 1\n");
+                asm_str += &format!("   cmp {REG_D}, 1\n");
+
+                asm_str += &Self::pop_internal_registers(); 
                 asm_str += &Self::pop_address_space_start();
-                asm_str += "    mov rdi, rbx\n";
-                asm_str += &format!("    mov rsi, {pc}\n");
-                asm_str += &format!("    mov rax, {set_pc_ptr}\n");
-                asm_str += "    call rax\n";
-                asm_str += &format!("    mov rax, {}\n", instruction.c.as_canonical_u32());
+                asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+                asm_str += &format!("   mov {REG_SECOND_ARG}, {pc}\n");
+                asm_str += &format!("   mov {REG_D}, {set_pc_ptr}\n");
+                asm_str += &format!("   call {REG_D}\n");
+                asm_str += &format!("   mov {REG_RETURN_VAL}, {}\n", instruction.c.as_canonical_u32());
                 asm_str += &Self::pop_external_registers();
                 asm_str += "    ret\n";
-                asm_str += "\n";
-                asm_str += &Self::xmm_to_rv32_regs();
+
                 continue;
             }
 
@@ -165,13 +174,22 @@ where
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
-                asm_str += &executor.fallback_to_interpreter(
-                    &Self::push_internal_registers(),
-                    &Self::pop_internal_registers(),
-                    &(Self::pop_address_space_start() + &Self::rv32_regs_to_xmm()),
-                    &instruction,
-                    pc,
-                );
+                asm_str += &Self::push_internal_registers();
+                asm_str += &executor.call_extern_handler(pc);
+                
+                asm_str += &format!("   mov {REG_PC}, {REG_RETURN_VAL}\n");
+                asm_str += &format!("   AND {REG_RETURN_VAL}, 1\n");
+                asm_str += &format!("   cmp {REG_RETURN_VAL}, 1\n");
+
+                asm_str += &Self::pop_internal_registers();
+                asm_str += &Self::pop_address_space_start();
+                asm_str += &Self::rv32_regs_to_xmm();
+                asm_str += &format!("   je asm_run_end_{pc}\n");
+
+                asm_str += &format!("   lea {REG_D}, [rip + map_pc_base]\n");
+                asm_str += &format!("   movsxd {REG_PC}, [{REG_D} + {REG_PC}]\n"); 
+                asm_str += &format!("   add {REG_PC}, {REG_D}\n");
+                asm_str += &format!("   jmp {REG_PC}\n");
             }
         }
 
@@ -179,9 +197,9 @@ where
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("asm_run_end_{pc}:\n");
             asm_str += &Self::xmm_to_rv32_regs();
-            asm_str += "    mov rdi, rbx\n";
-            asm_str += &format!("    mov rsi, {pc}\n");
-            asm_str += &format!("    mov rax, {set_pc_ptr}\n");
+            asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
+            asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");
+            asm_str += &format!("    mov {REG_D}, {set_pc_ptr}\n");
             asm_str += "    call rax\n";
             asm_str += "    xor rax, rax\n";
             asm_str += &Self::pop_external_registers();
