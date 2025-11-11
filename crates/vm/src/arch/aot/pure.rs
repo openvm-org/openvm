@@ -127,7 +127,7 @@ where
                 asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
                 asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
                 asm_str += &format!("   mov {REG_THIRD_ARG}, {pc}\n");
-                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n"); 
+                asm_str += &format!("   mov {REG_D}, {extern_handler_ptr}\n");
                 asm_str += &format!("   call {REG_D}\n");
                 asm_str += &format!("   mov {REG_PC}, {REG_D}\n");
                 asm_str += &format!("   AND {REG_D}, 1\n");
