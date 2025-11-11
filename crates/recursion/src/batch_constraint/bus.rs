@@ -61,6 +61,16 @@ define_typed_per_proof_permutation_bus!(EqZeroNBus, EqZeroNMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct EqNOuterMessage<T> {
+    pub is_sharp: T,
+    pub n: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(EqNOuterBus, EqNOuterMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct Eq3bMessage<T> {
     pub sort_idx: T,
     pub interaction_idx: T,
