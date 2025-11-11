@@ -90,10 +90,10 @@ where
 
         asm_str += &Self::rv32_regs_to_xmm();
 
-        asm_str += "    lea rdx, [rip + map_pc_base]\n";
-        asm_str += "    movsxd r13, [rdx + r13]\n";
-        asm_str += "    add r13, rdx\n";
-        asm_str += "    jmp r13\n";
+        asm_str += &format!("   lea {REG_D}, [rip + map_pc_base]\n");
+        asm_str += &format!("   movsxd {REG_PC}, [{REG_D} + {REG_PC}]\n");
+        asm_str += &format!("   add {REG_PC}, {REG_D}\n");
+        asm_str += &format!("   jmp {REG_PC}\n");
 
         // asm_execute_pc_{pc_num}
         // do fallback first for now but expand per instruction
@@ -114,9 +114,10 @@ where
             asm_str += &format!("asm_execute_pc_{pc}:\n");
 
             // Check if we should suspend or not
-            asm_str += "    cmp r12, 0\n";
+
+            asm_str += &format!("    cmp {REG_INSTRET_END}, 0\n");
             asm_str += &format!("    je asm_run_end_{pc}\n");
-            asm_str += "    dec r12\n";
+            asm_str += &format!("    dec {REG_INSTRET_END}\n");
 
             if instruction.opcode.as_usize() == 0 {
                 // terminal opcode has no associated executor, so can handle with default fallback
