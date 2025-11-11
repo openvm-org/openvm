@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
+#[cfg(feature = "aot")]
+use crate::arch::aot::common::{
+    REG_D, REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
+    REG_PC, REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
+};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
 #[cfg(feature = "metrics")]
@@ -182,8 +187,9 @@ pub trait AotExecutor<F> {
             crate::arch::aot::extern_handler::<F, ExecutionCtx, true> as *const ()
         );
         let mut asm_str = String::new();
-        asm_str += "    mov rdi, rbx\n";
-        asm_str += "    mov rsi, rbp\n";
+
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
         asm_str += &format!("    mov rdx, {pc}\n");
         asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
         asm_str += "    call rax\n";
@@ -227,9 +233,9 @@ pub trait AotExecutor<F> {
         asm_str += &format!("   je asm_run_end_{pc}\n");
 
         asm_str += "    lea rdx, [rip + map_pc_base]\n"; // load the base address of the map_pc_base section
-        asm_str += "    movsxd rcx, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
-        asm_str += "    add rcx, rdx\n"; // add the base address and the offset
-        asm_str += "    jmp rcx\n"; // jump to the next instruction (rcx is the next instruction)
+        asm_str += "    movsxd r13, [rdx + r13]\n"; // load the offset of the next instruction (r13 is the next pc)
+        asm_str += "    add r13, rdx\n"; // add the base address and the offset
+        asm_str += "    jmp r13\n"; // jump to the next instruction (rcx is the next instruction)
         asm_str += "\n";
         asm_str
     }

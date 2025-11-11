@@ -18,14 +18,15 @@ where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        let local_opcode = Rv32LoadStoreOpcode::from_usize(
-            inst.opcode
-                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        );
-        match local_opcode {
-            Rv32LoadStoreOpcode::LOADB | Rv32LoadStoreOpcode::LOADH => true,
-            _ => unreachable!(),
-        }
+        // let local_opcode = Rv32LoadStoreOpcode::from_usize(
+        //     inst.opcode
+        //         .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        // );
+        // match local_opcode {
+        //     Rv32LoadStoreOpcode::LOADB | Rv32LoadStoreOpcode::LOADH => true,
+        //     _ => unreachable!(),
+        // }
+        false
     }
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         let Instruction {

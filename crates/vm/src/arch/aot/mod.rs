@@ -6,12 +6,14 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
+        aot::common::{sync_gpr_to_xmm, sync_xmm_to_gpr},
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
 
+pub mod common;
 mod metered_execute;
 mod pure;
 
@@ -136,41 +138,35 @@ where
 
     fn push_internal_registers() -> String {
         let mut asm_str = String::new();
-        asm_str += "    push rax\n";
+
         asm_str += "    push rcx\n";
         asm_str += "    push rdx\n";
+        asm_str += "    push rsi\n";
+        asm_str += "    push rdi\n";
         asm_str += "    push r8\n";
         asm_str += "    push r9\n";
         asm_str += "    push r10\n";
         asm_str += "    push r11\n";
-        // asm_str += &Self::push_xmm_regs();
+        asm_str += "    push rax\n";
 
         asm_str
     }
 
     fn pop_internal_registers() -> String {
         let mut asm_str = String::new();
+
+        asm_str += "    pop rax\n";
         asm_str += "    pop r11\n";
         asm_str += "    pop r10\n";
         asm_str += "    pop r9\n";
         asm_str += "    pop r8\n";
+        asm_str += "    pop rdi\n";
+        asm_str += "    pop rsi\n";
         asm_str += "    pop rdx\n";
         asm_str += "    pop rcx\n";
-        asm_str += "    pop rax\n";
-        // asm_str += &Self::pop_xmm_regs();
 
         asm_str
     }
-
-    /*
-    fn sync_vm_registers() -> String  {
-        let mut asm_str = String::new();
-        for r in 0..16 {
-            asm_str += &format!("");
-            asm_str += &format!("   mov xmm{}, \n", r);
-        }
-    }
-    */
 
     // r15 stores vm_register_address
     fn rv32_regs_to_xmm() -> String {
@@ -180,6 +176,8 @@ where
             asm_str += &format!("   mov rdi, [r15 + 8*{r}]\n");
             asm_str += &format!("   pinsrq xmm{r}, rdi, 0\n");
         }
+
+        asm_str += &sync_xmm_to_gpr();
 
         asm_str
     }
@@ -200,6 +198,7 @@ where
     fn xmm_to_rv32_regs() -> String {
         let mut asm_str = String::new();
 
+        asm_str += &sync_gpr_to_xmm();
         for r in 0..16 {
             // at each iteration we save register 2r and 2r+1 of the guest mem to xmm
             asm_str += &format!("   movq [r15 + 8*{r}], xmm{r}\n");
