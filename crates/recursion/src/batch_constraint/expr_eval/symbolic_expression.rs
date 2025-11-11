@@ -217,7 +217,7 @@ where
                 cols.is_present * is_arg1_node_idx.clone(),
             );
 
-            let _is_var = enc.contains_flag::<AB>(
+            let is_var = enc.contains_flag::<AB>(
                 &flags,
                 &[NodeKind::VarMain, NodeKind::VarPreprocessed].map(|x| x as usize),
             );
@@ -231,8 +231,7 @@ where
                     claim: array::from_fn(|i| cols.args[i].into()),
                     is_rot: cached_cols.attrs[2].into(),
                 },
-                AB::Expr::ZERO,
-                // TODO: _is_var
+                is_var * cols.is_present,
             );
             self.public_values_bus.receive(
                 builder,
@@ -532,6 +531,38 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                     }));
                 }
             }
+            let mut node_idx = constraints.nodes.len();
+            for unused_var in &vk.unused_variables {
+                match unused_var.entry {
+                    Entry::Preprocessed { .. } => {
+                        let mut args = [F::ZERO; 2 * D_EF];
+                        args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                        records.push(Some(Record {
+                            args,
+                            sort_idx,
+                            n_abs,
+                            is_n_neg,
+                        }));
+                    }
+                    Entry::Main { .. } => {
+                        let mut args = [F::ZERO; 2 * D_EF];
+                        args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                        records.push(Some(Record {
+                            args,
+                            sort_idx,
+                            n_abs,
+                            is_n_neg,
+                        }));
+                    }
+                    Entry::Permutation { .. }
+                    | Entry::Public
+                    | Entry::Challenge
+                    | Entry::Exposed => {
+                        unreachable!()
+                    }
+                }
+                node_idx += 1;
+            }
         }
     }
 
@@ -718,9 +749,7 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                         }
                         Entry::Main { part_index, offset } => {
                             record.kind = NodeKind::VarMain;
-                            record.attrs[1] =
-                                (part_index + vk.preprocessed_data.is_some() as usize + 1)
-                                    % (vk.num_cached_mains() + 1);
+                            record.attrs[1] = vk.dag_main_part_index_to_commit_index(part_index);
                             record.attrs[2] = offset;
                         }
                         Entry::Permutation { .. } => unreachable!(),
@@ -804,6 +833,37 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                     fanout: 0,
                 });
             }
+        }
+        let mut node_idx = constraints.nodes.len();
+        for unused_var in &vk.unused_variables {
+            let record = match unused_var.entry {
+                Entry::Preprocessed { offset } => Record {
+                    kind: NodeKind::VarPreprocessed,
+                    air_idx,
+                    node_idx,
+                    attrs: [unused_var.index, 1, offset],
+                    is_constraint: false,
+                    constraint_idx: 0,
+                    fanout: 0,
+                },
+                Entry::Main { part_index, offset } => {
+                    let part = vk.dag_main_part_index_to_commit_index(part_index);
+                    Record {
+                        kind: NodeKind::VarMain,
+                        air_idx,
+                        node_idx,
+                        attrs: [unused_var.index, part, offset],
+                        is_constraint: false,
+                        constraint_idx: 0,
+                        fanout: 0,
+                    }
+                }
+                Entry::Permutation { .. } | Entry::Public | Entry::Challenge | Entry::Exposed => {
+                    unreachable!()
+                }
+            };
+            node_idx += 1;
+            records.push(record);
         }
     }
 
