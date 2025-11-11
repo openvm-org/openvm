@@ -17,7 +17,7 @@ use crate::{
         BatchConstraintInnerMessageType, EqNOuterBus, EqNOuterMessage, ExpressionClaimBus,
         ExpressionClaimMessage, SumcheckClaimBus, SumcheckClaimMessage,
     },
-    bus::{HyperdimBus, HyperdimBusMessage},
+    bus::{ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, HyperdimBus, HyperdimBusMessage},
     primitives::bus::{PowerCheckerBus, PowerCheckerBusMessage},
     utils::{base_to_ext, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
@@ -57,6 +57,7 @@ pub struct ExpressionClaimCols<T> {
 }
 
 pub struct ExpressionClaimAir {
+    pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub expr_claim_bus: ExpressionClaimBus,
     pub mu_bus: BatchConstraintConductorBus,
     pub sumcheck_claim_bus: SumcheckClaimBus,
@@ -154,6 +155,16 @@ where
                 msg_type: BatchConstraintInnerMessageType::Mu.to_field(),
                 idx: AB::Expr::ZERO,
                 value: local.mu.map(Into::into),
+            },
+            local.is_first * local.is_valid,
+        );
+
+        // Receive n_max value from proof shape air
+        self.expression_claim_n_max_bus.receive(
+            builder,
+            local.proof_idx,
+            ExpressionClaimNMaxMessage {
+                n_max: local.num_multilinear_sumcheck_rounds,
             },
             local.is_first * local.is_valid,
         );
