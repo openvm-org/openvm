@@ -169,7 +169,7 @@ asm_execute:
     mov rdi, rbx         ; rdi = aot_vm_exec_state_ptr
     mov {should_suspend_ptr} ; rax = should_suspend
     call rax                 ; should_suspend(aot_vm_exec_state_ptr)
-    cmp rax, 1           ; if return value of should_suspend is 1
+    cmp al, 1            ; if return value of should_suspend is 1. CAREFUL: when a function returns a boolean, only the lower 8 bits are set.
     je asm_run_end       ; jump to asm_run_end
     mov rdi, rbx         ; rdi = aot_vm_exec_state_ptr
     mov rsi, rbp         ; rsi = pre_compute_insns_ptr
@@ -213,7 +213,7 @@ asm_execute:
     mov rdi, rbx
     mov rax, {should_suspend_ptr}
     call rax
-    cmp rax, 1          
+    cmp al, 1          
     je asm_run_end      
     mov rdi, rbx        
     mov rsi, rbp        
