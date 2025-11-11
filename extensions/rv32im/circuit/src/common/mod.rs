@@ -3,13 +3,13 @@ pub use aot::*;
 
 #[cfg(feature = "aot")]
 mod aot {
+    pub(crate) use openvm_circuit::arch::aot::common::{
+        sync_gpr_to_xmm, sync_xmm_to_gpr, RISCV_TO_X86_OVERRIDE_MAP,
+    };
     pub use openvm_circuit::arch::aot::common::{
         DEFAULT_PC_OFFSET, REG_A, REG_A_W, REG_B, REG_B_W, REG_C, REG_C_B, REG_C_W, REG_D,
         REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_GUEST_MEM_PTR, REG_INSNS_PTR, REG_PC, REG_PC_W,
         REG_RETURN_VAL, REG_SECOND_ARG, REG_THIRD_ARG,
-    };
-    pub(crate) use openvm_circuit::arch::aot::common::{
-        RISCV_TO_X86_OVERRIDE_MAP, sync_gpr_to_xmm, sync_xmm_to_gpr,
     };
 
     pub(crate) fn rv32_register_to_gpr(rv32_reg: u8, gpr: &str) -> String {
@@ -48,13 +48,13 @@ mod aot {
     }
 
     /*
-    input: 
-    - riscv register number 
+    input:
+    - riscv register number
     - gpr register to write into
     - is_gpr_force_write boolean
 
     output:
-    - string representing the general purpose register that stores the value of register number `rv32_reg` 
+    - string representing the general purpose register that stores the value of register number `rv32_reg`
     - emitted assembly string that performs the move
     */
     pub(crate) fn xmm_to_gpr(
