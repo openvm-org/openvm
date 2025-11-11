@@ -233,6 +233,7 @@ where
                 asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
             }
         }
+        asm_str += &SYNC_GPR_TO_XMM();
 
         Ok(asm_str)
     }
