@@ -24,10 +24,14 @@ use stark_backend_v2::{
 use crate::{
     batch_constraint::{
         bus::{
-            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqSharpUniBus, EqZeroNBus,
-            ExpressionClaimBus, InteractionsFoldingBus, SumcheckClaimBus, SymbolicExpressionBus,
+            BatchConstraintConductorBus, ConstraintsFoldingBus, Eq3bBus, EqNegInternalBus,
+            EqSharpUniBus, EqZeroNBus, ExpressionClaimBus, InteractionsFoldingBus,
+            SumcheckClaimBus, SymbolicExpressionBus,
         },
-        eq_airs::{Eq3bAir, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir, EqUniAir},
+        eq_airs::{
+            Eq3bAir, EqNegAir, EqNegTraceGenerator, EqNsAir, EqSharpUniAir, EqSharpUniReceiverAir,
+            EqUniAir,
+        },
         expr_eval::{
             ColumnClaimAir, ConstraintsFoldingAir, InteractionsFoldingAir, SymbolicExpressionAir,
             generate_constraints_folding_blob, generate_interactions_folding_blob,
@@ -38,8 +42,9 @@ use crate::{
     },
     bus::{
         AirPartShapeBus, AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus,
-        ConstraintSumcheckRandomnessBus, HyperdimBus, PublicValuesBus, StackingModuleBus,
-        TranscriptBus, XiRandomnessBus,
+        ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, HyperdimBus,
+        PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
+        XiRandomnessBus,
     },
     system::{
         AirModule, BatchConstraintPreflight, BusIndexManager, BusInventory, GlobalCtxCpu,
@@ -68,6 +73,7 @@ pub struct BatchConstraintModule {
     air_part_shape_bus: AirPartShapeBus,
     hyperdim_bus: HyperdimBus,
     public_values_bus: PublicValuesBus,
+    sel_uni_bus: SelUniBus,
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
@@ -75,6 +81,10 @@ pub struct BatchConstraintModule {
     zero_n_bus: EqZeroNBus,
     eq_sharp_uni_bus: EqSharpUniBus,
     eq_3b_bus: Eq3bBus,
+    sel_hypercube_bus: SelHypercubeBus,
+    eq_neg_result_bus: EqNegResultBus,
+    eq_neg_base_rand_bus: EqNegBaseRandBus,
+    eq_neg_internal_bus: EqNegInternalBus,
 
     symbolic_expression_bus: SymbolicExpressionBus,
     expression_claim_bus: ExpressionClaimBus,
@@ -114,11 +124,17 @@ impl BatchConstraintModule {
             air_part_shape_bus: bus_inventory.air_part_shape_bus,
             hyperdim_bus: bus_inventory.hyperdim_bus,
             public_values_bus: bus_inventory.public_values_bus,
+            sel_uni_bus: bus_inventory.sel_uni_bus,
+            eq_neg_base_rand_bus: bus_inventory.eq_neg_base_rand_bus,
+            eq_neg_result_bus: bus_inventory.eq_neg_result_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
             eq_sharp_uni_bus: EqSharpUniBus::new(b.new_bus_idx()),
             eq_3b_bus: Eq3bBus::new(b.new_bus_idx()),
+            eq_neg_internal_bus: EqNegInternalBus::new(b.new_bus_idx()),
+            sel_hypercube_bus: SelHypercubeBus::new(b.new_bus_idx()),
+            // sel_uni bus is shared via inventory
             symbolic_expression_bus: SymbolicExpressionBus::new(b.new_bus_idx()),
             expression_claim_bus: ExpressionClaimBus::new(b.new_bus_idx()),
             interactions_folding_bus: InteractionsFoldingBus::new(b.new_bus_idx()),
@@ -269,6 +285,7 @@ impl AirModule for BatchConstraintModule {
             zero_n_bus: self.zero_n_bus,
             xi_bus: self.xi_randomness_bus,
             r_xi_bus: self.batch_constraint_conductor_bus,
+            sel_hypercube_bus: self.sel_hypercube_bus,
             l_skip,
         };
         let eq_3b_air = Eq3bAir {
@@ -294,14 +311,25 @@ impl AirModule for BatchConstraintModule {
             zero_n_bus: self.zero_n_bus,
             l_skip,
         };
+        let eq_neg_air = EqNegAir {
+            result_bus: self.eq_neg_result_bus,
+            base_rand_bus: self.eq_neg_base_rand_bus,
+            internal_bus: self.eq_neg_internal_bus,
+            sel_uni_bus: self.sel_uni_bus,
+            l_skip: self.l_skip,
+        };
         let symbolic_expression_air = SymbolicExpressionAir {
             expr_bus: self.symbolic_expression_bus,
             claim_bus: self.expression_claim_bus,
+            air_shape_bus: self.air_shape_bus,
             column_claims_bus: self.column_opening_bus,
             interactions_folding_bus: self.interactions_folding_bus,
             constraints_folding_bus: self.constraints_folding_bus,
             hyperdim_bus: self.hyperdim_bus,
             public_values_bus: self.public_values_bus,
+            sel_hypercube_bus: self.sel_hypercube_bus,
+            sel_uni_bus: self.sel_uni_bus,
+            eq_neg_internal_bus: self.eq_neg_internal_bus,
             cnt_proofs: self.max_num_proofs,
         };
         let column_claim_air = ColumnClaimAir {
@@ -342,6 +370,7 @@ impl AirModule for BatchConstraintModule {
             Arc::new(expression_claim_air) as AirRef<_>,
             Arc::new(interactions_folding_air) as AirRef<_>,
             Arc::new(constraints_folding_air) as AirRef<_>,
+            Arc::new(eq_neg_air) as AirRef<_>,
         ]
     }
 }
@@ -351,6 +380,15 @@ pub(in crate::batch_constraint) struct BatchConstraintBlobCpu {
     // innermost vec is empty.
     // TODO: Make this flatter.
     pub expr_evals: Vec<Vec<Vec<EF>>>,
+    // Per proof, per log height.
+    pub selector_counts: Vec<Vec<SelectorCount>>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SelectorCount {
+    pub first: usize,
+    pub last: usize,
+    pub transition: usize,
 }
 
 impl BatchConstraintModule {
@@ -364,17 +402,26 @@ impl BatchConstraintModule {
         let params = child_vk.params;
 
         let mut expr_evals_per_proof = vec![];
+        let mut eq_r_one_counts_per_proof = vec![];
         for (proof, preflight) in zip(proofs, preflights) {
             let rs = &preflight.batch_constraint.sumcheck_rnd;
 
             let (&rs_0, rs_rest) = rs.split_first().unwrap();
             let mut is_first_row_by_log_height = vec![];
             let mut is_last_row_by_log_height = vec![];
+            let n_max = preflight.proof_shape.n_max;
+            let mut selector_counts = vec![SelectorCount::default(); self.l_skip + n_max + 1];
 
+            let omega = F::two_adic_generator(params.l_skip);
             for log_height in 0..=params.l_skip {
-                let omega = F::two_adic_generator(log_height);
-                is_first_row_by_log_height.push(eval_eq_uni_at_one(log_height, rs_0));
-                is_last_row_by_log_height.push(eval_eq_uni_at_one(log_height, rs_0 * omega));
+                is_first_row_by_log_height.push(eval_eq_uni_at_one(
+                    log_height,
+                    rs_0.exp_power_of_2(params.l_skip - log_height),
+                ));
+                is_last_row_by_log_height.push(eval_eq_uni_at_one(
+                    log_height,
+                    (rs_0 * omega).exp_power_of_2(params.l_skip - log_height),
+                ));
             }
             for (i, &r) in rs_rest.iter().enumerate() {
                 is_first_row_by_log_height
@@ -406,6 +453,7 @@ impl BatchConstraintModule {
 
                 let constraints = &vk.symbolic_constraints.constraints;
                 let mut expr_evals = vec![EF::ZERO; constraints.nodes.len()];
+                let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
 
                 for (node_idx, node) in constraints.nodes.iter().enumerate() {
                     match node {
@@ -435,13 +483,16 @@ impl BatchConstraintModule {
                         },
                         SymbolicExpressionNode::IsFirstRow => {
                             expr_evals[node_idx] = is_first_row_by_log_height[vdata.log_height];
+                            selector_counts[log_height].first += 1;
                         }
                         SymbolicExpressionNode::IsLastRow => {
                             expr_evals[node_idx] = is_last_row_by_log_height[vdata.log_height];
+                            selector_counts[log_height].last += 1;
                         }
                         SymbolicExpressionNode::IsTransition => {
                             expr_evals[node_idx] =
                                 EF::ONE - is_last_row_by_log_height[vdata.log_height];
+                            selector_counts[log_height].transition += 1;
                         }
                         SymbolicExpressionNode::Constant(val) => {
                             expr_evals[node_idx] = EF::from_base(*val);
@@ -485,9 +536,11 @@ impl BatchConstraintModule {
                 expr_evals_per_air.push(expr_evals);
             }
             expr_evals_per_proof.push(expr_evals_per_air);
+            eq_r_one_counts_per_proof.push(selector_counts);
         }
         BatchConstraintBlobCpu {
             expr_evals: expr_evals_per_proof,
+            selector_counts: eq_r_one_counts_per_proof,
         }
     }
 }
@@ -530,7 +583,12 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             transpose(sumcheck::multilinear::generate_trace(
                 child_vk, proofs, preflights,
             )),
-            transpose(eq_airs::generate_eq_ns_trace(child_vk, proofs, preflights)),
+            transpose(eq_airs::generate_eq_ns_trace(
+                child_vk,
+                proofs,
+                preflights,
+                &blob.selector_counts,
+            )),
             transpose(eq_airs::generate_eq_3b_trace(
                 child_vk,
                 &eq_3b_blob,
@@ -555,6 +613,11 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for BatchConstraintModule {
             )),
             transpose(expr_eval::generate_constraints_folding_trace(
                 &cf_blob, preflights,
+            )),
+            transpose(EqNegTraceGenerator::generate_trace(
+                child_vk,
+                preflights,
+                &blob.selector_counts,
             )),
         ]
     }

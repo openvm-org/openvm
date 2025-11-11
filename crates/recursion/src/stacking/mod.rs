@@ -17,7 +17,6 @@ use crate::{
         claims::{StackingClaimsAir, StackingClaimsTraceGenerator},
         eq_base::{EqBaseAir, EqBaseTraceGenerator},
         eq_bits::{EqBitsAir, EqBitsTraceGenerator},
-        eq_neg::{EqNegAir, EqNegTraceGenerator},
         opening::{OpeningClaimsAir, OpeningClaimsTraceGenerator},
         sumcheck::{SumcheckRoundsAir, SumcheckRoundsTraceGenerator},
         univariate::{UnivariateRoundAir, UnivariateRoundTraceGenerator},
@@ -32,7 +31,6 @@ mod bus;
 pub mod claims;
 pub mod eq_base;
 pub mod eq_bits;
-pub mod eq_neg;
 pub mod opening;
 pub mod sumcheck;
 pub mod univariate;
@@ -50,9 +48,6 @@ pub struct StackingModule {
     eq_bits_internal_bus: EqBitsInternalBus,
     eq_kernel_lookup_bus: EqKernelLookupBus,
     eq_bits_lookup_bus: EqBitsLookupBus,
-    eq_neg_result_bus: EqNegResultBus,
-    eq_neg_base_rand_bus: EqNegBaseRandBus,
-    eq_neg_internal_bus: EqNegInternalBus,
 
     l_skip: usize,
     n_stack: usize,
@@ -75,9 +70,6 @@ impl StackingModule {
             eq_bits_internal_bus: EqBitsInternalBus::new(b.new_bus_idx()),
             eq_kernel_lookup_bus: EqKernelLookupBus::new(b.new_bus_idx()),
             eq_bits_lookup_bus: EqBitsLookupBus::new(b.new_bus_idx()),
-            eq_neg_result_bus: EqNegResultBus::new(b.new_bus_idx()),
-            eq_neg_base_rand_bus: EqNegBaseRandBus::new(b.new_bus_idx()),
-            eq_neg_internal_bus: EqNegInternalBus::new(b.new_bus_idx()),
             l_skip: child_vk.inner.params.l_skip,
             n_stack: child_vk.inner.params.n_stack,
             stacking_index_mult: child_vk.inner.params.num_whir_queries
@@ -189,14 +181,8 @@ impl AirModule for StackingModule {
             eq_base_bus: self.eq_base_bus,
             eq_rand_values_bus: self.eq_rand_values_bus,
             eq_kernel_lookup_bus: self.eq_kernel_lookup_bus,
-            eq_neg_base_rand_bus: self.eq_neg_base_rand_bus,
-            eq_neg_result_bus: self.eq_neg_result_bus,
-            l_skip: self.l_skip,
-        };
-        let eq_neg_air = EqNegAir {
-            result_bus: self.eq_neg_result_bus,
-            base_rand_bus: self.eq_neg_base_rand_bus,
-            internal_bus: self.eq_neg_internal_bus,
+            eq_neg_base_rand_bus: self.bus_inventory.eq_neg_base_rand_bus,
+            eq_neg_result_bus: self.bus_inventory.eq_neg_result_bus,
             l_skip: self.l_skip,
         };
         let eq_bits_air = EqBitsAir {
@@ -212,7 +198,6 @@ impl AirModule for StackingModule {
             Arc::new(sumcheck_rounds_air),
             Arc::new(stacking_claims_air),
             Arc::new(eq_base_air),
-            Arc::new(eq_neg_air),
             Arc::new(eq_bits_air),
         ]
     }
@@ -232,7 +217,6 @@ impl TraceGenModule<GlobalCtxCpu, CpuBackendV2> for StackingModule {
             SumcheckRoundsTraceGenerator::generate_trace(child_vk, proofs, preflights),
             StackingClaimsTraceGenerator::generate_trace(child_vk, proofs, preflights),
             EqBaseTraceGenerator::generate_trace(child_vk, proofs, preflights),
-            EqNegTraceGenerator::generate_trace(child_vk, preflights),
             EqBitsTraceGenerator::generate_trace(child_vk, proofs, preflights),
         ];
         traces

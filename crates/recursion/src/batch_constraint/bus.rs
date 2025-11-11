@@ -110,3 +110,18 @@ pub struct ConstraintsFoldingMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(ConstraintsFoldingBus, ConstraintsFoldingMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct EqNegInternalMessage<T> {
+    // hypercube dimension n * (-1)
+    pub neg_n: T,
+    // sampled value u_0
+    pub u: [T; D_EF],
+    // sampled value r_0^{2^{1 - n}}
+    pub r: [T; D_EF],
+    // (r_0 * omega)^{2^{1 - n}}, where omega is the D^2 generator
+    pub r_omega: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(EqNegInternalBus, EqNegInternalMessage);
