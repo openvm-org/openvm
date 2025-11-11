@@ -20,8 +20,8 @@ use crate::{
     batch_constraint::{
         BatchConstraintBlobCpu,
         bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, ExpressionClaimBus,
-            ExpressionClaimMessage,
+            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNOuterBus, EqNOuterMessage,
+            ExpressionClaimBus, ExpressionClaimMessage,
         },
     },
     bus::TranscriptBus,
@@ -41,6 +41,7 @@ struct ConstraintsFoldingCols<T> {
     air_idx: T,
     sort_idx: T,
     constraint_idx: T,
+    n_lift: T,
 
     lambda_tidx: T,
     lambda: [T; D_EF],
@@ -57,6 +58,7 @@ pub struct ConstraintsFoldingAir {
     pub transcript_bus: TranscriptBus,
     pub constraint_bus: ConstraintsFoldingBus,
     pub expression_claim_bus: ExpressionClaimBus,
+    pub eq_n_outer_bus: EqNOuterBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for ConstraintsFoldingAir {}
@@ -116,6 +118,10 @@ where
         builder
             .when(local.is_first_in_air)
             .assert_zero(local.constraint_idx);
+        builder
+            .when(not(next.is_first_in_air))
+            .assert_eq(local.n_lift, next.n_lift);
+        // TODO receive n_lift by sort_idx or air_idx
 
         // ======================== lambda and cur sum consistency ============================
         assert_array_eq(
@@ -172,6 +178,17 @@ where
             local.lambda_tidx,
             local.lambda,
             local.is_valid * local.is_first,
+        );
+
+        self.eq_n_outer_bus.receive(
+            builder,
+            local.proof_idx,
+            EqNOuterMessage {
+                is_sharp: AB::Expr::ZERO,
+                n: local.n_lift.into(),
+                value: local.eq_n.map(Into::into),
+            },
+            local.is_first_in_air * local.is_valid,
         );
     }
 }
@@ -272,14 +289,22 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
             .zip(records.par_iter())
             .for_each(|(chunk, record)| {
                 let cols: &mut ConstraintsFoldingCols<_> = chunk.borrow_mut();
+                let n_lift = preflight.proof_shape.sorted_trace_vdata[record.sort_idx]
+                    .1
+                    .log_height
+                    .saturating_sub(preflight.proof_shape.l_skip);
+
                 cols.is_valid = F::ONE;
                 cols.proof_idx = F::from_canonical_usize(pidx);
                 cols.air_idx = F::from_canonical_usize(record.air_idx);
                 cols.sort_idx = F::from_canonical_usize(record.sort_idx);
                 cols.constraint_idx = F::from_canonical_usize(record.constraint_idx);
+                cols.n_lift = F::from_canonical_usize(n_lift);
                 cols.lambda_tidx = F::from_canonical_usize(lambda_tidx);
                 cols.lambda.copy_from_slice(lambda_slice);
                 cols.value.copy_from_slice(record.value.as_base_slice());
+                cols.eq_n
+                    .copy_from_slice(preflight.batch_constraint.eq_ns[n_lift].as_base_slice());
                 cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                 cols.loop_aux.is_transition[0] = F::ONE;
             });
