@@ -61,9 +61,6 @@ where
             get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
         );
 
-        asm_str += "    xor r8, r8\n";
-        asm_str += "    xor r9, r9\n";
-
         asm_str += &Self::push_internal_registers();
 
         // Temporarily use r14 as the pointer to get_vm_address_space_addr
