@@ -230,7 +230,7 @@ impl AirModule for ProofShapeModule {
             transcript_bus: self.bus_inventory.transcript_bus,
         };
         let pvs_air = PublicValuesAir {
-            _public_values_bus: self.bus_inventory.public_values_bus,
+            public_values_bus: self.bus_inventory.public_values_bus,
             num_pvs_bus: self.num_pvs_bus,
             transcript_bus: self.bus_inventory.transcript_bus,
         };

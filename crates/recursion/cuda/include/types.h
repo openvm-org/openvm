@@ -13,12 +13,14 @@ typedef struct {
     size_t cached_idx;
     size_t starting_cidx;
     size_t total_interactions;
+    size_t num_air_id_lookups;
     uint8_t log_height;
 } TraceMetadata;
 
 typedef struct {
     size_t air_idx;
     size_t air_num_pvs;
+    size_t num_airs;
     size_t pv_idx;
     Fp value;
 } PublicValueData;
