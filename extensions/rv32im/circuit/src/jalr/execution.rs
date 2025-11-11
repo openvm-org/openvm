@@ -122,16 +122,17 @@ where
         let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
         let write_rd = !inst.f.is_zero();
 
-        asm_str += &rv32_register_to_gpr((b / 4) as u8, REG_B_W);
+        let (gpr_reg_b, delta_b) = xmm_to_gpr((b / 4) as u8, REG_B_W, true); // have to use temp, since we are modifying the value
+        asm_str += &delta_b;
 
-        asm_str += &format!("   add {REG_B_W}, {imm_extended}\n");
-        asm_str += &format!("   and {REG_B_W}, -2\n"); // clear bit 0 per RISC-V jalr
-        asm_str += &format!("   mov {REG_PC_W}, {REG_B_W}\n"); // zero-extend into r13
+        asm_str += &format!("   add {gpr_reg_b}, {imm_extended}\n");
+        asm_str += &format!("   and {gpr_reg_b}, -2\n"); // clear bit 0 per RISC-V jalr
+        asm_str += &format!("   mov {REG_PC_W}, {gpr_reg_b}\n"); // zero-extend into r13
 
         if write_rd {
             let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
             asm_str += &format!("   mov {REG_A_W}, {next_pc}\n");
-            asm_str += &gpr_to_rv32_register(REG_A_W, (a / 4) as u8);
+            asm_str += &gpr_to_xmm(REG_A_W, (a / 4) as u8);
         }
 
         asm_str += "   lea rdx, [rip + map_pc_base]\n";
