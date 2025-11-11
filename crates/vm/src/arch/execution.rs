@@ -11,6 +11,11 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::arch::aot::common::{
+        REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
+        REG_PC, REG_SECOND_ARG, REG_THIRD_ARG, REG_D, REG_RETURN_VAL
+};
+
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
@@ -182,8 +187,9 @@ pub trait AotExecutor<F> {
             crate::arch::aot::extern_handler::<F, ExecutionCtx, true> as *const ()
         );
         let mut asm_str = String::new();
-        asm_str += "    mov rdi, rbx\n";
-        asm_str += "    mov rsi, rbp\n";
+
+        asm_str += &format!("   mov {REG_FIRST_ARG}, {REG_EXEC_STATE_PTR}\n");
+        asm_str += &format!("   mov {REG_SECOND_ARG}, {REG_INSNS_PTR}\n");
         asm_str += &format!("    mov rdx, {pc}\n");
         asm_str += &format!("    mov rax, {extern_handler_ptr}\n");
         asm_str += "    call rax\n";

@@ -6,7 +6,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use super::{
     common::{
         REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
-        REG_PC, REG_SECOND_ARG, REG_THIRD_ARG, REG_D, REG_RETURN_VAL
+        REG_PC, REG_SECOND_ARG, REG_THIRD_ARG, REG_D, REG_RETURN_VAL, SYNC_XMM_TO_GPR, SYNC_GPR_TO_XMM
     },
     AotInstance, AsmRunFn,
 };
@@ -171,10 +171,12 @@ where
                             AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                         })?;
                 asm_str += &segment;
+                asm_str += &SYNC_GPR_TO_XMM();
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
                 asm_str += &Self::push_internal_registers();
+
                 asm_str += &executor.call_extern_handler(pc);
                 
                 asm_str += &format!("   mov {REG_PC}, {REG_RETURN_VAL}\n");
@@ -200,11 +202,10 @@ where
             asm_str += &format!("    mov {REG_FIRST_ARG}, rbx\n");
             asm_str += &format!("    mov {REG_SECOND_ARG}, {pc}\n");
             asm_str += &format!("    mov {REG_D}, {set_pc_ptr}\n");
-            asm_str += "    call rax\n";
-            asm_str += "    xor rax, rax\n";
+            asm_str += &format!("    call {REG_D}\n");
             asm_str += &Self::pop_external_registers();
+            asm_str += &format!("    xor {REG_RETURN_VAL}, {REG_RETURN_VAL}\n");
             asm_str += "    ret\n";
-            asm_str += "\n";
         }
 
         // map_pc_base part
@@ -218,6 +219,8 @@ where
         for (pc, _instruction, _) in exe.program.enumerate_by_pc() {
             asm_str += &format!("   .long asm_execute_pc_{pc} - map_pc_base\n");
         }
+
+        // std::fs::write("/tmp/asm_dump.s", &asm_str).expect("failed to write asm_str");
 
         Ok(asm_str)
     }

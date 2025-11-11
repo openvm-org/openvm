@@ -214,25 +214,25 @@ where
 
         if e == 0 {
             // [a:4]_1 = [a:4]_1 + c
-            let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, a != b);
+            let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a);
             asm_str += &delta_str_b;
             asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, c);
-            asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
+            asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
         } else {
             if a == c {
-                let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W, true); 
+                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W); 
                 asm_str += &delta_str_c;
-                let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, true); 
+                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a); 
                 asm_str += &delta_str_b;
                 asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
-                asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
+                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
             } else {
-                let (gpr_reg_b, delta_str_b) = REG_MAPPING_rv32_register_to_gpr((b / 4) as u8, str_reg_a, true); 
+                let (gpr_reg_b, delta_str_b) = xmm_to_gpr((b / 4) as u8, str_reg_a); 
                 asm_str += &delta_str_b; // data is now in gpr_reg_b
-                let (gpr_reg_c, delta_str_c) = REG_MAPPING_rv32_register_to_gpr((c / 4) as u8, REG_C_W, false); // data is in gpr_reg_c now
+                let (gpr_reg_c, delta_str_c) = xmm_to_gpr((c / 4) as u8, REG_C_W); // data is in gpr_reg_c now
                 asm_str += &delta_str_c; // have to get a return value here, since it modifies further registers too
                 asm_str += &format!("   {} {}, {}\n", asm_opcode, gpr_reg_b, gpr_reg_c);
-                asm_str += &REG_MAPPING_gpr_to_rv32_register(&gpr_reg_b, (a / 4) as u8);
+                asm_str += &gpr_to_xmm(&gpr_reg_b, (a / 4) as u8);
             }
         }
 

@@ -50,25 +50,9 @@ mod aot {
         format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
     }
 
-    /*
-    pre condition: XMM and GPR registers contain the riscv32 register values
-    rv32_reg is index of the riscv32 register
-    gpr: is the TARGET register to write to (GPR)
-    post condition:
-    - if rv32_reg is overridden:
-        if gpr == override_Reg, data is already in the correct location
-        - return empty_string, gpr
-        otherwise, write data from override_reg to gpr
-    - otherwise, copy from associate XMM register to gpr
-    - 
-    */
-    // if its a temporary register, then even if its overridden, we need to write to it
-    pub(crate) fn REG_MAPPING_rv32_register_to_gpr(rv32_reg: u8, gpr: &str, is_gpr_force_write: bool) -> (String, String) {
+    pub(crate) fn xmm_to_gpr(rv32_reg: u8, gpr: &str) -> (String, String) {
         if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] { // a/4 is overridden, b/4 is overridden
-            if is_gpr_force_write {
-                return (gpr.to_string(), format!("   mov {}, {}\n", gpr, override_reg));
-            }
-            return (override_reg.to_string(), "".to_string());
+            return (gpr.to_string(), format!("  mov {}, {}\n", gpr, override_reg));
         }
         let xmm_map_reg = rv32_reg / 2;
         if rv32_reg % 2 == 0 {
@@ -78,18 +62,7 @@ mod aot {
         }
     }
 
-    // String of assembly to get to the register of riscv into `reg_name`; 
-    // copy from GPR to rv32_reg
-    /*
-    precondition: correct rv32 data is stored in GPR, and needs to be written into the associated rv32 register
-    postcondition:
-    - if rv32_reg is overridden:
-        if gpr == override_Reg, data is already in the correct location
-        - return empty_string
-        otherwise, write data from gpr to override_reg
-    - otherwise, copy from gpr to associate XMM register
-    */
-    pub(crate) fn REG_MAPPING_gpr_to_rv32_register(gpr: &str, rv32_reg: u8) -> String{
+    pub(crate) fn gpr_to_xmm(gpr: &str, rv32_reg: u8) -> String {
         if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
             if gpr == override_reg { //already in correct location
                 return "".to_string();
