@@ -171,7 +171,6 @@ where
                             AotError::Other(_message) => StaticProgramError::InvalidInstruction(pc),
                         })?;
                 asm_str += &segment;
-                asm_str += &SYNC_GPR_TO_XMM();
             } else {
                 asm_str += &Self::xmm_to_rv32_regs();
                 asm_str += &Self::push_address_space_start();
