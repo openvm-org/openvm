@@ -26,10 +26,10 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        AirPartShapeBus, AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus,
-        CommitmentsBusMessage, GkrModuleBus, GkrModuleMessage, HyperdimBus, HyperdimBusMessage,
-        LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus, TranscriptBusMessage,
-        UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
+        AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage,
+        GkrModuleBus, GkrModuleMessage, HyperdimBus, HyperdimBusMessage, LiftedHeightsBus,
+        LiftedHeightsBusMessage, TranscriptBus, TranscriptBusMessage, UnivariateSumcheckInputBus,
+        UnivariateSumcheckInputMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -63,11 +63,6 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
     pub log_height: F,
     /// When `is_present`, constrained to equal `log_height - l_skip < 0 ? 1 : 0`.
     pub n_sign_bit: F,
-
-    // Lookup multiplicities for AirPartShapeBus. Note that part_cached_mult provides the
-    // multiplicities for cached traces.
-    pub part_common_main_mult: F,
-    pub part_preprocessed_mult: F,
 
     // First possible tidx and non-main cidx of the current AIR
     pub starting_tidx: F,
@@ -110,13 +105,11 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
 // Variable-length columns are stored at the end
 pub struct ProofShapeVarCols<'a, F> {
     pub idx_flags: &'a [F],                     // [F; IDX_FLAGS]
-    pub part_cached_mult: &'a [F],              // [F; MAX_CACHED]
     pub cached_commits: &'a [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
 }
 
 pub struct ProofShapeVarColsMut<'a, F> {
     pub idx_flags: &'a mut [F],                     // [F; IDX_FLAGS]
-    pub part_cached_mult: &'a mut [F],              // [F; MAX_CACHED]
     pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
 }
 
@@ -162,8 +155,7 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
         let num_airs = child_vk.inner.per_air.len();
         let num_rows = (proofs.len() * (num_airs + 1)).next_power_of_two();
         let cols_width = ProofShapeCols::<usize, NUM_LIMBS>::width();
-        let total_width =
-            self.idx_encoder.width() + cols_width + self.max_cached * (DIGEST_SIZE + 1);
+        let total_width = self.idx_encoder.width() + cols_width + self.max_cached * DIGEST_SIZE;
         let l_skip = child_vk.inner.params.l_skip;
 
         debug_assert_eq!(proofs.len(), preflights.len());
@@ -207,10 +199,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 let has_preprocessed = child_vk.inner.per_air[*idx].preprocessed_data.is_some();
                 cidx += has_preprocessed as usize;
 
-                // TODO[stephen]: these multiplicities might not be one
-                cols.part_common_main_mult = F::ONE;
-                cols.part_preprocessed_mult = F::from_bool(has_preprocessed);
-
                 cols.is_present = F::ONE;
                 cols.height = F::from_canonical_usize(height);
 
@@ -246,8 +234,6 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 }
 
                 for (i, commit) in vdata.cached_commitments.iter().enumerate() {
-                    // TODO[stephen]: this multiplicities might not be one
-                    vcols.part_cached_mult[i] = F::ONE;
                     vcols.cached_commits[i] = *commit;
                     cidx += 1;
                 }
@@ -466,7 +452,6 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub gkr_module_bus: GkrModuleBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub air_shape_bus: AirShapeBus,
-    pub _air_part_shape_bus: AirPartShapeBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
@@ -479,7 +464,7 @@ impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
     fn width(&self) -> usize {
         ProofShapeCols::<F, NUM_LIMBS>::width()
             + self.idx_encoder.width()
-            + self.max_cached * (DIGEST_SIZE + 1)
+            + self.max_cached * DIGEST_SIZE
     }
 }
 impl<F, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
@@ -592,7 +577,7 @@ where
         // Select values for AirShapeBus
         let mut num_interactions = AB::Expr::ZERO;
 
-        // Select values for AirPartShapeBus
+        // Select values for LiftedHeightsBus
         let mut main_common_width = AB::Expr::ZERO;
         let mut preprocessed_stacked_width = AB::Expr::ZERO;
         let mut cached_widths = vec![AB::Expr::ZERO; self.max_cached];
@@ -640,7 +625,6 @@ where
 
             if i == self.min_cached_idx {
                 is_min_cached += is_current_air.clone();
-                when_current.assert_zero(localv.part_cached_mult[self.max_cached - 1]);
             }
 
             if let Some(preprocessed) = &air_data.preprocessed_data {
@@ -787,9 +771,6 @@ where
         ///////////////////////////////////////////////////////////////////////////////////////////
         // AIR SHAPE LOOKUP
         ///////////////////////////////////////////////////////////////////////////////////////////
-        let _num_main_parts = fold(cached_present.iter(), AB::Expr::ONE, |acc, is_present| {
-            acc + is_present.clone()
-        });
         self.air_shape_bus.send(
             builder,
             local.proof_idx,
@@ -800,26 +781,7 @@ where
             },
             local.is_present * local.num_air_id_lookups,
         );
-        // self.air_shape_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     AirShapeBusMessage {
-        //         sort_idx: local.sorted_idx.into(),
-        //         property_idx: AirShapeProperty::HasPreprocessed.to_field(),
-        //         value: has_preprocessed.clone(),
-        //     },
-        //     local.is_present,
-        // );
-        // self.air_shape_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     AirShapeBusMessage {
-        //         sort_idx: local.sorted_idx.into(),
-        //         property_idx: AirShapeProperty::NumMainParts.to_field(),
-        //         value: num_main_parts,
-        //     },
-        //     local.is_present,
-        // );
+
         self.air_shape_bus.send(
             builder,
             local.proof_idx,
@@ -830,56 +792,6 @@ where
             },
             local.is_present,
         );
-
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        // AIR PART SHAPE LOOKUP
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        builder
-            .when(not::<AB::Expr>(local.is_present))
-            .assert_zero(local.part_common_main_mult);
-        builder
-            .when(not::<AB::Expr>(has_preprocessed.clone()))
-            .assert_zero(local.part_preprocessed_mult);
-        (0..self.max_cached).for_each(|cached_idx| {
-            builder
-                .when(not::<AB::Expr>(cached_present[cached_idx].clone()))
-                .assert_zero(localv.part_cached_mult[cached_idx]);
-        });
-
-        // self.air_part_shape_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     AirPartShapeBusMessage {
-        //         idx: local.idx.into(),
-        //         part: AB::Expr::ZERO,
-        //         width: main_common_width.clone(),
-        //     },
-        //     local.part_common_main_mult * local.is_valid,
-        // );
-
-        // self.air_part_shape_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     AirPartShapeBusMessage {
-        //         idx: local.idx.into(),
-        //         part: AB::Expr::ONE,
-        //         width: preprocessed_stacked_width.clone(),
-        //     },
-        //     local.part_preprocessed_mult * local.is_valid,
-        // );
-
-        // (0..self.max_cached).for_each(|cached_idx| {
-        //     self.air_part_shape_bus.send(
-        //         builder,
-        //         local.proof_idx,
-        //         AirPartShapeBusMessage {
-        //             idx: local.idx.into(),
-        //             part: AB::Expr::from_canonical_usize(1 + cached_idx) +
-        // has_preprocessed.clone(),             width: cached_widths[cached_idx].clone(),
-        //         },
-        //         localv.part_cached_mult[cached_idx] * local.is_valid,
-        //     );
-        // });
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // HYPERDIM (SIGNED N) LOOKUP
@@ -1318,8 +1230,7 @@ fn borrow_var_cols<F>(
     max_cached: usize,
 ) -> ProofShapeVarCols<'_, F> {
     let flags_idx = 0;
-    let part_cached_idx = flags_idx + idx_flags;
-    let cached_commits_idx = part_cached_idx + max_cached;
+    let cached_commits_idx = flags_idx + idx_flags;
 
     let cached_commits = &slice[cached_commits_idx..cached_commits_idx + max_cached * DIGEST_SIZE];
     let cached_commits: &[[F; DIGEST_SIZE]] = unsafe {
@@ -1330,8 +1241,7 @@ fn borrow_var_cols<F>(
     };
 
     ProofShapeVarCols {
-        idx_flags: &slice[flags_idx..part_cached_idx],
-        part_cached_mult: &slice[part_cached_idx..cached_commits_idx],
+        idx_flags: &slice[flags_idx..cached_commits_idx],
         cached_commits,
     }
 }
@@ -1342,8 +1252,7 @@ fn borrow_var_cols_mut<F>(
     max_cached: usize,
 ) -> ProofShapeVarColsMut<'_, F> {
     let flags_idx = 0;
-    let part_cached_idx = flags_idx + idx_flags;
-    let cached_commits_idx = part_cached_idx + max_cached;
+    let cached_commits_idx = flags_idx + idx_flags;
 
     let cached_commits =
         &mut slice[cached_commits_idx..cached_commits_idx + max_cached * DIGEST_SIZE];
@@ -1351,12 +1260,8 @@ fn borrow_var_cols_mut<F>(
         std::slice::from_raw_parts_mut(cached_commits.as_ptr() as *mut [F; DIGEST_SIZE], max_cached)
     };
 
-    let (idx_flags, part_cached_mult) =
-        slice[flags_idx..cached_commits_idx].split_at_mut(part_cached_idx);
-
     ProofShapeVarColsMut {
-        idx_flags,
-        part_cached_mult,
+        idx_flags: &mut slice[flags_idx..cached_commits_idx],
         cached_commits,
     }
 }
