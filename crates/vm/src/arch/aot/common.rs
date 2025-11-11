@@ -3,6 +3,7 @@ pub const REG_FOURTH_ARG: &str = "rcx";
 pub const REG_C: &str = "rdx";
 pub const REG_C_W: &str = "edx";
 pub const REG_C_B: &str = "dx";
+pub const REG_C_LB: &str = "dl";
 pub const REG_THIRD_ARG: &str = "rdx";
 
 pub const REG_B: &str = "rsi";
