@@ -30,7 +30,11 @@ use crate::{
         UnivariateSumcheckInputBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
-    primitives::exp_bits_len::ExpBitsLenAir,
+    primitives::{
+        bus::{PowerCheckerBus, RangeCheckerBus},
+        exp_bits_len::ExpBitsLenAir,
+        pow::{PowerCheckerAir, PowerCheckerTraceGenerator},
+    },
     proof_shape::ProofShapeModule,
     stacking::StackingModule,
     transcript::TranscriptModule,
@@ -138,6 +142,8 @@ pub struct BusInventory {
     pub public_values_bus: PublicValuesBus,
     pub univariate_sumcheck_input_bus: UnivariateSumcheckInputBus,
     pub column_claims_bus: ColumnClaimsBus,
+    pub range_checker_bus: RangeCheckerBus,
+    pub power_checker_bus: PowerCheckerBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -202,6 +208,8 @@ pub struct BatchConstraintPreflight {
     pub sumcheck_rnd: Vec<EF>,
     pub eq_ns: Vec<EF>,
     pub eq_sharp_ns: Vec<EF>,
+    pub eq_ns_frontloaded: Vec<EF>,
+    pub eq_sharp_ns_frontloaded: Vec<EF>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -267,6 +275,8 @@ impl BusInventory {
             public_values_bus: PublicValuesBus::new(b.new_bus_idx()),
             univariate_sumcheck_input_bus: UnivariateSumcheckInputBus::new(b.new_bus_idx()),
             sel_uni_bus: SelUniBus::new(b.new_bus_idx()),
+            range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
+            power_checker_bus: PowerCheckerBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
@@ -300,6 +310,8 @@ pub struct VerifierSubCircuit<const MAX_NUM_PROOFS: usize> {
     stacking: StackingModule,
     whir: WhirModule,
 
+    power_checker_air: Arc<PowerCheckerAir<2, 32>>,
+    power_checker_trace: Arc<PowerCheckerTraceGenerator<2, 32>>,
     exp_bits_len_air: Arc<ExpBitsLenAir>,
 }
 
@@ -308,18 +320,33 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
         let mut b = BusIndexManager::new();
         let bus_inventory = BusInventory::new(&mut b);
         let exp_bits_len_air = Arc::new(ExpBitsLenAir::new(bus_inventory.exp_bits_len_bus));
+        let power_checker_trace = Arc::new(PowerCheckerTraceGenerator::<2, 32>::default());
+        let power_checker_air = Arc::new(PowerCheckerAir::<2, 32> {
+            pow_bus: bus_inventory.power_checker_bus,
+            range_bus: bus_inventory.range_checker_bus,
+        });
 
         let transcript = TranscriptModule::new(bus_inventory.clone(), child_mvk.inner.params);
         let child_mvk_frame = child_mvk.as_ref().into();
-        let proof_shape = ProofShapeModule::new(&child_mvk_frame, &mut b, bus_inventory.clone());
+        let proof_shape = ProofShapeModule::new(
+            &child_mvk_frame,
+            &mut b,
+            bus_inventory.clone(),
+            power_checker_trace.clone(),
+        );
         let gkr = GkrModule::new(
             &child_mvk,
             &mut b,
             bus_inventory.clone(),
             exp_bits_len_air.clone(),
         );
-        let batch_constraint =
-            BatchConstraintModule::new(&child_mvk, &mut b, bus_inventory.clone(), MAX_NUM_PROOFS);
+        let batch_constraint = BatchConstraintModule::new(
+            &child_mvk,
+            &mut b,
+            bus_inventory.clone(),
+            MAX_NUM_PROOFS,
+            power_checker_trace.clone(),
+        );
         let stacking = StackingModule::new(&child_mvk, &mut b, bus_inventory.clone());
         let whir = WhirModule::new(
             &child_mvk,
@@ -335,6 +362,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             batch_constraint,
             stacking,
             whir,
+            power_checker_air,
+            power_checker_trace,
             exp_bits_len_air,
         }
     }
@@ -347,7 +376,10 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             .chain(self.batch_constraint.airs())
             .chain(self.stacking.airs())
             .chain(self.whir.airs())
-            .chain([self.exp_bits_len_air.clone() as AirRef<_>])
+            .chain([
+                self.power_checker_air.clone() as AirRef<_>,
+                self.exp_bits_len_air.clone() as AirRef<_>,
+            ])
             .collect()
     }
 
@@ -412,6 +444,8 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             })
             .collect::<Vec<_>>();
 
+        self.power_checker_trace.reset();
+
         const BATCH_CONSTRAINT_MOD_IDX: usize = 3;
         let modules = vec![
             &self.transcript as &dyn TraceGenModule<GlobalCtxCpu, CpuBackendV2>,
@@ -429,6 +463,9 @@ impl<const MAX_NUM_PROOFS: usize> VerifierSubCircuit<MAX_NUM_PROOFS> {
             vec![child_vk_pcs_data];
         let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
         // Caution: this must be done after GKR and WHIR tracegen
+        ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+            ColMajorMatrix::from_row_major(&self.power_checker_trace.generate_trace_row_major()),
+        ));
         ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
             ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major()),
         ));
@@ -494,6 +531,9 @@ pub mod cuda_tracegen {
                     self.run_preflight(sponge, child_vk, proof)
                 })
                 .collect::<Vec<_>>();
+
+            self.power_checker_trace.reset();
+
             // NOTE: avoid par_iter for now so H2D transfer all happens on same stream to avoid sync
             // issues
             let preflights_gpu = zip(proofs, preflights_cpu)
@@ -523,6 +563,13 @@ pub mod cuda_tracegen {
             let mut ctx_per_trace = ctxs_by_module.into_iter().flatten().collect::<Vec<_>>();
             // TODO: move this to gpu
             // Caution: this must be done after GKR and WHIR tracegen
+            let pow_bits_trace = ColMajorMatrix::from_row_major(
+                &self.power_checker_trace.generate_trace_row_major(),
+            );
+            ctx_per_trace.push(AirProvingContextV2::simple_no_pis(
+                transport_matrix_h2d_col_major(&pow_bits_trace).unwrap(),
+            ));
+
             let exp_bits_trace =
                 ColMajorMatrix::from_row_major(&self.exp_bits_len_air.generate_trace_row_major());
             ctx_per_trace.push(AirProvingContextV2::simple_no_pis(

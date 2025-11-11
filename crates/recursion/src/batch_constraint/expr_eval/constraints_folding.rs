@@ -27,7 +27,7 @@ use crate::{
     bus::TranscriptBus,
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
-    utils::{MultiProofVecVec, ext_field_add, ext_field_multiply},
+    utils::{MultiProofVecVec, ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
 };
 
 #[derive(AlignedBorrow, Copy, Clone)]
@@ -161,16 +161,22 @@ where
             },
             local.is_valid * (AB::Expr::ONE - local.is_first_in_air),
         );
+        let folded_sum: [AB::Expr; D_EF] = ext_field_add(
+            ext_field_multiply_scalar::<AB::Expr>(
+                next.cur_sum,
+                AB::Expr::ONE - next.is_first_in_air,
+            ),
+            ext_field_multiply_scalar::<AB::Expr>(local.cur_sum, next.is_first_in_air),
+        );
         self.expression_claim_bus.send(
             builder,
             local.proof_idx,
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ZERO,
                 idx: local.sort_idx.into(),
-                value: ext_field_multiply(local.cur_sum, local.eq_n),
+                value: ext_field_multiply(folded_sum, local.eq_n),
             },
-            // local.is_first_in_air * local.is_valid,
-            AB::Expr::ZERO,
+            local.is_first_in_air * local.is_valid,
         );
         self.transcript_bus.sample_ext(
             builder,
@@ -206,7 +212,8 @@ pub(in crate::batch_constraint) struct ConstraintsFoldingRecord {
 
 pub(in crate::batch_constraint) struct ConstraintsFoldingBlob {
     pub(in crate::batch_constraint) records: MultiProofVecVec<ConstraintsFoldingRecord>,
-    pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<EF>,
+    // (n, value), n is before lift, can be negative
+    pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<(isize, EF)>,
 }
 
 pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
@@ -256,7 +263,11 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_blob(
                 });
             }
             let n_lift = v.log_height.saturating_sub(vk.inner.params.l_skip);
-            folded.push(folded_claim * preflight.batch_constraint.eq_ns[n_lift]);
+            let n = v.log_height as isize - vk.inner.params.l_skip as isize;
+            folded.push((
+                n,
+                folded_claim * preflight.batch_constraint.eq_ns_frontloaded[n_lift],
+            ));
         }
         records.end_proof();
         folded.end_proof();
@@ -303,8 +314,9 @@ pub(in crate::batch_constraint) fn generate_constraints_folding_trace(
                 cols.lambda_tidx = F::from_canonical_usize(lambda_tidx);
                 cols.lambda.copy_from_slice(lambda_slice);
                 cols.value.copy_from_slice(record.value.as_base_slice());
-                cols.eq_n
-                    .copy_from_slice(preflight.batch_constraint.eq_ns[n_lift].as_base_slice());
+                cols.eq_n.copy_from_slice(
+                    preflight.batch_constraint.eq_ns_frontloaded[n_lift].as_base_slice(),
+                );
                 cols.is_first_in_air = F::from_bool(record.is_first_in_air);
                 cols.loop_aux.is_transition[0] = F::ONE;
             });

@@ -910,6 +910,17 @@ where
             },
             local.is_present * local.num_air_id_lookups,
         );
+        // For expression claim
+        self.hyperdim_bus.send(
+            builder,
+            local.proof_idx,
+            HyperdimBusMessage {
+                sort_idx: local.sorted_idx.into(),
+                n_abs: n_abs.clone(),
+                n_sign_bit: local.n_sign_bit.into(),
+            },
+            local.is_present,
+        );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
         // LIFTED HEIGHTS LOOKUP + STACKING COMMITMENTS

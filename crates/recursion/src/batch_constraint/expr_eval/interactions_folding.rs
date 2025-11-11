@@ -196,10 +196,9 @@ where
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ONE,
                 idx: local.sort_idx * AB::Expr::TWO,
-                value: local.cur_sum.map(Into::into),
+                value: ext_field_multiply(local.cur_sum, local.eq_3b),
             },
-            // local.is_first_in_message * local.is_valid,
-            AB::Expr::ZERO,
+            local.is_first_in_message * local.is_valid,
         );
         self.expression_claim_bus.send(
             builder,
@@ -207,10 +206,9 @@ where
             ExpressionClaimMessage {
                 is_interaction: AB::Expr::ONE,
                 idx: local.sort_idx * AB::Expr::TWO + AB::Expr::ONE,
-                value: next.cur_sum.map(Into::into),
+                value: ext_field_multiply(next.cur_sum, next.eq_3b),
             },
-            // local.is_first_in_message * local.is_valid,
-            AB::Expr::ZERO,
+            local.is_first_in_message * local.is_valid,
         );
         self.interaction_bus.receive(
             builder,
@@ -287,7 +285,8 @@ pub(in crate::batch_constraint) struct InteractionsFoldingRecord {
 
 pub(in crate::batch_constraint) struct InteractionsFoldingBlob {
     pub(in crate::batch_constraint) records: MultiProofVecVec<InteractionsFoldingRecord>,
-    pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<EF>,
+    // (n, value), n is before lift, can be negative
+    pub(in crate::batch_constraint) folded_claims: MultiProofVecVec<(isize, EF)>,
 }
 
 pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
@@ -296,6 +295,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
     eq_3b_blob: &Eq3bBlob,
     preflights: &[Preflight],
 ) -> InteractionsFoldingBlob {
+    let l_skip = vk.inner.params.l_skip;
     let interactions = vk
         .inner
         .per_air
@@ -314,7 +314,8 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
 
         let node_claims = &expr_blob.expr_evals[pidx];
         let vdata = &preflight.proof_shape.sorted_trace_vdata;
-        for (sort_idx, (air_idx, _)) in vdata.iter().enumerate() {
+        for (sort_idx, (air_idx, vdata)) in vdata.iter().enumerate() {
+            let n = vdata.log_height as isize - l_skip as isize;
             let inters = &interactions[*air_idx];
             let mut num_sum = EF::ZERO;
             let mut denom_sum = EF::ZERO;
@@ -350,7 +351,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                         has_interactions: true,
                         is_first_in_air: interaction_idx == 0,
                         is_last_in_air: false,
-                        is_mult: true,
+                        is_mult: true, // for each interaction, only the first record with is_mult = true
                         is_bus_index: false,
                     });
                     num_sum += node_claims[*air_idx][inter.count] * eq_3b;
@@ -393,8 +394,8 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_blob(
                     denom_sum += cur_sum * eq_3b;
                 }
             }
-            folded.push(num_sum);
-            folded.push(denom_sum);
+            folded.push((n, num_sum));
+            folded.push((n, denom_sum));
         }
         folded.end_proof();
         records.end_proof();
@@ -489,6 +490,7 @@ pub(in crate::batch_constraint) fn generate_interactions_folding_trace(
                 }
             });
 
+        // Setting is_first and is_last for this proof
         {
             let cols: &mut InteractionsFoldingCols<_> =
                 trace[cur_height * width..(cur_height + 1) * width].borrow_mut();
