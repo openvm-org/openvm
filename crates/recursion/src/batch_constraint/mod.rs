@@ -43,8 +43,8 @@ use crate::{
     },
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
-        StackingModuleBus, TranscriptBus, XiRandomnessBus,
+        EqNegBaseRandBus, EqNegResultBus, ExpressionClaimNMaxBus, HyperdimBus, PublicValuesBus,
+        SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
@@ -79,6 +79,7 @@ pub struct BatchConstraintModule {
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
+    expression_claim_n_max_bus: ExpressionClaimNMaxBus,
 
     zero_n_bus: EqZeroNBus,
     eq_sharp_uni_bus: EqSharpUniBus,
@@ -131,6 +132,7 @@ impl BatchConstraintModule {
             sel_uni_bus: bus_inventory.sel_uni_bus,
             eq_neg_base_rand_bus: bus_inventory.eq_neg_base_rand_bus,
             eq_neg_result_bus: bus_inventory.eq_neg_result_bus,
+            expression_claim_n_max_bus: bus_inventory.expression_claim_n_max_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             univariate_sumcheck_input_bus: UnivariateSumcheckInputBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
@@ -363,6 +365,7 @@ impl AirModule for BatchConstraintModule {
             cnt_proofs: self.max_num_proofs,
         };
         let expression_claim_air = ExpressionClaimAir {
+            expression_claim_n_max_bus: self.expression_claim_n_max_bus,
             expr_claim_bus: self.expression_claim_bus,
             mu_bus: self.batch_constraint_conductor_bus,
             sumcheck_claim_bus: self.sumcheck_bus,

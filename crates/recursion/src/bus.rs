@@ -152,6 +152,14 @@ define_typed_per_proof_permutation_bus!(GkrModuleBus, GkrModuleMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct ExpressionClaimNMaxMessage<T> {
+    pub n_max: T,
+}
+
+define_typed_per_proof_permutation_bus!(ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct BatchConstraintModuleMessage<T> {
     pub tidx: T,
     pub gkr_input_layer_claim: [[T; D_EF]; 2],
