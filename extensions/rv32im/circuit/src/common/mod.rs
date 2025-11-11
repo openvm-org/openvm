@@ -56,15 +56,22 @@ mod aot {
         }
         let xmm_map_reg = rv32_reg / 2;
         if rv32_reg % 2 == 0 {
-            (gpr.to_string(), format!("   pextrd {}, xmm{}, 0\n", gpr, xmm_map_reg))
+            (
+                gpr.to_string(),
+                format!("   pextrd {}, xmm{}, 0\n", gpr, xmm_map_reg),
+            )
         } else {
-            (gpr.to_string(), format!("   pextrd {}, xmm{}, 1\n", gpr, xmm_map_reg))
+            (
+                gpr.to_string(),
+                format!("   pextrd {}, xmm{}, 1\n", gpr, xmm_map_reg),
+            )
         }
     }
 
     pub(crate) fn gpr_to_xmm(gpr: &str, rv32_reg: u8) -> String {
         if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] {
-            if gpr == override_reg { //already in correct location
+            if gpr == override_reg {
+                //already in correct location
                 return "".to_string();
             }
             return format!("   mov {}, {}\n", override_reg, gpr);

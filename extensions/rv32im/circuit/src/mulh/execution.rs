@@ -121,7 +121,7 @@ where
         let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
 
         let mut asm = String::new();
-        
+
         asm += &rv32_register_to_gpr((b / 4) as u8, REG_A_W);
         asm += &rv32_register_to_gpr((c / 4) as u8, REG_B_W);
 
@@ -147,7 +147,7 @@ where
                 asm += &gpr_to_rv32_register("edx", (a / 4) as u8);
             }
         }
-        
+
         Ok(asm)
     }
 }
