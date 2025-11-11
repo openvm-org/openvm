@@ -75,7 +75,8 @@ where
     }
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
+        // true
+        false
     }
 }
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AotMeteredExecutor<F>
