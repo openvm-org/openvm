@@ -27,8 +27,9 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 use crate::{
     bus::{
         AirShapeBus, AirShapeBusMessage, AirShapeProperty, CommitmentsBus, CommitmentsBusMessage,
-        GkrModuleBus, GkrModuleMessage, HyperdimBus, HyperdimBusMessage, LiftedHeightsBus,
-        LiftedHeightsBusMessage, TranscriptBus, TranscriptBusMessage,
+        ExpressionClaimNMaxBus, ExpressionClaimNMaxMessage, GkrModuleBus, GkrModuleMessage,
+        HyperdimBus, HyperdimBusMessage, LiftedHeightsBus, LiftedHeightsBusMessage, TranscriptBus,
+        TranscriptBusMessage,
     },
     primitives::{
         bus::{PowerCheckerBus, PowerCheckerBusMessage, RangeCheckerBus, RangeCheckerBusMessage},
@@ -446,6 +447,7 @@ pub struct ProofShapeAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     // Inter-module buses
     pub gkr_module_bus: GkrModuleBus,
     pub air_shape_bus: AirShapeBus,
+    pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
     pub hyperdim_bus: HyperdimBus,
     pub lifted_heights_bus: LiftedHeightsBus,
     pub commitments_bus: CommitmentsBus,
@@ -1151,6 +1153,16 @@ where
                 n_logup: n_logup.into(),
                 n_max: local.n_max.into(),
                 is_n_max_greater: local.is_n_max_greater.into(),
+            },
+            local.is_last,
+        );
+
+        // Send n_max value to expression claim air
+        self.expression_claim_n_max_bus.send(
+            builder,
+            local.proof_idx,
+            ExpressionClaimNMaxMessage {
+                n_max: local.n_max.into(),
             },
             local.is_last,
         );

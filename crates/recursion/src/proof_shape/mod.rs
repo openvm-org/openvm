@@ -229,6 +229,7 @@ impl AirModule for ProofShapeModule {
             permutation_bus: self.permutation_bus,
             starting_tidx_bus: self.starting_tidx_bus,
             num_pvs_bus: self.num_pvs_bus,
+            expression_claim_n_max_bus: self.bus_inventory.expression_claim_n_max_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             hyperdim_bus: self.bus_inventory.hyperdim_bus,

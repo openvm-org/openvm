@@ -25,9 +25,9 @@ use crate::{
     bus::{
         AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, CommitmentsBus,
         ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus, ExpBitsLenBus,
-        GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus, Poseidon2Bus,
-        PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus, TranscriptBus,
-        WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
+        ExpressionClaimNMaxBus, GkrModuleBus, HyperdimBus, LiftedHeightsBus, MerkleVerifyBus,
+        Poseidon2Bus, PublicValuesBus, SelUniBus, StackingIndicesBus, StackingModuleBus,
+        TranscriptBus, WhirModuleBus, WhirOpeningPointBus, XiRandomnessBus,
     },
     gkr::GkrModule,
     primitives::{
@@ -142,6 +142,7 @@ pub struct BusInventory {
     pub column_claims_bus: ColumnClaimsBus,
     pub range_checker_bus: RangeCheckerBus,
     pub power_checker_bus: PowerCheckerBus,
+    pub expression_claim_n_max_bus: ExpressionClaimNMaxBus,
 
     // Randomness buses
     pub xi_randomness_bus: XiRandomnessBus,
@@ -273,6 +274,7 @@ impl BusInventory {
             sel_uni_bus: SelUniBus::new(b.new_bus_idx()),
             range_checker_bus: RangeCheckerBus::new(b.new_bus_idx()),
             power_checker_bus: PowerCheckerBus::new(b.new_bus_idx()),
+            expression_claim_n_max_bus: ExpressionClaimNMaxBus::new(b.new_bus_idx()),
 
             // Randomness buses
             xi_randomness_bus: XiRandomnessBus::new(b.new_bus_idx()),
