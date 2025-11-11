@@ -54,7 +54,7 @@ mod aot {
     - is_gpr_force_write boolean
 
     output:
-    - string representing the general purpose regiter that stores the value of register number `rv32_reg` 
+    - string representing the general purpose register that stores the value of register number `rv32_reg` 
     - emitted assembly string that performs the move
     */
     pub(crate) fn xmm_to_gpr(
