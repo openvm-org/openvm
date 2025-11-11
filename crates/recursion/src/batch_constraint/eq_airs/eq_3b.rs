@@ -237,8 +237,10 @@ where
             local.n_at_least_n_lift * within_one_interaction,
         );
 
-        // TODO constrain that air with this sort_idx has that n_lift,
-        // TODO constrain that this pidx has that n_logup
+        // The air with this sort_idx has that n_lift, because it's constrained by some
+        // HyperdimBusMessages between some other AIRs
+
+        // This pidx has that n_logup because of some GkrModuleMessage between some other AIRs
 
         self.eq_3b_bus.send(
             builder,

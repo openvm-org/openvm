@@ -21,6 +21,7 @@ use crate::{
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
     bus::{
+        BatchConstraintTidxBetweenSumchecksBus, BatchConstraintTidxBetweenSumchecksMessage,
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
         StackingModuleMessage, TranscriptBus, UnivariateSumcheckInputBus,
         UnivariateSumcheckInputMessage,
@@ -67,6 +68,7 @@ pub struct UnivariateSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
+    pub tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for UnivariateSumcheckAir {}
@@ -298,6 +300,15 @@ where
                 value: local.r.map(Into::into),
             },
             local.is_first * AB::Expr::TWO,
+        );
+
+        self.tidx_between_sumchecks_bus.send(
+            builder,
+            local.proof_idx,
+            BatchConstraintTidxBetweenSumchecksMessage {
+                tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+            },
+            local.is_valid * local.is_first * (AB::Expr::ONE - local.is_n_max_zero),
         );
     }
 }
