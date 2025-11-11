@@ -11,6 +11,7 @@ use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+#[cfg(feature = "aot")]
 use crate::arch::aot::common::{
         REG_EXEC_STATE_PTR, REG_FIRST_ARG, REG_FOURTH_ARG, REG_INSNS_PTR, REG_INSTRET_END,
         REG_PC, REG_SECOND_ARG, REG_THIRD_ARG, REG_D, REG_RETURN_VAL
