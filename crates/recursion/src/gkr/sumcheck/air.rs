@@ -31,7 +31,7 @@ pub struct GkrLayerSumcheckCols<T> {
     pub is_enabled: T,
     pub proof_idx: T,
     pub layer_idx: T,
-    pub is_layer_start: T,
+    pub is_proof_start: T,
     pub is_first_round: T,
 
     pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
@@ -43,7 +43,7 @@ pub struct GkrLayerSumcheckCols<T> {
     pub is_last_layer: T,
 
     /// Sumcheck sub-round index within this layer_idx (0..layer_idx-1)
-    // TODO(ayush): can probably remove round if XiRandomnessMessage takes tidx instead
+    // perf(ayush): can probably remove round if XiRandomnessMessage takes tidx instead
     pub round: T,
 
     /// Transcript index
@@ -130,13 +130,13 @@ where
                     NestedForLoopIoCols {
                         is_enabled: local.is_enabled,
                         counter: [local.proof_idx, local.layer_idx],
-                        is_first: [local.is_layer_start, local.is_first_round],
+                        is_first: [local.is_proof_start, local.is_first_round],
                     }
                     .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_enabled,
                         counter: [next.proof_idx, next.layer_idx],
-                        is_first: [next.is_layer_start, next.is_first_round],
+                        is_first: [next.is_proof_start, next.is_first_round],
                     }
                     .map_into(),
                 ),

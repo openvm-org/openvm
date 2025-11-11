@@ -230,7 +230,6 @@ impl AirModule for ProofShapeModule {
             starting_tidx_bus: self.starting_tidx_bus,
             num_pvs_bus: self.num_pvs_bus,
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
-            univariate_sumcheck_input_bus: self.bus_inventory.univariate_sumcheck_input_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
             hyperdim_bus: self.bus_inventory.hyperdim_bus,
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,

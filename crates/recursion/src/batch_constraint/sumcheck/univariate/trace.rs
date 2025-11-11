@@ -96,7 +96,6 @@ pub(crate) fn generate_trace(
                     );
                     cols.coeff.copy_from_slice(coeff_base_slice);
                     cols.tidx = F::from_canonical_usize(tidx_r - (i + 1) * D_EF);
-                    cols.is_n_max_zero = F::from_bool(preflight.proof_shape.n_max == 0);
                 });
 
             let mut sum_at_roots = EF::ZERO;

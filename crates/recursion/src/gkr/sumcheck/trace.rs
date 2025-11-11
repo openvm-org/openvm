@@ -116,7 +116,7 @@ pub fn generate_trace(
                 cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.layer_idx = F::ONE;
                 cols.is_first_round = F::ONE;
-                cols.is_layer_start = F::ONE;
+                cols.is_proof_start = F::ONE;
                 cols.is_last_layer = F::ONE;
                 cols.is_dummy = F::ONE;
                 cols.eq_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
@@ -177,7 +177,7 @@ pub fn generate_trace(
 
                     cols.round = F::from_canonical_usize(round_in_layer);
                     cols.is_first_round = F::from_bool(round_in_layer == 0);
-                    cols.is_layer_start = F::from_bool(layer_idx_value == 1 && round_in_layer == 0);
+                    cols.is_proof_start = F::from_bool(layer_idx_value == 1 && round_in_layer == 0);
 
                     cols.nested_for_loop_aux_cols.is_transition[0] =
                         F::from_bool(global_round_idx + 1 != total_rounds);

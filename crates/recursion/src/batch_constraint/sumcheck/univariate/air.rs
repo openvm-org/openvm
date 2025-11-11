@@ -19,12 +19,11 @@ use crate::{
     batch_constraint::bus::{
         BatchConstraintConductorBus, BatchConstraintConductorMessage,
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
+        UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage,
     },
     bus::{
-        BatchConstraintTidxBetweenSumchecksBus, BatchConstraintTidxBetweenSumchecksMessage,
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
-        StackingModuleMessage, TranscriptBus, UnivariateSumcheckInputBus,
-        UnivariateSumcheckInputMessage,
+        StackingModuleMessage, TranscriptBus,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     utils::{ext_field_add, ext_field_multiply, ext_field_multiply_scalar},
@@ -39,8 +38,7 @@ pub struct UnivariateSumcheckCols<T> {
 
     pub coeff_idx: T,
 
-    // TODO(ayush): there must be a better way to do this
-    // can these be preprocessed cols?
+    // perf(ayush): can these be preprocessed cols?
     /// Powers of generator of order 2^{l_skip} to get periodic selector columns
     pub omega_skip_power: T,
     pub is_omega_skip_power_equal_to_one: T,
@@ -53,7 +51,6 @@ pub struct UnivariateSumcheckCols<T> {
     pub value_at_r: [T; D_EF],
 
     pub tidx: T,
-    pub is_n_max_zero: T,
 }
 
 pub struct UnivariateSumcheckAir {
@@ -68,7 +65,6 @@ pub struct UnivariateSumcheckAir {
     pub transcript_bus: TranscriptBus,
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
-    pub tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for UnivariateSumcheckAir {}
@@ -135,12 +131,10 @@ where
         // Powers of omega constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // TODO(ayush): cache
         let omega_skip = AB::Expr::from_f(<AB::Expr as FieldAlgebra>::F::two_adic_generator(
             self.l_skip,
         ));
 
-        // TODO(ayush): see if i can somehow reuse ExpBitsLenAir
         // Omega power ends at 1
         builder
             .when(local.is_valid * is_last.clone())
@@ -227,14 +221,6 @@ where
         // Interactions
         ///////////////////////////////////////////////////////////////////////
 
-        self.univariate_sumcheck_input_bus.receive(
-            builder,
-            local.proof_idx,
-            UnivariateSumcheckInputMessage {
-                is_n_max_zero: local.is_n_max_zero,
-            },
-            local.is_first * local.is_valid,
-        );
         // Sample r
         self.transcript_bus.sample_ext(
             builder,
@@ -252,6 +238,13 @@ where
             local.is_valid,
         );
 
+        // Receive initial tidx value
+        self.univariate_sumcheck_input_bus.receive(
+            builder,
+            local.proof_idx,
+            UnivariateSumcheckInputMessage { tidx: local.tidx },
+            local.is_valid * is_last.clone(),
+        );
         // Send tidx when there are no multilinear rounds
         self.stacking_module_bus.send(
             builder,
@@ -260,7 +253,7 @@ where
                 // Skip r
                 tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
             },
-            local.is_valid * local.is_first * local.is_n_max_zero,
+            local.is_valid * local.is_first,
         );
 
         self.claim_bus.receive(
@@ -300,15 +293,6 @@ where
                 value: local.r.map(Into::into),
             },
             local.is_first * AB::Expr::TWO,
-        );
-
-        self.tidx_between_sumchecks_bus.send(
-            builder,
-            local.proof_idx,
-            BatchConstraintTidxBetweenSumchecksMessage {
-                tidx: local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
-            },
-            local.is_valid * local.is_first * (AB::Expr::ONE - local.is_n_max_zero),
         );
     }
 }

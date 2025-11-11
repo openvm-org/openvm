@@ -17,7 +17,6 @@ use crate::{
         BatchConstraintInnerMessageType, SumcheckClaimBus, SumcheckClaimMessage,
     },
     bus::{
-        BatchConstraintTidxBetweenSumchecksBus, BatchConstraintTidxBetweenSumchecksMessage,
         ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, StackingModuleBus,
         StackingModuleMessage, TranscriptBus,
     },
@@ -34,17 +33,21 @@ pub struct MultilinearSumcheckCols<T> {
     pub is_valid: T,
     pub proof_idx: T,
     pub round_idx: T,
-    pub is_round_start: T,
+    pub is_proof_start: T,
     pub is_first_eval: T,
 
     pub nested_for_loop_aux_cols: NestedForLoopAuxCols<T, 1>,
+
+    /// A valid row which is not involved in any interactions
+    /// but should satisfy air constraints
+    pub is_dummy: T,
 
     pub eval_idx: T,
 
     pub cur_sum: [T; D_EF],
     pub eval: [T; D_EF],
 
-    // TODO(ayush): can be preprocessed cols
+    // perf(ayush): can be preprocessed cols
     // 1 / i!(d - i)!
     pub denom_inv: T,
 
@@ -63,7 +66,6 @@ pub struct MultilinearSumcheckAir {
     pub randomness_bus: ConstraintSumcheckRandomnessBus,
     pub batch_constraint_conductor_bus: BatchConstraintConductorBus,
     pub stacking_module_bus: StackingModuleBus,
-    pub tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus,
 }
 
 impl<F> BaseAirWithPublicValues<F> for MultilinearSumcheckAir {}
@@ -100,13 +102,13 @@ where
                     NestedForLoopIoCols {
                         is_enabled: local.is_valid,
                         counter: [local.proof_idx, local.round_idx],
-                        is_first: [local.is_round_start, local.is_first_eval],
+                        is_first: [local.is_proof_start, local.is_first_eval],
                     }
                     .map_into(),
                     NestedForLoopIoCols {
                         is_enabled: next.is_valid,
                         counter: [next.proof_idx, next.round_idx],
-                        is_first: [next.is_round_start, next.is_first_eval],
+                        is_first: [next.is_proof_start, next.is_first_eval],
                     }
                     .map_into(),
                 ),
@@ -114,8 +116,15 @@ where
             ),
         );
 
-        let is_last_round = LoopSubAir::local_is_last(next.is_valid, next.is_round_start);
+        let is_proof_end = LoopSubAir::local_is_last(next.is_valid, next.is_proof_start);
         let is_last_eval = LoopSubAir::local_is_last(next.is_valid, next.is_first_eval);
+
+        let is_not_dummy = AB::Expr::ONE - local.is_dummy;
+
+        // Round idx starts at 0
+        builder
+            .when(local.is_proof_start)
+            .assert_zero(local.round_idx);
 
         // Eval idx starts at 0
         builder
@@ -125,16 +134,15 @@ where
         builder
             .when(AB::Expr::ONE - is_last_eval.clone())
             .assert_eq(next.eval_idx, local.eval_idx + AB::Expr::ONE);
-        // Eval idx ends at s_deg
+        // Eval idx ends at s_deg if not dummy
         builder
-            .when(local.is_valid * is_last_eval.clone())
+            .when(local.is_valid * is_last_eval.clone() * is_not_dummy.clone())
             .assert_eq(local.eval_idx, AB::Expr::from_canonical_usize(s_deg));
 
         ///////////////////////////////////////////////////////////////////////
         // Factorials Constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // TODO(ayush): cache
         let d_factorial_inv = AB::Expr::from_f(
             <AB::Expr as FieldAlgebra>::F::from_canonical_usize((1..=s_deg).product()).inverse(),
         );
@@ -227,7 +235,6 @@ where
         // Transition constraints
         ///////////////////////////////////////////////////////////////////////
 
-        // TODO(ayush): tidx initial value should be constrained using some interaction
         builder
             .when(local.is_valid * (AB::Expr::ONE - is_last_eval.clone()))
             .assert_eq(next.tidx, local.tidx + AB::Expr::from_canonical_usize(D_EF));
@@ -242,7 +249,7 @@ where
             local.proof_idx,
             local.tidx,
             next.eval,
-            local.is_valid * (AB::Expr::ONE - is_last_eval.clone()),
+            local.is_valid * (AB::Expr::ONE - is_last_eval.clone()) * is_not_dummy.clone(),
         );
         // Sample challenge r
         self.transcript_bus.sample_ext(
@@ -250,16 +257,23 @@ where
             local.proof_idx,
             local.tidx,
             local.r,
-            local.is_valid * is_last_eval.clone(),
+            local.is_valid * is_last_eval.clone() * is_not_dummy.clone(),
         );
 
+        // Receive tidx from univariate sumcheck and send it to stacking module
+        self.stacking_module_bus.receive(
+            builder,
+            local.proof_idx,
+            StackingModuleMessage { tidx: local.tidx },
+            local.is_valid * local.is_proof_start * is_not_dummy.clone(),
+        );
         self.stacking_module_bus.send(
             builder,
             local.proof_idx,
             StackingModuleMessage {
                 tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
             },
-            local.is_valid * is_last_round.clone(),
+            local.is_valid * is_proof_end.clone() * is_not_dummy.clone(),
         );
 
         self.claim_bus.receive(
@@ -269,7 +283,7 @@ where
                 round: local.round_idx.into(),
                 value: ext_field_add(local.eval, next.eval),
             },
-            local.is_valid * local.is_first_eval,
+            local.is_valid * local.is_first_eval * is_not_dummy.clone(),
         );
         self.claim_bus.send(
             builder,
@@ -278,7 +292,7 @@ where
                 round: local.round_idx + AB::Expr::ONE,
                 value: local.cur_sum.map(Into::into),
             },
-            local.is_valid * is_last_eval.clone(),
+            local.is_valid * is_last_eval.clone() * is_not_dummy.clone(),
         );
         self.randomness_bus.send(
             builder,
@@ -287,7 +301,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 challenge: local.r.map(|x| x.into()),
             },
-            local.is_valid * local.is_first_eval,
+            local.is_valid * local.is_first_eval * is_not_dummy.clone(),
         );
         self.batch_constraint_conductor_bus.send(
             builder,
@@ -297,14 +311,7 @@ where
                 idx: local.round_idx + AB::Expr::ONE,
                 value: local.r.map(|x| x.into()),
             },
-            local.is_valid * local.is_first_eval,
-        );
-
-        self.tidx_between_sumchecks_bus.receive(
-            builder,
-            local.proof_idx,
-            BatchConstraintTidxBetweenSumchecksMessage { tidx: local.tidx },
-            local.is_valid * local.is_round_start,
+            local.is_valid * local.is_first_eval * is_not_dummy,
         );
     }
 }

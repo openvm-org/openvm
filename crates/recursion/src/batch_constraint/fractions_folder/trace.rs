@@ -51,7 +51,6 @@ pub(crate) fn generate_trace(
             let mu_tidx = preflight.batch_constraint.tidx_before_univariate - D_EF;
             let mu_slice = &preflight.transcript.values()[mu_tidx..mu_tidx + D_EF];
             let tidx_alpha_beta = preflight.proof_shape.post_tidx + 2;
-            let gkr_post_tidx = preflight.gkr.post_tidx;
 
             debug_assert_eq!(rows.len(), height * width);
 
@@ -65,14 +64,12 @@ pub(crate) fn generate_trace(
                     cols.is_first = F::from_bool(i == 0);
                     cols.proof_idx = F::from_canonical_usize(pidx);
                     cols.air_idx = F::from_canonical_usize(air_idx);
-                    cols.tidx_alpha_beta = F::from_canonical_usize(tidx_alpha_beta);
                     cols.sum_claim_p
                         .copy_from_slice(npa[air_idx].as_base_slice());
                     cols.sum_claim_q
                         .copy_from_slice(dpa[air_idx].as_base_slice());
-                    cols.gkr_post_tidx = F::from_canonical_usize(gkr_post_tidx);
                     cols.mu.copy_from_slice(mu_slice);
-                    cols.tidx = F::from_canonical_usize(mu_tidx - D_EF - i * 2 * D_EF);
+                    cols.tidx = F::from_canonical_usize(mu_tidx - 2 * D_EF - i * 2 * D_EF);
                 });
 
             let mut cur_p_sum = [F::ZERO; D_EF];

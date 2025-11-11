@@ -18,7 +18,7 @@ use crate::{
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
 };
 
-// TODO(ayush): can probably get rid of this whole air if challenges -> transcript
+// perf(ayush): can probably get rid of this whole air if challenges -> transcript
 // interactions are constrained in batch constraint module
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
@@ -33,7 +33,7 @@ pub struct GkrXiSamplerCols<T> {
     pub is_dummy: T,
 
     /// Challenge index
-    // TODO(ayush): can probably remove idx if XiRandomnessMessage takes tidx instead
+    // perf(ayush): can probably remove idx if XiRandomnessMessage takes tidx instead
     pub idx: T,
 
     /// Sampled challenge

@@ -19,7 +19,10 @@ pub(crate) fn generate_trace(
 
     let rows_per_proof: Vec<usize> = proofs
         .iter()
-        .map(|proof| proof.batch_constraint_proof.sumcheck_round_polys.len() * rows_per_round)
+        .map(|proof| {
+            let rounds = proof.batch_constraint_proof.sumcheck_round_polys.len();
+            (rounds * rows_per_round).max(1)
+        })
         .collect();
     let total_height: usize = rows_per_proof.iter().sum();
     let padded_height = total_height.max(1).next_power_of_two();
@@ -52,16 +55,28 @@ pub(crate) fn generate_trace(
         .for_each(|(pidx, (rows, (proof, preflight)))| {
             let polys = &proof.batch_constraint_proof.sumcheck_round_polys;
             let n_rounds = polys.len();
-            if rows.is_empty() {
-                debug_assert_eq!(n_rounds, 0);
-                return;
-            }
-
-            debug_assert_eq!(rows.len(), n_rounds * rows_per_round * width);
             let tidx_before_multilinear = preflight.batch_constraint.tidx_before_multilinear;
             let sumcheck_rnd = &preflight.batch_constraint.sumcheck_rnd;
 
             debug_assert!(sumcheck_rnd.len() > n_rounds);
+
+            if n_rounds == 0 {
+                debug_assert_eq!(rows.len(), width);
+
+                let cols: &mut MultilinearSumcheckCols<F> = rows[..width].borrow_mut();
+                cols.is_valid = F::ONE;
+                cols.is_dummy = F::ONE;
+                cols.proof_idx = F::from_canonical_usize(pidx);
+                cols.is_proof_start = F::ONE;
+                cols.is_first_eval = F::ONE;
+                cols.prefix_product.copy_from_slice(EF::ONE.as_base_slice());
+                cols.suffix_product.copy_from_slice(EF::ONE.as_base_slice());
+                cols.denom_inv = denom_inv[0];
+
+                return;
+            }
+
+            debug_assert_eq!(rows.len(), n_rounds * rows_per_round * width);
 
             let r0 = sumcheck_rnd[0];
             let mut pow = EF::ONE;
@@ -83,7 +98,7 @@ pub(crate) fn generate_trace(
                     cols.is_valid = F::ONE;
                     cols.proof_idx = F::from_canonical_usize(pidx);
                     cols.round_idx = F::from_canonical_usize(round_idx);
-                    cols.is_round_start = F::from_bool(round_idx == 0 && eval_idx == 0);
+                    cols.is_proof_start = F::from_bool(round_idx == 0 && eval_idx == 0);
                     cols.is_first_eval = F::from_bool(eval_idx == 0);
                     cols.nested_for_loop_aux_cols.is_transition[0] =
                         F::from_bool(round_idx + 1 != n_rounds || eval_idx != s_deg);
