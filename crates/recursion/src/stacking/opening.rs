@@ -19,8 +19,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ColumnClaimsBus, ColumnClaimsMessage, LiftedHeightsBus, LiftedHeightsBusMessage,
-        StackingModuleBus, StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
+        ColumnClaimsBus, LiftedHeightsBus, LiftedHeightsBusMessage, StackingModuleBus,
+        StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     stacking::{
         bus::{
@@ -151,7 +151,7 @@ impl OpeningClaimsTraceGenerator {
                 })
                 .unwrap_or(num_rows - 1);
 
-            for (i, (claim, slice, (eq_in, k_rot_in, eq_bits), chunk)) in
+            for (row_idx, (claim, slice, (eq_in, k_rot_in, eq_bits), chunk)) in
                 izip!(claims, stacked_slices, per_slice, trace.chunks_mut(width)).enumerate()
             {
                 let ColumnOpeningPair {
@@ -164,8 +164,8 @@ impl OpeningClaimsTraceGenerator {
                 let cols: &mut OpeningClaimsCols<F> = chunk.borrow_mut();
                 cols.proof_idx = proof_idx_value;
                 cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(i == 0);
-                cols.is_last = F::from_bool(i + 1 == num_rows);
+                cols.is_first = F::from_bool(row_idx == 0);
+                cols.is_last = F::from_bool(row_idx + 1 == num_rows);
 
                 cols.sort_idx = F::from_canonical_usize(sort_idx);
                 cols.part_idx = F::from_canonical_usize(part_idx);
@@ -174,7 +174,8 @@ impl OpeningClaimsTraceGenerator {
                 cols.rot_claim.copy_from_slice(rot_claim.as_base_slice());
 
                 cols.is_main = F::from_bool(part_idx == 0);
-                cols.is_transition_main = F::from_bool(i + 1 != num_rows && i != last_main_idx);
+                cols.is_transition_main =
+                    F::from_bool(row_idx + 1 != num_rows && row_idx != last_main_idx);
 
                 let n_lift = slice.n.max(0) as usize;
                 cols.hypercube_dim = if slice.n.is_positive() {
@@ -187,7 +188,9 @@ impl OpeningClaimsTraceGenerator {
                     F::from_canonical_usize(1 << (n_lift + vk.inner.params.l_skip));
                 cols.lifted_height_inv = cols.lifted_height.inverse();
 
-                cols.tidx = F::from_canonical_usize(preflight.batch_constraint.post_tidx);
+                cols.tidx = F::from_canonical_usize(
+                    preflight.batch_constraint.tidx_before_column_openings + 2 * row_idx * D_EF,
+                );
                 cols.lambda
                     .copy_from_slice(preflight.stacking.lambda.as_base_slice());
 
@@ -369,30 +372,30 @@ where
          * and sent it to UnivariateRoundAir, which will constrain that the RLC is equal to the
          * sum of the proof's s_0 polynomial evaluated at each z in D.
          */
-        self.column_claims_bus.receive(
-            builder,
-            local.proof_idx,
-            ColumnClaimsMessage {
-                sort_idx: local.sort_idx.into(),
-                part_idx: local.part_idx.into(),
-                col_idx: local.col_idx.into(),
-                claim: local.col_claim.map(Into::into),
-                is_rot: AB::Expr::ZERO,
-            },
-            local.is_valid,
-        );
-        self.column_claims_bus.receive(
-            builder,
-            local.proof_idx,
-            ColumnClaimsMessage {
-                sort_idx: local.sort_idx.into(),
-                part_idx: local.part_idx.into(),
-                col_idx: local.col_idx.into(),
-                claim: local.rot_claim.map(Into::into),
-                is_rot: AB::Expr::ONE,
-            },
-            local.is_valid,
-        );
+        // self.column_claims_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     ColumnClaimsMessage {
+        //         sort_idx: local.sort_idx.into(),
+        //         part_idx: local.part_idx.into(),
+        //         col_idx: local.col_idx.into(),
+        //         claim: local.col_claim.map(Into::into),
+        //         is_rot: AB::Expr::ZERO,
+        //     },
+        //     local.is_valid,
+        // );
+        // self.column_claims_bus.send(
+        //     builder,
+        //     local.proof_idx,
+        //     ColumnClaimsMessage {
+        //         sort_idx: local.sort_idx.into(),
+        //         part_idx: local.part_idx.into(),
+        //         col_idx: local.col_idx.into(),
+        //         claim: local.rot_claim.map(Into::into),
+        //         is_rot: AB::Expr::ONE,
+        //     },
+        //     local.is_valid,
+        // );
 
         assert_array_eq(
             &mut builder.when(not(local.is_last)),
@@ -606,15 +609,44 @@ where
             StackingModuleMessage {
                 tidx: local.tidx.into(),
             },
-            and(local.is_last, local.is_valid),
+            and(local.is_first, local.is_valid),
         );
+
+        builder
+            .when(and(local.is_valid, not(local.is_last)))
+            .assert_eq(
+                local.tidx + AB::Expr::from_canonical_usize(2 * D_EF),
+                next.tidx,
+            );
 
         for i in 0..D_EF {
             self.transcript_bus.receive(
                 builder,
                 local.proof_idx,
                 TranscriptBusMessage {
-                    tidx: AB::Expr::from_canonical_usize(i) + local.tidx,
+                    tidx: local.tidx + AB::Expr::from_canonical_usize(i),
+                    value: local.col_claim[i].into(),
+                    is_sample: AB::Expr::ZERO,
+                },
+                local.is_valid,
+            );
+
+            self.transcript_bus.receive(
+                builder,
+                local.proof_idx,
+                TranscriptBusMessage {
+                    tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF + i),
+                    value: local.rot_claim[i].into(),
+                    is_sample: AB::Expr::ZERO,
+                },
+                local.is_valid,
+            );
+
+            self.transcript_bus.receive(
+                builder,
+                local.proof_idx,
+                TranscriptBusMessage {
+                    tidx: AB::Expr::from_canonical_usize(2 * D_EF + i) + local.tidx,
                     value: local.lambda[i].into(),
                     is_sample: AB::Expr::ONE,
                 },
@@ -627,7 +659,7 @@ where
             local.proof_idx,
             StackingModuleTidxMessage {
                 module_idx: AB::Expr::ZERO,
-                tidx: local.tidx + AB::Expr::from_canonical_usize(D_EF),
+                tidx: local.tidx + AB::Expr::from_canonical_usize(3 * D_EF),
             },
             and(local.is_last, local.is_valid),
         );
