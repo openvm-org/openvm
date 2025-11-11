@@ -718,11 +718,9 @@ pub(crate) fn generate_symbolic_expr_cached_trace(
                         }
                         Entry::Main { part_index, offset } => {
                             record.kind = NodeKind::VarMain;
-                            record.attrs[1] = if part_index == 0 {
-                                0
-                            } else {
-                                part_index + vk.preprocessed_data.is_some() as usize
-                            };
+                            record.attrs[1] =
+                                (part_index + vk.preprocessed_data.is_some() as usize + 1)
+                                    % (vk.num_cached_mains() + 1);
                             record.attrs[2] = offset;
                         }
                         Entry::Permutation { .. } => unreachable!(),

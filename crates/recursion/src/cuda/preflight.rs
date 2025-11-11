@@ -115,7 +115,7 @@ impl PreflightGpu {
                     cached_idx: sorted_cached_commits.len(),
                     starting_cidx: cidx,
                     total_interactions,
-                    num_air_id_lookups: bc_air_shape_lookups[vdata.log_height] + 1,
+                    num_air_id_lookups: bc_air_shape_lookups[vdata.log_height],
                 };
                 cidx += vdata.cached_commitments.len()
                     + vk.inner.per_air[*air_idx].preprocessed_data.is_some() as usize;

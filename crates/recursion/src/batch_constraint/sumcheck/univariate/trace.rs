@@ -94,9 +94,9 @@ pub(crate) fn generate_trace(
                             &mut cols.is_omega_skip_power_equal_to_one,
                         ),
                     );
-
                     cols.coeff.copy_from_slice(coeff_base_slice);
                     cols.tidx = F::from_canonical_usize(tidx_r - (i + 1) * D_EF);
+                    cols.is_n_max_zero = F::from_bool(preflight.proof_shape.n_max == 0);
                     // TODO(TEMP): remove this temporary column
                     cols.tmp_n_notpos =
                         F::from_bool(proof.batch_constraint_proof.sumcheck_round_polys.is_empty());
