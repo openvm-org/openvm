@@ -121,8 +121,8 @@ where
             if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
                 asm_str += &format!("   mov {override_reg}, {rd}\n");
             } else {
-                asm_str += &format!("   mov edx, {rd}\n");
-                asm_str += &gpr_to_xmm("edx", a_reg);
+                asm_str += &format!("   mov {REG_A_W}, {rd}\n");
+                asm_str += &gpr_to_xmm(REG_A_W, a_reg);
             }
         }
         if is_jal {
@@ -135,8 +135,7 @@ where
     }
 
     fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        // true
-        false
+        true
     }
 }
 
