@@ -7,6 +7,7 @@ pub struct TraceMetadata {
     pub cached_idx: usize,
     pub starting_cidx: usize,
     pub total_interactions: usize,
+    pub num_air_id_lookups: usize,
     pub log_height: u8,
 }
 
@@ -15,6 +16,7 @@ pub struct TraceMetadata {
 pub struct PublicValueData {
     pub air_idx: usize,
     pub air_num_pvs: usize,
+    pub num_airs: usize,
     pub pv_idx: usize,
     pub value: F,
 }

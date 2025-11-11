@@ -63,6 +63,8 @@ template <typename T, size_t MAX_CACHED> struct ProofShapeCols {
     T n_max;
     T is_n_max_greater;
 
+    T num_air_id_lookups;
+
     // T idx_flags[IDX_FLAGS];
     T part_cached_mult[MAX_CACHED];
     T cached_commits[MAX_CACHED][DIGEST_SIZE];
@@ -115,6 +117,7 @@ __device__ __forceinline__ void fill_present_row(
     size_t lifted_height = max(height, (size_t)(1 << l_skip));
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::one());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, height, height);
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, trace_data.num_air_id_lookups);
 
     Decomp lifted_height_decomp, num_interactions_decomp, total_interactions_decomp;
     decompose(lifted_height_decomp, lifted_height);
@@ -261,6 +264,7 @@ __device__ __forceinline__ void fill_summary_row(
     );
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, is_present, Fp::zero());
     COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, n_sign_bit, Fp::zero());
+    COL_WRITE_VALUE(row, typename Cols<MAX_CACHED>::template Type, num_air_id_lookups, Fp::zero());
     row.fill_zero(part_cached_mult_idx, MAX_CACHED);
     row.fill_zero(part_cached_mult_idx + MAX_CACHED, MAX_CACHED * DIGEST_SIZE);
 

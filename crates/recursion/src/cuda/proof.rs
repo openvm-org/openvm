@@ -60,17 +60,20 @@ impl ProofGpu {
     }
 
     fn proof_shape(_vk: &MultiStarkVerifyingKeyV2, proof: &Proof) -> ProofShapeProofGpu {
+        let num_airs = proof.public_values.len();
         let public_values = proof
             .public_values
             .iter()
             .enumerate()
-            .flat_map(|(air_idx, pvs)| {
+            .flat_map(move |(air_idx, pvs)| {
                 let air_num_pvs = pvs.len();
+                let total_airs = num_airs;
                 pvs.iter()
                     .enumerate()
                     .map(move |(pv_idx, &value)| PublicValueData {
                         air_idx,
                         air_num_pvs,
+                        num_airs: total_airs,
                         pv_idx,
                         value,
                     })

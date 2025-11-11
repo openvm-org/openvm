@@ -74,10 +74,10 @@ pub struct SingleMainSymbolicExpressionColumns<T> {
     // For selectors:
     //   args[0..D_EF)   = sel_uni witness (base or rotated depending on selector type).
     //   args[D_EF..2*D_EF) = eq-prefix witness (prod r_i or prod (1-r_i)).
-    //   args[2*D_EF]    = sort_idx
-    //   args[2*D_EF + 1]= n_abs
-    //   args[2*D_EF + 2]= n_sign_bit
-    args: [T; 2 * D_EF + 3],
+    args: [T; 2 * D_EF],
+    sort_idx: T,
+    n_abs: T,
+    is_n_neg: T,
 }
 
 pub struct SymbolicExpressionAir {
@@ -217,10 +217,6 @@ where
                 cols.is_present * is_arg1_node_idx.clone(),
             );
 
-            let sort_idx = cols.args[2 * D_EF];
-            let n_abs = cols.args[2 * D_EF + 1];
-            let n_is_neg = cols.args[2 * D_EF + 2];
-
             let _is_var = enc.contains_flag::<AB>(
                 &flags,
                 &[NodeKind::VarMain, NodeKind::VarPreprocessed].map(|x| x as usize),
@@ -229,7 +225,7 @@ where
                 builder,
                 proof_idx,
                 ColumnClaimsMessage {
-                    sort_idx: sort_idx.into(),
+                    sort_idx: cols.sort_idx.into(),
                     part_idx: cached_cols.attrs[1].into(),
                     col_idx: cached_cols.attrs[0].into(),
                     claim: array::from_fn(|i| cols.args[i].into()),
@@ -246,8 +242,28 @@ where
                     pv_idx: cached_cols.attrs[0],
                     value: cols.args[0],
                 },
-                AB::Expr::ZERO,
-                // enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags),
+                enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags)
+                    * cols.is_present,
+            );
+            self.air_shape_bus.receive(
+                builder,
+                proof_idx,
+                AirShapeBusMessage {
+                    sort_idx: cols.sort_idx.into(),
+                    property_idx: AB::Expr::ZERO,
+                    value: cached_cols.air_idx.into(),
+                },
+                cols.is_present,
+            );
+            self.hyperdim_bus.receive(
+                builder,
+                proof_idx,
+                HyperdimBusMessage {
+                    sort_idx: cols.sort_idx,
+                    n_abs: cols.n_abs,
+                    n_sign_bit: cols.is_n_neg,
+                },
+                cols.is_present,
             );
             // Selector
             {
@@ -260,34 +276,13 @@ where
                     ]
                     .map(|x| x as usize),
                 );
-                self.air_shape_bus.receive(
-                    builder,
-                    proof_idx,
-                    AirShapeBusMessage {
-                        sort_idx: sort_idx.into(),
-                        property_idx: AB::Expr::ZERO,
-                        value: cached_cols.air_idx.into(),
-                    },
-                    // TODO: _is_sel,
-                    AB::Expr::ZERO,
-                );
-                self.hyperdim_bus.receive(
-                    builder,
-                    proof_idx,
-                    HyperdimBusMessage {
-                        sort_idx,
-                        n_abs,
-                        n_sign_bit: n_is_neg,
-                    },
-                    // TODO: _is_sel,
-                    AB::Expr::ZERO,
-                );
+
                 let is_first = enc.get_flag_expr::<AB>(NodeKind::SelIsFirst as usize, &flags);
                 self.sel_uni_bus.receive(
                     builder,
                     proof_idx,
                     SelUniBusMessage {
-                        n: AB::Expr::NEG_ONE * n_abs * n_is_neg,
+                        n: AB::Expr::NEG_ONE * cols.n_abs * cols.is_n_neg,
                         is_first: is_first.clone(),
                         value: arg_ef0.map(Into::into),
                     },
@@ -297,15 +292,14 @@ where
                     builder,
                     proof_idx,
                     SelHypercubeBusMessage {
-                        n: n_abs.into(),
+                        n: cols.n_abs.into(),
                         is_first: is_first.clone(),
                         value: arg_ef1.map(Into::into),
                     },
-                    cols.is_present * is_sel.clone() * (AB::Expr::ONE - n_is_neg),
+                    cols.is_present * is_sel.clone() * (AB::Expr::ONE - cols.is_n_neg),
                 );
-                // TODO: n zero
                 assert_array_eq(
-                    &mut builder.when(is_sel.clone() * n_is_neg),
+                    &mut builder.when(cols.is_present * is_sel.clone() * cols.is_n_neg),
                     arg_ef1,
                     [
                         AB::Expr::ONE,
@@ -360,7 +354,10 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     let main_width = single_main_width * max_num_proofs;
 
     struct Record {
-        args: [F; 2 * D_EF + 3],
+        args: [F; 2 * D_EF],
+        sort_idx: usize,
+        n_abs: usize,
+        is_n_neg: usize,
     }
     let mut records = vec![];
 
@@ -415,23 +412,22 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                 .iter()
                 .position(|(idx, _)| *idx == air_idx)
                 .unwrap();
-            let sort_idx = F::from_canonical_usize(sort_idx);
 
             // TODO sort_idx in trace
             let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
-            let (n_abs, n_sign_bit) = if log_height < params.l_skip {
-                (F::from_canonical_usize(params.l_skip - log_height), F::ONE)
+            let (n_abs, is_n_neg) = if log_height < params.l_skip {
+                (params.l_skip - log_height, 1)
             } else {
-                (F::from_canonical_usize(log_height - params.l_skip), F::ZERO)
+                (log_height - params.l_skip, 0)
             };
 
             for (node_idx, node) in constraints.nodes.iter().enumerate() {
                 let mut record = Record {
-                    args: [F::ZERO; 2 * D_EF + 3],
+                    args: [F::ZERO; 2 * D_EF],
+                    sort_idx,
+                    n_abs,
+                    is_n_neg,
                 };
-                record.args[2 * D_EF] = sort_idx;
-                record.args[2 * D_EF + 1] = n_abs;
-                record.args[2 * D_EF + 2] = n_sign_bit;
                 match node {
                     SymbolicExpressionNode::Variable(var) => match var.entry {
                         Entry::Preprocessed { .. } => {
@@ -516,20 +512,24 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                 records.push(Some(record));
             }
             for interaction in &vk.symbolic_constraints.interactions {
-                let mut args = [F::ZERO; 2 * D_EF + 3];
+                let mut args = [F::ZERO; 2 * D_EF];
                 args[..D_EF].copy_from_slice(expr_evals[interaction.count].as_base_slice());
-                args[2 * D_EF] = sort_idx;
-                args[2 * D_EF + 1] = n_abs;
-                args[2 * D_EF + 2] = n_sign_bit;
-                records.push(Some(Record { args }));
+                records.push(Some(Record {
+                    args,
+                    sort_idx,
+                    n_abs,
+                    is_n_neg,
+                }));
 
                 for &node_idx in &interaction.message {
-                    let mut args = [F::ZERO; 2 * D_EF + 3];
+                    let mut args = [F::ZERO; 2 * D_EF];
                     args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
-                    args[2 * D_EF] = sort_idx;
-                    args[2 * D_EF + 1] = n_abs;
-                    args[2 * D_EF + 2] = n_sign_bit;
-                    records.push(Some(Record { args }));
+                    records.push(Some(Record {
+                        args,
+                        sort_idx,
+                        n_abs,
+                        is_n_neg,
+                    }));
                 }
             }
         }
@@ -566,6 +566,9 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
             let cols: &mut SingleMainSymbolicExpressionColumns<_> = chunk.borrow_mut();
             cols.is_present = F::ONE;
             cols.args = record.args;
+            cols.sort_idx = F::from_canonical_usize(record.sort_idx);
+            cols.n_abs = F::from_canonical_usize(record.n_abs);
+            cols.is_n_neg = F::from_canonical_usize(record.is_n_neg);
         });
 
     RowMajorMatrix::new(main_trace, main_width)
