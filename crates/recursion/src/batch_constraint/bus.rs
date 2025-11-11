@@ -135,3 +135,11 @@ pub struct EqNegInternalMessage<T> {
 }
 
 define_typed_per_proof_permutation_bus!(EqNegInternalBus, EqNegInternalMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct UnivariateSumcheckInputMessage<T> {
+    pub tidx: T,
+}
+
+define_typed_per_proof_permutation_bus!(UnivariateSumcheckInputBus, UnivariateSumcheckInputMessage);
