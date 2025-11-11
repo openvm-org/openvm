@@ -50,9 +50,12 @@ mod aot {
         format!("   pextrq {gpr}, {xmm_map_reg}, 1\n")
     }
 
-    pub(crate) fn xmm_to_gpr(rv32_reg: u8, gpr: &str) -> (String, String) {
+    pub(crate) fn xmm_to_gpr(rv32_reg: u8, gpr: &str, is_gpr_force_write: bool) -> (String, String) {
         if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[rv32_reg as usize] { // a/4 is overridden, b/4 is overridden
-            return (gpr.to_string(), format!("  mov {}, {}\n", gpr, override_reg));
+            if is_gpr_force_write {
+                return (gpr.to_string(), format!("  mov {}, {}\n", gpr, override_reg));
+            }
+            return (override_reg.to_string(), "".to_string());
         }
         let xmm_map_reg = rv32_reg / 2;
         if rv32_reg % 2 == 0 {
