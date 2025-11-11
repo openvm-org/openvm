@@ -10,13 +10,15 @@
 #include <cstdint>
 
 template <typename T> struct PublicValuesCols {
-    T proof_idx;
     T is_valid;
-    T is_first;
+    T proof_idx;
     T air_idx;
+    T pv_idx;
+    T is_first_in_proof;
+    T is_first_in_air;
+    T is_same_proof;
+    T is_same_air;
     T tidx;
-    T num_pvs_left;
-    T is_first_for_air;
     T value;
 };
 
@@ -35,17 +37,28 @@ __global__ void public_values_tracegen(
         size_t record_idx = idx % num_pvs;
         PublicValueData pv_data = pvs_data[proof_idx][record_idx];
         size_t starting_tidx = pvs_tidx[proof_idx][pv_data.air_idx];
-        COL_WRITE_VALUE(row, PublicValuesCols, proof_idx, proof_idx);
+
+        bool is_same_air = pv_data.pv_idx + 1 < pv_data.air_num_pvs;
+        bool is_same_proof = is_same_air || (pv_data.air_idx + 1 < pv_data.num_airs);
+
         COL_WRITE_VALUE(row, PublicValuesCols, is_valid, Fp::one());
-        COL_WRITE_VALUE(row, PublicValuesCols, is_first, record_idx == 0);
+        COL_WRITE_VALUE(row, PublicValuesCols, proof_idx, proof_idx);
         COL_WRITE_VALUE(row, PublicValuesCols, air_idx, pv_data.air_idx);
+        COL_WRITE_VALUE(row, PublicValuesCols, pv_idx, pv_data.pv_idx);
+        COL_WRITE_VALUE(
+            row,
+            PublicValuesCols,
+            is_first_in_proof,
+            pv_data.pv_idx == 0 && pv_data.air_idx == 0
+        );
+        COL_WRITE_VALUE(row, PublicValuesCols, is_first_in_air, pv_data.pv_idx == 0);
+        COL_WRITE_VALUE(row, PublicValuesCols, is_same_proof, is_same_proof);
+        COL_WRITE_VALUE(row, PublicValuesCols, is_same_air, is_same_air);
         COL_WRITE_VALUE(row, PublicValuesCols, tidx, starting_tidx + pv_data.pv_idx);
-        COL_WRITE_VALUE(row, PublicValuesCols, num_pvs_left, pv_data.air_num_pvs - pv_data.pv_idx);
-        COL_WRITE_VALUE(row, PublicValuesCols, is_first_for_air, pv_data.pv_idx == 0);
         COL_WRITE_VALUE(row, PublicValuesCols, value, pv_data.value);
     } else {
+        row.fill_zero(0, sizeof(PublicValuesCols<uint8_t>));
         COL_WRITE_VALUE(row, PublicValuesCols, proof_idx, NUM_PROOFS);
-        row.fill_zero(1, sizeof(PublicValuesCols<uint8_t>) - 1);
     }
 }
 

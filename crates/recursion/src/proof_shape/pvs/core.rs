@@ -1,6 +1,6 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::{AlignedBorrow, SubAir, utils::not};
+use openvm_circuit_primitives::{AlignedBorrow, SubAir};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     rap::{BaseAirWithPublicValues, PartitionedBaseAir},
@@ -11,7 +11,7 @@ use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use stark_backend_v2::{F, proof::Proof};
 
 use crate::{
-    bus::{PublicValuesBus, TranscriptBus, TranscriptBusMessage},
+    bus::{PublicValuesBus, PublicValuesBusMessage, TranscriptBus, TranscriptBusMessage},
     proof_shape::bus::{NumPublicValuesBus, NumPublicValuesMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
@@ -20,15 +20,19 @@ use crate::{
 #[repr(C)]
 #[derive(AlignedBorrow, Debug)]
 pub struct PublicValuesCols<F> {
-    pub proof_idx: F,
     pub is_valid: F,
-    pub is_first: F,
 
+    pub proof_idx: F,
     pub air_idx: F,
-    pub tidx: F,
-    pub num_pvs_left: F,
+    pub pv_idx: F,
 
-    pub is_first_for_air: F,
+    pub is_first_in_proof: F,
+    pub is_first_in_air: F,
+
+    pub is_same_proof: F,
+    pub is_same_air: F,
+
+    pub tidx: F,
     pub value: F,
 }
 
@@ -54,8 +58,6 @@ pub(in crate::proof_shape) fn generate_trace(
     let mut chunks = trace.chunks_exact_mut(width);
 
     for (proof_idx, (proof, preflight)) in proofs.iter().zip(preflights).enumerate() {
-        let mut row_idx = 0usize;
-
         for ((air_idx, pvs), &starting_tidx) in proof
             .public_values
             .iter()
@@ -64,26 +66,28 @@ pub(in crate::proof_shape) fn generate_trace(
             .zip(&preflight.proof_shape.pvs_tidx)
         {
             let mut tidx = starting_tidx;
-            let mut num_pvs_left = pvs.len();
 
             for (pv_idx, pv) in pvs.iter().enumerate() {
                 let chunk = chunks.next().unwrap();
                 let cols: &mut PublicValuesCols<F> = chunk.borrow_mut();
 
-                cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.is_valid = F::ONE;
-                cols.is_first = F::from_bool(row_idx == 0);
 
+                cols.proof_idx = F::from_canonical_usize(proof_idx);
                 cols.air_idx = F::from_canonical_usize(air_idx);
-                cols.tidx = F::from_canonical_usize(tidx);
-                cols.num_pvs_left = F::from_canonical_usize(num_pvs_left);
+                cols.pv_idx = F::from_canonical_usize(pv_idx);
 
-                cols.is_first_for_air = F::from_bool(pv_idx == 0);
+                cols.is_first_in_air = F::from_bool(pv_idx == 0);
+                cols.is_first_in_proof = F::from_bool(pv_idx == 0 && air_idx == 0);
+
+                cols.is_same_air = F::from_bool(pv_idx + 1 < pvs.len());
+                cols.is_same_proof =
+                    F::from_bool(pv_idx + 1 < pvs.len() || air_idx + 1 < proof.public_values.len());
+
+                cols.tidx = F::from_canonical_usize(tidx);
                 cols.value = *pv;
 
                 tidx += 1;
-                num_pvs_left -= 1;
-                row_idx += 1;
             }
         }
     }
@@ -97,7 +101,7 @@ pub(in crate::proof_shape) fn generate_trace(
 }
 
 pub struct PublicValuesAir {
-    pub _public_values_bus: PublicValuesBus,
+    pub public_values_bus: PublicValuesBus,
     pub num_pvs_bus: NumPublicValuesBus,
     pub transcript_bus: TranscriptBus,
 }
@@ -121,56 +125,69 @@ where
         let local: &PublicValuesCols<AB::Var> = (*local).borrow();
         let next: &PublicValuesCols<AB::Var> = (*next).borrow();
 
-        NestedForLoopSubAir::<1, 0> {}.eval(
+        NestedForLoopSubAir::<3, 2>.eval(
             builder,
             (
                 (
                     NestedForLoopIoCols {
-                        is_enabled: local.is_valid,
-                        counter: [local.proof_idx],
-                        is_first: [local.is_first],
-                    }
-                    .map_into(),
+                        is_enabled: local.is_valid.into(),
+                        counter: [
+                            local.proof_idx.into(),
+                            local.air_idx.into(),
+                            local.pv_idx.into(),
+                        ],
+                        is_first: [
+                            local.is_first_in_proof.into(),
+                            local.is_first_in_air.into(),
+                            AB::Expr::ONE,
+                        ],
+                    },
                     NestedForLoopIoCols {
-                        is_enabled: next.is_valid,
-                        counter: [next.proof_idx],
-                        is_first: [next.is_first],
-                    }
-                    .map_into(),
+                        is_enabled: next.is_valid.into(),
+                        counter: [
+                            next.proof_idx.into(),
+                            next.air_idx.into(),
+                            next.pv_idx.into(),
+                        ],
+                        is_first: [
+                            next.is_first_in_proof.into(),
+                            next.is_first_in_air.into(),
+                            AB::Expr::ONE,
+                        ],
+                    },
                 ),
-                NestedForLoopAuxCols { is_transition: [] },
+                NestedForLoopAuxCols {
+                    is_transition: [local.is_same_proof, local.is_same_air],
+                }
+                .map_into(),
             ),
         );
 
-        // Constrain is_first_for_air, send NumPublicValuesBus message when true
-        builder.assert_bool(local.is_first_for_air);
+        builder.assert_bool(local.is_valid);
         builder
-            .when(local.is_first)
-            .assert_one(local.is_first_for_air);
-        builder
-            .when(local.is_first_for_air)
-            .assert_one(local.is_valid);
-        builder
-            .when(next.is_valid * (next.air_idx - local.air_idx))
-            .assert_one(next.is_first_for_air);
+            .when(local.is_same_air)
+            .assert_eq(next.tidx, local.tidx + AB::Expr::ONE);
 
         self.num_pvs_bus.receive(
             builder,
             local.proof_idx,
             NumPublicValuesMessage {
-                air_idx: local.air_idx,
-                tidx: local.tidx,
-                num_pvs: local.num_pvs_left,
+                air_idx: local.air_idx.into(),
+                tidx: local.tidx - local.pv_idx,
+                num_pvs: local.pv_idx + AB::Expr::ONE,
             },
-            local.is_first_for_air,
+            local.is_valid - local.is_same_air,
         );
-
-        // Constrain rows for the same AIR are in the correct order
-        let mut when_same_air =
-            builder.when(local.is_valid * next.is_valid * not(next.is_first_for_air));
-        when_same_air.assert_eq(local.air_idx, next.air_idx);
-        when_same_air.assert_one(local.num_pvs_left - next.num_pvs_left);
-        when_same_air.assert_one(next.tidx - local.tidx);
+        self.public_values_bus.send(
+            builder,
+            local.proof_idx,
+            PublicValuesBusMessage {
+                air_idx: local.air_idx,
+                pv_idx: local.pv_idx,
+                value: local.value,
+            },
+            local.is_valid,
+        );
 
         // Receive transcript read of public values
         self.transcript_bus.receive(

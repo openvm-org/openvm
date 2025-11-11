@@ -17,7 +17,11 @@ use openvm_stark_backend::{
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{Field, FieldAlgebra, PrimeField32};
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
-use stark_backend_v2::{DIGEST_SIZE, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    DIGEST_SIZE, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    proof::{Proof, TraceVData},
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
@@ -96,6 +100,8 @@ pub struct ProofShapeCols<F, const NUM_LIMBS: usize> {
 
     pub n_max: F,
     pub is_n_max_greater: F,
+
+    pub num_air_id_lookups: F,
 }
 
 // Variable-length columns are stored at the end
@@ -109,6 +115,23 @@ pub struct ProofShapeVarColsMut<'a, F> {
     pub idx_flags: &'a mut [F],                     // [F; IDX_FLAGS]
     pub part_cached_mult: &'a mut [F],              // [F; MAX_CACHED]
     pub cached_commits: &'a mut [[F; DIGEST_SIZE]], // [[F; DIGEST_SIZE]; MAX_CACHED]
+}
+
+pub(crate) fn compute_air_shape_lookup_counts(
+    child_vk: &MultiStarkVerifyingKeyV2,
+    sorted_trace_vdata: &[(usize, TraceVData)],
+    l_skip: usize,
+    n_max: usize,
+) -> Vec<usize> {
+    let mut counts = vec![0usize; l_skip + n_max + 1];
+    for (air_idx, vdata) in sorted_trace_vdata {
+        let dag = &child_vk.inner.per_air[*air_idx].symbolic_constraints;
+        counts[vdata.log_height] += dag.constraints.nodes.len();
+        for interaction in &dag.interactions {
+            counts[vdata.log_height] += interaction.message.len() + 1;
+        }
+    }
+    counts
 }
 
 #[derive(derive_new::new)]
@@ -148,6 +171,13 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
             let mut sorted_idx = 0usize;
             let mut total_interactions = 0usize;
             let mut cidx = 1usize;
+
+            let bc_air_shape_lookups = compute_air_shape_lookup_counts(
+                child_vk,
+                &preflight.proof_shape.sorted_trace_vdata,
+                l_skip,
+                preflight.proof_shape.n_max,
+            );
 
             // Present AIRs
             for (idx, vdata) in &preflight.proof_shape.sorted_trace_vdata {
@@ -193,6 +223,8 @@ impl<const NUM_LIMBS: usize, const LIMB_BITS: usize> ProofShapeChip<NUM_LIMBS, L
                 total_interactions += num_interactions;
 
                 cols.n_max = F::from_canonical_usize(preflight.proof_shape.n_max);
+                cols.num_air_id_lookups =
+                    F::from_canonical_usize(bc_air_shape_lookups[log_height] + 1);
 
                 let vcols: &mut ProofShapeVarColsMut<'_, F> = &mut borrow_var_cols_mut(
                     &mut chunk[cols_width..],
@@ -759,7 +791,7 @@ where
                 property_idx: AirShapeProperty::AirId.to_field(),
                 value: local.idx.into(),
             },
-            local.is_present,
+            local.is_present * local.num_air_id_lookups,
         );
         self.air_shape_bus.send(
             builder,
@@ -869,7 +901,7 @@ where
                 n_abs: n_abs.clone(),
                 n_sign_bit: local.n_sign_bit.into(),
             },
-            local.is_present,
+            local.is_present * local.num_air_id_lookups,
         );
 
         ///////////////////////////////////////////////////////////////////////////////////////////
