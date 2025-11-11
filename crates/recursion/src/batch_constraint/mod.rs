@@ -449,7 +449,8 @@ impl BatchConstraintModule {
                     .unwrap();
 
                 let constraints = &vk.symbolic_constraints.constraints;
-                let mut expr_evals = vec![EF::ZERO; constraints.nodes.len()];
+                let mut expr_evals =
+                    vec![EF::ZERO; constraints.nodes.len() + vk.unused_variables.len()];
                 let log_height = proof.trace_vdata[air_idx].as_ref().unwrap().log_height;
 
                 for (node_idx, node) in constraints.nodes.iter().enumerate() {
@@ -463,7 +464,7 @@ impl BatchConstraintModule {
                                 };
                             }
                             Entry::Main { part_index, offset } => {
-                                let part = (part_index + 1) % (vk.num_cached_mains() + 1);
+                                let part = vk.dag_main_part_index_to_commit_index(part_index);
                                 expr_evals[node_idx] = match offset {
                                     0 => openings[sorted_idx][part][var.index].0,
                                     1 => openings[sorted_idx][part][var.index].1,
@@ -529,6 +530,33 @@ impl BatchConstraintModule {
                             expr_evals[node_idx] = expr_evals[*left_idx] * expr_evals[*right_idx];
                         }
                     };
+                }
+                let mut node_idx = constraints.nodes.len();
+                for unused_var in &vk.unused_variables {
+                    match unused_var.entry {
+                        Entry::Preprocessed { offset } => {
+                            expr_evals[node_idx] = if offset == 0 {
+                                openings[sorted_idx][1][unused_var.index].0
+                            } else {
+                                openings[sorted_idx][1][unused_var.index].1
+                            };
+                        }
+                        Entry::Main { part_index, offset } => {
+                            let part = vk.dag_main_part_index_to_commit_index(part_index);
+                            expr_evals[node_idx] = if offset == 0 {
+                                openings[sorted_idx][part][unused_var.index].0
+                            } else {
+                                openings[sorted_idx][part][unused_var.index].1
+                            };
+                        }
+                        Entry::Permutation { .. }
+                        | Entry::Public
+                        | Entry::Challenge
+                        | Entry::Exposed => {
+                            unreachable!()
+                        }
+                    }
+                    node_idx += 1;
                 }
                 expr_evals_per_air.push(expr_evals);
             }

@@ -19,8 +19,8 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ColumnClaimsBus, LiftedHeightsBus, LiftedHeightsBusMessage, StackingModuleBus,
-        StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
+        ColumnClaimsBus, ColumnClaimsMessage, LiftedHeightsBus, LiftedHeightsBusMessage,
+        StackingModuleBus, StackingModuleMessage, TranscriptBus, TranscriptBusMessage,
     },
     stacking::{
         bus::{
@@ -372,30 +372,30 @@ where
          * and sent it to UnivariateRoundAir, which will constrain that the RLC is equal to the
          * sum of the proof's s_0 polynomial evaluated at each z in D.
          */
-        // self.column_claims_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     ColumnClaimsMessage {
-        //         sort_idx: local.sort_idx.into(),
-        //         part_idx: local.part_idx.into(),
-        //         col_idx: local.col_idx.into(),
-        //         claim: local.col_claim.map(Into::into),
-        //         is_rot: AB::Expr::ZERO,
-        //     },
-        //     local.is_valid,
-        // );
-        // self.column_claims_bus.send(
-        //     builder,
-        //     local.proof_idx,
-        //     ColumnClaimsMessage {
-        //         sort_idx: local.sort_idx.into(),
-        //         part_idx: local.part_idx.into(),
-        //         col_idx: local.col_idx.into(),
-        //         claim: local.rot_claim.map(Into::into),
-        //         is_rot: AB::Expr::ONE,
-        //     },
-        //     local.is_valid,
-        // );
+        self.column_claims_bus.send(
+            builder,
+            local.proof_idx,
+            ColumnClaimsMessage {
+                sort_idx: local.sort_idx.into(),
+                part_idx: local.part_idx.into(),
+                col_idx: local.col_idx.into(),
+                claim: local.col_claim.map(Into::into),
+                is_rot: AB::Expr::ZERO,
+            },
+            local.is_valid,
+        );
+        self.column_claims_bus.send(
+            builder,
+            local.proof_idx,
+            ColumnClaimsMessage {
+                sort_idx: local.sort_idx.into(),
+                part_idx: local.part_idx.into(),
+                col_idx: local.col_idx.into(),
+                claim: local.rot_claim.map(Into::into),
+                is_rot: AB::Expr::ONE,
+            },
+            local.is_valid,
+        );
 
         assert_array_eq(
             &mut builder.when(not(local.is_last)),
