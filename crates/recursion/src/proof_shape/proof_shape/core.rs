@@ -128,8 +128,9 @@ pub(crate) fn compute_air_shape_lookup_counts(
 ) -> Vec<usize> {
     let mut counts = vec![0usize; l_skip + n_max + 1];
     for (air_idx, vdata) in sorted_trace_vdata {
-        let dag = &child_vk.inner.per_air[*air_idx].symbolic_constraints;
-        counts[vdata.log_height] += dag.constraints.nodes.len();
+        let vk = &child_vk.inner.per_air[*air_idx];
+        let dag = &vk.symbolic_constraints;
+        counts[vdata.log_height] += dag.constraints.nodes.len() + vk.unused_variables.len();
         for interaction in &dag.interactions {
             counts[vdata.log_height] += interaction.message.len() + 1;
         }
@@ -873,8 +874,8 @@ where
         //         local.proof_idx,
         //         AirPartShapeBusMessage {
         //             idx: local.idx.into(),
-        //             part: AB::Expr::from_canonical_usize(1 + cached_idx) + has_preprocessed.clone(),
-        //             width: cached_widths[cached_idx].clone(),
+        //             part: AB::Expr::from_canonical_usize(1 + cached_idx) +
+        // has_preprocessed.clone(),             width: cached_widths[cached_idx].clone(),
         //         },
         //         localv.part_cached_mult[cached_idx] * local.is_valid,
         //     );
