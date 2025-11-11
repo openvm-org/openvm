@@ -26,38 +26,38 @@ pub const REG_GUEST_MEM_PTR: &str = "r15";
 pub const DEFAULT_PC_OFFSET: i32 = 4;
 
 pub const RISCV_TO_X86_OVERRIDE_MAP: [Option<&str>; 32] = [
-    None,        // x0
-    None,        // x1
-    None,        // x2
-    None,        // x3
-    None,        // x4
-    None,        // x5
-    None,        // x6
-    None,        // x7
-    None,        // x8
-    None,        // x9
+    None,         // x0
+    None,         // x1
+    None,         // x2
+    None,         // x3
+    None,         // x4
+    None,         // x5
+    None,         // x6
+    None,         // x7
+    None,         // x8
+    None,         // x9
     Some("r10d"), // x10
     Some("r11d"), // x11
-    Some("r9d"),        // x12
-    Some("r8d"),        // x13
-    None,        // x14
-    None,        // x15
-    None,        // x16
-    None,        // x17
-    None,        // x18
-    None,        // x19
-    None,        // x20
-    None,        // x21
-    None,        // x22
-    None,        // x23
-    None,        // x24
-    None,        // x25
-    None,        // x26
-    None,        // x27
-    None,        // x28
-    None,        // x29
-    None,        // x30
-    None,        // x31
+    Some("r9d"),  // x12
+    Some("r8d"),  // x13
+    None,         // x14
+    None,         // x15
+    None,         // x16
+    None,         // x17
+    None,         // x18
+    None,         // x19
+    None,         // x20
+    None,         // x21
+    None,         // x22
+    None,         // x23
+    None,         // x24
+    None,         // x25
+    None,         // x26
+    None,         // x27
+    None,         // x28
+    None,         // x29
+    None,         // x30
+    None,         // x31
 ];
 
 pub fn SYNC_XMM_TO_GPR() -> String {
@@ -83,4 +83,3 @@ pub fn SYNC_GPR_TO_XMM() -> String {
     }
     asm_str
 }
-

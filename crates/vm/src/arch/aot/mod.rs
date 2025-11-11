@@ -3,20 +3,19 @@ use std::{ffi::c_void, io::Write, process::Command};
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
-use crate::arch::aot::common::SYNC_XMM_TO_GPR;
-use crate::arch::aot::common::SYNC_GPR_TO_XMM;
 
 use crate::{
     arch::{
+        aot::common::{SYNC_GPR_TO_XMM, SYNC_XMM_TO_GPR},
         interpreter::{AlignedBuf, PreComputeInstruction},
         ExecutionCtxTrait, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
 
+pub mod common;
 mod metered_execute;
 mod pure;
-pub mod common;
 
 /// The assembly bridge build process requires the following tools:
 /// GNU Binutils (provides `as` and `ar`)
@@ -149,7 +148,7 @@ where
         asm_str += "    push r10\n";
         asm_str += "    push r11\n";
         asm_str += "    push rax\n";
-        
+
         asm_str
     }
 
@@ -168,7 +167,6 @@ where
 
         asm_str
     }
-
 
     // r15 stores vm_register_address
     fn rv32_regs_to_xmm() -> String {
