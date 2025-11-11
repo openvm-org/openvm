@@ -18,11 +18,14 @@ use stark_backend_v2::{D_EF, EF, F, keygen::types::MultiStarkVerifyingKeyV2, pro
 use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
-    batch_constraint::bus::{
-        BatchConstraintConductorBus, BatchConstraintConductorMessage,
-        BatchConstraintInnerMessageType, EqZeroNBus, EqZeroNMessage,
+    batch_constraint::{
+        SelectorCount,
+        bus::{
+            BatchConstraintConductorBus, BatchConstraintConductorMessage,
+            BatchConstraintInnerMessageType, EqZeroNBus, EqZeroNMessage,
+        },
     },
-    bus::{XiRandomnessBus, XiRandomnessMessage},
+    bus::{SelHypercubeBus, SelHypercubeBusMessage, XiRandomnessBus, XiRandomnessMessage},
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},
     system::Preflight,
     utils::{
@@ -36,9 +39,13 @@ use crate::{
 pub struct EqNsRecord {
     xi: EF,
     r: EF,
+    eq_r_ones: EF,
+    eq_r_zeroes: EF,
     r_prod: EF,
     eq: EF,
     eq_sharp: EF,
+    sel_first_count: usize,
+    sel_last_and_trans_count: usize,
     n_logup: usize,
     n_max: usize,
 }
@@ -57,16 +64,21 @@ pub struct EqNsColumns<T> {
     xi_n: [T; D_EF],
     r_n: [T; D_EF],
     r_product: [T; D_EF],
+    r_pref_product: [T; D_EF],
+    one_minus_r_pref_prod: [T; D_EF],
     eq: [T; D_EF],
     eq_sharp: [T; D_EF],
 
     xi_mult: T,
+    sel_first_count: T,
+    sel_last_and_trans_count: T,
 }
 
 pub struct EqNsAir {
     pub zero_n_bus: EqZeroNBus,
     pub xi_bus: XiRandomnessBus,
     pub r_xi_bus: BatchConstraintConductorBus,
+    pub sel_hypercube_bus: SelHypercubeBus,
 
     pub l_skip: usize,
 }
@@ -157,6 +169,49 @@ where
             local.r_product,
             ext_field_multiply(next.r_product, local.r_n),
         );
+        assert_array_eq(
+            &mut builder.when(local.is_valid * local.is_first),
+            local.r_pref_product,
+            base_to_ext::<AB::Expr>(AB::Expr::ONE),
+        );
+        assert_array_eq(
+            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            next.r_pref_product,
+            ext_field_multiply(local.r_pref_product, local.r_n),
+        );
+        assert_array_eq(
+            &mut builder.when(local.is_valid * local.is_first),
+            local.one_minus_r_pref_prod,
+            base_to_ext::<AB::Expr>(AB::Expr::ONE),
+        );
+        assert_array_eq(
+            &mut builder.when(not(next.is_first) * local.n_less_than_n_max),
+            next.one_minus_r_pref_prod,
+            ext_field_multiply(
+                local.one_minus_r_pref_prod,
+                ext_field_subtract(base_to_ext::<AB::Expr>(AB::F::ONE), local.r_n),
+            ),
+        );
+        self.sel_hypercube_bus.send(
+            builder,
+            local.proof_idx,
+            SelHypercubeBusMessage {
+                n: local.n.into(),
+                is_first: AB::Expr::ZERO,
+                value: local.r_pref_product.map(Into::into),
+            },
+            local.sel_last_and_trans_count,
+        );
+        self.sel_hypercube_bus.send(
+            builder,
+            local.proof_idx,
+            SelHypercubeBusMessage {
+                n: local.n.into(),
+                is_first: AB::Expr::ONE,
+                value: local.one_minus_r_pref_prod.map(Into::into),
+            },
+            local.sel_first_count,
+        );
         // ========================= eq consistency ===============================
         let mult = ext_field_one_minus::<AB::Expr>(ext_field_subtract::<AB::Expr>(
             ext_field_add(local.xi_n, local.r_n),
@@ -232,28 +287,40 @@ pub(crate) fn generate_eq_ns_trace(
     vk: &MultiStarkVerifyingKeyV2,
     _proofs: &[Proof],
     preflights: &[Preflight],
+    selector_counts: &[Vec<SelectorCount>],
 ) -> RowMajorMatrix<F> {
     let l_skip = vk.inner.params.l_skip;
     // TODO: blob, MultiProofVecVec etc
     let records = preflights
         .iter()
-        .map(|preflight| {
+        .zip(selector_counts.iter())
+        .map(|(preflight, selector_counts)| {
             let n_global = preflight.proof_shape.n_global();
             let n_max = preflight.proof_shape.n_max;
             let rs = &preflight.batch_constraint.sumcheck_rnd;
             let xi = &preflight.batch_constraint.xi;
             let mut res = Vec::with_capacity(n_global + 1);
+            let mut eq_r_ones = EF::ONE;
+            let mut eq_r_zeroes = EF::ONE;
             for i in 0..n_max {
+                let counts = selector_counts[i + l_skip];
                 res.push(EqNsRecord {
                     xi: xi[l_skip + i],
                     r: rs[1 + i],
                     r_prod: EF::ONE,
                     eq: preflight.batch_constraint.eq_ns[i],
                     eq_sharp: preflight.batch_constraint.eq_sharp_ns[i],
+                    eq_r_ones,
+                    eq_r_zeroes,
                     n_logup: preflight.proof_shape.n_logup,
                     n_max: preflight.proof_shape.n_max,
+                    sel_first_count: counts.first,
+                    sel_last_and_trans_count: counts.last + counts.transition,
                 });
+                eq_r_ones *= rs[1 + i];
+                eq_r_zeroes *= EF::ONE - rs[1 + i];
             }
+            let counts = selector_counts[l_skip + n_max];
             for i in n_max..n_global {
                 res.push(EqNsRecord {
                     xi: xi[l_skip + i],
@@ -261,18 +328,26 @@ pub(crate) fn generate_eq_ns_trace(
                     r_prod: EF::ONE,
                     eq: preflight.batch_constraint.eq_ns[n_max],
                     eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
+                    eq_r_ones,
+                    eq_r_zeroes,
                     n_logup: preflight.proof_shape.n_logup,
                     n_max: preflight.proof_shape.n_max,
+                    sel_first_count: counts.first,
+                    sel_last_and_trans_count: counts.last + counts.transition,
                 });
             }
             res.push(EqNsRecord {
                 xi: EF::ZERO,
                 r: EF::ZERO,
                 r_prod: EF::ONE,
+                eq_r_ones,
+                eq_r_zeroes,
                 eq: preflight.batch_constraint.eq_ns[n_max],
                 eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
                 n_logup: preflight.proof_shape.n_logup,
                 n_max: preflight.proof_shape.n_max,
+                sel_first_count: counts.first,
+                sel_last_and_trans_count: counts.last + counts.transition,
             });
             for i in (0..n_global).rev() {
                 res[i].r_prod = res[i + 1].r_prod * res[i].r;
@@ -305,9 +380,16 @@ pub(crate) fn generate_eq_ns_trace(
                 cols.r_n.copy_from_slice(record.r.as_base_slice());
                 cols.r_product
                     .copy_from_slice(record.r_prod.as_base_slice());
+                cols.r_pref_product
+                    .copy_from_slice(record.eq_r_ones.as_base_slice());
+                cols.one_minus_r_pref_prod
+                    .copy_from_slice(record.eq_r_zeroes.as_base_slice());
                 cols.eq.copy_from_slice(record.eq.as_base_slice());
                 cols.eq_sharp
                     .copy_from_slice(record.eq_sharp.as_base_slice());
+                cols.sel_first_count = F::from_canonical_usize(record.sel_first_count);
+                cols.sel_last_and_trans_count =
+                    F::from_canonical_usize(record.sel_last_and_trans_count);
             });
         let mut num_n_lift = vec![0; preflights[pidx].proof_shape.n_logup + 1];
         for (air_idx, vdata) in preflights[pidx].proof_shape.sorted_trace_vdata.iter() {
@@ -335,6 +417,8 @@ pub(crate) fn generate_eq_ns_trace(
             cols.proof_idx = F::from_canonical_usize(preflights.len() + i);
             cols.is_first = F::ONE;
             cols.is_last = F::ONE;
+            cols.sel_first_count = F::ZERO;
+            cols.sel_last_and_trans_count = F::ZERO;
         });
 
     RowMajorMatrix::new(trace, width)

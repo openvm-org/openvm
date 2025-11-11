@@ -25,12 +25,12 @@ use stark_recursion_circuit_derive::AlignedBorrow;
 
 use crate::{
     bus::{
-        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, WhirOpeningPointBus,
+        ConstraintSumcheckRandomness, ConstraintSumcheckRandomnessBus, EqNegBaseRandBus,
+        EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, WhirOpeningPointBus,
         WhirOpeningPointMessage,
     },
     stacking::bus::{
-        EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqNegBaseRandBus,
-        EqNegBaseRandMessage, EqNegResultBus, EqNegResultMessage, EqRandValuesLookupBus,
+        EqBaseBus, EqBaseMessage, EqKernelLookupBus, EqKernelLookupMessage, EqRandValuesLookupBus,
         EqRandValuesLookupMessage,
     },
     subairs::nested_for_loop::{NestedForLoopAuxCols, NestedForLoopIoCols, NestedForLoopSubAir},

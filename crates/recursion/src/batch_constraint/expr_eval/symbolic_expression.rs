@@ -1,7 +1,7 @@
-use core::{array, iter::zip};
+use core::{array, cmp::min, iter::zip};
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit_primitives::encoder::Encoder;
+use openvm_circuit_primitives::{encoder::Encoder, utils::assert_array_eq};
 use openvm_stark_backend::{
     air_builders::{
         PartitionedAirBuilder,
@@ -12,13 +12,18 @@ use openvm_stark_backend::{
 };
 use p3_air::{Air, BaseAir};
 use p3_field::{
-    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, extension::BinomiallyExtendable,
+    FieldAlgebra, FieldExtensionAlgebra, PrimeField32, TwoAdicField,
+    extension::BinomiallyExtendable,
 };
 use p3_matrix::{Matrix, dense::RowMajorMatrix};
 use p3_maybe_rayon::prelude::*;
-use stark_backend_v2::{D_EF, F, keygen::types::MultiStarkVerifyingKeyV2, proof::Proof};
+use stark_backend_v2::{
+    D_EF, EF, F,
+    keygen::types::MultiStarkVerifyingKeyV2,
+    poly_common::{Squarable, eval_eq_uni_at_one},
+    proof::Proof,
+};
 use stark_recursion_circuit_derive::AlignedBorrow;
-
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::EnumIter;
 
@@ -26,14 +31,15 @@ use crate::{
     batch_constraint::{
         BatchConstraintBlobCpu,
         bus::{
-            ConstraintsFoldingBus, ConstraintsFoldingMessage, ExpressionClaimBus,
+            ConstraintsFoldingBus, ConstraintsFoldingMessage, EqNegInternalBus, ExpressionClaimBus,
             InteractionsFoldingBus, InteractionsFoldingMessage, SymbolicExpressionBus,
             SymbolicExpressionMessage,
         },
     },
     bus::{
-        ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus, HyperdimBusMessage, PublicValuesBus,
-        PublicValuesBusMessage,
+        AirShapeBus, AirShapeBusMessage, ColumnClaimsBus, ColumnClaimsMessage, HyperdimBus,
+        HyperdimBusMessage, PublicValuesBus, PublicValuesBusMessage, SelHypercubeBus,
+        SelHypercubeBusMessage, SelUniBus, SelUniBusMessage,
     },
     system::Preflight,
     utils::{
@@ -64,19 +70,28 @@ pub struct CachedSymbolicExpressionColumns<T> {
 #[repr(C)]
 pub struct SingleMainSymbolicExpressionColumns<T> {
     is_present: T,
-    // Dynamic arguments. For Add, Mul, Sub, this breaks into two [T; 4].
-    // For selectors, args[0..4] give the value and args[4] gives the dimension.
-    args: [T; 8],
+    // Dynamic arguments. For Add/Mul/Sub, this splits into two extension-field elements.
+    // For selectors:
+    //   args[0..D_EF)   = sel_uni witness (base or rotated depending on selector type).
+    //   args[D_EF..2*D_EF) = eq-prefix witness (prod r_i or prod (1-r_i)).
+    //   args[2*D_EF]    = sort_idx
+    //   args[2*D_EF + 1]= n_abs
+    //   args[2*D_EF + 2]= n_sign_bit
+    args: [T; 2 * D_EF + 3],
 }
 
 pub struct SymbolicExpressionAir {
     pub expr_bus: SymbolicExpressionBus,
     pub claim_bus: ExpressionClaimBus,
     pub hyperdim_bus: HyperdimBus,
+    pub air_shape_bus: AirShapeBus,
     pub column_claims_bus: ColumnClaimsBus,
     pub interactions_folding_bus: InteractionsFoldingBus,
     pub constraints_folding_bus: ConstraintsFoldingBus,
     pub public_values_bus: PublicValuesBus,
+    pub sel_hypercube_bus: SelHypercubeBus,
+    pub sel_uni_bus: SelUniBus,
+    pub eq_neg_internal_bus: EqNegInternalBus,
 
     pub cnt_proofs: usize,
 }
@@ -137,8 +152,8 @@ where
         for (proof_idx, &cols) in main_cols.iter().enumerate() {
             let proof_idx = AB::F::from_canonical_usize(proof_idx);
 
-            let arg_ef0: [AB::Var; 4] = cols.args[..D_EF].try_into().unwrap();
-            let arg_ef1: [AB::Var; 4] = cols.args[D_EF..2 * D_EF].try_into().unwrap();
+            let arg_ef0: [AB::Var; D_EF] = cols.args[..D_EF].try_into().unwrap();
+            let arg_ef1: [AB::Var; D_EF] = cols.args[D_EF..2 * D_EF].try_into().unwrap();
 
             builder.assert_bool(cols.is_present);
 
@@ -153,11 +168,14 @@ where
                     NodeKind::Mul => ext_field_multiply::<AB::Expr>(arg_ef0, arg_ef1),
                     NodeKind::Constant => base_to_ext(cached_cols.attrs[0]),
                     NodeKind::VarPublicValue => base_to_ext(cols.args[0]),
+                    NodeKind::SelIsFirst => ext_field_multiply(arg_ef0, arg_ef1),
+                    NodeKind::SelIsLast => ext_field_multiply(arg_ef0, arg_ef1),
+                    NodeKind::SelIsTransition => scalar_subtract_ext_field(
+                        AB::Expr::ONE,
+                        ext_field_multiply(arg_ef0, arg_ef1),
+                    ),
                     NodeKind::VarPreprocessed
                     | NodeKind::VarMain
-                    | NodeKind::SelIsFirst
-                    | NodeKind::SelIsLast
-                    | NodeKind::SelIsTransition
                     | NodeKind::InteractionMult
                     | NodeKind::InteractionMsgComp => arg_ef0.map(Into::into),
                 };
@@ -199,6 +217,10 @@ where
                 cols.is_present * is_arg1_node_idx.clone(),
             );
 
+            let sort_idx = cols.args[2 * D_EF];
+            let n_abs = cols.args[2 * D_EF + 1];
+            let n_is_neg = cols.args[2 * D_EF + 2];
+
             let _is_var = enc.contains_flag::<AB>(
                 &flags,
                 &[NodeKind::VarMain, NodeKind::VarPreprocessed].map(|x| x as usize),
@@ -207,11 +229,11 @@ where
                 builder,
                 proof_idx,
                 ColumnClaimsMessage {
-                    sort_idx: cols.args[D_EF],
-                    part_idx: cached_cols.attrs[1],
-                    col_idx: cached_cols.attrs[0],
-                    claim: array::from_fn(|i| cols.args[i]),
-                    is_rot: cached_cols.attrs[2],
+                    sort_idx: sort_idx.into(),
+                    part_idx: cached_cols.attrs[1].into(),
+                    col_idx: cached_cols.attrs[0].into(),
+                    claim: array::from_fn(|i| cols.args[i].into()),
+                    is_rot: cached_cols.attrs[2].into(),
                 },
                 AB::Expr::ZERO,
                 // TODO: _is_var
@@ -227,27 +249,72 @@ where
                 AB::Expr::ZERO,
                 // enc.get_flag_expr::<AB>(NodeKind::VarPublicValue as usize, &flags),
             );
-            let _is_sel = enc.contains_flag::<AB>(
-                &flags,
-                &[
-                    NodeKind::SelIsFirst,
-                    NodeKind::SelIsLast,
-                    NodeKind::SelIsTransition,
-                ]
-                .map(|x| x as usize),
-            );
-            self.hyperdim_bus.receive(
-                builder,
-                proof_idx,
-                HyperdimBusMessage {
-                    sort_idx: cols.args[D_EF],
-                    n_abs: cols.args[D_EF + 1],
-                    n_sign_bit: cols.args[D_EF + 2],
-                },
-                AB::Expr::ZERO,
-                // TODO: _is_sel,
-            );
-            // TODO: Constrain cols.args[..D_EF] when _is_sel.
+            // Selector
+            {
+                let is_sel = enc.contains_flag::<AB>(
+                    &flags,
+                    &[
+                        NodeKind::SelIsFirst,
+                        NodeKind::SelIsLast,
+                        NodeKind::SelIsTransition,
+                    ]
+                    .map(|x| x as usize),
+                );
+                self.air_shape_bus.receive(
+                    builder,
+                    proof_idx,
+                    AirShapeBusMessage {
+                        sort_idx: sort_idx.into(),
+                        property_idx: AB::Expr::ZERO,
+                        value: cached_cols.air_idx.into(),
+                    },
+                    // TODO: _is_sel,
+                    AB::Expr::ZERO,
+                );
+                self.hyperdim_bus.receive(
+                    builder,
+                    proof_idx,
+                    HyperdimBusMessage {
+                        sort_idx,
+                        n_abs,
+                        n_sign_bit: n_is_neg,
+                    },
+                    // TODO: _is_sel,
+                    AB::Expr::ZERO,
+                );
+                let is_first = enc.get_flag_expr::<AB>(NodeKind::SelIsFirst as usize, &flags);
+                self.sel_uni_bus.receive(
+                    builder,
+                    proof_idx,
+                    SelUniBusMessage {
+                        n: AB::Expr::NEG_ONE * n_abs * n_is_neg,
+                        is_first: is_first.clone(),
+                        value: arg_ef0.map(Into::into),
+                    },
+                    cols.is_present * is_sel.clone(),
+                );
+                self.sel_hypercube_bus.receive(
+                    builder,
+                    proof_idx,
+                    SelHypercubeBusMessage {
+                        n: n_abs.into(),
+                        is_first: is_first.clone(),
+                        value: arg_ef1.map(Into::into),
+                    },
+                    cols.is_present * is_sel.clone() * (AB::Expr::ONE - n_is_neg),
+                );
+                // TODO: n zero
+                assert_array_eq(
+                    &mut builder.when(is_sel.clone() * n_is_neg),
+                    arg_ef1,
+                    [
+                        AB::Expr::ONE,
+                        AB::Expr::ZERO,
+                        AB::Expr::ZERO,
+                        AB::Expr::ZERO,
+                    ],
+                );
+            }
             let is_mult = enc.get_flag_expr::<AB>(NodeKind::InteractionMult as usize, &flags);
             let is_interaction = enc.contains_flag::<AB>(
                 &flags,
@@ -293,11 +360,37 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
     let main_width = single_main_width * max_num_proofs;
 
     struct Record {
-        args: [F; 8],
+        args: [F; 2 * D_EF + 3],
     }
     let mut records = vec![];
 
     for (proof_idx, (proof, preflight)) in zip(proofs, preflights).enumerate() {
+        let rs = &preflight.batch_constraint.sumcheck_rnd;
+        let (&rs_0, rs_rest) = rs.split_first().unwrap();
+        let mut is_first_uni_by_log_height = vec![];
+        let mut is_last_uni_by_log_height = vec![];
+
+        for (log_height, &r_pow) in rs_0
+            .exp_powers_of_2()
+            .take(params.l_skip + 1)
+            .collect::<Vec<_>>()
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            is_first_uni_by_log_height.push(eval_eq_uni_at_one(log_height, r_pow));
+            is_last_uni_by_log_height.push(eval_eq_uni_at_one(
+                log_height,
+                r_pow * F::two_adic_generator(log_height),
+            ));
+        }
+        let mut is_first_mle_by_n = vec![EF::ONE];
+        let mut is_last_mle_by_n = vec![EF::ONE];
+        for (i, &r) in rs_rest.iter().enumerate() {
+            is_first_mle_by_n.push(is_first_mle_by_n[i] * (EF::ONE - r));
+            is_last_mle_by_n.push(is_last_mle_by_n[i] * r);
+        }
+
         for (air_idx, vk) in child_vk.inner.per_air.iter().enumerate() {
             let constraints = &vk.symbolic_constraints.constraints;
             let expr_evals = &blob.expr_evals[proof_idx][air_idx];
@@ -333,18 +426,21 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
             };
 
             for (node_idx, node) in constraints.nodes.iter().enumerate() {
-                let mut record = Record { args: [F::ZERO; 8] };
+                let mut record = Record {
+                    args: [F::ZERO; 2 * D_EF + 3],
+                };
+                record.args[2 * D_EF] = sort_idx;
+                record.args[2 * D_EF + 1] = n_abs;
+                record.args[2 * D_EF + 2] = n_sign_bit;
                 match node {
                     SymbolicExpressionNode::Variable(var) => match var.entry {
                         Entry::Preprocessed { .. } => {
                             record.args[..D_EF]
                                 .copy_from_slice(expr_evals[node_idx].as_base_slice());
-                            record.args[D_EF] = sort_idx;
                         }
                         Entry::Main { .. } => {
                             record.args[..D_EF]
                                 .copy_from_slice(expr_evals[node_idx].as_base_slice());
-                            record.args[D_EF] = sort_idx;
                         }
                         Entry::Permutation { .. } => unreachable!(),
                         Entry::Public => record.args[..D_EF]
@@ -353,22 +449,34 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                         Entry::Exposed => unreachable!(),
                     },
                     SymbolicExpressionNode::IsFirstRow => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
-                        record.args[D_EF] = sort_idx;
-                        record.args[D_EF + 1] = n_abs;
-                        record.args[D_EF + 2] = n_sign_bit;
+                        record.args[..D_EF].copy_from_slice(
+                            is_first_uni_by_log_height[min(log_height, params.l_skip)]
+                                .as_base_slice(),
+                        );
+                        record.args[D_EF..2 * D_EF].copy_from_slice(
+                            is_first_mle_by_n[log_height.saturating_sub(params.l_skip)]
+                                .as_base_slice(),
+                        );
                     }
                     SymbolicExpressionNode::IsLastRow => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
-                        record.args[D_EF] = sort_idx;
-                        record.args[D_EF + 1] = n_abs;
-                        record.args[D_EF + 2] = n_sign_bit;
+                        record.args[..D_EF].copy_from_slice(
+                            is_last_uni_by_log_height[min(log_height, params.l_skip)]
+                                .as_base_slice(),
+                        );
+                        record.args[D_EF..2 * D_EF].copy_from_slice(
+                            is_last_mle_by_n[log_height.saturating_sub(params.l_skip)]
+                                .as_base_slice(),
+                        );
                     }
                     SymbolicExpressionNode::IsTransition => {
-                        record.args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
-                        record.args[D_EF] = sort_idx;
-                        record.args[D_EF + 1] = n_abs;
-                        record.args[D_EF + 2] = n_sign_bit;
+                        record.args[..D_EF].copy_from_slice(
+                            is_last_uni_by_log_height[min(log_height, params.l_skip)]
+                                .as_base_slice(),
+                        );
+                        record.args[D_EF..2 * D_EF].copy_from_slice(
+                            is_last_mle_by_n[log_height.saturating_sub(params.l_skip)]
+                                .as_base_slice(),
+                        );
                     }
                     SymbolicExpressionNode::Constant(_) => {}
                     SymbolicExpressionNode::Add {
@@ -377,7 +485,8 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                         degree_multiple: _,
                     } => {
                         record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
-                        record.args[D_EF..].copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                        record.args[D_EF..2 * D_EF]
+                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
                     }
                     SymbolicExpressionNode::Sub {
                         left_idx,
@@ -385,7 +494,8 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                         degree_multiple: _,
                     } => {
                         record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
-                        record.args[D_EF..].copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                        record.args[D_EF..2 * D_EF]
+                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
                     }
                     SymbolicExpressionNode::Neg {
                         idx,
@@ -399,19 +509,26 @@ pub(in crate::batch_constraint) fn generate_symbolic_expr_common_trace(
                         degree_multiple: _,
                     } => {
                         record.args[..D_EF].copy_from_slice(expr_evals[*left_idx].as_base_slice());
-                        record.args[D_EF..].copy_from_slice(expr_evals[*right_idx].as_base_slice());
+                        record.args[D_EF..2 * D_EF]
+                            .copy_from_slice(expr_evals[*right_idx].as_base_slice());
                     }
                 };
                 records.push(Some(record));
             }
             for interaction in &vk.symbolic_constraints.interactions {
-                let mut args = [F::ZERO; 8];
+                let mut args = [F::ZERO; 2 * D_EF + 3];
                 args[..D_EF].copy_from_slice(expr_evals[interaction.count].as_base_slice());
+                args[2 * D_EF] = sort_idx;
+                args[2 * D_EF + 1] = n_abs;
+                args[2 * D_EF + 2] = n_sign_bit;
                 records.push(Some(Record { args }));
 
                 for &node_idx in &interaction.message {
-                    let mut args = [F::ZERO; 8];
+                    let mut args = [F::ZERO; 2 * D_EF + 3];
                     args[..D_EF].copy_from_slice(expr_evals[node_idx].as_base_slice());
+                    args[2 * D_EF] = sort_idx;
+                    args[2 * D_EF + 1] = n_abs;
+                    args[2 * D_EF + 2] = n_sign_bit;
                     records.push(Some(Record { args }));
                 }
             }

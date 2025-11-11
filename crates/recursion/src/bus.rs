@@ -443,6 +443,26 @@ define_typed_per_proof_permutation_bus!(XiRandomnessBus, XiRandomnessMessage);
 
 #[repr(C)]
 #[derive(AlignedBorrow, Debug, Clone)]
+pub struct SelHypercubeBusMessage<T> {
+    pub n: T,
+    pub is_first: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(SelHypercubeBus, SelHypercubeBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct SelUniBusMessage<T> {
+    pub n: T,
+    pub is_first: T,
+    pub value: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(SelUniBus, SelUniBusMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
 pub struct ConstraintSumcheckRandomness<T> {
     pub idx: T,
     pub challenge: [T; D_EF],
@@ -495,3 +515,27 @@ pub struct ExpBitsLenMessage<T> {
 }
 
 define_typed_lookup_bus!(ExpBitsLenBus, ExpBitsLenMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct EqNegResultMessage<T> {
+    // hypercube dimension where n < 0
+    pub n: T,
+    // 2^{l_skip + n} * eq_n(u_0, r_0)
+    pub eq: [T; D_EF],
+    // 2^{l_skip + n} * k_rot_n(u_0, r_0)
+    pub k_rot: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(EqNegResultBus, EqNegResultMessage);
+
+#[repr(C)]
+#[derive(AlignedBorrow, Debug, Clone)]
+pub struct EqNegBaseRandMessage<T> {
+    // sampled value u_0
+    pub u: [T; D_EF],
+    // sampled value r_0^2
+    pub r_squared: [T; D_EF],
+}
+
+define_typed_per_proof_permutation_bus!(EqNegBaseRandBus, EqNegBaseRandMessage);
