@@ -149,8 +149,6 @@ where
             local.value,
         );
 
-        // TODO: constrain that sort_idx and air_idx match
-
         self.constraint_bus.receive(
             builder,
             local.proof_idx,

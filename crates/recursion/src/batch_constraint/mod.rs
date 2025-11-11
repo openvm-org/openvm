@@ -41,9 +41,10 @@ use crate::{
         sumcheck::{MultilinearSumcheckAir, UnivariateSumcheckAir},
     },
     bus::{
-        AirShapeBus, BatchConstraintModuleBus, ColumnClaimsBus, ConstraintSumcheckRandomnessBus,
-        EqNegBaseRandBus, EqNegResultBus, HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus,
-        StackingModuleBus, TranscriptBus, UnivariateSumcheckInputBus, XiRandomnessBus,
+        AirShapeBus, BatchConstraintModuleBus, BatchConstraintTidxBetweenSumchecksBus,
+        ColumnClaimsBus, ConstraintSumcheckRandomnessBus, EqNegBaseRandBus, EqNegResultBus,
+        HyperdimBus, PublicValuesBus, SelHypercubeBus, SelUniBus, StackingModuleBus, TranscriptBus,
+        UnivariateSumcheckInputBus, XiRandomnessBus,
     },
     primitives::{bus::PowerCheckerBus, pow::PowerCheckerTraceGenerator},
     system::{
@@ -78,6 +79,7 @@ pub struct BatchConstraintModule {
 
     batch_constraint_conductor_bus: BatchConstraintConductorBus,
     sumcheck_bus: SumcheckClaimBus,
+    tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus,
 
     zero_n_bus: EqZeroNBus,
     eq_sharp_uni_bus: EqSharpUniBus,
@@ -133,6 +135,9 @@ impl BatchConstraintModule {
             eq_neg_result_bus: bus_inventory.eq_neg_result_bus,
             batch_constraint_conductor_bus: BatchConstraintConductorBus::new(b.new_bus_idx()),
             sumcheck_bus: SumcheckClaimBus::new(b.new_bus_idx()),
+            tidx_between_sumchecks_bus: BatchConstraintTidxBetweenSumchecksBus::new(
+                b.new_bus_idx(),
+            ),
             zero_n_bus: EqZeroNBus::new(b.new_bus_idx()),
             eq_sharp_uni_bus: EqSharpUniBus::new(b.new_bus_idx()),
             eq_3b_bus: Eq3bBus::new(b.new_bus_idx()),
@@ -297,6 +302,7 @@ impl AirModule for BatchConstraintModule {
             transcript_bus: self.transcript_bus,
             randomness_bus: self.constraint_sumcheck_randomness_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
+            tidx_between_sumchecks_bus: self.tidx_between_sumchecks_bus,
         };
         let sumcheck_lin_air = MultilinearSumcheckAir {
             max_constraint_degree: self.max_constraint_degree,
@@ -305,6 +311,7 @@ impl AirModule for BatchConstraintModule {
             randomness_bus: self.constraint_sumcheck_randomness_bus,
             batch_constraint_conductor_bus: self.batch_constraint_conductor_bus,
             stacking_module_bus: self.stacking_module_bus,
+            tidx_between_sumchecks_bus: self.tidx_between_sumchecks_bus,
         };
         let eq_ns_air = EqNsAir {
             zero_n_bus: self.zero_n_bus,

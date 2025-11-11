@@ -61,9 +61,8 @@ impl ProofShapeChipGpu<NUM_LIMBS, LIMB_BITS> {
         let pow_checker = &self.pow_checker;
         let num_airs = vk_gpu.per_air.len();
         let height = (preflights_gpu.len() * (num_airs + 1)).next_power_of_two();
-        let width = ProofShapeCols::<u8, NUM_LIMBS>::width()
-            + encoder_width
-            + max_cached * (DIGEST_SIZE + 1);
+        let width =
+            ProofShapeCols::<u8, NUM_LIMBS>::width() + encoder_width + max_cached * DIGEST_SIZE;
         let trace = DeviceMatrix::with_capacity(height, width);
 
         let per_row_tidx = preflights_gpu

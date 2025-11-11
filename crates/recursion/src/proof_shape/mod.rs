@@ -232,7 +232,6 @@ impl AirModule for ProofShapeModule {
             gkr_module_bus: self.bus_inventory.gkr_module_bus,
             univariate_sumcheck_input_bus: self.bus_inventory.univariate_sumcheck_input_bus,
             air_shape_bus: self.bus_inventory.air_shape_bus,
-            _air_part_shape_bus: self.bus_inventory.air_part_shape_bus,
             hyperdim_bus: self.bus_inventory.hyperdim_bus,
             lifted_heights_bus: self.bus_inventory.lifted_heights_bus,
             commitments_bus: self.bus_inventory.commitments_bus,
