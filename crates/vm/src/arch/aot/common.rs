@@ -16,6 +16,7 @@ pub const REG_FIRST_ARG: &str = "rdi";
 
 pub const REG_RETURN_VAL: &str = "rax";
 pub const REG_D: &str = "rax";
+pub const REG_D_W: &str = "eax";
 pub const REG_INSTRET_END: &str = "r12";
 
 pub const REG_EXEC_STATE_PTR: &str = "rbx";

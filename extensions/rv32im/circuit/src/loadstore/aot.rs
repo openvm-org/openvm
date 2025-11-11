@@ -12,25 +12,27 @@ use crate::{
     LoadStoreExecutor,
 };
 
+#[allow(unused_imports)]
+use crate::{adapters::imm_to_bytes, common::*, BaseAluExecutor};
+
 impl<F, A, const NUM_CELLS: usize> AotExecutor<F> for LoadStoreExecutor<A, NUM_CELLS>
 where
     F: PrimeField32,
 {
     fn is_aot_supported(&self, inst: &openvm_instructions::instruction::Instruction<F>) -> bool {
-        // let local_opcode = Rv32LoadStoreOpcode::from_usize(
-        //     inst.opcode
-        //         .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
-        // );
-        // let e_u32 = inst.e.as_canonical_u32();
-        // let is_native_store = e_u32 == NATIVE_AS;
-        // // Writing into native address space is not supported in AOT.
-        // match local_opcode {
-        //     Rv32LoadStoreOpcode::STOREW
-        //     | Rv32LoadStoreOpcode::STOREH
-        //     | Rv32LoadStoreOpcode::STOREB => !is_native_store,
-        //     _ => true,
-        // }
-        false
+        let local_opcode = Rv32LoadStoreOpcode::from_usize(
+            inst.opcode
+                .local_opcode_idx(Rv32LoadStoreOpcode::CLASS_OFFSET),
+        );
+        let e_u32 = inst.e.as_canonical_u32();
+        let is_native_store = e_u32 == NATIVE_AS;
+        // Writing into native address space is not supported in AOT.
+        match local_opcode {
+            Rv32LoadStoreOpcode::STOREW
+            | Rv32LoadStoreOpcode::STOREH
+            | Rv32LoadStoreOpcode::STOREB => !is_native_store,
+            _ => true,
+        }
     }
 
     fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
@@ -73,49 +75,52 @@ where
         let b_reg = b / 4;
 
         let mut asm_str = String::new();
-        // eax = [b:4]_1
-        asm_str += &rv32_register_to_gpr(b_reg, REG_B);
-        // eax = ptr = [b:4]_1 + imm_extended
+        // REG_B_W = [b:4]_1
+        let (gpr_reg, delta_str) = xmm_to_gpr(b_reg, REG_B_W, true);
+        asm_str += &delta_str;
+        // REG_B_W = ptr = [b:4]_1 + imm_extended
         asm_str += &format!("   add {REG_B_W}, {imm_extended}\n");
         // REG_A = <start of destination address space>
         asm_str += &address_space_start_to_gpr(e_u32, REG_A);
-        // REG_D = REG_D + REG_A = <memory address in host memory>
-        asm_str += &format!("   lea {REG_D}, [{REG_D} + {REG_A}]")
-        asm_str += "   lea {REG_D}, [{REG_D} + {REG_A}]\n";
+        // REG_B = REG_B + REG_A = <memory address in host memory>
+        asm_str += &format!("   lea {REG_B}, [{REG_B} + {REG_A}]\n");
 
         match local_opcode {
             Rv32LoadStoreOpcode::LOADW => {
-                asm_str += &format!("   mov {REG_D_W}, [{REG_D}]\n");
-                asm_str += &gpr_to_rv32_register(REG_D_W, a_reg);
+                asm_str += &format!("   mov {REG_B_W}, [{REG_B}]\n");
+                asm_str += &gpr_to_xmm(REG_B_W, a_reg);
             }
             Rv32LoadStoreOpcode::LOADHU => {
-                asm_str += &format!("   movzx {REG_D_W}, word ptr [{REG_D}]\n");
-                asm_str += &gpr_to_rv32_register(REG_D_W, a_reg);
+                asm_str += &format!("   movzx {REG_B_W}, word ptr [{REG_B}]\n");
+                asm_str += &gpr_to_xmm(REG_B_W, a_reg);
             }
             Rv32LoadStoreOpcode::LOADBU => {
-                asm_str += &format!("   movzx {REG_D_W}, byte ptr [{REG_D}]\n");
-                asm_str += &gpr_to_rv32_register(REG_D_W, a_reg);
+                asm_str += &format!("   movzx {REG_B_W}, byte ptr [{REG_B}]\n");
+                asm_str += &gpr_to_xmm(REG_B_W, a_reg);
             }
             Rv32LoadStoreOpcode::STOREW => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg, REG_C_W);
-                asm_str += &format!("   mov [{REG_D}], {REG_C_W}\n");
+                let (gpr_reg, delta_str) = xmm_to_gpr(a_reg, REG_C_W, true);
+                asm_str += &delta_str;
+                asm_str += &format!("   mov [{REG_B}], {REG_C_W}\n");
             }
             Rv32LoadStoreOpcode::STOREH => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg, REG_C_W);
-                asm_str += &format!("   mov word ptr [{REG_D}], {REG_C_B}\n");
+                let (gpr_reg, delta_str) = xmm_to_gpr(a_reg, REG_C_W, true);
+                asm_str += &delta_str;
+                asm_str += &format!("   mov word ptr [{REG_B}], {REG_C_B}\n");
             }
             Rv32LoadStoreOpcode::STOREB => {
                 if !enabled {
                     return Err(AotError::InvalidInstruction);
                 }
-                asm_str += &rv32_register_to_gpr(a_reg, REG_C_W);
-                asm_str += &format!("   mov byte ptr [{REG_D}], {REG_C_LB}\n");
+                let (gpr_reg, delta_str) = xmm_to_gpr(a_reg, REG_C_W, true);
+                asm_str += &delta_str;
+                asm_str += &format!("   mov byte ptr [{REG_B}], {REG_C_LB}\n");
             }
             _ => unreachable!("LoadStoreExecutor should not handle LOADB/LOADH opcodes"),
         }
