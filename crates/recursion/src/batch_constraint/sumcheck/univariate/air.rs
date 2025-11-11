@@ -53,10 +53,6 @@ pub struct UnivariateSumcheckCols<T> {
 
     pub tidx: T,
     pub is_n_max_zero: T,
-
-    // TODO(TEMP): remove this once there is an air to receive the final sum claim. This is to skip
-    // the claim send in the case n <= 0 for now
-    pub tmp_n_notpos: T,
 }
 
 pub struct UnivariateSumcheckAir {
@@ -281,8 +277,7 @@ where
                 round: AB::Expr::ZERO,
                 value: local.value_at_r.map(Into::into),
             },
-            // TODO(TEMP): remove tmp_n_notpos once there is an air to receive the final sum claim
-            local.is_valid * is_last * not(local.tmp_n_notpos),
+            local.is_valid * is_last,
         );
         self.randomness_bus.send(
             builder,

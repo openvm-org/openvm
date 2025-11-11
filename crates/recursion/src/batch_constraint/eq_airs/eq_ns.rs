@@ -166,6 +166,13 @@ where
             .assert_zero(local.n_less_than_n_max);
         // ========================= r consistency ==============================
         assert_array_eq(
+            &mut builder
+                .when(not(local.n_less_than_n_max))
+                .when(local.is_valid),
+            local.r_n,
+            base_to_ext::<AB::Expr>(AB::Expr::ONE),
+        );
+        assert_array_eq(
             &mut builder.when(local.is_valid * next.is_first),
             local.r_product,
             base_to_ext::<AB::Expr>(AB::Expr::ONE),
@@ -287,16 +294,25 @@ where
             local.n_less_than_n_max,
         );
 
-        // The number of traces with n_lift == next.n
         self.eq_n_outer_bus.send(
             builder,
             next.proof_idx,
             EqNOuterMessage {
                 is_sharp: AB::Expr::ZERO,
                 n: next.n.into(),
-                value: next.eq.map(Into::into),
+                value: ext_field_multiply(next.eq, next.r_product),
             },
             next.is_valid * next.num_traces,
+        );
+        self.eq_n_outer_bus.send(
+            builder,
+            next.proof_idx,
+            EqNOuterMessage {
+                is_sharp: AB::Expr::ONE,
+                n: next.n.into(),
+                value: ext_field_multiply(next.eq_sharp, next.r_product),
+            },
+            next.is_valid * next.num_traces * AB::Expr::TWO, // two because num+denom per trace
         );
     }
 }
@@ -342,7 +358,7 @@ pub(crate) fn generate_eq_ns_trace(
             for i in n_max..n_global {
                 res.push(EqNsRecord {
                     xi: xi[l_skip + i],
-                    r: EF::ZERO,
+                    r: EF::ONE,
                     r_prod: EF::ONE,
                     eq: preflight.batch_constraint.eq_ns[n_max],
                     eq_sharp: preflight.batch_constraint.eq_sharp_ns[n_max],
@@ -356,7 +372,7 @@ pub(crate) fn generate_eq_ns_trace(
             }
             res.push(EqNsRecord {
                 xi: EF::ZERO,
-                r: EF::ZERO,
+                r: EF::ONE,
                 r_prod: EF::ONE,
                 eq_r_ones,
                 eq_r_zeroes,

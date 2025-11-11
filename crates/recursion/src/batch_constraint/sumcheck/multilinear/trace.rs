@@ -112,7 +112,7 @@ pub(crate) fn generate_trace(
                 let mut suffix_products = vec![EF::ONE; rows_per_round];
                 for i in (0..s_deg).rev() {
                     suffix_products[i] =
-                        suffix_products[i + 1] * (EF::from_canonical_usize(s_deg - i) - r);
+                        suffix_products[i + 1] * (EF::from_canonical_usize(i + 1) - r);
                 }
 
                 let mut round_sum = EF::ZERO;
