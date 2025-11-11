@@ -1,6 +1,5 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use itertools::Itertools;
 use openvm_circuit_primitives::{
     SubAir,
     utils::{assert_array_eq, not},
@@ -330,11 +329,11 @@ pub(crate) fn generate_eq_3b_trace(
 ) -> RowMajorMatrix<F> {
     let width = Eq3bColumns::<F>::width();
     let l_skip = vk.inner.params.l_skip;
-    let heights = preflights
+    let total_height = preflights
         .iter()
-        .map(|p| (2 << p.proof_shape.n_logup) - 1)
-        .collect_vec();
-    let total_height = heights.iter().sum::<usize>();
+        .enumerate()
+        .map(|(i, p)| (p.proof_shape.n_logup + 1) * blob.all_stacked_ids[i].len())
+        .sum::<usize>();
     let padding_height = total_height.next_power_of_two();
     let mut trace = vec![F::ZERO; padding_height * width];
 
